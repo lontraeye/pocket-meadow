@@ -24,6 +24,7 @@ users 1──* berry_plots
 users 1──* inventory
 users 1──* active_effects
 users 1──* encounters *──1 species
+encounters 1──* encounter_fighters *──0..1 pokemon
 species 1──* evolutions (from/to)
 users 1──* pokedex_entries
 ```
@@ -224,7 +225,6 @@ CREATE TABLE encounters (
   -- 'caught'  = venceu e capturou
   -- 'escaped' = venceu, mas a captura falhou
   -- 'fled'    = jogador fugiu ou o encontro expirou
-  fighter_pokemon_id INTEGER REFERENCES pokemon(id) ON DELETE SET NULL,
   win_chance         REAL,                           -- registrado para depuração/balanceamento
   catch_chance       REAL,
   caught_pokemon_id  INTEGER REFERENCES pokemon(id) ON DELETE SET NULL,
@@ -234,6 +234,15 @@ CREATE TABLE encounters (
 );
 
 CREATE INDEX idx_encounters_user_created ON encounters(user_id, created_at DESC);
+
+-- Quem lutou: o time tem de 1 a 3 Pokémon (PLANNING.md, seção 5.5).
+CREATE TABLE encounter_fighters (
+  encounter_id  INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
+  slot          INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
+  pokemon_id    INTEGER REFERENCES pokemon(id) ON DELETE SET NULL,  -- NULL se foi solto depois
+  power         REAL    NOT NULL,                     -- poder na hora da batalha, para depuração/balanceamento
+  PRIMARY KEY (encounter_id, slot)
+);
 
 -- Garante no máximo 1 encontro pendente por jogador
 CREATE UNIQUE INDEX uq_encounters_one_pending
@@ -317,7 +326,7 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Ação | Passos |
 |---|---|
 | Criar encontro | catch-up → validar região/energia/sem pendente → `energy -= 1` → consumir efeitos de encontro → inserir encontro → atualizar pokédex (visto) |
-| Batalhar | catch-up → validar encontro pendente e Pokémon (no jardim, do jogador) → rolar vitória → XP do lutador e do treinador → (se venceu) rolar captura → inserir Pokémon → atualizar status do encontro e pokédex |
+| Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → XP dividido entre o time e XP do treinador → (se venceu) rolar captura → inserir Pokémon → atualizar status do encontro e pokédex |
 | Soltar | validar (não está no daycare, não é o último Pokémon) → apagar → creditar `candies` + `generic_candies` |
 | Alimentar | validar saldo → debitar doces → aplicar XP e level ups |
 | Evoluir | validar `min_level` e doces → debitar → trocar `species_id` → pokédex |

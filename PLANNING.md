@@ -301,20 +301,27 @@ Sorteio por peso. Exemplo:
 6. Encontros pendentes expiram após `ENCOUNTER_TTL_MS` (inicial: 30 min) e viram `fled`.
 
 ### 5.5 Batalha (automática e probabilística)
-- O jogador escolhe 1 Pokémon do seu time para lutar.
+- O jogador manda um **time de 1 a 3 Pokémon** contra o selvagem. O time serve para tentar capturar Pokémon muito fortes ou lendários, que um Pokémon sozinho quase nunca vence.
+- Os Pokémon do time precisam ser distintos, do jogador e estar no jardim (não no daycare).
 - Poder de um Pokémon:
   ```
   power = baseStatTotal * (1 + level / 10)
   ```
+- Poder do time, com retorno decrescente, para que mandar 3 não seja sempre a escolha óbvia:
+  ```
+  powers    = poderes do time, do maior para o menor
+  teamPower = Σ powers[i] * BATTLE_TEAM_WEIGHTS[i]       // inicial: [1, 0.6, 0.4]
+  ```
+  Exemplo com os valores iniciais: Mewtwo nível 70 contra três Pokémon nível 40 de BST 500 dá ~42% de vitória; com um só, cai para o mínimo de 5%.
 - Chance de vitória (logística sobre a razão de poder):
   ```
-  ratio     = myPower / wildPower
+  ratio     = teamPower / wildPower
   winChance = 1 / (1 + exp(-BATTLE_K * ln(ratio)))      // BATTLE_K inicial: 4
   winChance = clamp(winChance, BATTLE_MIN, BATTLE_MAX)  // 0.05 .. 0.95
   ```
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
-- **Derrota**: encontro encerrado. O Pokémon do jogador não sofre penalidade (não há HP persistente).
-- **Vitória**: Pokémon do jogador ganha XP; treinador ganha XP; segue para a captura.
+- **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
+- **Vitória**: o `BATTLE_XP` é **dividido igualmente** entre quem lutou (`floor(BATTLE_XP / tamanho do time)` para cada um), o treinador ganha XP normalmente, e segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
 
 ### 5.6 Captura
 - Após a vitória, uma tentativa de captura:
@@ -424,7 +431,7 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 | GET | `/state` | Estado completo: treinador, energia, Pokémon, doces, daycare, canteiros, inventário, efeitos, encontro pendente |
 | GET | `/regions` | Regiões com status de bloqueio (sem revelar a tabela exata de spawn) |
 | POST | `/encounters` | `{ regionSlug }` → cria encontro pendente |
-| POST | `/encounters/:id/battle` | `{ pokemonId }` → resolve batalha e, se vencer, captura |
+| POST | `/encounters/:id/battle` | `{ pokemonIds }` (1 a 3, distintos) → resolve batalha e, se vencer, captura |
 | POST | `/encounters/:id/flee` | Encerra encontro |
 | POST | `/pokemon/:id/release` | Solta e credita doces |
 | POST | `/pokemon/:id/feed` | `{ candies, useGeneric? }` → aplica XP |
@@ -474,7 +481,6 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 ---
 
 ## 10. Questões em aberto
-- Batalha com 1 Pokémon ou time de até 3?
 - Mais de uma tentativa de captura por encontro (gastando algo)?
 - Pokémon com IVs/natures ou só nível?
 - Encontros de lendários: só em regiões especiais ou eventos?
