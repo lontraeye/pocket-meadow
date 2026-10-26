@@ -110,6 +110,17 @@ Não há arte original como padrão. O visual é um mix de pixel art pronta e in
 
 Pixel art feita à mão só entra quando não houver peça pronta que sirva. Não desenhar um set inteiro por conta própria.
 
+### 4.4 Mobile é plataforma principal
+Jogo idle é aberto várias vezes ao dia, quase sempre no celular. Toda tela nasce pensada para celular em retrato e depois se adapta ao desktop, nunca o contrário.
+
+- Layout a partir de ~360px de largura, sem rolagem horizontal. Respeitar `env(safe-area-inset-*)` (notch, barra de gestos).
+- Alvos de toque com no mínimo 44×44px. Ações principais (encontro, colher) ao alcance do polegar, na parte de baixo da tela.
+- Nada depende de hover. Detalhes abrem por toque (sheet/modal), não por tooltip.
+- O jardim isométrico precisa caber em retrato: a grade se ajusta à largura e os sprites escalam em múltiplos inteiros, com `image-rendering: pixelated`.
+- Texto legível sem zoom (mínimo 16px em inputs, para o iOS não dar zoom ao focar).
+- Testar sempre no viewport mobile do navegador, e de vez em quando num celular de verdade.
+- Depois, considerar PWA (instalar na tela inicial). Notificação de berry pronta fica para a Fase 6.
+
 O primeiro jardim testa um chão isométrico com esses Pokémon 2D por cima. Ver seção 5.11.
 
 ---

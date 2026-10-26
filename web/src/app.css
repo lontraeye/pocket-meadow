@@ -1,22 +1,152 @@
+/*
+  Tema pixel. Molduras em 9-slice do Kenney Pixel UI Pack (CC0), em web/public/ui.
+  Cada PNG tem 48px e borda de 6px; desenhamos a borda em 2x (12px) para manter
+  o pixel inteiro. Não usar escala fracionária nesses assets.
+*/
+
 :root {
-  font: 18px/1.45 system-ui, 'Segoe UI', sans-serif;
-  color: #1c2b1f;
-  background: #e7f2df;
+  --ink: #3b2a1a;
+  --ink-soft: #6b5238;
+  --paper: #d4bc8f;
+  --grass-1: #8fcb6b;
+  --grass-2: #7bbd59;
+  --grass-side: #5a8f3c;
+  --soil: #b98a52;
+  --sky: #cfe8b5;
+  --accent: #ffcc00;
+  --danger: #b33a2b;
+  --px: 2px;
+
+  font: 18px/1.4 'Pixelify Sans', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--sky);
+  -webkit-font-smoothing: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  margin: 0;
+  overflow-x: hidden;
+  /* Quadriculado leve de grama ao fundo, em pixels de 8px. */
+  background:
+    repeating-conic-gradient(#c6e2a9 0 25%, transparent 0 50%) 0 0 / 16px 16px,
+    var(--sky);
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
-main {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
+button,
+input {
+  font: inherit;
+  color: inherit;
 }
 
-pre {
-  padding: 1rem 1.25rem;
-  background: #fff;
-  border-radius: 8px;
-  overflow: auto;
+img {
+  image-rendering: pixelated;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+:focus-visible {
+  outline: var(--px) dashed var(--ink);
+  outline-offset: 3px;
+}
+
+.panel {
+  box-sizing: border-box;
+  border: 12px solid transparent;
+  border-image: url('/ui/panel.png') 6 fill / 12px round;
+  image-rendering: pixelated;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 0.75rem;
+  border: 12px solid transparent;
+  border-image: url('/ui/panel.png') 6 fill / 12px round;
+  background: none;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.btn:active:not(:disabled) {
+  border-image-source: url('/ui/button-pressed.png');
+  transform: translateY(var(--px));
+}
+
+.btn-primary {
+  border-image-source: url('/ui/button-primary.png');
+  color: #fff;
+  text-shadow: 0 var(--px) 0 #3f7a2a;
+}
+
+.btn-primary:active:not(:disabled) {
+  border-image-source: url('/ui/button-primary-pressed.png');
+}
+
+.btn:disabled {
+  filter: grayscale(1) opacity(0.6);
+  cursor: default;
+}
+
+.btn-link {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 0.25rem;
+  border: 8px solid transparent;
+  border-image: url('/ui/inlay.png') 4 fill / 8px round;
+  background: none;
+  /* 16px ou mais: o iOS não dá zoom ao focar. */
+  font-size: 18px;
+}
+
+.field:focus {
+  outline: none;
+  border-image-source: url('/ui/selected.png');
+  border-image-slice: 6 fill;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
+import { stateRoutes } from './routes/state.js'
 
 migrateDatabase()
 
@@ -21,6 +22,7 @@ app.onError((error, c) => {
 app.notFound((c) => c.json({ error: 'not_found' }, 404))
 
 app.route('/auth', authRoutes)
+app.route('/state', stateRoutes)
 
 app.get('/health', (c) => {
   return c.json({ ok: true, service: 'pocket-meadow' })
