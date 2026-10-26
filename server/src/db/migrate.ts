@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { applySpeciesSnapshot, readSpeciesSnapshot } from '../seed/apply.js'
 import { createDb, openDatabase } from './client.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -10,6 +11,7 @@ export function migrateDatabase(): void {
   migrate(createDb(sqlite), {
     migrationsFolder: path.resolve(here, '../..', 'drizzle'),
   })
+  applySpeciesSnapshot(sqlite, readSpeciesSnapshot())
   sqlite.close()
 }
 

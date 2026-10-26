@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { eq, inArray, or } from 'drizzle-orm'
 import { speciesSeed } from '../src/config/seed.js'
-import { createDb, openDatabase } from '../src/db/client.js'
-import { evolutions, species } from '../src/db/schema.js'
+import { openDatabase } from '../src/db/client.js'
+import { applySpeciesSnapshot, writeSpeciesSnapshot } from '../src/seed/apply.js'
 import {
   type EvolutionChainPayload,
   type ParsedSpeciesSeed,
@@ -46,36 +45,10 @@ async function main(): Promise<void> {
 }
 
 function writeSeed(parsed: ParsedSpeciesSeed): void {
+  const snapshot = { species: parsed.species, evolutions: parsed.evolutions }
+  writeSpeciesSnapshot(snapshot)
   const sqlite = openDatabase()
-  const db = createDb(sqlite)
-  const ids = parsed.species.map((row) => row.id)
-
-  const write = sqlite.transaction(() => {
-    for (const row of parsed.species) {
-      db.insert(species)
-        .values({ ...row, evolvesFromId: null })
-        .onConflictDoUpdate({
-          target: species.id,
-          set: { ...row, evolvesFromId: null },
-        })
-        .run()
-    }
-
-    for (const row of parsed.species) {
-      if (row.evolvesFromId === null) continue
-      db.update(species).set({ evolvesFromId: row.evolvesFromId }).where(eq(species.id, row.id)).run()
-    }
-
-    db.delete(evolutions)
-      .where(or(inArray(evolutions.fromSpeciesId, ids), inArray(evolutions.toSpeciesId, ids)))
-      .run()
-
-    if (parsed.evolutions.length > 0) {
-      db.insert(evolutions).values(parsed.evolutions).run()
-    }
-  })
-
-  write()
+  applySpeciesSnapshot(sqlite, snapshot)
   sqlite.close()
 }
 

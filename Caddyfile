@@ -7,12 +7,25 @@
 # meadow.example.com {
 #     reverse_proxy 127.0.0.1:8080
 # }
+#
+# Quem conecta neste Caddy é o Caddy compartilhado, pela bridge do Docker.
+# Por isso as faixas privadas são confiáveis: {client_ip} passa a ser o IP
+# do X-Forwarded-For que o Caddy compartilhado escreveu, e não o da bridge.
+# O Caddy compartilhado precisa sobrescrever esse header, que é o padrão
+# do reverse_proxy, e não pode aceitar o valor vindo do cliente.
+
+{
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+	}
+}
 
 :80 {
 	handle /api/* {
 		uri strip_prefix /api
 		reverse_proxy server:3000 {
-			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-For {client_ip}
 		}
 	}
 

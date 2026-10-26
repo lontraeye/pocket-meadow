@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { hash, verify } from '@node-rs/argon2'
 import { SqliteError } from 'better-sqlite3'
 import { eq } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { deleteCookie, setCookie } from 'hono/cookie'
 import { getConnInfo } from '@hono/node-server/conninfo'
+import { currentSession, hashToken } from '../auth/session.js'
 import { authConfig } from '../config/auth.js'
 import { type StarterKey, trainerConfig } from '../config/trainer.js'
 import { getDb, immediate } from '../db/client.js'
@@ -17,24 +18,18 @@ authRoutes.post('/register', async (c) => {
   if (!parsed.ok) return c.json({ error: parsed.error }, 400)
   const username = asUsername(parsed.body.username)
   if (!username) {
-    return c.json(
-      { error: `username must be ${authConfig.usernameMin}–${authConfig.usernameMax} letters, numbers, or underscores` },
-      400,
-    )
+    return c.json({ error: 'invalid_username', min: authConfig.usernameMin, max: authConfig.usernameMax }, 400)
   }
   const password = asPassword(parsed.body.password)
   if (!password) {
-    return c.json(
-      { error: `password must be ${authConfig.passwordMin}–${authConfig.passwordMax} characters` },
-      400,
-    )
+    return c.json({ error: 'invalid_password', min: authConfig.passwordMin, max: authConfig.passwordMax }, 400)
   }
   const starter = parsed.body.starter
-  if (!isStarter(starter)) return c.json({ error: 'choose bulbasaur, charmander, or squirtle' }, 400)
+  if (!isStarter(starter)) return c.json({ error: 'invalid_starter', starters: Object.keys(trainerConfig.starters) }, 400)
 
   const db = getDb()
   const starterSpecies = db.select({ id: species.id }).from(species).where(eq(species.id, trainerConfig.starters[starter])).get()
-  if (!starterSpecies) return c.json({ error: 'starter species is not seeded' }, 500)
+  if (!starterSpecies) throw new Error(`starter species ${trainerConfig.starters[starter]} is not seeded`)
 
   const now = Date.now()
   const passwordHash = await hash(password)
@@ -99,7 +94,7 @@ authRoutes.post('/register', async (c) => {
     })
   } catch (error) {
     if (error instanceof SqliteError && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return c.json({ error: 'username is taken' }, 409)
+      return c.json({ error: 'username_taken' }, 409)
     }
     throw error
   }
@@ -119,7 +114,7 @@ authRoutes.post('/login', async (c) => {
   if (!parsed.ok) return c.json({ error: parsed.error }, 400)
   const username = asUsername(parsed.body.username)
   const password = asPassword(parsed.body.password)
-  if (!username || !password) return c.json({ error: 'invalid username or password' }, 401)
+  if (!username || !password) return c.json({ error: 'invalid_credentials' }, 401)
 
   const db = getDb()
   const user = db
@@ -128,7 +123,7 @@ authRoutes.post('/login', async (c) => {
     .where(eq(users.username, username))
     .get()
   const valid = user !== undefined && (await verify(user.passwordHash, password))
-  if (!user || !valid) return c.json({ error: 'invalid username or password' }, 401)
+  if (!user || !valid) return c.json({ error: 'invalid_credentials' }, 401)
 
   const now = Date.now()
   const token = randomBytes(32).toString('base64url')
@@ -153,7 +148,7 @@ authRoutes.post('/login', async (c) => {
 
 authRoutes.post('/logout', (c) => {
   const session = currentSession(c)
-  if (!session) return c.json({ error: 'not signed in' }, 401)
+  if (!session) return c.json({ error: 'not_signed_in' }, 401)
 
   const meta = requestMeta(c)
   const now = Date.now()
@@ -167,20 +162,6 @@ authRoutes.post('/logout', (c) => {
   deleteCookie(c, authConfig.cookieName, { path: '/' })
   return c.body(null, 204)
 })
-
-function currentSession(c: Context) {
-  const token = getCookie(c, authConfig.cookieName)
-  if (!token) return undefined
-  const id = hashToken(token)
-  const db = getDb()
-  const session = db.select().from(sessions).where(eq(sessions.id, id)).get()
-  if (!session) return undefined
-  if (session.expiresAt <= Date.now()) {
-    db.delete(sessions).where(eq(sessions.id, id)).run()
-    return undefined
-  }
-  return session
-}
 
 function setSessionCookie(c: Context, token: string) {
   setCookie(c, authConfig.cookieName, token, {
@@ -200,19 +181,15 @@ function requestMeta(c: Context): { ip: string; userAgent: string | null } {
   return { ip, userAgent }
 }
 
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('base64url')
-}
-
 async function readBody(c: Context): Promise<{ ok: true; body: { username?: unknown; password?: unknown; starter?: unknown } } | { ok: false; error: string }> {
   try {
     const body = await c.req.json()
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      return { ok: false, error: 'expected a JSON object' }
+      return { ok: false, error: 'invalid_body' }
     }
     return { ok: true, body }
   } catch {
-    return { ok: false, error: 'expected JSON' }
+    return { ok: false, error: 'invalid_body' }
   }
 }
 
@@ -230,5 +207,5 @@ function asPassword(value: unknown): string | undefined {
 }
 
 function isStarter(value: unknown): value is StarterKey {
-  return value === 'bulbasaur' || value === 'charmander' || value === 'squirtle'
+  return typeof value === 'string' && Object.hasOwn(trainerConfig.starters, value)
 }

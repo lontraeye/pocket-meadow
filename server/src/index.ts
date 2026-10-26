@@ -12,6 +12,14 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const app = new Hono()
 
+// Erros saem como { error: '<codigo>' }; o cliente traduz o código.
+app.onError((error, c) => {
+  console.error(error)
+  return c.json({ error: 'internal' }, 500)
+})
+
+app.notFound((c) => c.json({ error: 'not_found' }, 404))
+
 app.route('/auth', authRoutes)
 
 app.get('/health', (c) => {

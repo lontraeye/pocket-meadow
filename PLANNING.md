@@ -89,6 +89,8 @@ Evoluções por item, troca, amizade etc. são **simplificadas**: toda evoluçã
 
 Respeitar a PokéAPI: fazer as requisições em sequência com pequeno delay e cachear as respostas em disco durante o seed.
 
+O script também grava `server/snapshots/species.json`, que fica versionado. O servidor aplica esse snapshot no boot, logo depois das migrações, de forma idempotente. Assim um banco novo, inclusive o da VM, já nasce com as espécies, sem acessar a PokéAPI. Só é preciso rodar o script de novo para mudar a faixa de IDs ou as regras de evolução.
+
 ### 4.2 Sprites
 `scripts/download-sprites.ts` baixa, para cada ID da faixa:
 
