@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx scripts/seed-species.ts"
+    "db:seed": "tsx scripts/seed-species.ts",
+    "sprites:download": "tsx scripts/download-sprites.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
