@@ -2,7 +2,7 @@
   import { untrack } from 'svelte'
   import type { GameState } from './api'
   import PmdSprite from './PmdSprite.svelte'
-  import { gardenExtent, gardenSprite, showdownSrc, type PmdAnimName } from './sprites'
+  import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
 
   let { game }: { game: GameState } = $props()
 
@@ -17,6 +17,16 @@
   const sleepChance = 0.15
   const sleepMinMs = 20_000
   const sleepMaxMs = 40_000
+  // Virar de uma direção para a vizinha (Walk e Idle têm 8) antes de andar
+  // numa direção nova, em vez de girar na hora.
+  const turnStepMs = 110
+  const sleepDir = 0
+
+  // A pose de sono do PMD olha para ↙ em quase todas as espécies. Quem dorme
+  // olhando para a direita (↘ → ↗) usa a pose espelhada, para não virar de lado.
+  function sleepFlip(walker: Walker): boolean {
+    return walker.anim === 'Sleep' && walker.dir >= 1 && walker.dir <= 3
+  }
 
   type Walker = {
     id: number
@@ -34,6 +44,11 @@
   let time = $state(0)
   let selectedId = $state<number | null>(null)
   let walkers = $state<Walker[]>([])
+  // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
+  let devCommands: { sleep: (id: number) => void; wake: (id: number) => void } | null = null
+  const devTools = import.meta.env.DEV
+
+  type Step = { col: number; row: number; dir: number }
 
   const tileW = $derived(baseTileW * scale)
   const tileH = $derived(baseTileH * scale)
@@ -52,6 +67,7 @@
   )
 
   const selected = $derived(game.pokemon.find((mon) => mon.id === selectedId) ?? null)
+  const selectedAsleep = $derived(walkers.find((walker) => walker.id === selectedId)?.anim === 'Sleep')
   const selectedCandies = $derived(
     selected === null
       ? 0
@@ -110,6 +126,13 @@
   })
 
   $effect(() => {
+    for (const mon of gardenPokemon) {
+      const look = gardenSprite(mon.speciesId, mon.isShiny)
+      if (look.kind === 'pmd') preloadPmd(mon.speciesId, look.shinySheet)
+    }
+  })
+
+  $effect(() => {
     const mons = gardenPokemon
     const created = mons.map((mon, index) => ({
       id: mon.id,
@@ -127,17 +150,32 @@
     let cancelled = false
     const frames: number[] = []
     const waits: number[] = []
+    // Cada Pokémon segue um plano (passear, dormir…). Trocar o número do plano
+    // faz os timers e frames pendentes do plano antigo pararem sozinhos.
+    const plans = new Map<number, number>()
+    const alive = (walker: Walker, plan: number) => !cancelled && plans.get(walker.id) === plan
 
-    function wander(walker: Walker) {
-      if (cancelled) return
-      if (Math.random() < sleepChance) {
-        walker.anim = 'Sleep'
-        waits.push(
-          window.setTimeout(
-            () => wander(walker),
-            sleepMinMs + Math.random() * (sleepMaxMs - sleepMinMs),
-          ),
-        )
+    function canSleep(walker: Walker): boolean {
+      // O Sleep só tem a direção 0 (de frente). Só dorme quem já olha para ela
+      // ou para uma vizinha (↘ ↙), para a troca não parecer um giro. Dorme
+      // direto, sem virar: virar mostraria o Idle de frente para a câmera.
+      const facing = (walker.dir - sleepDir + 8) % 8
+      return facing <= 1 || facing >= 7
+    }
+
+    // Mantém a direção em que estava: o Sleep tem uma pose só, e a direção
+    // decide se ela é espelhada (ver sleepFlip) e de onde ele vira ao acordar.
+    function sleep(walker: Walker, plan: number) {
+      walker.anim = 'Sleep'
+      waits.push(
+        window.setTimeout(() => wander(walker, plan), sleepMinMs + Math.random() * (sleepMaxMs - sleepMinMs)),
+      )
+    }
+
+    function wander(walker: Walker, plan: number) {
+      if (!alive(walker, plan)) return
+      if (canSleep(walker) && Math.random() < sleepChance) {
+        sleep(walker, plan)
         return
       }
       let col = 0
@@ -148,41 +186,108 @@
         col = Math.floor(Math.random() * columns)
         row = Math.floor(Math.random() * gridRows)
       } while (col === hereCol && row === hereRow)
-      const steps = route(hereCol, hereRow, col, row)
+      walkSteps(walker, plan, route(hereCol, hereRow, col, row), () => {
+        walker.anim = 'Idle'
+        waits.push(
+          window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
+        )
+      })
+    }
+
+    function walkSteps(walker: Walker, plan: number, steps: Step[], done: () => void) {
       let index = 0
       const next = () => {
-        if (cancelled) return
+        if (!alive(walker, plan)) return
         const step = steps[index]
         if (!step) {
-          walker.anim = 'Idle'
-          waits.push(
-            window.setTimeout(() => wander(walker), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
-          )
+          done()
           return
         }
         index += 1
-        walker.anim = 'Walk'
-        walker.dir = step.dir
-        const fromCol = walker.col
-        const fromRow = walker.row
-        const started = performance.now()
-        const tick = (now: number) => {
-          if (cancelled) return
-          const progress = Math.min(1, (now - started) / stepMs)
-          walker.col = fromCol + (step.col - fromCol) * progress
-          walker.row = fromRow + (step.row - fromRow) * progress
-          if (progress < 1) frames.push(requestAnimationFrame(tick))
-          else next()
-        }
-        frames.push(requestAnimationFrame(tick))
+        turn(walker, plan, step.dir, () => {
+          walker.anim = 'Walk'
+          const fromCol = walker.col
+          const fromRow = walker.row
+          const started = performance.now()
+          const tick = (now: number) => {
+            if (!alive(walker, plan)) return
+            const progress = Math.min(1, (now - started) / stepMs)
+            walker.col = fromCol + (step.col - fromCol) * progress
+            walker.row = fromRow + (step.row - fromRow) * progress
+            if (progress < 1) frames.push(requestAnimationFrame(tick))
+            else next()
+          }
+          frames.push(requestAnimationFrame(tick))
+        })
       }
       next()
     }
 
-    for (const walker of live) waits.push(window.setTimeout(() => wander(walker), 400))
+    // Gira parado (Idle), uma direção vizinha por vez, pelo lado mais curto.
+    // Se já está olhando para lá, segue direto, sem interromper o Walk.
+    function turn(walker: Walker, plan: number, target: number, done: () => void) {
+      if (!alive(walker, plan)) return
+      if (walker.dir === target) {
+        done()
+        return
+      }
+      const clockwise = (target - walker.dir + 8) % 8
+      walker.anim = 'Idle'
+      walker.dir = (walker.dir + (clockwise <= 4 ? 1 : 7)) % 8
+      waits.push(window.setTimeout(() => turn(walker, plan, target, done), turnStepMs))
+    }
+
+    function start(walker: Walker, delay: number) {
+      const plan = (plans.get(walker.id) ?? 0) + 1
+      plans.set(walker.id, plan)
+      waits.push(window.setTimeout(() => wander(walker, plan), delay))
+    }
+
+    // Só para testes: termina o passo atual, anda até ficar olhando para ↘ ou
+    // ↙ e dorme.
+    const sleepNow = (id: number) => {
+      const walker = live.find((item) => item.id === id)
+      if (!walker) return
+      const plan = (plans.get(walker.id) ?? 0) + 1
+      plans.set(walker.id, plan)
+
+      // No meio de um passo, a posição é fracionada: o destino do passo é o
+      // bloco seguinte na direção em que ele está andando.
+      let col = walker.col
+      let row = walker.row
+      if (walker.dir === 1) col = Math.ceil(col)
+      else if (walker.dir === 5) col = Math.floor(col)
+      else if (walker.dir === 7) row = Math.ceil(row)
+      else if (walker.dir === 3) row = Math.floor(row)
+      col = Math.round(col)
+      row = Math.round(row)
+      const steps: Step[] = []
+      if (col !== walker.col || row !== walker.row) steps.push({ col, row, dir: walker.dir })
+
+      // Terminar o passo não muda a direção, então dá para checar já.
+      if (!canSleep(walker)) {
+        if (col < columns - 1) steps.push({ col: col + 1, row, dir: 1 })
+        else if (row < gridRows - 1) steps.push({ col, row: row + 1, dir: 7 })
+        else steps.push({ col: col - 1, row, dir: 5 }, { col, row, dir: 1 })
+      }
+      walkSteps(walker, plan, steps, () => sleep(walker, plan))
+    }
+
+    // Só para testes: acorda e volta a passear.
+    const wakeNow = (id: number) => {
+      const walker = live.find((item) => item.id === id)
+      if (!walker) return
+      walker.anim = 'Idle'
+      start(walker, idleMinMs)
+    }
+
+    devCommands = { sleep: sleepNow, wake: wakeNow }
+
+    for (const walker of live) start(walker, 400)
 
     return () => {
       cancelled = true
+      devCommands = null
       for (const frame of frames) cancelAnimationFrame(frame)
       for (const wait of waits) clearTimeout(wait)
     }
@@ -200,7 +305,7 @@
   })
 
   function route(fromCol: number, fromRow: number, toCol: number, toRow: number) {
-    const steps: { col: number; row: number; dir: number }[] = []
+    const steps: Step[] = []
     let col = fromCol
     let row = fromRow
     const colDelta = Math.sign(toCol - col)
@@ -258,6 +363,7 @@
               dir={walker.dir}
               scale={pmdScale}
               shadow={look.shadow}
+              flip={sleepFlip(walker)}
               {time}
             >
               {#if look.sparkle}<span class="sparkle"></span>{/if}
@@ -302,6 +408,15 @@
         <p class="candy">Doces da linha: <strong>{selectedCandies}</strong></p>
       </div>
       <button type="button" class="btn close" aria-label="Fechar" onclick={() => (selectedId = null)}>✕</button>
+      {#if devTools}
+        <button
+          type="button"
+          class="btn dev"
+          onclick={() => selected && (selectedAsleep ? devCommands?.wake(selected.id) : devCommands?.sleep(selected.id))}
+        >
+          {selectedAsleep ? 'Acordar (teste)' : 'Dormir (teste)'}
+        </button>
+      {/if}
     </section>
   {:else}
     <p class="hint">Toque em um Pokémon para ver os detalhes.</p>
@@ -521,6 +636,11 @@
   .xp small,
   .candy {
     font-size: 15px;
+  }
+
+  .dev {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .close {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { frameIndex, groundAt, pmdAnim, type PmdAnimName } from './sprites'
+  import { frameIndex, groundAt, pmdAnim, pmdSheetUrl, type PmdAnimName } from './sprites'
 
   // Desenha a partir do ponto do chão: quem usa posiciona o componente no chão
   // (ex.: centro do bloco) e o quadro se alinha pelo pixel de sombra da folha.
@@ -13,6 +13,7 @@
     scale,
     time,
     shadow,
+    flip = false,
     children,
   }: {
     speciesId: number
@@ -22,6 +23,8 @@
     scale: number
     time: number
     shadow: 0 | 1 | 2
+    // Espelha na horizontal, mantendo o ponto do chão no lugar.
+    flip?: boolean
     children?: Snippet
   } = $props()
 
@@ -31,6 +34,8 @@
   const ground = $derived(sheet ? groundAt(sheet, dir, frame) : { x: 0, y: 0 })
   const width = $derived((sheet?.w ?? 0) * scale)
   const height = $derived((sheet?.h ?? 0) * scale)
+  // Espelhado, o pixel do chão vai de x para (w - 1 - x).
+  const groundX = $derived(sheet && flip ? sheet.w - 1 - ground.x : ground.x)
 </script>
 
 {#if sheet}
@@ -38,11 +43,12 @@
     <span class="shadow s{shadow}" style:--scale={scale}></span>
     <span
       class="sprite"
-      style:left="{-ground.x * scale}px"
+      class:flip
+      style:left="{-groundX * scale}px"
       style:top="{-ground.y * scale}px"
       style:width="{width}px"
       style:height="{height}px"
-      style:background-image="url('/sprites/pmd/{speciesId}{shiny ? '/shiny' : ''}/{anim}.png')"
+      style:background-image="url('{pmdSheetUrl(speciesId, shiny, anim)}')"
       style:background-size="{sheet.w * sheet.durations.length * scale}px {sheet.h * sheet.dirs * scale}px"
       style:background-position="{-frame * width}px {-row * height}px"
     >
@@ -79,6 +85,10 @@
   .shadow.s2 {
     --w: 22;
     --h: 8;
+  }
+
+  .sprite.flip {
+    transform: scaleX(-1);
   }
 
   .sprite {

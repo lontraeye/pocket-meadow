@@ -38,6 +38,25 @@ export function gardenSprite(speciesId: number, isShiny: boolean): GardenLook {
   return { kind: 'pmd', shadow: entry.shadow, shinySheet: false, sparkle: isShiny, anims: entry.normal }
 }
 
+export function pmdSheetUrl(speciesId: number, shinySheet: boolean, anim: PmdAnimName): string {
+  return `/sprites/pmd/${speciesId}${shinySheet ? '/shiny' : ''}/${anim}.png`
+}
+
+// Mantém as folhas decodificadas na memória. Sem isso, a primeira troca para
+// uma animação (ex.: o primeiro Sleep) mostra o sprite vazio até o PNG chegar.
+const preloaded = new Map<string, HTMLImageElement>()
+
+export function preloadPmd(speciesId: number, shinySheet: boolean): void {
+  for (const anim of ['Walk', 'Idle', 'Sleep'] as const) {
+    const url = pmdSheetUrl(speciesId, shinySheet, anim)
+    if (preloaded.has(url)) continue
+    const image = new Image()
+    image.src = url
+    image.decode().catch(() => preloaded.delete(url))
+    preloaded.set(url, image)
+  }
+}
+
 export function pmdAnim(speciesId: number, shinySheet: boolean, anim: PmdAnimName): PmdAnim | null {
   const entry = species[String(speciesId)]
   if (!entry) return null
