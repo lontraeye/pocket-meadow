@@ -6,7 +6,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx scripts/seed-species.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

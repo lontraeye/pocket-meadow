@@ -14,6 +14,9 @@ node_modules/
 # build
 dist/
 
+# PokéAPI responses cached by the species seed
+.cache/
+
 # env
 .env
 .env.production
