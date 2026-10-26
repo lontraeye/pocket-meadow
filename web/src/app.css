@@ -1,0 +1,22 @@
+:root {
+  font: 18px/1.45 system-ui, 'Segoe UI', sans-serif;
+  color: #1c2b1f;
+  background: #e7f2df;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+
+pre {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-radius: 8px;
+  overflow: auto;
+}
