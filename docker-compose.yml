@@ -1,0 +1,30 @@
+services:
+  server:
+    build: ./server
+    environment:
+      PORT: "3000"
+    volumes:
+      - ./data:/data
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      server:
+        condition: service_healthy

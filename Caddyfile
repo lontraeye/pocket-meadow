@@ -1,0 +1,22 @@
+# Este Caddy é só do Pocket Meadow. No Compose ele escuta na porta 80
+# do container, publicada em 127.0.0.1:8080.
+#
+# Na VM, o Caddy compartilhado continua dono do 80/443. Falta preencher
+# o subdomínio real nesse Caddy compartilhado, por exemplo:
+#
+# meadow.example.com {
+#     reverse_proxy 127.0.0.1:8080
+# }
+
+:80 {
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy server:3000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
