@@ -60,7 +60,7 @@ CREATE TABLE species (
 CREATE INDEX idx_species_chain ON species(evolution_chain_id);
 ```
 
-Sprites não são guardados: o caminho é derivado do ID (`/sprites/showdown/{id}.gif` e `/sprites/showdown/shiny/{id}.gif`).
+Sprites não são guardados: o caminho é derivado do ID. No jardim, `/sprites/pmd/{id}/` (shiny em `shiny/`); no card e no encontro, `/sprites/showdown/{id}.gif` e `/sprites/showdown/shiny/{id}.gif`.
 
 ### `evolutions`
 Simplificado: toda evolução é "nível mínimo + doces".

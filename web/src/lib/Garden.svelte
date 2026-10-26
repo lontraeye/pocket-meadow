@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { GameState } from './api'
+  import PmdSprite from './PmdSprite.svelte'
+  import { gardenExtent, gardenSprite, showdownSrc, type PmdAnimName } from './sprites'
 
   let { game }: { game: GameState } = $props()
 
@@ -8,8 +10,13 @@
   const gridRows = 6
   const baseTileW = 48
   const baseTileH = 24
-  const baseSprite = 64
-  const unitWidth = ((columns + gridRows) * baseTileW) / 2 + (baseSprite - baseTileW)
+  const showdownSize = 64
+  const stepMs = 480
+  const idleMinMs = 1600
+  const idleMaxMs = 3000
+  const sleepChance = 0.15
+  const sleepMinMs = 20_000
+  const sleepMaxMs = 40_000
 
   type Walker = {
     id: number
@@ -18,25 +25,22 @@
     isShiny: boolean
     col: number
     row: number
-    facing: number
+    dir: number
+    anim: PmdAnimName
   }
 
   let lawn = $state<HTMLDivElement | null>(null)
   let scale = $state(1)
+  let time = $state(0)
   let selectedId = $state<number | null>(null)
   let walkers = $state<Walker[]>([])
 
   const tileW = $derived(baseTileW * scale)
   const tileH = $derived(baseTileH * scale)
-  const sprite = $derived(baseSprite * scale)
+  const pmdScale = $derived(2 * scale)
   const depth = $derived(8 * scale)
   const halfW = $derived(tileW / 2)
   const halfH = $derived(tileH / 2)
-  const pad = $derived((sprite - tileW) / 2)
-  const originX = $derived(gridRows * halfW + pad)
-  const originY = $derived(sprite - halfH)
-  const stageW = $derived((columns + gridRows) * halfW + pad * 2)
-  const stageH = $derived(originY + (columns + gridRows) * halfH + depth)
 
   const gardenPokemon = $derived(
     [...game.pokemon.filter((mon) => mon.location === 'garden')]
@@ -53,6 +57,32 @@
       ? 0
       : (game.candies.find((row) => row.evolutionChainId === selected.evolutionChainId)?.amount ?? 0),
   )
+
+  // Quanto os sprites passam do ponto do chão, em px na escala 1. Depende só de
+  // quem está no jardim, não da animação atual: senão o palco muda de tamanho
+  // quando alguém troca de animação e o jardim inteiro pula.
+  const extent = $derived.by(() => {
+    const out = { side: 0, up: 0, down: 0 }
+    for (const mon of gardenPokemon) {
+      const reach = gardenExtent(gardenSprite(mon.speciesId, mon.isShiny))
+      out.side = Math.max(out.side, reach.left, reach.right)
+      out.up = Math.max(out.up, reach.up)
+      out.down = Math.max(out.down, reach.down)
+    }
+    return out
+  })
+
+  const unitWidth = $derived(
+    ((columns + gridRows) * baseTileW) / 2 + 2 * Math.max(0, extent.side - baseTileW / 2),
+  )
+  const padX = $derived(Math.max(0, extent.side * scale - halfW))
+  const padTop = $derived(Math.max(0, extent.up * scale - halfH))
+  const padBottom = $derived(Math.max(0, extent.down * scale - halfH - depth))
+
+  const originX = $derived(gridRows * halfW + padX)
+  const originY = $derived(padTop)
+  const stageW = $derived((columns + gridRows) * halfW + padX * 2)
+  const stageH = $derived(originY + (columns + gridRows) * halfH + depth + padBottom)
 
   const tiles = Array.from({ length: columns * gridRows }, (_, index) => ({
     col: index % columns,
@@ -88,7 +118,8 @@
       isShiny: mon.isShiny,
       col: (index % (columns - 1)) + 1,
       row: Math.floor(index / (columns - 1)) + 1,
-      facing: 1,
+      dir: 1,
+      anim: 'Idle' as const,
     }))
     walkers = created
     const live = untrack(() => walkers)
@@ -99,28 +130,53 @@
 
     function wander(walker: Walker) {
       if (cancelled) return
+      if (Math.random() < sleepChance) {
+        walker.anim = 'Sleep'
+        waits.push(
+          window.setTimeout(
+            () => wander(walker),
+            sleepMinMs + Math.random() * (sleepMaxMs - sleepMinMs),
+          ),
+        )
+        return
+      }
       let col = 0
       let row = 0
+      const hereCol = Math.round(walker.col)
+      const hereRow = Math.round(walker.row)
       do {
         col = Math.floor(Math.random() * columns)
         row = Math.floor(Math.random() * gridRows)
-      } while (col === Math.round(walker.col) && row === Math.round(walker.row))
-      const fromCol = walker.col
-      const fromRow = walker.row
-      const fromX = fromCol - fromRow
-      const toX = col - row
-      walker.facing = toX >= fromX ? 1 : -1
-      const started = performance.now()
-      const duration = 2800
-      const step = (time: number) => {
+      } while (col === hereCol && row === hereRow)
+      const steps = route(hereCol, hereRow, col, row)
+      let index = 0
+      const next = () => {
         if (cancelled) return
-        const progress = Math.min(1, (time - started) / duration)
-        walker.col = fromCol + (col - fromCol) * progress
-        walker.row = fromRow + (row - fromRow) * progress
-        if (progress < 1) frames.push(requestAnimationFrame(step))
-        else waits.push(window.setTimeout(() => wander(walker), 1600 + Math.random() * 1400))
+        const step = steps[index]
+        if (!step) {
+          walker.anim = 'Idle'
+          waits.push(
+            window.setTimeout(() => wander(walker), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
+          )
+          return
+        }
+        index += 1
+        walker.anim = 'Walk'
+        walker.dir = step.dir
+        const fromCol = walker.col
+        const fromRow = walker.row
+        const started = performance.now()
+        const tick = (now: number) => {
+          if (cancelled) return
+          const progress = Math.min(1, (now - started) / stepMs)
+          walker.col = fromCol + (step.col - fromCol) * progress
+          walker.row = fromRow + (step.row - fromRow) * progress
+          if (progress < 1) frames.push(requestAnimationFrame(tick))
+          else next()
+        }
+        frames.push(requestAnimationFrame(tick))
       }
-      frames.push(requestAnimationFrame(step))
+      next()
     }
 
     for (const walker of live) waits.push(window.setTimeout(() => wander(walker), 400))
@@ -131,6 +187,34 @@
       for (const wait of waits) clearTimeout(wait)
     }
   })
+
+  $effect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let frame = 0
+    const loop = (now: number) => {
+      time = now
+      frame = requestAnimationFrame(loop)
+    }
+    frame = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(frame)
+  })
+
+  function route(fromCol: number, fromRow: number, toCol: number, toRow: number) {
+    const steps: { col: number; row: number; dir: number }[] = []
+    let col = fromCol
+    let row = fromRow
+    const colDelta = Math.sign(toCol - col)
+    const rowDelta = Math.sign(toRow - row)
+    while (col !== toCol) {
+      col += colDelta
+      steps.push({ col, row, dir: colDelta > 0 ? 1 : 5 })
+    }
+    while (row !== toRow) {
+      row += rowDelta
+      steps.push({ col, row, dir: rowDelta > 0 ? 7 : 3 })
+    }
+    return steps
+  }
 </script>
 
 <div class="layout">
@@ -153,25 +237,39 @@
         ></div>
       {/each}
       {#each walkers as walker (walker.id)}
+        {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
         {@const spot = place(walker.col, walker.row)}
+        <!-- O botão é o ponto do chão (centro do bloco); o sprite cresce a partir dele. -->
         <button
           class="mon"
           class:selected={selectedId === walker.id}
           style:left="{spot.x}px"
-          style:top="{spot.y + halfH - sprite}px"
-          style:width="{sprite}px"
-          style:height="{sprite}px"
-          style:margin-left="{-sprite / 2}px"
+          style:top="{spot.y + halfH}px"
+          style:--size="{showdownSize * scale}px"
           style:z-index={Math.round(walker.col + walker.row) + 1}
           aria-label={walker.displayName}
           onclick={() => (selectedId = walker.id)}
         >
-          <span class="shadow" aria-hidden="true"></span>
-          <img
-            src="/sprites/showdown/{walker.isShiny ? 'shiny/' : ''}{walker.speciesId}.gif"
-            alt={walker.displayName}
-            style:transform={walker.facing < 0 ? 'scaleX(-1)' : undefined}
-          />
+          {#if look.kind === 'pmd'}
+            <PmdSprite
+              speciesId={walker.speciesId}
+              shiny={look.shinySheet}
+              anim={walker.anim}
+              dir={walker.dir}
+              scale={pmdScale}
+              shadow={look.shadow}
+              {time}
+            >
+              {#if look.sparkle}<span class="sparkle"></span>{/if}
+            </PmdSprite>
+          {:else}
+            <span class="shadow" aria-hidden="true"></span>
+            <img
+              src={showdownSrc(walker.speciesId, walker.isShiny)}
+              alt=""
+              style:transform={walker.dir === 5 || walker.dir === 7 ? 'scaleX(-1)' : undefined}
+            />
+          {/if}
         </button>
       {/each}
     </div>
@@ -181,7 +279,7 @@
     <section class="panel sheet" aria-label="Detalhes">
       <div class="portrait">
         <img
-          src="/sprites/showdown/{selected.isShiny ? 'shiny/' : ''}{selected.speciesId}.gif"
+          src={showdownSrc(selected.speciesId, selected.isShiny)}
           alt=""
         />
       </div>
@@ -286,6 +384,8 @@
 
   .mon {
     position: absolute;
+    width: 0;
+    height: 0;
     padding: 0;
     border: 0;
     background: none;
@@ -293,26 +393,60 @@
     touch-action: manipulation;
   }
 
+  .mon:focus-visible {
+    outline: none;
+  }
+
+  /* Só o fallback do Showdown; a sombra do PMD fica no PmdSprite. */
   .shadow {
     position: absolute;
-    left: 25%;
-    right: 25%;
-    bottom: 2%;
-    height: 12%;
+    left: calc(var(--size) * -0.25);
+    top: calc(var(--size) * -0.06);
+    width: calc(var(--size) * 0.5);
+    height: calc(var(--size) * 0.12);
     border-radius: 50%;
     background: #00000030;
+    pointer-events: none;
+  }
+
+  .sparkle {
+    position: absolute;
+    top: 6%;
+    right: 10%;
+    width: 4px;
+    height: 4px;
+    background: #fff4a8;
+    box-shadow: 2px 0 0 #e0a800;
+    animation: spark 2.8s steps(1, end) infinite;
+    pointer-events: none;
+  }
+
+  @keyframes spark {
+    0%,
+    78% {
+      opacity: 0;
+    }
+    79%,
+    100% {
+      opacity: 1;
+    }
   }
 
   .mon img {
-    position: relative;
+    position: absolute;
+    left: calc(var(--size) * -0.5);
+    top: calc(var(--size) * -1);
     display: block;
-    width: 100%;
-    height: 100%;
+    width: var(--size);
+    height: var(--size);
     object-fit: contain;
     object-position: bottom;
   }
 
-  .mon.selected img {
+  .mon.selected img,
+  .mon.selected :global(.sprite),
+  .mon:focus-visible img,
+  .mon:focus-visible :global(.sprite) {
     filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff);
   }
 

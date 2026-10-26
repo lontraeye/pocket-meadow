@@ -64,11 +64,15 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 │  │  └─ index.ts
 │  └─ scripts/
 │     ├─ seed-species.ts    # puxa dados da PokéAPI e popula `species`/`evolutions`
-│     └─ download-sprites.ts
+│     ├─ download-sprites.ts
+│     └─ pmd-sprites.ts     # sprites do jardim (seção 4.5)
 ├─ web/
 │  ├─ public/sprites/showdown/{id}.gif
 │  ├─ public/sprites/showdown/shiny/{id}.gif
+│  ├─ public/sprites/pmd/{id}/{Walk,Idle,Sleep}.png
+│  ├─ public/sprites/pmd/{id}/shiny/{Walk,Idle,Sleep}.png
 │  └─ src/
+│     └─ lib/pmd-manifest.json   # gerado pelo pmd-sprites.ts
 └─ data/                    # volume do SQLite (fora do git)
 ```
 
@@ -104,8 +108,8 @@ e salva em `web/public/sprites/showdown/`. Não fazer hotlink em produção. No 
 ### 4.3 Direção de arte
 Não há arte original como padrão. O visual é um mix de pixel art pronta e interface web estilizada:
 
-- Pokémon: os GIFs do Showdown, acima.
-- Cenário, ícones e props (grama, canteiro, berry, presente): pixel art gratuita, com licença que permita projeto pessoal não comercial. Escalar com `image-rendering: pixelated`.
+- Pokémon no jardim: sprites do PMD Sprite Collab (seção 4.5). Em detalhes, encontros e onde faltar PMD: os GIFs do Showdown, acima.
+- Cenário, ícones e props (grama, canteiro, berry, presente): pixel art gratuita. O repositório é público, então a licença precisa permitir redistribuição (CC0, CC-BY, CC BY-NC, OFL). Licença "grátis, mas sem redistribuir" não serve. Todo asset entra no `CREDITS.md`. Escalar com `image-rendering: pixelated`.
 - Painéis, botões e texto: HTML e CSS, no mesmo clima, sem imitar um jogo em canvas.
 
 Pixel art feita à mão só entra quando não houver peça pronta que sirva. Não desenhar um set inteiro por conta própria.
@@ -122,6 +126,131 @@ Jogo idle é aberto várias vezes ao dia, quase sempre no celular. Toda tela nas
 - Depois, considerar PWA (instalar na tela inicial). Notificação de berry pronta fica para a Fase 6.
 
 O primeiro jardim testa um chão isométrico com esses Pokémon 2D por cima. Ver seção 5.11.
+
+### 4.5 Sprites do jardim (PMD Sprite Collab)
+
+Os GIFs do Showdown são poses de batalha de frente e ficam estranhos andando no chão isométrico. No jardim usamos os sprites do [PMD Sprite Collab](https://github.com/PMDCollab/SpriteCollab), no estilo Pokémon Mystery Dungeon. Eles são vistos de cima e cada um tem animação nas 8 direções. O Showdown continua no card de detalhes, nos encontros e como fallback.
+
+#### Fonte e versão
+- O repositório tem ~2 GB e muda todo dia. **Não clonar inteiro** nem usar `master` direto.
+- Clone raso e parcial em `server/.cache/spritecollab/` (já ignorado pelo `.gitignore`), só com os arquivos usados. Para todas as gerações, isso dá ~150 MB e leva ~30 s. O clone nunca vai para a VM.
+- A versão fica fixada por commit em `server/src/config/pmd.ts`. Atualizar é **manual e de propósito**: trocar o commit no config, rodar o script, revisar o `git diff` de `web/public/sprites/pmd/` e commitar.
+
+```ts
+// server/src/config/pmd.ts
+export const pmd = {
+  repoUrl: 'https://github.com/PMDCollab/SpriteCollab.git',
+  commit: 'dc5203a9e558fdb725f8315b43c61f4b781b6981', // 2026-10-26
+  cacheDir: '.cache/spritecollab',
+  outputDir: '../web/public/sprites/pmd',
+  manifestPath: '../web/src/lib/pmd-manifest.json',
+  creditsPath: '../CREDITS-PMD.md',
+  anims: ['Walk', 'Idle', 'Sleep'],
+} as const
+// A faixa de IDs vem de speciesSeed (config/seed.ts), a mesma do seed.
+```
+
+Para preparar o clone (o script faz isso sozinho se a pasta não existir, ou se o commit fixado for outro):
+
+```sh
+git init .cache/spritecollab
+git -C .cache/spritecollab remote add origin <repoUrl>
+git -C .cache/spritecollab sparse-checkout set --no-cone \
+  /tracker.json /credit_names.txt \
+  '/sprite/*/AnimData.xml' '/sprite/*/credits.txt' \
+  '/sprite/*/Walk-Anim.png' '/sprite/*/Idle-Anim.png' '/sprite/*/Sleep-Anim.png' \
+  '/sprite/*/0000/0001/AnimData.xml' '/sprite/*/0000/0001/credits.txt' \
+  '/sprite/*/0000/0001/Walk-Anim.png' '/sprite/*/0000/0001/Idle-Anim.png' '/sprite/*/0000/0001/Sleep-Anim.png'
+git -C .cache/spritecollab fetch --depth 1 --filter=blob:none origin <commit>
+git -C .cache/spritecollab checkout <commit>
+```
+
+Rodar o `git` com `execFileSync` (argumentos em lista, sem shell).
+
+#### Como o repositório é organizado
+- `sprite/{dex com 4 dígitos}/` é a forma normal. **`sprite/{dex}/0000/0001/` é o shiny.** Outras subpastas são formas (ex.: Unown B em `sprite/0201/0001/`) ou slots não oficiais (`canon: false`, ex.: "Altcolor"). Por enquanto só usamos a forma normal e o shiny.
+- `tracker.json` é o índice. `tracker[dex].sprite_complete` vale 0 (só Idle, ou nada), 1 (inclui Idle, Walk e Sleep) ou 2 (completo). O shiny fica em `tracker[dex].subgroups['0000'].subgroups['0001']`. **Ignorar o campo `sprite_files`**, que não diz se o arquivo existe.
+- `AnimData.xml` traz, por `<Anim>`: `Name`, `FrameWidth`, `FrameHeight` e `Durations` (um `<Duration>` por quadro, **em frames de jogo de 1/60 s**). Uma animação pode ser só `<CopyOf>Outra</CopyOf>`: nesse caso, usar os dados e o PNG da outra. Na raiz há `<ShadowSize>` (0, 1 ou 2).
+- `{Anim}-Anim.png` é a folha: **colunas = quadros, linhas = direções**. Walk e Idle têm 8 linhas, e Sleep normalmente tem 1. Ordem das linhas: 0 ↓, 1 ↘, 2 →, 3 ↗, 4 ↑, 5 ↖, 6 ←, 7 ↙. O número de direções é `altura do PNG / FrameHeight`.
+- `credits.txt` é TSV, uma linha por contribuição: `data  autor  status  licença  ações`. O autor é um ID do Discord (`<@!123>`) ou `CHUNSOFT`. O status `CUR` vale; `OLD` foi substituído. `credit_names.txt` (TSV `Name  Discord  Contact`) traduz o ID para nome e contato.
+
+#### Script `server/scripts/pmd-sprites.ts` (`npm run sprites:pmd`)
+Para cada dex da faixa, e para cada variante (normal e shiny):
+1. A variante é válida se o nó do tracker tem `sprite_complete >= 1` e Walk, Idle e Sleep existem no clone, depois de resolver o `CopyOf`.
+2. Conferir o PNG: `largura == FrameWidth × nº de quadros` e `altura % FrameHeight == 0`. Se não bater, pular a variante e avisar no relatório.
+3. Copiar para `web/public/sprites/pmd/{dex}/{Anim}.png` (shiny em `{dex}/shiny/`). Apagar da saída as pastas e arquivos que não vieram nesta rodada, para não sobrar sprite velho.
+4. Juntar os créditos: linhas `CUR` cujas ações incluem Walk, Idle ou Sleep.
+
+Ao final, gravar:
+- **`web/src/lib/pmd-manifest.json`**, que o front importa (fica no bundle e é tipado). Uma espécie fica de fora quando não tem PMD.
+
+```json
+{
+  "commit": "dc5203a…",
+  "species": {
+    "1": {
+      "shadow": 1,
+      "normal": {
+        "Walk":  { "w": 40, "h": 40, "dirs": 8, "durations": [4, 4, 4, 4, 4, 4] },
+        "Idle":  { "w": 32, "h": 40, "dirs": 8, "durations": [40, 6, 6] },
+        "Sleep": { "w": 24, "h": 24, "dirs": 1, "durations": [30, 35] }
+      },
+      "shiny": { "Walk": { … }, "Idle": { … }, "Sleep": { … } }
+    }
+  }
+}
+```
+
+`shiny` é `null` quando não há shiny PMD. As medidas do shiny podem diferir das do normal, então ele tem o próprio bloco.
+
+- **`CREDITS-PMD.md`** na raiz, gerado: commit usado, licença (CC BY-NC 4.0, com link) e lista de autores (nome + contato) com os dex que cada um fez. `CHUNSOFT` aparece como "Spike Chunsoft (sprites originais de Pokémon Mystery Dungeon)". O `CREDITS.md` aponta para esse arquivo.
+- **Relatório no console:** quantos normais e shiny saíram, e a lista de dex sem PMD e sem shiny PMD. Na Gen 1–2, hoje, são 0 sem PMD e 12 sem shiny: Pidgey, Raichu, Growlithe, Ditto, Dratini, Sentret, Furret, Lanturn, Sunkern, Girafarig, Sneasel e Delibird.
+
+Rodar o script duas vezes seguidas com o mesmo commit não pode gerar diff.
+
+#### Front: componente `PmdSprite.svelte`
+- Props: `speciesId`, `shiny`, `anim` (`'Walk' | 'Idle' | 'Sleep'`), `dir` (0–7) e `scale` (inteiro).
+- Desenha um `div` do tamanho `w×scale` por `h×scale`, com a folha como `background-image`, `background-size` escalado e `background-position` em `(-quadro×w, -linhaDaDireção×h)` × scale. Usar `image-rendering: pixelated`. Se a animação tem 1 direção, usar sempre a linha 0.
+- Quadro atual: as durações variam por quadro, então `steps()` em CSS não serve. Usar **um único `requestAnimationFrame` no Garden** para todos os sprites. Cada sprite calcula o quadro a partir do tempo decorrido e da soma das `durations` (× 1000/60 ms). Nada de `setInterval` por sprite.
+- **Ponto de apoio:** no PMD, o centro do quadro é o ponto da criatura no chão. Alinhar o centro do quadro com o centro do bloco. Sombra em CSS (elipse) com tamanho por `shadow`: 0 pequena, 1 média, 2 grande.
+- **Escala:** sprites PMD em `2 × scale` do jardim. Assim ficam proporcionais ao bloco e entre si: um Onix fica maior que um Pidgey.
+
+#### Direção no isométrico
+Cada passo na grade é uma diagonal na tela:
+
+| Movimento na grade | Na tela | Linha da folha |
+|---|---|---|
+| coluna +1 | ↘ | 1 |
+| linha −1 | ↗ | 3 |
+| coluna −1 | ↖ | 5 |
+| linha +1 | ↙ | 7 |
+
+Hoje o Garden anda em linha reta até um bloco aleatório, o que gera diagonais "tortas" na tela. Para casar com a folha, **andar bloco a bloco**: primeiro as colunas, depois as linhas (ou intercalado), cada passo com a sua direção. Parado, o sprite mantém a última direção.
+
+#### Comportamento no jardim
+- Andando: `Walk` na direção do passo.
+- Ao chegar: `Idle` na última direção, pelo tempo de espera que já existe.
+- Às vezes, em vez de andar, dorme: `Sleep` por um tempo maior (ex.: 15% de chance, 20–40 s). Os valores ficam numa constante no topo do Garden, não espalhados.
+- Tocar em quem está dormindo abre os detalhes normalmente.
+
+#### Fallbacks
+| Caso | Jardim | Card de detalhes / encontro |
+|---|---|---|
+| Tem PMD normal e shiny | PMD | Showdown |
+| Shiny sem PMD shiny | PMD **normal** + marca de shiny (brilho em pixel piscando de vez em quando, em CSS) | Showdown **shiny** |
+| Sem PMD (Gen 5+ no futuro) | GIF do Showdown, como hoje (espelhando) | Showdown |
+
+A regra fica numa função só (ex.: `gardenSprite(speciesId, isShiny)` em `web/src/lib/sprites.ts`), que lê o manifesto. Nada de lista fixa de nomes no código.
+
+#### Licença
+CC BY-NC 4.0 (os mais antigos usam `PMDCollab_1`/`PMDCollab_2`, também com crédito). Combina com o projeto: público, sem fins lucrativos e com crédito. Os sprites normais das Gen 1–2 são todos extraídos dos jogos oficiais do PMD (`CHUNSOFT`), com o mesmo status dos GIFs do Showdown. Os shiny são, em geral, recolors da comunidade e precisam do crédito por autor que o `CREDITS-PMD.md` gera.
+
+#### Pronto quando
+- `npm run sprites:pmd` roda do zero (sem clone) e de novo sem gerar diff.
+- `web/public/sprites/pmd/` tem os 251 normais e os shiny disponíveis. O manifesto e o `CREDITS-PMD.md` estão commitados.
+- No jardim, cada Pokémon anda bloco a bloco com a direção certa, para, e às vezes dorme. Sem espelhar.
+- O shiny sem PMD aparece com a marca no jardim e com o GIF shiny no card.
+- Funciona em 360px (seção 4.4), e 15 Pokémon andando não travam no celular.
 
 ---
 
@@ -240,7 +369,7 @@ Sorteio por peso. Exemplo:
 - Sementes vêm de: colheita, recompensas de nível de treinador e, ocasionalmente, de vencer batalhas.
 
 ### 5.11 Jardim (visual)
-Teste reversível. O chão e os objetos (grama, canteiro, itens) ficam numa grade isométrica, em blocos, porque colocar coisa num gramado frontal fica achatado. Os Pokémon continuam os GIFs 2D do Showdown, em pé sobre o bloco, sem serem redesenhados em perspectiva. O passo segue a grade. O sprite só espelha (`transform: scaleX(-1)`) conforme o lado horizontal do movimento. A ordem de desenho segue a profundidade do bloco, para quem está na frente cobrir quem está atrás.
+Teste reversível. O chão e os objetos (grama, canteiro, itens) ficam numa grade isométrica, em blocos, porque colocar coisa num gramado frontal fica achatado. Os Pokémon usam os sprites do PMD (seção 4.5), que têm animação de andar nas 8 direções. O passo segue a grade, e cada passo usa a linha diagonal correspondente da folha, sem espelhar. Só o fallback com GIF do Showdown espelha (`transform: scaleX(-1)`) conforme o lado horizontal do movimento. A ordem de desenho segue a profundidade do bloco, para quem está na frente cobrir quem está atrás.
 
 Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só visual, no cliente. Não muda regra, timestamp nem API.
 
