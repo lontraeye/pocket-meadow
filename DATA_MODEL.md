@@ -316,3 +316,9 @@ No `POST /auth/register`, em uma transação:
 1. `users` + `trainers` (`energy = ENERGY_MAX`, `energy_updated_at = now`).
 2. Pokémon inicial escolhido (nível 5) em `pokemon` + `pokedex_entries`.
 3. `inventory`: `seed:oran` ×3, `seed:pinap` ×1.
+
+---
+
+## 9. Social
+
+Decidido no `PLANNING.md`, ainda sem tabelas: amigos, visita ao jardim de outro jogador, presente e troca de Pokémon. Não há batalha entre jogadores. Presente e troca serão transações, e a troca não pode deixar nenhum dos dois jogadores com zero Pokémon.

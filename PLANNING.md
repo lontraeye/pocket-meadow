@@ -18,6 +18,8 @@ Um jogo web idle/AFK com tema Pokémon. Não há batalhas manuais nem exploraç�
 
 Loop principal: **encontro → captura → soltar duplicatas → time mais forte → regiões novas**.
 
+O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta entre jogadores. As interações sociais previstas são adicionar amigos, deixar um presente para um amigo e trocar Pokémon. O schema e a fase disso ficam para depois do loop single-player. Presente e troca seguem as regras que já existem: o servidor resolve, a operação roda em transação, e um jogador não pode ficar com zero Pokémon.
+
 ---
 
 ## 2. Princípios de arquitetura (importante)
@@ -95,6 +97,17 @@ https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/s
 ```
 
 e salva em `web/public/sprites/showdown/`. Não fazer hotlink em produção. No CSS, usar `image-rendering: pixelated` ao escalar.
+
+### 4.3 Direção de arte
+Não há arte original como padrão. O visual é um mix de pixel art pronta e interface web estilizada:
+
+- Pokémon: os GIFs do Showdown, acima.
+- Cenário, ícones e props (grama, canteiro, berry, presente): pixel art gratuita, com licença que permita projeto pessoal não comercial. Escalar com `image-rendering: pixelated`.
+- Painéis, botões e texto: HTML e CSS, no mesmo clima, sem imitar um jogo em canvas.
+
+Pixel art feita à mão só entra quando não houver peça pronta que sirva. Não desenhar um set inteiro por conta própria.
+
+O primeiro jardim testa um chão isométrico com esses Pokémon 2D por cima. Ver seção 5.11.
 
 ---
 
@@ -213,10 +226,14 @@ Sorteio por peso. Exemplo:
 - Sementes vêm de: colheita, recompensas de nível de treinador e, ocasionalmente, de vencer batalhas.
 
 ### 5.11 Jardim (visual)
+Teste reversível. O chão e os objetos (grama, canteiro, itens) ficam numa grade isométrica, em blocos, porque colocar coisa num gramado frontal fica achatado. Os Pokémon continuam os GIFs 2D do Showdown, em pé sobre o bloco, sem serem redesenhados em perspectiva. O passo segue a grade. O sprite só espelha (`transform: scaleX(-1)`) conforme o lado horizontal do movimento. A ordem de desenho segue a profundidade do bloco, para quem está na frente cobrir quem está atrás.
+
+Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só visual, no cliente. Não muda regra, timestamp nem API.
+
 - Mostra no máximo `GARDEN_MAX_VISIBLE` (inicial: 15) Pokémon andando. Prioridade: favoritos, depois aleatórios.
-- Movimento puramente visual no cliente: alvo aleatório, andar até ele, esperar alguns segundos, repetir. Espelhar o sprite (`transform: scaleX(-1)`) conforme a direção.
+- Movimento puramente visual no cliente: alvo aleatório na grade, andar até ele, esperar alguns segundos, repetir.
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
-- Canteiros de berry aparecem no gramado.
+- Canteiros de berry ocupam um bloco da grade.
 
 ---
 
@@ -293,7 +310,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Scripts de seed de espécies e download de sprites.
 - Schema + migrações.
 - Auth.
-- `GET /state` e o jardim com Pokémon andando.
+- `GET /state` e o jardim com Pokémon andando. A primeira versão do jardim é o teste isométrico da seção 5.11. Se não encaixar, volta ao gramado frontal antes de seguir.
 
 **Fase 2 — Encontros**
 - Config de regiões (2–3 regiões iniciais), energia com catch-up.
@@ -318,4 +335,4 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Mais de uma tentativa de captura por encontro (gastando algo)?
 - Pokémon com IVs/natures ou só nível?
 - Encontros de lendários: só em regiões especiais ou eventos?
-- Ranking/visualização de jardim de outros jogadores?
+- Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
