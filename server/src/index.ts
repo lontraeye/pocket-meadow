@@ -1,5 +1,8 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { migrateDatabase } from './db/migrate.js'
+
+migrateDatabase()
 
 const port = Number(process.env.PORT ?? 3001)
 if (!Number.isInteger(port) || port <= 0) {

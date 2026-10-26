@@ -3,6 +3,7 @@ services:
     build: ./server
     environment:
       PORT: "3000"
+      DATABASE_PATH: /data/meadow.sqlite
     volumes:
       - ./data:/data
     expose:

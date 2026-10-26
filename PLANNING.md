@@ -37,13 +37,13 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 
 | Camada | Escolha | Observação |
 |---|---|---|
-| Hospedagem | VM Oracle Cloud (já existente) | Roda lado a lado com outro projeto |
+| Hospedagem | VM Oracle Cloud Always Free (já existente) | Roda lado a lado com outro projeto. O catch-up sob demanda cabe nessa máquina: sem jogador online, o servidor não fica em loop |
 | Containers | Docker Compose | Um compose por projeto, isolados |
 | Reverse proxy | Caddy | Roteia por subdomínio, HTTPS automático |
-| Backend | Bun (ou Node) + Hono | API REST JSON |
+| Backend | Node + Hono | API REST JSON |
 | ORM | Drizzle ORM | Migrações versionadas, bom suporte a SQLite |
 | Banco | SQLite com WAL | Um arquivo; backup = copiar o arquivo (usar `.backup` / `VACUUM INTO`) |
-| Frontend | Vite + React (ou Svelte) + TypeScript | Build estático servido pelo Caddy |
+| Frontend | Vite + Svelte + TypeScript | Build estático servido pelo Caddy |
 | Auth | Usuário + senha (argon2), sessão por cookie httpOnly | Simples; projeto pessoal |
 | Dados | PokéAPI (seed único) | Não consultar em tempo real |
 | Sprites | GIFs animados do Showdown via repositório `PokeAPI/sprites` | Baixados uma vez e servidos localmente |
