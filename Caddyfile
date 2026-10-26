@@ -11,7 +11,9 @@
 :80 {
 	handle /api/* {
 		uri strip_prefix /api
-		reverse_proxy server:3000
+		reverse_proxy server:3000 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 
 	handle {

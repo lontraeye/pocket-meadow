@@ -30,6 +30,7 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 - **Encontros pendentes são persistidos.** Ao gerar um encontro, o resultado (espécie, nível, shiny) é salvo no banco antes de ser mostrado. Recarregar a página não rerola nada.
 - **Operações que gastam recursos rodam em transação** (gastar energia, gastar doces, soltar Pokémon etc.).
 - **Balanceamento em config.** Regiões, tabelas de spawn, berries, fórmulas e constantes ficam em arquivos de config versionados (ex.: `server/src/config/*.ts`). O banco guarda apenas o estado dos jogadores e os dados estáticos das espécies.
+- **Várias contas não são bloqueadas, e o jogador não é avisado.** O servidor registra IP e user-agent de cada registro, login e logout, lidos da conexão (atrás do Caddy deste projeto, o proxy sobrescreve `X-Forwarded-For` e o servidor só confia nesse header com `TRUST_PROXY=1`). Esses registros alimentam um painel de alertas de admin, ainda sem tela, para moderar depois. A API não devolve aviso, badge ou erro especial por causa disso. Quando a troca existir, cada troca também fica registrada para o mesmo painel.
 
 ---
 

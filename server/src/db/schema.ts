@@ -79,6 +79,25 @@ export const sessions = sqliteTable(
   (table) => [index('idx_sessions_user').on(table.userId)],
 )
 
+export const authEvents = sqliteTable(
+  'auth_events',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    event: text('event', { enum: ['register', 'login', 'logout'] }).notNull(),
+    ip: text('ip').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_auth_events_user').on(table.userId),
+    index('idx_auth_events_ip').on(table.ip),
+    check('ck_auth_events_event', sql`${table.event} in ('register', 'login', 'logout')`),
+  ],
+)
+
 export const trainers = sqliteTable('trainers', {
   userId: integer('user_id')
     .primaryKey()

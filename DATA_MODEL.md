@@ -94,13 +94,30 @@ CREATE TABLE users (
 ### `sessions`
 ```sql
 CREATE TABLE sessions (
-  id          TEXT    PRIMARY KEY,                   -- token aleatório (32 bytes, base64url); guardar hash se preferir
+  id          TEXT    PRIMARY KEY,                   -- SHA-256 em base64url do token (32 bytes). O cookie guarda o token cru.
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at  INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL
 );
 
 CREATE INDEX idx_sessions_user ON sessions(user_id);
+```
+
+### `auth_events`
+Rastro para olhar várias contas no mesmo lugar. A linha não é apagada no logout. Trocas entram numa tabela própria quando essa mecânica existir.
+
+```sql
+CREATE TABLE auth_events (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event       TEXT    NOT NULL CHECK (event IN ('register', 'login', 'logout')),
+  ip          TEXT    NOT NULL,                      -- visto pelo servidor, nunca enviado pelo cliente como dado de jogo
+  user_agent  TEXT,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX idx_auth_events_user ON auth_events(user_id);
+CREATE INDEX idx_auth_events_ip ON auth_events(ip);
 ```
 
 ---

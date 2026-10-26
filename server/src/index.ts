@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { migrateDatabase } from './db/migrate.js'
+import { authRoutes } from './routes/auth.js'
 
 migrateDatabase()
 
@@ -10,6 +11,8 @@ if (!Number.isInteger(port) || port <= 0) {
 }
 
 const app = new Hono()
+
+app.route('/auth', authRoutes)
 
 app.get('/health', (c) => {
   return c.json({ ok: true, service: 'pocket-meadow' })

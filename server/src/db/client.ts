@@ -23,3 +23,29 @@ export function openDatabase(): Database.Database {
 export function createDb(sqlite: Database.Database = openDatabase()) {
   return drizzle(sqlite, { schema })
 }
+
+let sqlite: Database.Database | undefined
+let database: ReturnType<typeof createDb> | undefined
+
+export function getSqlite(): Database.Database {
+  if (!sqlite) sqlite = openDatabase()
+  return sqlite
+}
+
+export function getDb() {
+  if (!database) database = createDb(getSqlite())
+  return database
+}
+
+export function immediate<T>(fn: () => T): T {
+  const connection = getSqlite()
+  connection.exec('BEGIN IMMEDIATE')
+  try {
+    const result = fn()
+    connection.exec('COMMIT')
+    return result
+  } catch (error) {
+    connection.exec('ROLLBACK')
+    throw error
+  }
+}

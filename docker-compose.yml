@@ -4,6 +4,7 @@ services:
     environment:
       PORT: "3000"
       DATABASE_PATH: /data/meadow.sqlite
+      TRUST_PROXY: "1"
     volumes:
       - ./data:/data
     expose:
