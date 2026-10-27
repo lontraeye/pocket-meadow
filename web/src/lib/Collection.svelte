@@ -159,72 +159,71 @@
 
 <div class="collection">
   {#if open}
-    <PokemonSheet {game} mon={open} fill onClose={() => (openId = null)} {onState} />
-  {:else}
-    <div class="scroll">
-      {#if message}<p class="alert" role="alert">{message}</p>{/if}
-      <input class="field" bind:value={query} placeholder="Buscar nome ou apelido" aria-label="Buscar" autocomplete="off" />
-      <div class="chips" role="group" aria-label="Filtros">
-        {#each filters as item (item.id)}
-          <button type="button" class="btn chip" class:btn-primary={filter === item.id} aria-pressed={filter === item.id} onclick={() => (filter = item.id)}>
-            {item.label}
+    <PokemonSheet {game} mon={open} onClose={() => (openId = null)} {onState} />
+  {/if}
+  <div class="scroll">
+    {#if message}<p class="alert" role="alert">{message}</p>{/if}
+    <input class="field" bind:value={query} placeholder="Buscar nome ou apelido" aria-label="Buscar" autocomplete="off" />
+    <div class="chips" role="group" aria-label="Filtros">
+      {#each filters as item (item.id)}
+        <button type="button" class="btn chip" class:btn-primary={filter === item.id} aria-pressed={filter === item.id} onclick={() => (filter = item.id)}>
+          {item.label}
+        </button>
+      {/each}
+    </div>
+    <label class="sort">
+      Ordem
+      <select class="field" bind:value={sort}>
+        {#each sorts as item (item.id)}
+          <option value={item.id}>{item.label}</option>
+        {/each}
+      </select>
+    </label>
+    {#if visible.length === 0}
+      <p class="hint">Ninguém com esse filtro.</p>
+    {:else}
+      <div class="grid">
+        {#each visible as mon (mon.id)}
+          <button
+            type="button"
+            class="card"
+            class:on={picked.includes(mon.id)}
+            aria-pressed={selecting ? picked.includes(mon.id) : undefined}
+            onclick={() => (selecting ? toggle(mon.id) : (openId = mon.id))}
+          >
+            <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" loading="lazy" width="72" height="72" />
+            <span class="name">{mon.nickname ?? mon.displayName}</span>
+            <small>Nv {mon.level}{mon.isShiny ? ' ★' : ''}{mon.isFavorite ? ' ♥' : ''}</small>
           </button>
         {/each}
       </div>
-      <label class="sort">
-        Ordem
-        <select class="field" bind:value={sort}>
-          {#each sorts as item (item.id)}
-            <option value={item.id}>{item.label}</option>
+    {/if}
+  </div>
+  <div class="dock">
+    {#if confirm}
+      <p class="preview">
+        Soltar {marked.length} · +{candyTotal} doces e {genericTotal} genéricos.
+      </p>
+      {#if special.length > 0}
+        <ul>
+          {#each special as mon (mon.id)}
+            <li>{mon.nickname ?? mon.displayName}{mon.isShiny ? ' · shiny' : ''}{mon.isFavorite ? ' · favorito' : ''}</li>
           {/each}
-        </select>
-      </label>
-      {#if visible.length === 0}
-        <p class="hint">Ninguém com esse filtro.</p>
-      {:else}
-        <div class="grid">
-          {#each visible as mon (mon.id)}
-            <button
-              type="button"
-              class="card"
-              class:on={picked.includes(mon.id)}
-              aria-pressed={selecting ? picked.includes(mon.id) : undefined}
-              onclick={() => (selecting ? toggle(mon.id) : (openId = mon.id))}
-            >
-              <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" loading="lazy" width="72" height="72" />
-              <span class="name">{mon.nickname ?? mon.displayName}</span>
-              <small>Nv {mon.level}{mon.isShiny ? ' ★' : ''}{mon.isFavorite ? ' ♥' : ''}</small>
-            </button>
-          {/each}
-        </div>
+        </ul>
       {/if}
-    </div>
-    <div class="dock">
-      {#if confirm}
-        <p class="preview">
-          Soltar {marked.length} · +{candyTotal} doces e {genericTotal} genéricos.
-        </p>
-        {#if special.length > 0}
-          <ul>
-            {#each special as mon (mon.id)}
-              <li>{mon.nickname ?? mon.displayName}{mon.isShiny ? ' · shiny' : ''}{mon.isFavorite ? ' · favorito' : ''}</li>
-            {/each}
-          </ul>
-        {/if}
-        <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void releaseMarked()}>Confirmar</button>
-        <button type="button" class="btn" disabled={pending} onclick={() => (confirm = false)}>Cancelar</button>
-      {:else if selecting}
-        <button type="button" class="btn btn-primary" disabled={pending || releaseBlocked !== ''} onclick={() => (confirm = true)}>
-          {releaseBlocked || `Soltar ${marked.length} · +${candyTotal} doces`}
-        </button>
-        <button type="button" class="btn" onclick={keepStrongest}>Menos o mais forte</button>
-        <button type="button" class="btn" onclick={() => { selecting = false; picked = [] }}>Cancelar</button>
-      {:else}
-        <button type="button" class="btn" onclick={() => (selecting = true)}>Selecionar</button>
-        <button type="button" class="btn" onclick={onClose}>Jardim</button>
-      {/if}
-    </div>
-  {/if}
+      <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void releaseMarked()}>Confirmar</button>
+      <button type="button" class="btn" disabled={pending} onclick={() => (confirm = false)}>Cancelar</button>
+    {:else if selecting}
+      <button type="button" class="btn btn-primary" disabled={pending || releaseBlocked !== ''} onclick={() => (confirm = true)}>
+        {releaseBlocked || `Soltar ${marked.length} · +${candyTotal} doces`}
+      </button>
+      <button type="button" class="btn" onclick={keepStrongest}>Menos o mais forte</button>
+      <button type="button" class="btn" onclick={() => { selecting = false; picked = [] }}>Cancelar</button>
+    {:else}
+      <button type="button" class="btn" onclick={() => (selecting = true)}>Selecionar</button>
+      <button type="button" class="btn" onclick={onClose}>Jardim</button>
+    {/if}
+  </div>
 </div>
 
 <style>

@@ -331,7 +331,7 @@
 
 <div class="overlay" role="presentation">
   <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
-  <section class="panel sheet" aria-label="Detalhes" role="dialog" aria-modal="true">
+  <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
   <div class="scroll">
     {#if highlightCards.length > 0}
       <div class="highlights">
@@ -544,7 +544,7 @@
       </button>
     {/if}
   </div>
-</section>
+</div>
 </div>
 
 <style>
@@ -553,7 +553,7 @@
     z-index: 40;
     inset: 0;
     display: grid;
-    place-items: stretch;
+    place-items: center;
     padding:
       calc(env(safe-area-inset-top) + 0.5rem)
       calc(env(safe-area-inset-right) + 0.5rem)
@@ -583,17 +583,17 @@
     flex-direction: column;
     gap: 0.5rem;
     width: min(100%, 28rem);
+    height: fit-content;
     max-height: 100%;
     min-width: 0;
-    min-height: 0;
-    margin: 0 auto;
+    margin: 0;
     overflow: hidden;
   }
 
   .scroll {
     display: grid;
     gap: 0.6rem;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     min-height: 0;
     overflow-x: hidden;

@@ -176,6 +176,15 @@
     return walker.anim === 'Sleep' && walker.dir >= 1 && walker.dir <= 3
   }
 
+  /** Canteiros na última fileira (mesma regra do desenho dos tiles). */
+  function isPlotCell(col: number, row: number): boolean {
+    return row === gridRows - 1 && col >= 0 && col < game.plotSlotsUnlocked
+  }
+
+  function isWalkable(col: number, row: number): boolean {
+    return col >= 0 && col < columns && row >= 0 && row < gridRows && !isPlotCell(col, row)
+  }
+
   type Walker = {
     id: number
     speciesId: number
@@ -276,16 +285,22 @@
 
   $effect(() => {
     const mons = gardenPokemon
-    const created = mons.map((mon, index) => ({
-      id: mon.id,
-      speciesId: mon.speciesId,
-      displayName: mon.nickname ?? mon.displayName,
-      isShiny: mon.isShiny,
-      col: (index % (columns - 1)) + 1,
-      row: Math.floor(index / (columns - 1)) + 1,
-      dir: 1,
-      anim: 'Idle' as const,
-    }))
+    // Lê os canteiros desbloqueados para o efeito recrear se a faixa mudar.
+    void game.plotSlotsUnlocked
+    const spots = walkableSpots()
+    const created = mons.map((mon, index) => {
+      const spot = spots[index % Math.max(1, spots.length)] ?? { col: 1, row: 1 }
+      return {
+        id: mon.id,
+        speciesId: mon.speciesId,
+        displayName: mon.nickname ?? mon.displayName,
+        isShiny: mon.isShiny,
+        col: spot.col,
+        row: spot.row,
+        dir: 1,
+        anim: 'Idle' as const,
+      }
+    })
     walkers = created
     const live = untrack(() => walkers)
 
@@ -320,15 +335,16 @@
         sleep(walker, plan)
         return
       }
-      let col = 0
-      let row = 0
       const hereCol = Math.round(walker.col)
       const hereRow = Math.round(walker.row)
-      do {
-        col = Math.floor(Math.random() * columns)
-        row = Math.floor(Math.random() * gridRows)
-      } while (col === hereCol && row === hereRow)
-      walkSteps(walker, plan, route(hereCol, hereRow, col, row), () => {
+      const target = pickWalkTarget(hereCol, hereRow)
+      if (!target) {
+        waits.push(
+          window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
+        )
+        return
+      }
+      walkSteps(walker, plan, route(hereCol, hereRow, target.col, target.row), () => {
         walker.anim = 'Idle'
         waits.push(
           window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
@@ -408,9 +424,10 @@
 
       // Terminar o passo não muda a direção, então dá para checar já.
       if (!canSleep(walker)) {
-        if (col < columns - 1) steps.push({ col: col + 1, row, dir: 1 })
-        else if (row < gridRows - 1) steps.push({ col, row: row + 1, dir: 7 })
-        else steps.push({ col: col - 1, row, dir: 5 }, { col, row, dir: 1 })
+        if (isWalkable(col + 1, row)) steps.push({ col: col + 1, row, dir: 1 })
+        else if (isWalkable(col, row + 1)) steps.push({ col, row: row + 1, dir: 7 })
+        else if (isWalkable(col - 1, row)) steps.push({ col: col - 1, row, dir: 5 }, { col: col - 1, row, dir: 1 })
+        else if (isWalkable(col, row - 1)) steps.push({ col, row: row - 1, dir: 3 }, { col, row: row - 1, dir: 1 })
       }
       walkSteps(walker, plan, steps, () => sleep(walker, plan))
     }
@@ -446,21 +463,77 @@
     return () => cancelAnimationFrame(frame)
   })
 
-  function route(fromCol: number, fromRow: number, toCol: number, toRow: number) {
+  function walkableSpots(): { col: number; row: number }[] {
+    const spots: { col: number; row: number }[] = []
+    for (let row = 0; row < gridRows; row += 1) {
+      for (let col = 0; col < columns; col += 1) {
+        if (isWalkable(col, row)) spots.push({ col, row })
+      }
+    }
+    return spots
+  }
+
+  function pickWalkTarget(hereCol: number, hereRow: number): { col: number; row: number } | null {
+    const spots = walkableSpots().filter((spot) => spot.col !== hereCol || spot.row !== hereRow)
+    if (spots.length === 0) return null
+    return spots[Math.floor(Math.random() * spots.length)] ?? null
+  }
+
+  /** Caminho em L que não pisa em canteiro; se precisar, sobe da fileira dos plots antes. */
+  function route(fromCol: number, fromRow: number, toCol: number, toRow: number): Step[] {
+    const direct = orthRoute(fromCol, fromRow, toCol, toRow, true)
+    if (direct && pathClear(direct)) return direct
+    const alt = orthRoute(fromCol, fromRow, toCol, toRow, false)
+    if (alt && pathClear(alt)) return alt
+
+    // Em cima de um canteiro (ou rota cruzando): sai para o norte e tenta de novo.
+    if (isPlotCell(fromCol, fromRow) && isWalkable(fromCol, fromRow - 1)) {
+      const escape: Step[] = [{ col: fromCol, row: fromRow - 1, dir: 3 }]
+      return [...escape, ...route(fromCol, fromRow - 1, toCol, toRow)]
+    }
+    const viaRow = Math.min(fromRow, toRow, gridRows - 2)
+    const via = orthRoute(fromCol, fromRow, fromCol, viaRow, false)
+    const rest = orthRoute(fromCol, viaRow, toCol, toRow, true)
+    if (via && rest && pathClear(via) && pathClear(rest)) return [...via, ...rest]
+    return []
+  }
+
+  function orthRoute(
+    fromCol: number,
+    fromRow: number,
+    toCol: number,
+    toRow: number,
+    colFirst: boolean,
+  ): Step[] {
     const steps: Step[] = []
     let col = fromCol
     let row = fromRow
-    const colDelta = Math.sign(toCol - col)
-    const rowDelta = Math.sign(toRow - row)
-    while (col !== toCol) {
-      col += colDelta
-      steps.push({ col, row, dir: colDelta > 0 ? 1 : 5 })
+    const runCol = () => {
+      const delta = Math.sign(toCol - col)
+      while (col !== toCol) {
+        col += delta
+        steps.push({ col, row, dir: delta > 0 ? 1 : 5 })
+      }
     }
-    while (row !== toRow) {
-      row += rowDelta
-      steps.push({ col, row, dir: rowDelta > 0 ? 7 : 3 })
+    const runRow = () => {
+      const delta = Math.sign(toRow - row)
+      while (row !== toRow) {
+        row += delta
+        steps.push({ col, row, dir: delta > 0 ? 7 : 3 })
+      }
+    }
+    if (colFirst) {
+      runCol()
+      runRow()
+    } else {
+      runRow()
+      runCol()
     }
     return steps
+  }
+
+  function pathClear(steps: Step[]): boolean {
+    return steps.every((step) => isWalkable(step.col, step.row))
   }
 </script>
 
@@ -562,90 +635,89 @@
     {@const plot = plotsByIndex.get(plotIndex)}
     {@const stage = plotStage(plot)}
     {@const berry = plot ? game.berries.find((row) => row.key === plot.berryKey) : null}
-    <div class="details plot-sheet">
-      <section class="panel sheet" aria-label="Canteiro">
+    <div class="overlay" role="presentation">
+      <button type="button" class="backdrop" aria-label="Fechar" onclick={closePlot}></button>
+      <div class="panel sheet plot-sheet" role="dialog" aria-modal="true" aria-label="Canteiro">
         <header class="sheet-head">
           <h2>Canteiro {plotIndex + 1}</h2>
           <button type="button" class="btn" onclick={closePlot}>Fechar</button>
         </header>
-        {#if plotMessage}<p class="alert" role="status">{plotMessage}</p>{/if}
-        {#if harvestResult}
-          <p class="good">
-            Colheu {harvestResult.berries} {itemLabel(`berry:${harvestResult.berryKey}`, game.berries)}
-            e {harvestResult.seeds} semente{harvestResult.seeds === 1 ? '' : 's'}.
-          </p>
-          <button type="button" class="btn btn-primary" onclick={closePlot}>Ok</button>
-        {:else if stage === 'empty'}
-          <p class="hint">Escolha uma semente para plantar.</p>
-          {#if seedRows.length === 0}
-            <p class="hint">Sem sementes na mochila.</p>
-          {:else}
-            <ul class="seed-list">
-              {#each seedRows as row (row.itemKey)}
-                {@const key = row.itemKey.slice(5)}
-                {@const info = game.berries.find((berry) => berry.key === key)}
-                <li>
-                  <button type="button" class="btn choice" disabled={plotPending} onclick={() => void plant(key)}>
-                    <img src={berryIconSrc(key)} alt="" width="28" height="28" />
-                    <span>{itemLabel(row.itemKey, game.berries)} ×{row.quantity}</span>
-                    {#if info}<small>{Math.round(info.growMs / 60000)} min</small>{/if}
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        {:else if plot && (stage === 'planted' || stage === 'growing')}
-          {@const left = remainingMs(plot.readyAt)}
-          {@const total = Math.max(1, plot.readyAt - plot.plantedAt)}
-          {@const progress = Math.min(1, 1 - left / total)}
-          <p class="hint">{berry?.name ?? plot.berryKey} crescendo…</p>
-          <div class="bar" aria-hidden="true"><span style:width="{progress * 100}%"></span></div>
-          <p class="timer">{formatCountdown(left)}</p>
-          {#if game.devTools}
-            <div class="dev-row">
-              <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ minutes: 10 })}>+10 min (teste)</button>
-              <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ ready: true })}>Pronta agora (teste)</button>
-            </div>
-          {/if}
-          {#if confirmUproot}
-            <p class="hint">
-              Arrancar antes de ficar pronta tem {Math.round((1 - game.uprootSeedReturnChance) * 100)}% de chance de
-              perder a semente.
+        <div class="plot-body">
+          {#if plotMessage}<p class="alert" role="status">{plotMessage}</p>{/if}
+          {#if harvestResult}
+            <p class="good">
+              Colheu {harvestResult.berries} {itemLabel(`berry:${harvestResult.berryKey}`, game.berries)}
+              e {harvestResult.seeds} semente{harvestResult.seeds === 1 ? '' : 's'}.
             </p>
-            <button type="button" class="btn" disabled={plotPending} onclick={() => void uproot()}>Arrancar mesmo assim</button>
-            <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = false)}>Cancelar</button>
-          {:else}
-            <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = true)}>Arrancar</button>
+            <button type="button" class="btn btn-primary" onclick={closePlot}>Ok</button>
+          {:else if stage === 'empty'}
+            <p class="hint">Escolha uma semente para plantar.</p>
+            {#if seedRows.length === 0}
+              <p class="hint">Sem sementes na mochila.</p>
+            {:else}
+              <ul class="seed-list">
+                {#each seedRows as row (row.itemKey)}
+                  {@const key = row.itemKey.slice(5)}
+                  {@const info = game.berries.find((berry) => berry.key === key)}
+                  <li>
+                    <button type="button" class="btn choice" disabled={plotPending} onclick={() => void plant(key)}>
+                      <img src={berryIconSrc(key)} alt="" width="28" height="28" />
+                      <span>{itemLabel(row.itemKey, game.berries)} ×{row.quantity}</span>
+                      {#if info}<small>{Math.round(info.growMs / 60000)} min</small>{/if}
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {:else if plot && (stage === 'planted' || stage === 'growing')}
+            {@const left = remainingMs(plot.readyAt)}
+            {@const total = Math.max(1, plot.readyAt - plot.plantedAt)}
+            {@const progress = Math.min(1, 1 - left / total)}
+            <p class="hint">{berry?.name ?? plot.berryKey} crescendo…</p>
+            <div class="bar" aria-hidden="true"><span style:width="{progress * 100}%"></span></div>
+            <p class="timer">{formatCountdown(left)}</p>
+            {#if game.devTools}
+              <div class="dev-row">
+                <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ minutes: 10 })}>+10 min (teste)</button>
+                <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ ready: true })}>Pronta agora (teste)</button>
+              </div>
+            {/if}
+            {#if confirmUproot}
+              <p class="hint">
+                Arrancar antes de ficar pronta tem {Math.round((1 - game.uprootSeedReturnChance) * 100)}% de chance de
+                perder a semente.
+              </p>
+              <button type="button" class="btn" disabled={plotPending} onclick={() => void uproot()}>Arrancar mesmo assim</button>
+              <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = false)}>Cancelar</button>
+            {:else}
+              <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = true)}>Arrancar</button>
+            {/if}
+          {:else if plot && stage === 'ready'}
+            <p class="hint">{berry?.name ?? plot.berryKey} pronta.</p>
+            <button type="button" class="btn btn-primary" disabled={plotPending} onclick={() => void harvest()}>
+              Colher
+            </button>
           {/if}
-        {:else if plot && stage === 'ready'}
-          <p class="hint">{berry?.name ?? plot.berryKey} pronta.</p>
-          <button type="button" class="btn btn-primary" disabled={plotPending} onclick={() => void harvest()}>
-            Colher
-          </button>
-        {/if}
-      </section>
+        </div>
+      </div>
     </div>
   {:else if selected}
-    <div class="details">
-      <PokemonSheet
-        {game}
-        mon={selected}
-        dev={devTools
-          ? {
-              asleep: selectedAsleep,
-              toggle: () => {
-                if (!selected) return
-                if (selectedAsleep) devCommands?.wake(selected.id)
-                else devCommands?.sleep(selected.id)
-              },
-            }
-          : null}
-        onClose={() => (selectedId = null)}
-        {onState}
-      />
-    </div>
-  {:else}
-    <p class="hint">Toque em um Pokémon ou canteiro.</p>
+    <PokemonSheet
+      {game}
+      mon={selected}
+      dev={devTools
+        ? {
+            asleep: selectedAsleep,
+            toggle: () => {
+              if (!selected) return
+              if (selectedAsleep) devCommands?.wake(selected.id)
+              else devCommands?.sleep(selected.id)
+            },
+          }
+        : null}
+      onClose={() => (selectedId = null)}
+      {onState}
+    />
   {/if}
 </div>
 
@@ -654,7 +726,7 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 0.5rem;
+    min-width: 0;
     min-height: 0;
   }
 
@@ -663,7 +735,7 @@
     flex: 1;
     align-items: center;
     justify-content: center;
-    min-height: 16rem;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -853,18 +925,57 @@
   }
 
   .hint {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
     margin: 0;
     color: var(--ink-soft);
     font-weight: 600;
   }
 
-  .plot-sheet .sheet {
+  .overlay {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding:
+      calc(env(safe-area-inset-top) + 0.5rem)
+      calc(env(safe-area-inset-right) + 0.5rem)
+      calc(env(safe-area-inset-bottom) + 0.5rem)
+      calc(env(safe-area-inset-left) + 0.5rem);
+    box-sizing: border-box;
+  }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #1a1208aa;
+    cursor: pointer;
+  }
+
+  .plot-sheet {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(100%, 28rem);
+    height: fit-content;
+    max-height: 100%;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .plot-body {
     display: grid;
     gap: 0.5rem;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .sheet-head {
@@ -931,17 +1042,4 @@
     font-weight: 700;
   }
 
-  @media (min-width: 800px) {
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 20rem;
-      align-items: start;
-    }
-
-    .details {
-      position: sticky;
-      top: 1rem;
-      min-width: 0;
-    }
-  }
 </style>
