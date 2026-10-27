@@ -45,22 +45,36 @@ export function pmdSheetUrl(speciesId: number, shinySheet: boolean, anim: PmdAni
 
 // Mantém as folhas decodificadas na memória. Sem isso, a primeira troca para
 // uma animação (ex.: o primeiro Sleep) mostra o sprite vazio até o PNG chegar.
-const preloaded = new Map<string, HTMLImageElement>()
+const preloaded = new Map<string, { image: HTMLImageElement; ready: Promise<void> }>()
 // Folhas já decodificadas. Reativo: o PmdSprite mostra a Poké Ball até a dele entrar.
 const decoded = new SvelteSet<string>()
 
-export function preloadPmd(speciesId: number, shinySheet: boolean): void {
-  for (const anim of ['Walk', 'Idle', 'Sleep'] as const) {
+/** Baixa e decodifica as três folhas. Resolve mesmo se alguma falhar. */
+export function loadPmd(speciesId: number, shinySheet: boolean): Promise<void> {
+  const sheets = (['Walk', 'Idle', 'Sleep'] as const).map((anim) => {
     const url = pmdSheetUrl(speciesId, shinySheet, anim)
-    if (preloaded.has(url)) continue
+    const known = preloaded.get(url)
+    if (known) return known.ready
     const image = new Image()
     image.src = url
-    image
-      .decode()
-      .then(() => decoded.add(url))
-      .catch(() => preloaded.delete(url))
-    preloaded.set(url, image)
-  }
+    const ready = image.decode().then(
+      () => {
+        decoded.add(url)
+      },
+      () => {
+        // Falhou (rede caiu?): esquece, para a próxima chamada tentar de novo.
+        preloaded.delete(url)
+      },
+    )
+    // Guarda a imagem: sem referência, o navegador pode descartar a decodificação.
+    preloaded.set(url, { image, ready })
+    return ready
+  })
+  return Promise.all(sheets).then(() => undefined)
+}
+
+export function preloadPmd(speciesId: number, shinySheet: boolean): void {
+  void loadPmd(speciesId, shinySheet)
 }
 
 export function pmdSheetReady(url: string): boolean {

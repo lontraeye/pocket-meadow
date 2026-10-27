@@ -7,11 +7,15 @@
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
+  import { baseTasks, gameTasks, warmUp } from './lib/preload'
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
   import { formatClockTime, formatCountdown } from './lib/time'
   import { serverClock } from './lib/serverClock.svelte'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
+  // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
+  let progress = $state({ done: 0, total: 0 })
+  let offline = $state(false)
   let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare' | 'bag'>('meadow')
   let game = $state<GameState | null>(null)
   let energyDetail = $state(false)
@@ -40,19 +44,44 @@
   })
 
   async function loadState() {
-    const response = await api('/api/state')
+    let response: Response
+    try {
+      response = await api('/api/state')
+    } catch {
+      // Sem rede na abertura: oferece tentar de novo em vez de travar no carregando.
+      if (phase === 'loading') offline = true
+      return
+    }
     if (response.status === 401) {
       game = null
-      phase = 'auth'
       screen = 'meadow'
+      if (phase !== 'auth') await warmUp(baseTasks(), onProgress)
+      phase = 'auth'
       return
     }
     if (!response.ok) {
       if (!game) phase = 'auth'
       return
     }
-    game = (await response.json()) as GameState
+    const next = (await response.json()) as GameState
+    // Entrando no jogo (abertura ou logo após o login): só mostra o jardim com a
+    // arte pronta. As atualizações durante o jogo não passam por aqui.
+    if (phase !== 'play') {
+      phase = 'loading'
+      await warmUp([...baseTasks(), ...gameTasks(next)], onProgress)
+    }
+    game = next
     phase = 'play'
+  }
+
+  function onProgress(done: number, total: number) {
+    progress = { done, total }
+  }
+
+  function retry() {
+    offline = false
+    progress = { done: 0, total: 0 }
+    void loadState()
   }
 
   async function logout() {
@@ -95,7 +124,28 @@
 </script>
 
 {#if phase === 'loading'}
-  <main class="status"><p>Abrindo o jardim…</p></main>
+  <!-- Só CSS: as molduras em PNG são justamente parte do que está carregando. -->
+  <main class="status boot">
+    <p class="boot-logo">Pocket<span>Meadow</span></p>
+    {#if offline}
+      <p class="boot-caption">Sem conexão com o servidor.</p>
+      <button type="button" class="boot-retry" onclick={retry}>Tentar de novo</button>
+    {:else}
+      <div
+        class="boot-bar"
+        role="progressbar"
+        aria-label="Carregando"
+        aria-valuemin={0}
+        aria-valuemax={progress.total}
+        aria-valuenow={progress.done}
+      >
+        <span style:width="{progress.total ? (progress.done / progress.total) * 100 : 0}%"></span>
+      </div>
+      <p class="boot-caption">
+        {progress.total ? `Carregando ${progress.done}/${progress.total}` : 'Abrindo o jardim…'}
+      </p>
+    {/if}
+  </main>
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
@@ -174,6 +224,65 @@
     place-items: center;
     min-height: var(--screen-h);
     font-size: 1.2rem;
+  }
+
+  .boot {
+    place-content: center;
+    gap: 1rem;
+  }
+
+  .boot-logo {
+    display: grid;
+    justify-items: center;
+    margin: 0;
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow:
+      0 3px 0 var(--grass-side),
+      3px 0 0 var(--grass-side),
+      -3px 0 0 var(--grass-side),
+      0 -3px 0 var(--grass-side),
+      0 6px 0 var(--ink);
+  }
+
+  .boot-logo span {
+    color: var(--accent);
+    font-size: 1.15em;
+    margin-top: -0.15em;
+  }
+
+  .boot-bar {
+    box-sizing: border-box;
+    width: min(16rem, 80vw);
+    height: 20px;
+    padding: 3px;
+    background: var(--ink);
+  }
+
+  .boot-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    box-shadow: inset 0 -3px 0 #c79a00;
+    transition: width 0.15s steps(4, end);
+  }
+
+  .boot-caption {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .boot-retry {
+    min-height: 48px;
+    padding: 0 1.25rem;
+    border: 3px solid var(--ink);
+    background: var(--accent);
+    box-shadow: inset 0 -4px 0 #c79a00;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
   }
 
   .meadow {

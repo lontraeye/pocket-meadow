@@ -1,0 +1,78 @@
+import type { GameState } from './api'
+import { gardenSprite, loadPmd } from './sprites'
+
+// Arte da abertura (App.svelte): o que aparece em quase toda tela. As molduras
+// entram por border-image no CSS; sem elas, painéis e botões aparecem crus.
+const uiArt = [
+  '/ui/panel.png',
+  '/ui/inlay.png',
+  '/ui/selected.png',
+  '/ui/button-pressed.png',
+  '/ui/button-primary.png',
+  '/ui/button-primary-pressed.png',
+]
+// Os ícones das berries também saem de game.berries; esta lista cobre a tela
+// de login, que ainda não tem o estado.
+const itemArt = ['oran', 'pinap', 'razz', 'nanab', 'lum'].map((key) => `/sprites/items/${key}-berry.png`)
+const fonts = ['400 16px "Pixelify Sans"', '600 16px "Pixelify Sans"', '700 16px "Pixelify Sans"']
+
+const loaded = new Map<string, Promise<void>>()
+
+/** Baixa e decodifica. Resolve mesmo com erro: a abertura não pode travar numa imagem. */
+export function loadImage(url: string): Promise<void> {
+  const known = loaded.get(url)
+  if (known) return known
+  const image = new Image()
+  image.src = url
+  const ready = image.decode().catch(() => {
+    loaded.delete(url)
+  })
+  loaded.set(url, ready)
+  return ready
+}
+
+/** Tudo que a tela de login usa. */
+export function baseTasks(): Promise<unknown>[] {
+  return [
+    // Os iniciais aparecem no cadastro, logo depois do primeiro login.
+    ...[...uiArt, ...itemArt, '/sprites/items/poke-ball.png', ...[1, 4, 7].map((id) => `/sprites/showdown/${id}.gif`)].map(
+      loadImage,
+    ),
+    ...fonts.map((font) => document.fonts.load(font).catch(() => undefined)),
+  ]
+}
+
+/** O jardim do jogador: folhas PMD (ou GIF, quem não tem PMD) e os ícones das berries do config. */
+export function gameTasks(game: GameState): Promise<unknown>[] {
+  const tasks: Promise<unknown>[] = game.berries.map((berry) => loadImage(`/sprites/items/${berry.key}-berry.png`))
+  const seen = new Set<string>()
+  for (const mon of game.pokemon) {
+    if (mon.location !== 'garden') continue
+    const look = gardenSprite(mon.speciesId, mon.isShiny)
+    const key = look.kind === 'pmd' ? `pmd:${mon.speciesId}:${look.shinySheet}` : look.src
+    if (seen.has(key)) continue
+    seen.add(key)
+    tasks.push(look.kind === 'pmd' ? loadPmd(mon.speciesId, look.shinySheet) : loadImage(look.src))
+  }
+  return tasks
+}
+
+/**
+ * Espera as tarefas, avisando o progresso, por no máximo `timeoutMs`. Passado
+ * o limite, segue assim mesmo: o que faltar aparece com a Poké Ball.
+ */
+export async function warmUp(
+  tasks: Promise<unknown>[],
+  onProgress: (done: number, total: number) => void,
+  timeoutMs = 10_000,
+): Promise<void> {
+  let done = 0
+  onProgress(0, tasks.length)
+  const all = Promise.all(tasks.map((task) => task.finally(() => onProgress(++done, tasks.length))))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const limit = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs)
+  })
+  await Promise.race([all, limit])
+  clearTimeout(timer)
+}
