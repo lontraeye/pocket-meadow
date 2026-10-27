@@ -772,6 +772,24 @@ O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca má
 - **Canteiros de berry no modo de construção.** Hoje os canteiros ficam fixos na última fileira do jardim, e o número cresce com o nível (seção 5.10). Com o modo de edição, o jogador escolhe onde ficam, e o canteiro vira um objeto como os outros. O número máximo continua derivado do nível. Dá para casar com os biomas: certas berries só crescem, ou crescem mais rápido, num bioma específico. O `plot_index` do banco passaria a ter uma posição no jardim.
 - **Lista de arte** para o usuário: tiles por bioma, estados da terra (seca, regada, grama), máquinas com e sem operador, ícones dos itens de evolução que não vierem do `PokeAPI/sprites`.
 
+### 5.17 Personagem e perfil de treinador (ideia, ainda sem fase)
+O jogador monta o visual do próprio treinador, e isso é o começo de um **perfil de treinador**: o cartão que os outros veem ao visitar o jardim (seção 1).
+
+- **Avatar em camadas:** corpo, cabelo, roupa de cima, de baixo, calçado e acessório. Cada camada é uma folha de sprite, e o avatar é a sobreposição delas. O jogador escolhe por toque, com prévia, em mobile primeiro.
+- **Base pronta + peças próprias:** começar com um pacote pronto e, depois, o usuário desenha peças exclusivas. As peças próprias entram no `CREDITS.md` com a licença escolhida.
+- **Candidatos a base** (conferir a licença de cada peça antes de usar, seção 4.3):
+  - **LPC (Liberated Pixel Cup) e o gerador de personagens:** o mais completo, com centenas de peças. Mas a licença é misturada, com muitas peças CC-BY-SA ou GPL. CC-BY-SA não está na lista aceita hoje: ou se usa só as peças CC0 e CC-BY, ou se decide aceitar CC-BY-SA no projeto;
+  - **Kenney, "Roguelike Characters":** CC0, pixel pequeno com partes trocáveis. É mais simples, sem problema de licença;
+  - **sprites de treinador do Showdown:** personagens fixos, sem personalização, que serviriam como "escolha um avatar da lista", com o mesmo status dos outros sprites Pokémon.
+- **Estilo:** o avatar precisa combinar com os sprites do PMD do jardim. Se o treinador andar no jardim, as direções da folha importam: LPC tem 4 direções, e o PMD tem 8.
+- **Peças como recompensa:** roupas liberadas por progresso (nível de treinador, álbum da seção 5.12, missões da 5.15), além das peças básicas de início. Dá outro motivo para completar coisas.
+- **Cartão de treinador:** nome, avatar, nível, espécies capturadas, Pokémon favorito em destaque, data de início e, depois, conquistas do álbum.
+
+Pontos a decidir:
+- **Modelo de dados:** o avatar como chaves por camada (`avatar` JSON ou colunas em `trainers`) e as peças liberadas, só as conquistadas, porque as do nível são derivadas (`DATA_MODEL.md`, seção 3). Pede migração.
+- Se o treinador aparece andando no jardim ou só no cartão e no HUD.
+- Validação no servidor: só aceitar peças que o jogador liberou.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
@@ -917,7 +935,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 **Fase 7 — Pokédex: guia e álbum** (seção 5.12)
 - Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
 
-**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9).
+**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
 
 ---
 
