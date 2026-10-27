@@ -1,4 +1,5 @@
 import { mulberry32, type Rng } from '../mulberry32.js'
+import { isPokemonType } from '../../config/types.js'
 import {
   abilityImmunity,
   calcDamage,
@@ -7,6 +8,7 @@ import {
   fastEnergyGain,
   moveCooldownMs,
   offensiveStat,
+  typeMultiplier,
 } from './damage.js'
 import { simConfig } from './config.js'
 import { autoReactionSeed } from './seeds.js'
@@ -388,6 +390,9 @@ function resolveMove(
 ) {
   const absorb = abilityImmunity(defender.fighter.abilityKey, move.type)
   let damage = 0
+  const effectiveness = isPokemonType(move.type)
+    ? typeMultiplier(move.type, defender.fighter.types)
+    : 1
 
   if (absorb.immune && absorb.healFraction > 0) {
     const healed = Math.floor(defender.maxHp / 4)
@@ -426,6 +431,7 @@ function resolveMove(
     move: action,
     moveName: move.name,
     damage,
+    effectiveness,
     fainted,
   })
   if (fainted) {

@@ -47,7 +47,17 @@ export type BattleInput = {
 
 export type BattleEvent =
   | { t: number; kind: 'enter'; side: 'player' | 'wild'; fighterId: number | null; slot: number }
-  | { t: number; kind: 'move'; side: 'player' | 'wild'; move: 'fast' | 'charged'; moveName: string; damage: number; fainted: boolean }
+  | {
+      t: number
+      kind: 'move'
+      side: 'player' | 'wild'
+      move: 'fast' | 'charged'
+      moveName: string
+      damage: number
+      /** Multiplicador de tipo (0, 0.25, 0.5, 1, 2, 4) — o mesmo que o dano usa. */
+      effectiveness: number
+      fainted: boolean
+    }
   | { t: number; kind: 'heal'; side: 'player' | 'wild'; amount: number }
   | { t: number; kind: 'faint'; side: 'player' | 'wild'; slot: number }
   | { t: number; kind: 'switch'; side: 'player'; slot: number; manual: boolean }

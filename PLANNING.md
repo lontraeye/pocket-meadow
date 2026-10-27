@@ -893,7 +893,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 
 **Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova até o nível atual passam a valer para troca (e um carregado entra direto se o slot estiver vazio).
 - No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
-- As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
+- As demais aparecem na ficha como "sem efeito em combate por enquanto". As ligadas a status ganham efeito na 8.6, e as de clima quando ele entrar.
 
 **Golpes (modelo do Pokémon GO: um golpe rápido e um golpe carregado)**
 - Nomes: **golpe rápido** e **golpe carregado** são os slots. "Físico" e "especial" ficam só para a classe do golpe (qual atributo ele usa).
@@ -943,6 +943,24 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - Desfechos com os status que já existem: capturou → `caught`; errou e ele fugiu, deixou ir, ou o prazo da decisão acabou → `escaped` ("venceu, mas não ficou com ele").
 - O jogador lança a bola: a chance é a `catchChance` da seção 5.6. Errou: o selvagem pode fugir (config, chance por erro). Dá para lançar de novo até capturar, ele fugir, o jogador deixar ir ou o encontro expirar. A Poké Ball é infinita até as pokébolas virarem item.
 
+**Status e efeitos dos golpes (parte 8.6, decidido em 2026-10-27)**
+- **Condições de status**, uma por vez por Pokémon, como nos jogos principais. Durações e intensidades em milissegundos e frações inteiras, no config:
+  - **Queimadura:** perde vida a cada segundo e o Ataque físico cai.
+  - **Veneno:** perde vida a cada segundo.
+  - **Paralisia:** o tempo de espera entre os golpes aumenta.
+  - **Sono:** fica alguns segundos sem agir.
+  - **Congelamento:** fica sem agir até descongelar (por tempo, ou na hora se levar um golpe de fogo).
+  - **Confusão:** chance de bater em si mesmo ao agir. Some depois de alguns segundos e pode somar com as outras, como nos jogos.
+- **Imunidade por tipo**, como nos jogos: Fogo não queima, Elétrico não paralisa, Venenoso e Aço não envenenam, Gelo não congela.
+- **Efeitos secundários** dos golpes de dano, com os dados da PokéAPI (`meta`): status e a chance dele, mudanças de atributo (como os buffs do GO, com tetos), dreno (Absorb, Giga Drain) e recuo (Take Down, Double-Edge). O snapshot `moves.json` passa a guardar esses campos.
+- **Rápido x carregado:** no golpe carregado o efeito usa a chance cheia do jogo. No rápido, a chance é dividida (config, inicial ÷3), porque ele acerta a cada segundo. **Sono, congelamento e confusão só saem do golpe carregado:** no rápido, mesmo com chance baixa, eles travariam a luta. A lista de status permitidos no rápido fica no config.
+- **Golpes só de status** (Thunder Wave, Sleep Powder, Toxic) continuam fora do pool por enquanto. Pedem um balanceamento à parte como golpe carregado.
+- **Habilidades ligadas a status** entram no conjunto escolhido: Static, Poison Point, Flame Body, Effect Spore, Synchronize, Guts, Immunity, Limber, Insomnia, Vital Spirit, Water Veil, Magma Armor, Own Tempo, Natural Cure, Shed Skin, Early Bird, Marvel Scale, Shield Dust, Serene Grace e Rock Head. As de contato (Static, Poison Point, Flame Body, Effect Spore) usam a classe física do golpe como contato, porque a PokéAPI não traz esse dado.
+- **Só durante a luta:** todos saem curados no fim. Pokémon que ficam machucados depois da luta (com cura no jardim, itens ou centro) é ideia para o futuro.
+- Tudo dentro da simulação compartilhada, com as regras de sempre (seed da luta, só `+ − × ÷` e `floor`/`min`/`max`, tempo em ms inteiros). O servidor continua refazendo a luta igual.
+- **Na tela:** selo do status ao lado da barra de vida (QMD, ENV, PAR, DRM, CGL, CNF) e o dano por tempo como número. O visual de cada status (chama, bolhas, faíscas) vem na parte 2 do juice.
+- Clima e as habilidades que dependem dele (Swift Swim, Chlorophyll, Drizzle) ficam para depois.
+
 **PRNG (seção 7)**
 - A luta tem um número variável de rolagens, então cada parte usa a sua sequência, derivada da seed do encontro: **luta**, **lançamentos** e **traços do capturado** (6 IVs, nature, habilidade e 2 golpes). Assim o replay de cada parte continua simples.
 
@@ -977,7 +995,8 @@ if (trainer.energy >= ENERGY_MAX) {
 // Daycare: XP calculada por (min(now, enteredAt + MAX) - lastSettledAt)
 // Berries: não precisam de catch-up; "pronta" = now >= readyAt
 // Efeitos: remover os com expiresAt <= now
-// Encontros: marcar como 'fled' os pendentes com expiresAt <= now
+// Encontros: os pendentes com expiresAt <= now viram 'fled' (antes da luta)
+// ou 'escaped' (já vencidos, com won_at)
 ```
 
 Retornar também `energyNextAt` para o frontend mostrar o contador regressivo.
@@ -986,7 +1005,7 @@ Retornar também `energyNextAt` para o frontend mostrar o contador regressivo.
 
 ## 7. RNG
 - Usar um PRNG com seed no servidor (ex.: `mulberry32` ou `seedrandom`), com seed gerada por `crypto.getRandomValues` a cada encontro e **salva no registro do encontro**. Permite reproduzir e depurar resultados.
-- Todas as rolagens de um encontro (espécie, nível, shiny, batalha, captura) usam a sequência desse PRNG, nessa ordem. Numa vitória, depois da captura vêm a chance de semente e, se ganhou, qual semente (seção 5.10).
+- Espécie, nível e shiny saem da sequência desse PRNG, nessa ordem. Desde a Fase 8, o resto usa sequências próprias, derivadas da seed do encontro (`server/src/game/sim/seeds.ts`): a luta, o tempo de reação do automático, os traços do selvagem (os mesmos na luta e na captura), os lançamentos (o 1º lançamento usa a 1ª rolagem, e assim por diante) e a semente que cai na vitória (seção 5.10).
 
 ---
 
@@ -1139,18 +1158,19 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - *8.4 — Captura em passos:* encontro vencido (`won_at`, sem status novo), lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
 - *8.5 — Modo automático:* o interruptor "Auto" (que já existe na 8.3) vira preferência do treinador no servidor, com o interruptor também na tela de exploração. A captura continua sempre sendo decisão do jogador.
 - Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
-- *Juice do combate (anotado em 2026-10-27, depois da 8.5):*
+- *8.6 — Status e efeitos dos golpes:* condições de status, efeitos secundários, dreno, recuo e as habilidades ligadas a status, tudo na simulação compartilhada (ver "Status e efeitos dos golpes" na 5.18). Vem depois da parte 1 do juice e antes da parte 2.
+- *Juice do combate (anotado em 2026-10-27, depois da 8.5). Parte 1: Poké Ball e impacto dos golpes. Parte 2: efeitos visuais por golpe e por status:*
   - **Efeitos por golpe:** pegar efeitos visuais (partículas, rajadas, folhas, chamas, raios…) e mapear para os golpes que os Pokémon podem ter. O mapa sai por tipo e categoria do golpe (físico ou especial, rápido ou carregado), com exceções por golpe quando valer a pena; golpe sem efeito usa o do tipo. Fica num lugar só, como o `gardenSprite`. Só assets com licença redistribuível (seção 4.3), creditados no `CREDITS.md`.
   - **Animações da luta mais vivas:** impacto com tremida de tela curta, flash no acerto, destaque no supereficaz e no crítico, e uma entrada mais marcada do golpe carregado.
   - **Pokébola mais bonita e mais dramática:** arco do lançamento, a bola abrindo e puxando o Pokémon num brilho, pausas maiores entre as chacoalhadas (a última mais demorada), e no fim estrelinhas na captura ou a bola estourando na fuga.
   - Tudo respeitando `prefers-reduced-motion` e leve no celular.
 
-**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
+**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 
 ## 10. Questões em aberto
-- Mais de uma tentativa de captura por encontro (gastando algo)?
+- ~~Mais de uma tentativa de captura por encontro (gastando algo)?~~ Decidido: dá para lançar de novo até capturar ou ele fugir (seção 5.18). Gastar bola fica para quando as pokébolas virarem item (5.6).
 - ~~Pokémon com IVs/natures ou só nível?~~ Decidido: IVs e EVs, sem natures por enquanto (seção 5.13).
 - Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.

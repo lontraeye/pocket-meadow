@@ -28,6 +28,40 @@
   // snapshot continua valendo (HP e energia só mudam em eventos); o
   // requestAnimationFrame cuida só do relógio da interface (cooldowns, anims).
 
+  // Juice visual (parte 1): só transform/opacity; não atrasa a simulação.
+  const HIT_FLASH_MS = 120
+  const SHAKE_FAST_MS = 150
+  const SHAKE_CHARGED_MS = 220
+  const SHAKE_PX_FAST = 2
+  const SHAKE_PX_CHARGED = 4
+  const CHARGED_BANNER_MS = 550
+  const FAINT_SLOW_MS = 1100
+  const FAINT_LINGER_MS = 900
+  const HP_TRAIL_HOLD_MS = 90
+  const HP_TRAIL_MS = 280
+  const FLOAT_MS = 1000
+
+  const TYPE_GLOW: Record<string, string> = {
+    normal: '#a8a878',
+    fire: '#f08030',
+    water: '#6890f0',
+    electric: '#f8d030',
+    grass: '#78c850',
+    ice: '#98d8d8',
+    fighting: '#c03028',
+    poison: '#a040a0',
+    ground: '#e0c068',
+    flying: '#a890f0',
+    psychic: '#f85888',
+    bug: '#a8b820',
+    rock: '#b8a038',
+    ghost: '#705898',
+    dragon: '#7038f8',
+    dark: '#705848',
+    steel: '#b8b8d0',
+    fairy: '#ee99ac',
+  }
+
   let {
     start,
     encounter,
@@ -55,7 +89,17 @@
 
   type Pose = { id: number; start: number; steps: Step[] }
   type Step = { anim: PmdAnimName | null; css: 'lunge' | 'hurt' | 'faint' | null; ms: number }
-  type Floater = { id: number; side: 'player' | 'wild'; text: string; heal: boolean; born: number }
+  type Floater = {
+    id: number
+    side: 'player' | 'wild'
+    text: string
+    heal: boolean
+    born: number
+    charged?: boolean
+    effectiveness?: number
+    note?: string
+  }
+  type ChargedFx = { name: string; color: string; side: 'player' | 'wild'; until: number }
   type Status = 'live' | 'finishing' | 'offline'
 
   const { setup, seed, timeLimit, encounterId } = untrack(() => ({
@@ -77,6 +121,14 @@
   let wildPose = $state.raw<Pose | null>(null)
   // Instante (ms de luta) do último golpe/entrada do jogador: base da barra de espera.
   let cdFrom = $state(0)
+  let shakeToken = $state(0)
+  let shakeHard = $state(false)
+  let flashSide = $state<'player' | 'wild' | null>(null)
+  let chargedFx = $state.raw<ChargedFx | null>(null)
+  let endingFaint = $state(false)
+  let wildTrail = $state(100)
+  let allyTrail = $state(100)
+  let allyTrailSlot = -1
 
   let seen = 0
   let primed = false
@@ -87,6 +139,7 @@
   let autoAt: number | null = null
   let autoFor = -1
   let frame = 0
+  let flashClear = 0
   // Mesma sequência da simulação: mulberry32(autoReactionSeed(seed)).
   let autoRoll = mulberry32(autoReactionSeed(seed))
   function nextAutoDelay(): number {
@@ -180,7 +233,7 @@
         if (i >= startAt) allyPose = null
       }
       if (event.kind === 'move' && event.side === 'player') from = event.t
-      if (i >= startAt) react(event, slot)
+      if (i >= startAt) react(event, slot, next.snapshot.result === 'win' || next.snapshot.result === 'lose')
     }
     seen = next.log.length
     primed = true
@@ -278,9 +331,10 @@
   function tick(now: number) {
     frame = requestAnimationFrame(tick)
     clock = now
-    if (floaters.length > 0 && floaters.some((f) => now - f.born > 900)) {
-      floaters = floaters.filter((f) => now - f.born <= 900)
+    if (floaters.length > 0 && floaters.some((f) => now - f.born > FLOAT_MS)) {
+      floaters = floaters.filter((f) => now - f.born <= FLOAT_MS)
     }
+    if (chargedFx && now >= chargedFx.until) chargedFx = null
     if (status !== 'live') return
     const e = elapsedAt(now)
     if (e >= nextEventAt) resim(e)
@@ -291,7 +345,10 @@
   onMount(() => {
     persist()
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(flashClear)
+    }
   })
 
   // ---- Fim da luta -------------------------------------------------------
@@ -308,8 +365,14 @@
   async function finish() {
     if (status !== 'live') return
     status = 'finishing'
-    // Deixa a animação de desmaio aparecer antes de trocar de tela.
-    const linger = !reduced && sim.snapshot.result !== null && sim.snapshot.result !== 'timeout' ? sleep(900) : Promise.resolve()
+    // Deixa a animação de desmaio aparecer antes de trocar de tela (só visual).
+    const lingerMs =
+      !reduced && sim.snapshot.result !== null && sim.snapshot.result !== 'timeout'
+        ? endingFaint
+          ? FAINT_SLOW_MS
+          : FAINT_LINGER_MS
+        : 0
+    const linger = lingerMs > 0 ? sleep(lingerMs) : Promise.resolve()
     for (let attempt = 0; attempt < 8; attempt += 1) {
       let response: Response
       try {
@@ -344,29 +407,83 @@
 
   // ---- Reações aos eventos (som, número, animação) ------------------------
 
-  function react(event: BattleEvent, allySlot: number) {
+  /** `ended`: a luta acabou por desmaio nesta re-simulação (`sim` ainda é a anterior). */
+  function react(event: BattleEvent, allySlot: number, ended: boolean) {
     if (event.kind === 'move') {
       const attacker = event.side === 'player' ? setup.team[allySlot]! : wildFighter
       const defenderSide = event.side === 'player' ? 'wild' : 'player'
-      if (event.side === 'player') play(event.move === 'charged' ? 'charged' : 'fast')
+      const charged = event.move === 'charged'
+      if (event.side === 'player') play(charged ? 'charged' : 'fast')
+      if (charged) showCharged(attacker, event.side, event.moveName)
       poseFor(event.side, attackSteps(attacker, event.side, event.move))
       if (event.damage > 0) {
         play('hit')
-        spawn(defenderSide, `-${event.damage}`, false)
-        if (!event.fainted) poseFor(defenderSide, hurtSteps(defenderSide === 'player' ? setup.team[allySlot]! : wildFighter, defenderSide))
+        bumpJuice(defenderSide, charged)
+        spawnDamage(defenderSide, event.damage, event.effectiveness, charged)
+        if (!event.fainted) {
+          poseFor(
+            defenderSide,
+            hurtSteps(defenderSide === 'player' ? setup.team[allySlot]! : wildFighter, defenderSide),
+          )
+        }
       }
+      // Câmera lenta só no desmaio que encerra a luta: o selvagem caiu, ou caiu
+      // o último do seu time (não quando ainda há outro para entrar).
+      if (event.fainted && ended) endingFaint = true
     } else if (event.kind === 'heal') {
-      spawn(event.side, `+${event.amount}`, true)
+      spawnHeal(event.side, event.amount)
     } else if (event.kind === 'faint') {
       play('faint')
       const fighter = event.side === 'player' ? setup.team[event.slot]! : wildFighter
-      poseFor(event.side, faintSteps(fighter, event.side))
+      poseFor(event.side, faintSteps(fighter, event.side, endingFaint))
     }
   }
 
-  function spawn(side: 'player' | 'wild', text: string, heal: boolean) {
+  function showCharged(attacker: SimFighter, side: 'player' | 'wild', moveName: string) {
+    if (reduced) return
+    const move = attacker.chargedMove ?? attacker.fastMove
+    chargedFx = {
+      name: moveLabel(moveName),
+      color: TYPE_GLOW[move.type] ?? '#fff',
+      side,
+      until: performance.now() + CHARGED_BANNER_MS,
+    }
+  }
+
+  function bumpJuice(side: 'player' | 'wild', charged: boolean) {
+    if (reduced) return
+    flashSide = side
+    window.clearTimeout(flashClear)
+    flashClear = window.setTimeout(() => {
+      flashSide = null
+    }, HIT_FLASH_MS)
+    shakeHard = charged
+    shakeToken += 1
+  }
+
+  function spawnDamage(side: 'player' | 'wild', damage: number, effectiveness: number, charged: boolean) {
     floaterId += 1
-    floaters = [...floaters, { id: floaterId, side, text, heal, born: performance.now() }]
+    let note: string | undefined
+    if (effectiveness > 1) note = 'Super eficaz!'
+    else if (effectiveness > 0 && effectiveness < 1) note = 'Pouco eficaz'
+    floaters = [
+      ...floaters,
+      {
+        id: floaterId,
+        side,
+        text: `-${damage}`,
+        heal: false,
+        born: performance.now(),
+        charged,
+        effectiveness,
+        note,
+      },
+    ]
+  }
+
+  function spawnHeal(side: 'player' | 'wild', amount: number) {
+    floaterId += 1
+    floaters = [...floaters, { id: floaterId, side, text: `+${amount}`, heal: true, born: performance.now() }]
   }
 
   function shinySheet(fighter: SimFighter, side: 'player' | 'wild'): boolean {
@@ -399,7 +516,9 @@
       side,
       battleAnimChoice({ kind: 'fast', damageClass: move?.damageClass, hasShoot }).anim,
     )
-    if (hit) steps.push(hit)
+    // A folha de ataque do PMD mexe pouco e se confunde com o Idle: o golpe
+    // sempre leva junto o avanço em CSS na direção do alvo.
+    if (hit) steps.push({ ...hit, css: 'lunge' })
     if (steps.length === 0) steps.push({ anim: null, css: 'lunge', ms: 320 })
     return steps
   }
@@ -409,9 +528,11 @@
     return [sheet ?? { anim: null, css: 'hurt', ms: 450 }]
   }
 
-  function faintSteps(fighter: SimFighter, side: 'player' | 'wild'): Step[] {
+  function faintSteps(fighter: SimFighter, side: 'player' | 'wild', slow: boolean): Step[] {
     const sheet = sheetStep(fighter, side, battleAnimChoice({ kind: 'faint' }).anim)
-    return [sheet ?? { anim: null, css: 'faint', ms: 600 }]
+    const ms = slow && !reduced ? FAINT_SLOW_MS : 600
+    if (sheet) return [{ ...sheet, ms: Math.max(sheet.ms, ms) }]
+    return [{ anim: null, css: 'faint', ms }]
   }
 
   function poseFor(side: 'player' | 'wild', steps: Step[]) {
@@ -481,6 +602,35 @@
   const chargeReady = $derived(chargedCost !== null && active.energy >= chargedCost)
   const wildPercent = $derived(hpPercent(snap.wild))
   const allyPercent = $derived(hpPercent(active))
+  const shakePx = $derived(shakeHard ? SHAKE_PX_CHARGED : SHAKE_PX_FAST)
+  const shakeMs = $derived(shakeHard ? SHAKE_CHARGED_MS : SHAKE_FAST_MS)
+
+  // Rastro da barra: ao perder vida, a parte perdida espera um instante e
+  // desce. O valor anterior é lido com untrack: se fosse dependência, o
+  // efeito rodaria de novo logo depois de gravar e o rastro sumiria na hora.
+  // A limpeza cancela a espera quando chega outro golpe antes dela.
+  $effect(() => {
+    const next = wildPercent
+    if (reduced || next >= untrack(() => wildTrail)) {
+      wildTrail = next
+      return
+    }
+    const hold = window.setTimeout(() => (wildTrail = next), HP_TRAIL_HOLD_MS)
+    return () => window.clearTimeout(hold)
+  })
+
+  $effect(() => {
+    const next = allyPercent
+    // Troca de Pokémon não é dano: a barra só acompanha.
+    const swapped = untrack(() => allyTrailSlot !== snap.activeSlot)
+    allyTrailSlot = untrack(() => snap.activeSlot)
+    if (reduced || swapped || next >= untrack(() => allyTrail)) {
+      allyTrail = next
+      return
+    }
+    const hold = window.setTimeout(() => (allyTrail = next), HP_TRAIL_HOLD_MS)
+    return () => window.clearTimeout(hold)
+  })
 
   // Primeira foto da tela (retomada): já grava e aplica o estado inicial.
   commit(
@@ -489,13 +639,14 @@
   )
 </script>
 
-{#snippet bar(percent: number)}
+{#snippet bar(fill: number, trail: number, tone: string)}
   <span class="hp-track">
-    <span class="hp-fill {hpTone(percent)}" style:width="{percent}%"></span>
+    <span class="hp-trail" style:transform="scaleX({trail / 100})"></span>
+    <span class="hp-fill {tone}" style:transform="scaleX({fill / 100})"></span>
   </span>
 {/snippet}
 
-<div class="live">
+<div class="live" class:ending={endingFaint && status === 'finishing'}>
   <div class="top">
     <span class="timer" class:late={remaining < 10_000} aria-label="Tempo restante">{formatCountdown(remaining)}</span>
     <button type="button" class="btn auto" class:on={battleAuto} aria-pressed={battleAuto} disabled={status !== 'live'} onclick={toggleAuto}>
@@ -503,16 +654,33 @@
     </button>
   </div>
 
-  <div class="arena" aria-label="Campo de batalha">
+  <div
+    class="arena"
+    class:nudge-a={!reduced && shakeToken > 0 && shakeToken % 2 === 1}
+    class:nudge-b={!reduced && shakeToken > 0 && shakeToken % 2 === 0}
+    aria-label="Campo de batalha"
+    style:--shake-px="{shakePx}px"
+    style:--shake-ms="{shakeMs}ms"
+  >
+    {#if chargedFx && !reduced}
+      <div class="charged-veil" aria-hidden="true"></div>
+      <p class="charged-banner" style:--glow={chargedFx.color}>{chargedFx.name}</p>
+    {/if}
     <div class="plate wild-plate">
       <span class="who"><b>{encounter.displayName}{#if encounter.isShiny} ★{/if}</b><small>Nv {wildFighter.level}</small></span>
       <span role="progressbar" aria-label="HP do selvagem" aria-valuemin="0" aria-valuemax={snap.wild.maxHp} aria-valuenow={snap.wild.hp}>
-        {@render bar(wildPercent)}
+        {@render bar(wildPercent, wildTrail, hpTone(wildPercent))}
       </span>
     </div>
 
-    <div class="slot wild" style:--dx="-10px" style:--dy="8px">
-      <div class="body {wildView.css}" class:down={snap.wild.fainted}>
+    <div class="slot wild" style:--dx="-22px" style:--dy="16px">
+      <div
+        class="body {wildView.css}"
+        class:down={snap.wild.fainted}
+        class:hit-flash={flashSide === 'wild'}
+        class:type-glow={chargedFx?.side === 'wild'}
+        style:--glow={chargedFx?.side === 'wild' ? chargedFx.color : 'transparent'}
+      >
         {#if wildLook.kind === 'pmd'}
           <div class="anchor">
             <PmdSprite
@@ -530,12 +698,27 @@
         {/if}
       </div>
       {#each floaters.filter((f) => f.side === 'wild') as f (f.id)}
-        <span class="float" class:heal={f.heal}>{f.text}</span>
+        <span
+          class="float"
+          class:heal={f.heal}
+          class:charged={f.charged}
+          class:super={f.effectiveness !== undefined && f.effectiveness > 1}
+          class:resist={f.effectiveness !== undefined && f.effectiveness > 0 && f.effectiveness < 1}
+        >
+          {f.text}
+          {#if f.note}<small>{f.note}</small>{/if}
+        </span>
       {/each}
     </div>
 
-    <div class="slot ally" style:--dx="10px" style:--dy="-8px">
-      <div class="body {allyView.css}" class:down={active.fainted}>
+    <div class="slot ally" style:--dx="22px" style:--dy="-16px">
+      <div
+        class="body {allyView.css}"
+        class:down={active.fainted}
+        class:hit-flash={flashSide === 'player'}
+        class:type-glow={chargedFx?.side === 'player'}
+        style:--glow={chargedFx?.side === 'player' ? chargedFx.color : 'transparent'}
+      >
         {#if allyLook.kind === 'pmd'}
           <div class="anchor">
             <PmdSprite
@@ -553,14 +736,23 @@
         {/if}
       </div>
       {#each floaters.filter((f) => f.side === 'player') as f (f.id)}
-        <span class="float" class:heal={f.heal}>{f.text}</span>
+        <span
+          class="float"
+          class:heal={f.heal}
+          class:charged={f.charged}
+          class:super={f.effectiveness !== undefined && f.effectiveness > 1}
+          class:resist={f.effectiveness !== undefined && f.effectiveness > 0 && f.effectiveness < 1}
+        >
+          {f.text}
+          {#if f.note}<small>{f.note}</small>{/if}
+        </span>
       {/each}
     </div>
 
     <div class="plate ally-plate">
       <span class="who"><b>{nameOf(activeFighter)}{#if allyShiny} ★{/if}</b><small>Nv {activeFighter.level}</small></span>
       <span role="progressbar" aria-label="HP do seu Pokémon" aria-valuemin="0" aria-valuemax={active.maxHp} aria-valuenow={active.hp}>
-        {@render bar(allyPercent)}
+        {@render bar(allyPercent, allyTrail, hpTone(allyPercent))}
       </span>
       <small class="hp-text">{active.hp}/{active.maxHp}</small>
     </div>
@@ -615,7 +807,7 @@
           <span class="chip-meta">
             {#if side.fainted}Caiu{:else if here}Em campo{:else if switchWait > 0}{Math.ceil(switchWait / 1000)}s{:else}Trocar{/if}
           </span>
-          {@render bar(hpPercent(side))}
+          {@render bar(hpPercent(side), hpPercent(side), hpTone(hpPercent(side)))}
         </button>
       {/each}
     </div>
@@ -669,6 +861,53 @@
     box-shadow: inset 0 0 0 var(--px) #00000022;
   }
 
+  .arena.nudge-a {
+    animation: arena-shake-a var(--shake-ms, 150ms) ease-out;
+  }
+
+  .arena.nudge-b {
+    animation: arena-shake-b var(--shake-ms, 150ms) ease-out;
+  }
+
+  .charged-veil {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    background: #00000055;
+    pointer-events: none;
+    animation: veil-in 0.55s ease-out both;
+  }
+
+  .charged-banner {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 42%;
+    z-index: 5;
+    margin: 0;
+    padding: 0.35rem 0.5rem;
+    background: color-mix(in srgb, var(--glow, #fff) 35%, #000000cc);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+    pointer-events: none;
+    animation: banner-sweep 0.55s ease-out both;
+  }
+
+  .live.ending .arena::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    animation: end-flash 0.5s ease-out both;
+  }
+
   .slot {
     position: absolute;
     width: 7rem;
@@ -693,6 +932,19 @@
 
   .body.down {
     opacity: 0.45;
+  }
+
+  /* Acerto: o sprite inteiro fica branco por um instante (flash de pixel art).
+     O filtro fica no filho, porque o .body já usa filter nas animações de dano. */
+  .body.hit-flash > .anchor,
+  .body.hit-flash > .gif {
+    filter: brightness(0) invert(1);
+  }
+
+  /* Golpe carregado: contorno na cor do tipo do golpe. */
+  .body.type-glow > .anchor,
+  .body.type-glow > .gif {
+    filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 4px var(--glow));
   }
 
   /* Ponto do chão: o PmdSprite se posiciona a partir daqui. */
@@ -766,6 +1018,7 @@
   }
 
   .hp-track {
+    position: relative;
     display: block;
     height: 0.6rem;
     background: #00000030;
@@ -773,10 +1026,24 @@
     overflow: hidden;
   }
 
+  .hp-trail,
   .hp-fill {
+    position: absolute;
+    inset: 0;
     display: block;
     height: 100%;
-    transition: width 0.25s steps(8, end);
+    width: 100%;
+    transform-origin: left center;
+    will-change: transform;
+  }
+
+  .hp-trail {
+    background: #ffd27a;
+    transition: transform 0.28s linear;
+  }
+
+  .hp-fill {
+    transition: none;
   }
 
   .hp-fill.ok {
@@ -796,6 +1063,9 @@
     left: 50%;
     top: 0.5rem;
     z-index: 2;
+    display: grid;
+    justify-items: center;
+    gap: 0.05rem;
     font-size: 1.35rem;
     font-weight: 700;
     color: #fff;
@@ -805,11 +1075,47 @@
       var(--px) 0 0 var(--ink),
       calc(var(--px) * -1) 0 0 var(--ink);
     pointer-events: none;
-    animation: rise 0.9s ease-out both;
+    animation: rise 1s ease-out both;
+  }
+
+  /* O selvagem fica colado no topo da arena, que corta o que passa da borda:
+     o número dele nasce mais embaixo para dar tempo de subir à vista. */
+  .slot.wild .float {
+    top: 2.6rem;
+  }
+
+  .float small {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
   }
 
   .float.heal {
     color: #b9ff9a;
+  }
+
+  .float.charged {
+    font-size: 1.7rem;
+    animation-name: rise-pop;
+  }
+
+  .float.super {
+    color: #ffb347;
+  }
+
+  .float.super small {
+    color: #ffd27a;
+  }
+
+  .float.resist {
+    font-size: 1.05rem;
+    opacity: 0.72;
+    color: #c8c8c8;
+  }
+
+  .float.resist small {
+    color: #b0b0b0;
   }
 
   .note {
@@ -982,6 +1288,10 @@
       animation-name: rise-move;
     }
 
+    .float.charged {
+      animation-name: rise-pop;
+    }
+
     .body.lunge-0 {
       animation: lunge-a 0.32s ease-out;
     }
@@ -1003,6 +1313,26 @@
     .body.faint-end {
       animation: faint 0.6s ease-in both;
     }
+
+    .live.ending .body.faint-0,
+    .live.ending .body.faint-1,
+    .live.ending .body.faint-end {
+      animation: faint-slow 1.1s ease-in both;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .arena.nudge-a,
+    .arena.nudge-b,
+    .charged-veil,
+    .charged-banner,
+    .live.ending .arena::after {
+      animation: none !important;
+    }
+
+    .hp-trail {
+      transition: none;
+    }
   }
 
   @keyframes rise-move {
@@ -1013,6 +1343,98 @@
     to {
       transform: translate(-50%, -2rem);
       opacity: 0;
+    }
+  }
+
+  @keyframes rise-pop {
+    0% {
+      transform: translate(-50%, 0.4rem) scale(0.6);
+      opacity: 0;
+    }
+    35% {
+      transform: translate(-50%, -0.4rem) scale(1.25);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -2.4rem) scale(1);
+      opacity: 0;
+    }
+  }
+
+  /* Dois nomes iguais por dentro: trocar o nome da animação é o que faz o
+     navegador repetir a tremida a cada golpe. */
+  @keyframes arena-shake-a {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    20% {
+      transform: translate(var(--shake-px), calc(var(--shake-px) * -0.5));
+    }
+    45% {
+      transform: translate(calc(var(--shake-px) * -1), var(--shake-px));
+    }
+    70% {
+      transform: translate(calc(var(--shake-px) * 0.5), calc(var(--shake-px) * -0.5));
+    }
+  }
+
+  @keyframes arena-shake-b {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    20% {
+      transform: translate(var(--shake-px), calc(var(--shake-px) * -0.5));
+    }
+    45% {
+      transform: translate(calc(var(--shake-px) * -1), var(--shake-px));
+    }
+    70% {
+      transform: translate(calc(var(--shake-px) * 0.5), calc(var(--shake-px) * -0.5));
+    }
+  }
+
+  @keyframes veil-in {
+    0% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes banner-sweep {
+    0% {
+      transform: translateX(-12%) scaleX(0.85);
+      opacity: 0;
+    }
+    30% {
+      transform: translateX(0) scaleX(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(8%) scaleX(1);
+      opacity: 0;
+    }
+  }
+
+  @keyframes end-flash {
+    0% {
+      opacity: 0.55;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes faint-slow {
+    to {
+      transform: translateY(28px);
+      opacity: 0.3;
     }
   }
 

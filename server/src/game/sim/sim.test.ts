@@ -102,6 +102,64 @@ test('Velocidade maior → cooldown menor, dentro de 0,8–1,2', () => {
   assert.ok(fSlow >= fFast)
 })
 
+test('evento move traz a efetividade de tipo (super e pouco eficaz)', () => {
+  const superSetup = setup(
+    [
+      fighter({
+        id: 1,
+        speciesId: 4,
+        level: 30,
+        types: ['fire'],
+        stats: { hp: 80, attack: 70, defense: 40, spAttack: 80, spDefense: 40, speed: 70 },
+        fastMove: move({ name: 'ember', type: 'fire', power: 40, damageClass: 'special' }),
+        chargedMove: null,
+      }),
+    ],
+    fighter({
+      speciesId: 1,
+      level: 20,
+      types: ['grass'],
+      stats: { hp: 200, attack: 20, defense: 40, spAttack: 20, spDefense: 40, speed: 20 },
+    }),
+  )
+  const superLog = runBattle({
+    setup: superSetup,
+    seed: 11,
+    inputs: [{ t: 0, action: 'fast' }],
+    untilMs: 500,
+  }).log.filter((event) => event.kind === 'move' && event.side === 'player')
+  assert.equal(superLog[0]?.kind, 'move')
+  if (superLog[0]?.kind === 'move') assert.equal(superLog[0].effectiveness, 2)
+
+  const resistSetup = setup(
+    [
+      fighter({
+        id: 1,
+        speciesId: 4,
+        level: 30,
+        types: ['fire'],
+        stats: { hp: 80, attack: 70, defense: 40, spAttack: 80, spDefense: 40, speed: 70 },
+        fastMove: move({ name: 'ember', type: 'fire', power: 40, damageClass: 'special' }),
+        chargedMove: null,
+      }),
+    ],
+    fighter({
+      speciesId: 7,
+      level: 20,
+      types: ['water'],
+      stats: { hp: 200, attack: 20, defense: 40, spAttack: 20, spDefense: 50, speed: 20 },
+    }),
+  )
+  const resistLog = runBattle({
+    setup: resistSetup,
+    seed: 11,
+    inputs: [{ t: 0, action: 'fast' }],
+    untilMs: 500,
+  }).log.filter((event) => event.kind === 'move' && event.side === 'player')
+  assert.equal(resistLog[0]?.kind, 'move')
+  if (resistLog[0]?.kind === 'move') assert.equal(resistLog[0].effectiveness, 0.5)
+})
+
 test('STAB, efetividade, imunidade e fraqueza ×4', () => {
   assert.equal(typeMultiplier('fire', ['grass']), 2)
   assert.equal(typeMultiplier('fire', ['grass', 'bug']), 4)

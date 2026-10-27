@@ -545,32 +545,51 @@
   }
 </script>
 
-{#snippet wild(mon: PendingEncounter, pose: 'Idle' | 'Hurt' = 'Idle')}
+<!--
+  `compact`: sprite menor ao lado do nome, para sobrar tela para o time.
+  `dizzy`: derrotado esperando a captura; balança tonto, com estrelas girando
+  em cima da cabeça (a altura vem do ponto do chão no quadro da folha).
+-->
+{#snippet wild(mon: PendingEncounter, variant: 'full' | 'compact' | 'dizzy' = 'full')}
   {@const look = gardenSprite(mon.speciesId, mon.isShiny)}
-  {@const anim = look.kind === 'pmd' && pose === 'Hurt' && pmdAnim(mon.speciesId, look.shinySheet, 'Hurt') ? 'Hurt' : 'Idle'}
-  {@const sheet = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, anim) : null}
-  <div class="stage">
-    {#if look.kind === 'pmd' && sheet}
-      <div class="anchor">
-        <PmdSprite
-          speciesId={mon.speciesId}
-          shiny={look.shinySheet}
-          {anim}
-          dir={0}
-          scale={3}
-          {time}
-          shadow={look.shadow}
-        />
+  {@const sheet = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, 'Idle') : null}
+  {@const scale = variant === 'compact' ? 2 : 3}
+  {@const head = sheet ? Math.round((sheet.ground[1] ?? sheet.h) * scale * 0.85) : 84}
+  <div class="wild-card" class:compact={variant === 'compact'}>
+    <div class="stage">
+      <div class="anchor" class:dizzy={variant === 'dizzy'}>
+        {#if look.kind === 'pmd' && sheet}
+          <PmdSprite
+            speciesId={mon.speciesId}
+            shiny={look.shinySheet}
+            anim="Idle"
+            dir={0}
+            {scale}
+            {time}
+            shadow={look.shadow}
+          />
+        {:else}
+          <img class="fallback" use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
+        {/if}
+        {#if variant === 'dizzy'}
+          <div class="halo" style:--head="{head}px" aria-hidden="true">
+            {#each [0, 1, 2] as n (n)}
+              <span class="orbit" style:--i={n}>
+                <svg viewBox="0 0 12 12" width="10" height="10"><path fill="#ffe66d" d="M6 0l1.5 4.2H12L8.2 6.8 9.7 11 6 8.4 2.3 11l1.5-4.2L0 4.2h4.5z" /></svg>
+              </span>
+            {/each}
+          </div>
+        {/if}
       </div>
-    {:else}
-      <img class="fallback" use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
-    {/if}
+    </div>
+    <div class="info">
+      <h2>
+        {mon.displayName}
+        {#if mon.isShiny}<span class="star" title="Shiny">★</span>{/if}
+      </h2>
+      <p class="lv">Nv {mon.level} · {mon.regionName}</p>
+    </div>
   </div>
-  <h2>
-    {mon.displayName}
-    {#if mon.isShiny}<span class="star" title="Shiny">★</span>{/if}
-  </h2>
-  <p class="lv">Nv {mon.level} · {mon.regionName}</p>
 {/snippet}
 
 <div class="flow">
@@ -651,11 +670,11 @@
     </div>
   {:else if step === 'encounter' && encounter}
     <div class="scroll">
-      <section class="panel sheet wild">
-        {@render wild(encounter)}
+      <section class="panel sheet">
+        {@render wild(encounter, 'compact')}
       </section>
       <section class="panel sheet">
-        <h2>Time {chosen.length}/3</h2>
+        <h2>Time {chosen.length}/3 <small class="pick">{chosen.length === 0 ? 'escolha de 1 a 3' : ''}</small></h2>
         {#if roster.length === 0}
           <p class="hint">Nenhum Pokémon no jardim.</p>
         {:else}
@@ -679,21 +698,23 @@
       </section>
     </div>
     <div class="dock">
-      <p class="odds">{chosen.length === 0 ? 'Escolha de 1 a 3 Pokémon.' : `${chosen.length} no time`}</p>
-      <button
-        type="button"
-        class="btn auto-pref"
-        class:on={battleAuto}
-        aria-pressed={battleAuto}
-        disabled={pending}
-        onclick={() => {
-          play('tap')
-          void setBattleAuto(!battleAuto)
-        }}
-      >
-        <strong>Luta automática: {battleAuto ? 'ligada' : 'desligada'}</strong>
-        <small>{battleAuto ? 'Seus Pokémon lutam sozinhos.' : 'Você toca os golpes.'}</small>
-      </button>
+      <div class="pair">
+        <button
+          type="button"
+          class="btn auto-pref"
+          class:on={battleAuto}
+          aria-pressed={battleAuto}
+          disabled={pending}
+          onclick={() => {
+            play('tap')
+            void setBattleAuto(!battleAuto)
+          }}
+        >
+          <strong>Luta automática</strong>
+          <small>{battleAuto ? 'Ligada' : 'Desligada'}</small>
+        </button>
+        <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
+      </div>
       <button
         type="button"
         class="btn btn-primary"
@@ -707,7 +728,6 @@
           Batalhar
         {/if}
       </button>
-      <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
       <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
     </div>
   {:else if step === 'fight' && encounter && fightStart}
@@ -729,7 +749,7 @@
   {:else if step === 'decide' && encounter}
     <div class="scroll">
       <section class="panel sheet wild">
-        {@render wild(encounter, 'Hurt')}
+        {@render wild(encounter, 'dizzy')}
         {#if encounter.catchChance !== null}
           <p class="odds">Chance de captura {percent(encounter.catchChance)}</p>
         {/if}
@@ -757,7 +777,6 @@
       <section class="panel sheet">
         {#key lastThrow.throwNumber}
           <BattleScene
-            mode="throw"
             {encounter}
             throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
             {time}
@@ -901,9 +920,35 @@
     color: #f3ffe8;
   }
 
+  .wild-card {
+    display: grid;
+    justify-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: center;
+  }
+
+  .wild-card.compact {
+    grid-template-columns: 6rem 1fr;
+    align-items: center;
+    justify-items: start;
+    gap: 0.75rem;
+    text-align: left;
+  }
+
+  .info {
+    display: grid;
+    gap: 0.25rem;
+  }
+
   .stage {
     position: relative;
+    width: 100%;
     height: 10rem;
+  }
+
+  .compact .stage {
+    height: 5.5rem;
   }
 
   .anchor {
@@ -914,19 +959,88 @@
     height: 0;
   }
 
+  .compact .anchor {
+    bottom: 0.4rem;
+  }
+
   .fallback {
     position: absolute;
-    left: 50%;
-    bottom: 0.75rem;
+    left: -48px;
+    bottom: 0;
     width: 96px;
     height: 96px;
-    transform: translateX(-50%);
     object-fit: contain;
   }
 
-  .wild {
-    justify-items: center;
-    text-align: center;
+  .compact .fallback {
+    left: -32px;
+    width: 64px;
+    height: 64px;
+  }
+
+  /* Tonto: balança em volta do ponto do chão (a âncora tem tamanho zero). */
+  .anchor.dizzy {
+    animation: dizzy-sway 1.8s ease-in-out infinite alternate;
+  }
+
+  /* Estrelas em órbita achatada: o scaleY do .halo vira a elipse. */
+  .halo {
+    position: absolute;
+    left: 0;
+    top: calc(var(--head) * -1);
+    width: 0;
+    height: 0;
+    transform: scaleY(0.4);
+  }
+
+  .orbit {
+    position: absolute;
+    left: -5px;
+    top: -5px;
+    animation: orbit 1.2s linear infinite;
+    animation-delay: calc(var(--i) * -0.4s);
+  }
+
+  .orbit svg {
+    display: block;
+    transform: scaleY(2.5);
+  }
+
+  .pick {
+    font-size: 0.85rem;
+    font-weight: 600;
+    opacity: 0.75;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+  }
+
+  @keyframes dizzy-sway {
+    from {
+      transform: rotate(-4deg);
+    }
+    to {
+      transform: rotate(4deg);
+    }
+  }
+
+  @keyframes orbit {
+    from {
+      transform: rotate(0deg) translateX(22px) rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg) translateX(22px) rotate(-360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anchor.dizzy,
+    .orbit {
+      animation: none;
+    }
   }
 
   .roster {
@@ -975,6 +1089,11 @@
     flex-direction: column;
     gap: 0.1rem;
     min-height: 52px;
+  }
+
+  .auto-pref strong {
+    font-size: 0.9rem;
+    white-space: nowrap;
   }
 
   .auto-pref small {

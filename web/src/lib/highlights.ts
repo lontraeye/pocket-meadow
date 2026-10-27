@@ -24,11 +24,6 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** Quantidade de chacoalhadas só para a cena (PLANNING.md 6.2). */
-export function catchShakes(caught: boolean, catchChance: number | null): number {
-  if (caught) return 3
-  return 1 + (catchChance !== null && catchChance >= 0.5 ? 1 : 0)
-}
 
 export function battleHighlightCards(input: {
   battle: BattleOutcome
