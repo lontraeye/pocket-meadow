@@ -1,0 +1,16 @@
+# Bloco do Pocket Meadow no /etc/caddy/Caddyfile da VM. Acrescentar ao arquivo,
+# sem substituir os outros blocos, e depois: sudo systemctl reload caddy
+pocket.lontraeye.com {
+	encode gzip
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		root * /opt/pocket-meadow/current/web
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,11 @@
+# /etc/systemd/system/pocket-meadow-backup.timer
+[Unit]
+Description=Pocket Meadow (backup diário, 04:30 UTC)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+# Se a VM estava desligada na hora, roda ao ligar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

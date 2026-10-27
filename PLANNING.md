@@ -39,11 +39,11 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 | Camada | Escolha | Observação |
 |---|---|---|
 | Hospedagem | VM Oracle Cloud Always Free (já existente) | Roda lado a lado com outro projeto. O catch-up sob demanda cabe nessa máquina: sem jogador online, o servidor não fica em loop |
-| Containers | Docker Compose | Um compose por projeto, isolados |
-| Reverse proxy | Caddy | Roteia por subdomínio, HTTPS automático |
+| Execução | Serviço do systemd (`deploy/`) | A VM tem 1 GB: Docker e um segundo Caddy não cabem bem. Mesmo padrão do outro projeto da VM. O `docker-compose.yml` fica para rodar local |
+| Reverse proxy | Caddy da VM | Roteia por subdomínio, HTTPS automático, serve o front e repassa `/api` |
 | Backend | Node + Hono | API REST JSON |
 | ORM | Drizzle ORM | Migrações versionadas, bom suporte a SQLite |
-| Banco | SQLite com WAL | Um arquivo; backup = copiar o arquivo (usar `.backup` / `VACUUM INTO`) |
+| Banco | SQLite com WAL | Um arquivo; backup por `VACUUM INTO` (seção 4.6) |
 | Frontend | Vite + Svelte + TypeScript | Build estático servido pelo Caddy |
 | Auth | Usuário + senha (argon2), sessão por cookie httpOnly | Simples; projeto pessoal |
 | Dados | PokéAPI (seed único) | Não consultar em tempo real |
@@ -252,6 +252,22 @@ CC BY-NC 4.0 (os mais antigos usam `PMDCollab_1`/`PMDCollab_2`, também com cré
 - No jardim, cada Pokémon anda bloco a bloco com a direção certa, para, e às vezes dorme. Sem espelhar.
 - O shiny sem PMD aparece com a marca no jardim e com o GIF shiny no card.
 - Funciona em 360px (seção 4.4), e 15 Pokémon andando não travam no celular.
+
+### 4.6 Dados dos jogadores
+
+Desde 2026-10-27 o jogo tem save de verdade em produção. Até ali, as contas eram de teste e podiam ser apagadas. Daqui em diante, nenhuma mudança pode perder dados de jogador.
+
+**Regras**
+1. **Migrações só avançam.** Nunca editar uma migração que já rodou. Mudança que apaga ou transforma coluna leva junto o passo que converte os dados existentes (ex.: trocar senha por Google liga a conta que já existe ao `google_sub`, em vez de apagá-la). Zerar o banco para simplificar não é opção.
+2. **Testar a migração numa cópia.** Antes do deploy, rodar a migração numa cópia do banco de produção (um backup diário serve) e conferir os dados. Migração nova ganha teste em `db/migrate.test.ts`, no estilo dos que já existem.
+3. **Regra que muda o sentido de dados salvos é anotada aqui**, junto com o que acontece com os saves. Exemplo: mudar `xpToNext` muda o que o `xp` guardado significa. Ajuste de chance, taxa ou peso, que só vale dali para frente, não precisa.
+4. **Desenvolvimento nunca toca o banco de produção.** As rotas `/dev` só existem com `DEV_TOOLS=1` e fora de `NODE_ENV=production`.
+
+**Backups** (`server/src/db/backup.ts`, sempre por `VACUUM INTO` e conferidos com `integrity_check`; copiar o arquivo com o servidor rodando pode pegar o WAL pela metade)
+- **Antes de migrar:** no boot, se houver migração pendente e o banco já tiver dados, o servidor grava `data/backups/pre-migrate-<data>.sqlite` antes de aplicar. Guarda as 5 últimas.
+- **Diário:** o timer `pocket-meadow-backup.timer` (04:30 UTC) roda `node dist/db/backup.js` e grava `daily-<data>.sqlite`. Guarda 14.
+- **Fora da VM:** a pasta `/var/lib/pocket-meadow/backups/` também vai para fora da VM (destino a definir; o Object Storage da Oracle é o candidato). Backup que só existe na própria máquina não protege contra perder a máquina.
+- **Restore:** `sudo systemctl stop pocket-meadow`, depois `cd /opt/pocket-meadow/current/server && sudo -u pocket-meadow env $(xargs < /etc/pocket-meadow.env) node dist/db/backup.js restore /var/lib/pocket-meadow/backups/<arquivo>` e `sudo systemctl start pocket-meadow`. O banco atual vira `pre-restore-<data>.sqlite` antes da troca. Testar o restore de vez em quando, porque backup que nunca foi restaurado não é garantia.
 
 ---
 

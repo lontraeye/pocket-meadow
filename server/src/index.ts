@@ -30,6 +30,21 @@ app.onError((error, c) => {
 
 app.notFound((c) => c.json({ error: 'not_found' }, 404))
 
+// Contra CSRF de um subdomínio irmão: ele é "mesmo site", então o SameSite=Lax
+// do cookie não barra. Formulário não manda JSON, e fetch com JSON de outra
+// origem pede preflight, que este servidor não autoriza. DELETE já não sai de
+// formulário e também pede preflight.
+app.use('*', async (c, next) => {
+  const method = c.req.method
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+    const type = c.req.header('content-type') ?? ''
+    if (!type.toLowerCase().startsWith('application/json')) {
+      return c.json({ error: 'invalid_content_type' }, 415)
+    }
+  }
+  await next()
+})
+
 app.route('/auth', authRoutes)
 app.route('/state', stateRoutes)
 app.route('/regions', regionRoutes)
@@ -50,7 +65,8 @@ app.get('/health', (c) => {
 serve(
   {
     fetch: app.fetch,
-    hostname: '0.0.0.0',
+    // Na VM fica só no loopback, atrás do Caddy (HOST=127.0.0.1); no Docker, 0.0.0.0.
+    hostname: process.env.HOST ?? '0.0.0.0',
     port,
   },
   (info) => {

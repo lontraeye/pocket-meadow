@@ -1,0 +1,28 @@
+# /etc/systemd/system/pocket-meadow.service
+# API do Pocket Meadow. O Caddy da VM serve o front e repassa /api para cá.
+[Unit]
+Description=Pocket Meadow (API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pocket-meadow
+Group=pocket-meadow
+EnvironmentFile=/etc/pocket-meadow.env
+WorkingDirectory=/opt/pocket-meadow/current/server
+ExecStart=/usr/bin/node --max-old-space-size=192 dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# A VM tem 1 GB e divide com o tibiawalk.
+MemoryMax=320M
+
+# Só o banco e os backups são graváveis.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/pocket-meadow
+
+[Install]
+WantedBy=multi-user.target

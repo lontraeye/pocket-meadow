@@ -1,0 +1,17 @@
+# /etc/systemd/system/pocket-meadow-backup.service
+# Backup diário do banco (PLANNING.md, seção 4.6). Disparado pelo .timer.
+[Unit]
+Description=Pocket Meadow (backup diário)
+
+[Service]
+Type=oneshot
+User=pocket-meadow
+Group=pocket-meadow
+EnvironmentFile=/etc/pocket-meadow.env
+WorkingDirectory=/opt/pocket-meadow/current/server
+ExecStart=/usr/bin/node dist/db/backup.js
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/pocket-meadow
