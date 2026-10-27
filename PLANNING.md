@@ -682,6 +682,35 @@ Anotado depois do teste da Fase 2. Hoje o encontro é seco: abre a rota, aparece
 
 Sugestão: começar pelo formato 1. Ele já dá o "juice" e cabe no modelo atual (uma requisição por batalha). O formato 2 pode vir depois, se fizer falta.
 
+**Decidido: lutar e capturar viram dois passos** (pedido do usuário, 2026-10-27). Nem toda luta precisa terminar em captura. Com as pokébolas craftadas (seções 5.6 e 5.16), gastar bola tem custo, e às vezes o jogador só quer o XP.
+1. **Luta em turnos:** "eu bato, ele bate", até um lado cair. O servidor decide a luta inteira com a seed do encontro e devolve o log de turnos. O front anima o log (formato 1 acima). A vitória dá o XP como hoje.
+2. **Depois de vencer, o jogador decide:** vê a **chance de captura** com cada bola que tem e escolhe **lançar** (qual bola) ou **deixar ir**. Só ao lançar a bola é gasta e a captura é rolada.
+
+O que isso muda no modelo atual:
+- **Encontro com estado intermediário:** depois da vitória, o encontro fica esperando a decisão (ex.: status `won`) até o jogador lançar, deixar ir ou o encontro expirar. Hoje a batalha já resolve a captura na mesma requisição. Mudar o `CHECK` de `status` no SQLite pede reconstruir a tabela (migração, testada num banco com dados).
+- **Rotas:** `POST /encounters/:id/battle` só luta. Rotas novas: `POST /encounters/:id/throw` (`{ ball }`) e `POST /encounters/:id/release`, este último para deixar ir.
+- **PRNG (seção 7):** a ordem continua fixa, mas a captura passa a ser rolada só quando o jogador lança. Com várias tentativas (uma por bola), cada uma é a próxima rolagem da sequência. A semente da batalha (seção 5.10) continua logo depois da vitória.
+- **`winChance` e o log:** a luta em turnos pode continuar com a chance da seção 5.5 como base, decidindo quem vence e gerando um log coerente com isso, ou virar uma simulação de verdade com HP e dano. Decidir junto com os tipos e os ataques.
+- **A cena da parte 6.2** passa a ser só a parte da captura. A luta ganha a sua própria animação, com os golpes do PMD e os fallbacks genéricos.
+- **Até existirem pokébolas como item,** a Poké Ball é infinita, mas a escolha de lançar ou deixar ir já existe.
+
+**Decidido: golpes e atributos individuais** (2026-10-27). O combate fica bem mais simples que o dos jogos principais, mas com algum nível de complexidade:
+- **Dois golpes por Pokémon:** um **golpe rápido** (dano pequeno, carrega energia) e um **golpe carregado**, a "ult" (dano alto, gasta a energia acumulada). É a mesma ideia de ritmo dos jogos mobile: bater, carregar, soltar a ult.
+- **IVs e EVs** por Pokémon, para dois do mesmo nível não serem iguais:
+  - **IVs** sorteados na captura, com o PRNG do encontro (entram na ordem da seção 7, depois da captura). O inicial também ganha IVs;
+  - **EVs** ganhos ao vencer batalhas, pelo `effort` que a PokéAPI informa por espécie (o "EV yield"), com teto por atributo e no total;
+  - **atributos finais** (HP, Ataque, Defesa…) calculados de base + IV + EV + nível por uma fórmula no config, e usados no dano. Substituem o `power` atual (`BST × (1 + nível/10)`) na luta.
+- **Tipos contam:** tabela de efetividade e bônus de mesmo tipo (STAB) no config.
+
+Pontos a decidir antes de especificar:
+- **De onde vêm os golpes.** A PokéAPI tem os golpes que cada espécie aprende e o poder e o tipo de cada um, mas não tem os números de golpe rápido e carregado (energia, duração). Caminhos: uma tabela própria de golpes no config, com um golpe padrão por tipo para cobrir as 251 espécies rápido, mais ajustes por espécie onde fizer diferença; ou montar a partir da PokéAPI com regras (ex.: golpe físico fraco vira rápido, especial forte vira carregado). Os números são nossos, não copiados de outro jogo.
+- **Os golpes são fixos por espécie ou variam por Pokémon** (sorteados na captura, trocáveis com algum item ou doce).
+- **Faixa dos IVs:** 0–15 (mais simples de mostrar) ou 0–31. E se entram natures. Hoje: IVs e EVs, sem natures.
+- **Pokémon que já existem** quando os IVs entrarem: sortear IVs na migração ou usar um valor médio fixo.
+- **A luta:** simulação de verdade turno a turno (HP, dano, energia, quando soltar a ult) no lugar da `winChance`, ou a `winChance` decide e a simulação só gera um log coerente. Com IVs, EVs e tipos, a simulação de verdade faz mais sentido. O balanceamento vai precisar de testes.
+- **Mostrar ao jogador:** uma avaliação dos IVs no sheet (ex.: estrelas), os dois golpes e a efetividade contra o selvagem antes de lutar.
+- **Escopo:** é um bloco grande (dados de golpes, migração de IVs e EVs, simulação, animação). Vale dividir em partes como a Fase 6.
+
 **Sprites da batalha: PMD em vez do Showdown.** O pack do PMD Sprite Collab (seção 4.5), que já usamos no jardim, tem animações de golpe por Pokémon, nas 8 direções. Conferido no commit fixado em `config/pmd.ts`:
 - Comuns a todos os conferidos: `Attack`, `Strike`, `Shoot`, `Charge`, `Hurt`, `Swing`, `Hop` e `Rotate`.
 - Golpes próprios em alguns: `Shock` (Pikachu), `Lick` (Gengar), `Stomp` (Snorlax), `Rumble` (Gyarados).
@@ -971,7 +1000,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 
 ## 10. Questões em aberto
 - Mais de uma tentativa de captura por encontro (gastando algo)?
-- Pokémon com IVs/natures ou só nível?
+- ~~Pokémon com IVs/natures ou só nível?~~ Decidido: IVs e EVs, sem natures por enquanto (seção 5.13).
 - Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
 

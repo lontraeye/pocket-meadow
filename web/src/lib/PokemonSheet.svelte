@@ -1,5 +1,18 @@
 <script lang="ts">
-  import { api, errorText, type ApiError, type GameState, type OwnedPokemon } from './api'
+  import {
+    api,
+    errorText,
+    type ApiError,
+    type GameState,
+    type OwnedPokemon,
+    type RegionInfo,
+  } from './api'
+  import Highlights from './Highlights.svelte'
+  import {
+    evolveHighlightCards,
+    xpHighlightCards,
+    type HighlightCard,
+  } from './highlights'
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { showdownSrc } from './sprites'
 
@@ -27,6 +40,8 @@
   let message = $state('')
   let pending = $state(false)
   let seenSpecies = $state(0)
+  let highlightCards = $state<HighlightCard[]>([])
+  let regionsCache = $state<RegionInfo[] | null>(null)
 
   const rules = $derived(game.progression)
   const chainCandies = $derived(game.candies.find((row) => row.evolutionChainId === mon.evolutionChainId)?.amount ?? 0)
@@ -101,16 +116,97 @@
     }
   }
 
+  async function loadRegions(): Promise<RegionInfo[]> {
+    if (regionsCache) return regionsCache
+    const response = await api('/api/regions')
+    if (!response.ok) return []
+    const body = (await response.json()) as { regions: RegionInfo[] }
+    regionsCache = body.regions
+    return body.regions
+  }
+
+  function crossedEvolve(beforeLevel: number, afterLevel: number, evolutions: OwnedPokemon['evolutions']): boolean {
+    return evolutions.some((option) => beforeLevel < option.minLevel && afterLevel >= option.minLevel)
+  }
+
   async function feed() {
     const asked = Math.min(doses, maxDoses)
     if (asked < 1) return
-    const ok = await send(`/api/pokemon/${mon.id}/feed`, { candies: asked, useGeneric })
-    if (ok) message = 'Alimentado.'
+    const beforeLevel = mon.level
+    const name = mon.nickname ?? mon.displayName
+    const evolutions = mon.evolutions
+    pending = true
+    message = ''
+    try {
+      const response = await api(`/api/pokemon/${mon.id}/feed`, { candies: asked, useGeneric })
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        doses?: number
+        xpGained?: number
+        levelsGained?: number
+        level?: number
+      }
+      if (!response.ok) {
+        message = errorText(payload)
+        return
+      }
+      await onState()
+      const levels = Number(payload.levelsGained ?? 0)
+      const level = Number(payload.level ?? beforeLevel)
+      const xpGained = Number(payload.xpGained ?? 0)
+      if (levels > 0) {
+        highlightCards = xpHighlightCards({
+          name,
+          xpGained,
+          levelsGained: levels,
+          level,
+          canEvolve: crossedEvolve(beforeLevel, level, evolutions),
+        })
+      } else {
+        message = 'Alimentado.'
+      }
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
   }
 
   async function evolve(toSpeciesId: number) {
-    const ok = await send(`/api/pokemon/${mon.id}/evolve`, { toSpeciesId })
-    if (ok) message = 'Evoluiu!'
+    const fromName = mon.nickname ?? mon.displayName
+    const option = mon.evolutions.find((row) => row.toSpeciesId === toSpeciesId)
+    pending = true
+    message = ''
+    try {
+      const response = await api(`/api/pokemon/${mon.id}/evolve`, { toSpeciesId })
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        displayName?: string
+        trainerXpGained?: number
+        trainer?: { level: number; levelsGained: number }
+        levelRewards?: { itemKey: string; quantity: number }[]
+      }
+      if (!response.ok) {
+        message = errorText(payload)
+        return
+      }
+      const regions = await loadRegions()
+      await onState()
+      highlightCards = evolveHighlightCards({
+        fromName,
+        toName: payload.displayName ?? option?.displayName ?? 'evolução',
+        trainerXpGained: Number(payload.trainerXpGained ?? 0),
+        trainer: {
+          level: Number(payload.trainer?.level ?? game.trainer.level),
+          levelsGained: Number(payload.trainer?.levelsGained ?? 0),
+        },
+        levelRewards: payload.levelRewards ?? [],
+        regions,
+        berries: game.berries,
+      })
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
   }
 
   async function release() {
@@ -142,6 +238,8 @@
 
   async function takeFromDaycare() {
     if (daycareSlot === null) return
+    const name = mon.nickname ?? mon.displayName
+    const evolutions = mon.evolutions
     pending = true
     message = ''
     try {
@@ -149,13 +247,28 @@
       const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
         xpGained?: number
         levelsGained?: number
+        level?: number
       }
       if (!response.ok) {
         message = errorText(payload)
         return
       }
+      const levels = Number(payload.levelsGained ?? 0)
+      const level = Number(payload.level ?? mon.level)
+      const xpGained = Number(payload.xpGained ?? 0)
+      const before = level - levels
       await onState()
-      message = `+${payload.xpGained ?? 0} XP · +${payload.levelsGained ?? 0} níveis`
+      if (levels > 0) {
+        highlightCards = xpHighlightCards({
+          name,
+          xpGained,
+          levelsGained: levels,
+          level,
+          canEvolve: crossedEvolve(before, level, evolutions),
+        })
+      } else {
+        message = `+${xpGained} XP`
+      }
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -166,6 +279,11 @@
 
 <section class="panel sheet" class:fill aria-label="Detalhes">
   <div class="scroll">
+    {#if highlightCards.length > 0}
+      <div class="highlights">
+        <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
+      </div>
+    {/if}
     <div class="head">
       <div class="portrait" class:popping>
         <img src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
@@ -285,6 +403,10 @@
 </section>
 
 <style>
+  .highlights {
+    margin-bottom: 0.5rem;
+  }
+
   .sheet {
     display: flex;
     flex-direction: column;

@@ -28,13 +28,13 @@ async function main(): Promise<void> {
   const total = (speciesSeed.lastId - speciesSeed.firstId + 1) * 2
   console.log(`sprites ready: ${total} (${downloaded} downloaded, ${total - downloaded} already on disk)`)
 
+  const itemFiles = [...berryList.map((berry) => `${berry.key}-berry.png`), 'poke-ball.png']
   let itemsDownloaded = 0
-  for (const berry of berryList) {
-    const name = `${berry.key}-berry.png`
+  for (const name of itemFiles) {
     itemsDownloaded += await saveFile(`${itemsBase}/${name}`, path.join(itemsDir, name), 'png')
   }
   console.log(
-    `berry icons ready: ${berryList.length} (${itemsDownloaded} downloaded, ${berryList.length - itemsDownloaded} already on disk)`,
+    `item icons ready: ${itemFiles.length} (${itemsDownloaded} downloaded, ${itemFiles.length - itemsDownloaded} already on disk)`,
   )
 }
 
