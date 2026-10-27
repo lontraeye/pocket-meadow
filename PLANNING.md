@@ -90,7 +90,7 @@ A pasta `server/src/game/` deve conter **funções puras** (recebem estado + `no
 - De `/pokemon-species/{id}`: `capture_rate`, `is_legendary`, `is_mythical`, `evolution_chain.url` (extrair o ID), `evolves_from_species`.
 - De `/evolution-chain/{id}`: pares de evolução (de → para) e `min_level` quando houver.
 
-Evoluções por item, amizade etc. são **simplificadas**: viram "por nível". A exceção é a **evolução por troca** (`trigger` = `trade` em `evolution_details`). Ela também ganha um nível, mas fica marcada com `via_trade` e só acontece por missão de NPC (seção 5.15). Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
+Evoluções por item, amizade etc. são **simplificadas**: viram "por nível". Isso inclui a **evolução por troca**: ela também evolui por nível. A missão de NPC (seção 5.15) é um caminho alternativo, para evoluir antes. Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
 
 Respeitar a PokéAPI: fazer as requisições em sequência com pequeno delay e cachear as respostas em disco durante o seed.
 
@@ -455,12 +455,11 @@ O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com e
 
 #### Evoluir (`POST /pokemon/:id/evolve`)
 - Corpo: `{ toSpeciesId }`. Precisa existir a linha em `evolutions` saindo da espécie atual para `toSpeciesId`, o que cobre as ramificações, como Eevee e Gloom.
-- Evolução com `via_trade` não passa por aqui: responde `needs_quest`. Ela só acontece pela missão de NPC (seção 5.15).
 - Valida que o Pokémon é do jogador, está no jardim e tem `level >= minLevel`. Não debita doce.
 - Troca `species_id` e mantém nível, XP, shiny, apelido e favorito. `original_species_id` não muda.
 - Pokédex: a nova espécie conta como vista e capturada (cria a entrada, se não existir, com `seen_count` e `caught_count` +1, `first_seen_at` e `first_caught_at` se ainda forem nulos, e `shiny_caught` se for shiny).
 - XP de treinador: `EVOLVE_XP_BY_STAGE` (inicial: 30 para chegar ao estágio 2, 60 para o 3), pelo estágio da espécie nova. Pode subir o nível de treinador e abrir regiões.
-- Erros: `evolution_not_found`, `level_too_low` (com o nível pedido), `needs_quest` e `in_daycare`.
+- Erros: `evolution_not_found`, `level_too_low` (com o nível pedido) e `in_daycare`.
 - No `GET /state`, cada item de `evolutions` traz também `viaTrade`. No sheet, a opção aparece como "Evolui por troca (missão)", sem botão, até as missões existirem.
 - **O estado precisa mostrar as opções.** `GET /state` passa a trazer, em cada Pokémon, `evolutions: [{ toSpeciesId, displayName, minLevel }]`. O front mostra quantos níveis faltam, mas só o servidor decide.
 
@@ -592,7 +591,8 @@ Hoje, gastar 1 de energia dá exatamente um Pokémon. A ideia é gastar a energi
 ### 5.15 Missões de NPC: Pokédex completa jogando sozinho (ideia, ainda sem fase)
 Nos jogos, nenhuma Pokédex fecha sem outra pessoa: há evoluções por troca e espécies exclusivas de versão. Aqui, **a experiência solo tem que ser completa**. A troca entre jogadores (seção 1) continua prevista, mas nunca é obrigatória. Quem cobre essa lacuna são NPCs com missões.
 
-- **Decidido: a missão é o único caminho** para o que não se obtém de outro jeito: evoluções por troca e espécies fora do mato. Para a evolução por troca, **a missão aparece quando o Pokémon chega ao nível dela** (`min_level` em `evolutions`, com `via_trade = 1`). Antes disso, o jogador nem vê a missão. Se o jogador tiver mais de um Pokémon elegível, ele escolhe qual entregar.
+- **Decidido: evolução por troca não é bloqueada.** Ela continua saindo por nível, como qualquer evolução (seção 5.8). A missão é um **caminho alternativo**, que deixa evoluir antes do nível. Para isso, a missão precisa aparecer num nível **abaixo** do nível da evolução. Se aparecesse no mesmo nível, não adiantaria nada. Se o jogador tiver mais de um Pokémon elegível, ele escolhe qual entregar.
+- Para espécies fora do mato, a missão pode ser o jeito de obter, ao lado de regiões novas e eventos (ver o mapa abaixo).
 - O nível de cada evolução por troca vem do padrão do config (Nv 16 para chegar ao estágio 2, como Onix → Steelix; Nv 36 para o estágio 3, como Haunter → Gengar). Se algum ficar estranho, criar um override por evolução no config.
 - **Como funciona:** um NPC passa um objetivo. Ao cumprir, ele faz a troca. Exemplo: "capture 5 Pokémon do tipo fantasma". Você entrega seu Haunter, ele volta como Gengar. Como na troca dos jogos, o Pokémon é o mesmo e mantém nível, XP, shiny, apelido e favorito.
 - **Evoluções por troca na Gen 1–2:** Kadabra → Alakazam, Machoke → Machamp, Graveler → Golem, Haunter → Gengar, Onix → Steelix, Scyther → Scizor, Poliwhirl → Politoed, Slowpoke → Slowking, Seadra → Kingdra e Porygon → Porygon2. **Hoje o seed transforma todas em evolução por nível**, com o nível padrão do config: Haunter → Gengar no Nv 36, Onix → Steelix e Scyther → Scizor já no Nv 16.
@@ -601,9 +601,10 @@ Nos jogos, nenhuma Pokédex fecha sem outra pessoa: há evoluções por troca e 
 - **Servidor decide:** cumprir e resgatar é uma ação em transação. O servidor confere o objetivo e se a missão já foi feita, e quem escolhe o Pokémon entregue é o jogador. Resgates numa tabela (`user_id`, `quest_key`, `claimed_at`), que pode ser a mesma do álbum.
 - **Visual:** o NPC pode morar no jardim ou numa tela de região, com um diálogo curto. Arte só com licença redistribuível (seção 4.3).
 
-**Mapa das espécies sem rota (tarefa futura).** Antes de especificar as missões, gerar a lista das espécies da faixa do seed que não dá para obter **em nenhuma região do config**, nem por evolução por nível a partir de uma espécie obtenível. Decidir uma a uma: entra numa região nova, vira missão ou fica para evento. A lista sai das regiões (`snapshots/regions.json`) e da tabela `evolutions`, com `via_trade` contando como "precisa de missão". Pode ser um script de relatório, no mesmo estilo do relatório do `pmd-sprites`. Rodar de novo sempre que entrar uma região, porque a lista diminui.
+**Mapa das espécies sem rota (tarefa futura).** Antes de especificar as missões, gerar a lista das espécies da faixa do seed que não dá para obter **em nenhuma região do config**, nem por evolução por nível a partir de uma espécie obtenível. Decidir uma a uma: entra numa região nova, vira missão ou fica para evento. A lista sai das regiões (`snapshots/regions.json`) e da tabela `evolutions`, com as evoluções por troca contando como obteníveis, porque saem por nível. Pode ser um script de relatório, no mesmo estilo do relatório do `pmd-sprites`. Rodar de novo sempre que entrar uma região, porque a lista diminui.
 
 Pontos a decidir:
+- **Em que nível a missão de troca aparece.** Sugestão: um nível próprio por missão no config, abaixo do nível da evolução (ex.: Haunter evolui sozinho no Nv 36, e a missão do Gengar aparece no Nv 25). Uma regra fixa também serve, como "10 níveis antes".
 - Missões únicas ou repetíveis. Uma troca de Haunter por missão, ou o NPC aceita outros Haunters depois.
 - Se o NPC também troca espécie por espécie (dar um Pokémon e receber outro), como as trocas com NPC dos jogos.
 
@@ -698,10 +699,6 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
   - as transações da seção 7 do `DATA_MODEL.md` estão cobertas;
   - as funções puras de doces, alimentação e evolução em `game/` têm teste;
   - nenhuma ação deixa o jogador com zero Pokémon nem com saldo negativo.
-
-**Evolução por troca bloqueada (feature curta, antes das missões)**
-- `evolutions.via_trade` numa migração própria, marcado no seed pelo `trigger` `trade`. O botão Evoluir recusa essas evoluções com `needs_quest`, e o sheet mostra "Evolui por troca (missão)". As missões ficam para a seção 5.15.
-- Até isso entrar, as 10 evoluções por troca da Gen 1–2 continuam saindo por nível.
 
 **Fase 4 — Daycare**
 
