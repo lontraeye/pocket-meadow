@@ -124,7 +124,7 @@ Jogo idle é aberto várias vezes ao dia, quase sempre no celular. Toda tela nas
 - O jardim isométrico precisa caber em retrato: a grade se ajusta à largura e os sprites escalam em múltiplos inteiros, com `image-rendering: pixelated`.
 - Texto legível sem zoom (mínimo 16px em inputs, para o iOS não dar zoom ao focar).
 - Testar sempre no viewport mobile do navegador, e de vez em quando num celular de verdade.
-- Depois, considerar PWA (instalar na tela inicial). Notificação de berry pronta fica para a Fase 6.
+- PWA (instalar na tela inicial) entra na Fase 6.4. **Sem notificação push por enquanto**: push exigiria algo agendado rodando no servidor, contra a seção 2. No lugar, avisos de "pronto" ao abrir o app (Fase 6.1).
 
 O primeiro jardim testa um chão isométrico com esses Pokémon 2D por cima. Ver seção 5.11.
 
@@ -887,11 +887,37 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
   - o replay do encontro continua batendo com a semente da batalha;
   - a tela funciona em 360px.
 
-**Fase 6 — Polimento**
-- Pokédex (espécies vistas/capturadas; a versão com guia e informação por progresso está na seção 5.12), animações de captura, sons, contador de energia, notificações de berry pronta.
-- Testes das funções puras de `game/`.
+**Fase 6 — Sensação e acabamento** (em partes, uma por vez, cada uma testada antes da próxima)
 
-**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); Pokédex como guia e álbum (5.12); pokébolas (5.6); cuidador do daycare (5.9).
+*6.1 — Contador de energia e avisos de "pronto"*
+- **HUD:** abaixo das pips, "+1 em 12:34" enquanto não está cheia e "Cheia" quando está. Ao tocar na energia, mostra também quando enche (ex.: "cheia às 18:40" ou "cheia em 1h 45m"). O servidor manda `energyFullAt` junto com `energyNextAt`, calculado com a mesma regra do catch-up (seção 6), sem conta de energia no cliente.
+- **Avisos de "pronto"** no lugar do push: um selo (badge) com número no botão do dock correspondente, e um aviso curto no topo do jardim ao abrir o app ("2 berries prontas · daycare cheio"). Tocar no aviso leva ao lugar.
+  - berries prontas: canteiros com `readyAt <= agora`;
+  - daycare cheio: slots com `fullAt <= agora`;
+  - energia cheia: no próprio HUD.
+- Tudo calculado com o `serverClock` (mesmo relógio das outras telas). Quando um contador chega a zero na tela, o aviso aparece sem recarregar. O servidor continua decidindo na próxima ação.
+- Sem rota nova e sem mudança de schema.
+
+*6.2 — Captura com suspense e destaques de progresso*
+- A pokébola chacoalha de 1 a 3 vezes antes do resultado, e há uma comemoração ao capturar. O resultado já veio do servidor, e a animação só encena. O número de chacoalhadas é derivado da chance de captura, só para a cena, sem rolagem nova.
+- Destaques (não só texto) para: subir de nível (Pokémon e treinador), "pode evoluir", evolução, região nova liberada, semente ganha e recompensas de nível.
+- `prefers-reduced-motion`: sem animação, resultado direto.
+
+*6.3 — Sons*
+- Sons curtos nos momentos da 6.2 e em ações (colher, soltar, botão principal). Botão de mudo lembrado no `localStorage`. No celular, o som só toca depois do primeiro toque, por regra do navegador.
+- Só com licença redistribuível (ex.: pacotes CC0 do Kenney), creditados no `CREDITS.md`.
+
+*6.4 — Instalar na tela inicial (PWA)*
+- `manifest.webmanifest` (nome, ícones, cores, `display: standalone`), ícones nos tamanhos pedidos e service worker simples que cacheia os arquivos estáticos. A API nunca é cacheada, porque o estado vem sempre do servidor.
+
+*6.5 — Revisão mobile e estados*
+- Passar todas as telas em 360px e num celular de verdade (seção 4.4).
+- Estados de carregando, erro e sem conexão em todas as ações. Nenhum botão fica "morto" sem explicação.
+
+**Fase 7 — Pokédex: guia e álbum** (seção 5.12)
+- Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
+
+**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9).
 
 ---
 
