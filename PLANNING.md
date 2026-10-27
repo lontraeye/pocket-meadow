@@ -959,6 +959,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - **Só durante a luta:** todos saem curados no fim. Pokémon que ficam machucados depois da luta (com cura no jardim, itens ou centro) é ideia para o futuro.
 - Tudo dentro da simulação compartilhada, com as regras de sempre (seed da luta, só `+ − × ÷` e `floor`/`min`/`max`, tempo em ms inteiros). O servidor continua refazendo a luta igual.
 - **Na tela:** selo do status ao lado da barra de vida (QMD, ENV, PAR, DRM, CGL, CNF) e o dano por tempo como número. O visual de cada status (chama, bolhas, faíscas) vem na parte 2 do juice.
+- **Golpe crítico** (entra junto): rolagem em todo golpe de dano, rápido ou carregado, sem dividir a chance (só aumenta o dano, não trava a luta). Chance inicial 1/24, e 1/8 nos golpes de crítico alto (`meta.crit_rate` da PokéAPI, como Slash e Razor Leaf). Dano ×1,5, ignorando os estágios que atrapalham o atacante, como nos jogos principais. Super Luck aumenta a chance, Sniper leva o crítico a ×2,25, Battle Armor e Shell Armor são imunes. Na tela, "Crítico!" junto ao número.
 - Clima e as habilidades que dependem dele (Swift Swim, Chlorophyll, Drizzle) ficam para depois.
 
 **PRNG (seção 7)**
@@ -1163,6 +1164,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - **Efeitos por golpe:** pegar efeitos visuais (partículas, rajadas, folhas, chamas, raios…) e mapear para os golpes que os Pokémon podem ter. O mapa sai por tipo e categoria do golpe (físico ou especial, rápido ou carregado), com exceções por golpe quando valer a pena; golpe sem efeito usa o do tipo. Fica num lugar só, como o `gardenSprite`. Só assets com licença redistribuível (seção 4.3), creditados no `CREDITS.md`.
   - **Animações da luta mais vivas:** impacto com tremida de tela curta, flash no acerto, destaque no supereficaz e no crítico, e uma entrada mais marcada do golpe carregado.
   - **Pokébola mais bonita e mais dramática:** arco do lançamento, a bola abrindo e puxando o Pokémon num brilho, pausas maiores entre as chacoalhadas (a última mais demorada), e no fim estrelinhas na captura ou a bola estourando na fuga.
+  - **Status sobre o sprite** (pedido em 2026-10-27, depois da 8.6): efeito visual em cima do Pokémon enquanto durar o status. Chama na queimadura, bolhas roxas no veneno, faíscas na paralisia, "Zzz" no sono, cristais de gelo no congelamento, estrelinhas girando na confusão.
+  - **Cor do número de dano pela origem** (pedido em 2026-10-27): dá para saber de onde veio cada dano. Golpe normal em branco, crítico e super eficaz como hoje, queimadura em laranja, veneno em roxo, recuo em cinza, autoataque da confusão em rosa, e cura e dreno em verde. A cor de cada status é a mesma do selo na placa.
   - Tudo respeitando `prefers-reduced-motion` e leve no celular.
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).

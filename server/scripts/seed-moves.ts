@@ -15,7 +15,13 @@ import {
   type LearnsetsSnapshot,
   type MovesSnapshot,
 } from '../src/seed/traitsData.js'
-import type { LearnEntry, MoveInfo, SpeciesAbilities } from '../src/game/traits.js'
+import type {
+  LearnEntry,
+  MoveAilmentName,
+  MoveInfo,
+  MoveStatChange,
+  SpeciesAbilities,
+} from '../src/game/traits.js'
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pokeCache = path.join(serverRoot, speciesSeed.cacheDir)
@@ -47,6 +53,15 @@ type MovePayload = {
   damage_class: { name: string }
   names: { name: string; language: { name: string } }[]
   effect_entries: { effect: string; short_effect: string; language: { name: string } }[]
+  meta: {
+    ailment: { name: string }
+    category: { name: string }
+    drain: number
+    crit_rate: number
+    ailment_chance: number
+    stat_chance: number
+  } | null
+  stat_changes: { change: number; stat: { name: string } }[]
 }
 
 async function main(): Promise<void> {
@@ -179,6 +194,23 @@ function parseEffort(pokemon: PokemonCache): Record<string, number> {
   return out
 }
 
+const AILMENTS = new Set<MoveAilmentName>([
+  'burn',
+  'poison',
+  'paralysis',
+  'sleep',
+  'freeze',
+  'confusion',
+])
+
+const STAT_MAP: Record<string, MoveStatChange['stat']> = {
+  attack: 'attack',
+  defense: 'defense',
+  'special-attack': 'spAttack',
+  'special-defense': 'spDefense',
+  speed: 'speed',
+}
+
 function toMoveInfo(payload: MovePayload): MoveInfo | null {
   // Sem power = status ou dano fixo. User faints = Self-Destruct etc.
   if (payload.power === null || payload.power <= 0) return null
@@ -189,12 +221,31 @@ function toMoveInfo(payload: MovePayload): MoveInfo | null {
   if (payload.damage_class.name !== 'physical' && payload.damage_class.name !== 'special') {
     return null
   }
+  const meta = payload.meta
+  const ailmentRaw = meta?.ailment.name ?? 'none'
+  const ailment =
+    ailmentRaw !== 'none' && AILMENTS.has(ailmentRaw as MoveAilmentName)
+      ? (ailmentRaw as MoveAilmentName)
+      : null
+  const statChanges: MoveStatChange[] = []
+  for (const row of payload.stat_changes ?? []) {
+    const stat = STAT_MAP[row.stat.name]
+    if (!stat || row.change === 0) continue
+    statChanges.push({ stat, stages: row.change })
+  }
   return {
     name: payload.name,
     displayName,
     type: payload.type.name,
     power: payload.power,
     damageClass: payload.damage_class.name,
+    ailment,
+    ailmentChance: meta?.ailment_chance ?? 0,
+    statChanges,
+    statChance: meta?.stat_chance ?? 0,
+    statOnSelf: meta?.category.name === 'damage-raise',
+    drain: meta?.drain ?? 0,
+    critRate: meta?.crit_rate ?? 0,
   }
 }
 

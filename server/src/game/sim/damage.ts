@@ -2,11 +2,18 @@ import { traitsConfig } from '../../config/traits.js'
 import { isPokemonType, typeEffectiveness, type PokemonType } from '../../config/types.js'
 import { calcStat } from '../stats.js'
 import { bandValue, simConfig } from './config.js'
-import type { DamageClass, SimFighter, SimMove } from './types.js'
+import {
+  applyStage,
+  critChanceDenom,
+  isCritImmune,
+  type Stages,
+} from './effects.js'
+import type { DamageClass, SimFighter, SimMove, StatusCondition } from './types.js'
 import type { Rng } from '../mulberry32.js'
 
-/** Fator de Velocidade 0,8–1,2 (PLANNING 8.2). */
-export function speedFactor(speed: number, level: number): number {
+/** Fator de Velocidade 0,8–1,2 (PLANNING 8.2), com estágio de Velocidade. */
+export function speedFactor(speed: number, level: number, speedStages = 0): number {
+  const staged = applyStage(speed, speedStages)
   const average = calcStat(
     simConfig.speedRefBase,
     simConfig.speedRefIv,
@@ -16,17 +23,25 @@ export function speedFactor(speed: number, level: number): number {
     'speed',
   )
   if (!(average > 0)) return 1
-  const raw = 1 + (simConfig.speedFactorK * (average - speed)) / average
+  const raw = 1 + (simConfig.speedFactorK * (average - staged)) / average
   return Math.min(simConfig.speedFactorMax, Math.max(simConfig.speedFactorMin, raw))
 }
 
-export function moveCooldownMs(move: SimMove, speed: number, level: number): number {
+export function moveCooldownMs(
+  move: SimMove,
+  speed: number,
+  level: number,
+  speedStages = 0,
+  paralyzed = false,
+): number {
   const bands =
     move.power <= traitsConfig.fastPowerMax ? simConfig.fastCooldownMs : simConfig.chargedCooldownMs
   const base = bandValue(bands, move.power, 'ms')
-  // floor(base * factor) com factor em décimos via divisão inteira aproximada.
-  // speedFactor é racional; usamos floor(base * factor) direto (÷ permitido).
-  return Math.max(1, Math.floor(base * speedFactor(speed, level)))
+  let ms = Math.max(1, Math.floor(base * speedFactor(speed, level, speedStages)))
+  if (paralyzed) {
+    ms = Math.max(1, Math.floor((ms * simConfig.paralysisCooldownNum) / simConfig.paralysisCooldownDen))
+  }
+  return ms
 }
 
 export function fastEnergyGain(power: number): number {
@@ -49,7 +64,7 @@ export type DamageInput = {
   attacker: SimFighter
   defender: SimFighter
   move: SimMove
-  /** Ataque efetivo (já com Intimidate / Huge Power / Hustle). */
+  /** Ataque efetivo (já com habilidades / estágios / status). */
   attackStat: number
   /** Defesa efetiva do alvo. */
   defenseStat: number
@@ -61,12 +76,13 @@ export type DamageInput = {
   defenderHp: number
   /** HP máximo de luta do defensor (com battleHpMultiplier). */
   defenderMaxHp: number
+  critical: boolean
   rng: Rng
 }
 
 /**
  * Dano: ⌊(⌊2L/5⌋+2) · Poder · A/D / 50⌋ + 2, depois STAB ×3/2,
- * efetividade e fator 85–100. Mínimo 1, salvo imunidade (0).
+ * efetividade, crítico e fator 85–100. Mínimo 1, salvo imunidade (0).
  */
 export function calcDamage(input: DamageInput): number {
   const {
@@ -79,11 +95,11 @@ export function calcDamage(input: DamageInput): number {
     attackerMaxHp,
     defenderHp,
     defenderMaxHp,
+    critical,
     rng,
   } = input
   if (!isPokemonType(move.type)) return 1
 
-  // Imunidades por habilidade (antes do cálculo).
   const immune = abilityImmunity(defender.abilityKey, move.type)
   if (immune.immune) return 0
 
@@ -93,33 +109,35 @@ export function calcDamage(input: DamageInput): number {
   let damage =
     Math.floor((((Math.floor((2 * level) / 5) + 2) * move.power * a) / d) / 50) + 2
 
-  // STAB ×3/2
   if (attacker.types.includes(move.type)) {
     damage = Math.floor((damage * 3) / 2)
   }
 
-  // Efetividade (0, 0.25, 0.5, 1, 2, 4)
   const eff = typeMultiplier(move.type, defender.types)
   damage = applyEffectiveness(damage, eff)
 
-  // Thick Fat: ½ Fire e Ice
   if (defender.abilityKey === 'thick-fat' && (move.type === 'fire' || move.type === 'ice')) {
     damage = Math.floor(damage / 2)
   }
 
-  // Blaze / Torrent / Overgrow / Swarm: ×3/2 no tipo com HP ≤ ⅓
   if (typeBoostAbility(attacker.abilityKey, move.type, attackerHp, attackerMaxHp)) {
     damage = Math.floor((damage * 3) / 2)
   }
 
-  // Fator aleatório 85–100
+  if (critical) {
+    if (attacker.abilityKey === 'sniper') {
+      damage = Math.floor((damage * simConfig.sniperCritDamageNum) / simConfig.sniperCritDamageDen)
+    } else {
+      damage = Math.floor((damage * simConfig.critDamageNum) / simConfig.critDamageDen)
+    }
+  }
+
   const roll = 85 + Math.floor(rng() * 16)
   damage = Math.floor((damage * roll) / 100)
 
   if (eff === 0) return 0
   if (damage < 1) damage = 1
 
-  // Sturdy: aguenta com 1 HP um golpe que mataria a partir do HP cheio
   if (defender.abilityKey === 'sturdy' && defenderHp === defenderMaxHp && damage >= defenderHp) {
     return defenderHp - 1
   }
@@ -134,7 +152,6 @@ function applyEffectiveness(damage: number, eff: number): number {
   if (eff === 4) return damage * 4
   if (eff === 0.5) return Math.floor(damage / 2)
   if (eff === 0.25) return Math.floor(damage / 4)
-  // Fallback genérico com centésimos inteiros.
   return Math.floor((damage * Math.floor(eff * 100)) / 100)
 }
 
@@ -163,23 +180,80 @@ function typeBoostAbility(
   return false
 }
 
+/** Estágio de ataque efetivo no crítico: ignora estágios negativos. */
+export function attackStagesForCrit(stages: number, critical: boolean): number {
+  if (critical && stages < 0) return 0
+  return stages
+}
+
+/** Estágio de defesa efetivo no crítico: ignora estágios positivos. */
+export function defenseStagesForCrit(stages: number, critical: boolean): number {
+  if (critical && stages > 0) return 0
+  return stages
+}
+
 export function offensiveStat(
   fighter: SimFighter,
   damageClass: DamageClass,
-  intimidated: boolean,
+  stages: Stages,
+  status: StatusCondition | null,
+  critical: boolean,
 ): number {
+  const key = damageClass === 'physical' ? 'attack' : 'spAttack'
   let atk = damageClass === 'physical' ? fighter.stats.attack : fighter.stats.spAttack
   if (damageClass === 'physical') {
     if (fighter.abilityKey === 'huge-power') atk = atk * 2
     if (fighter.abilityKey === 'hustle') atk = Math.floor((atk * 3) / 2)
-    if (intimidated) atk = Math.floor((atk * 2) / 3)
+    if (status !== null && fighter.abilityKey === 'guts') {
+      atk = Math.floor((atk * simConfig.gutsAttackNum) / simConfig.gutsAttackDen)
+    }
+  }
+  const stage = attackStagesForCrit(stages[key], critical)
+  atk = applyStage(atk, stage)
+  if (
+    damageClass === 'physical' &&
+    status === 'burn' &&
+    fighter.abilityKey !== 'guts'
+  ) {
+    atk = Math.floor((atk * simConfig.burnAttackNum) / simConfig.burnAttackDen)
   }
   return Math.max(1, atk)
 }
 
-export function defensiveStat(fighter: SimFighter, damageClass: DamageClass): number {
-  return Math.max(
-    1,
-    damageClass === 'physical' ? fighter.stats.defense : fighter.stats.spDefense,
+export function defensiveStat(
+  fighter: SimFighter,
+  damageClass: DamageClass,
+  stages: Stages,
+  status: StatusCondition | null,
+  critical: boolean,
+): number {
+  const key = damageClass === 'physical' ? 'defense' : 'spDefense'
+  let def = damageClass === 'physical' ? fighter.stats.defense : fighter.stats.spDefense
+  if (damageClass === 'physical' && status !== null && fighter.abilityKey === 'marvel-scale') {
+    def = Math.floor((def * simConfig.marvelScaleDefNum) / simConfig.marvelScaleDefDen)
+  }
+  const stage = defenseStagesForCrit(stages[key], critical)
+  return Math.max(1, applyStage(def, stage))
+}
+
+/** Battle Armor e Shell Armor protegem quem recebe: ver rollCriticalAgainst. */
+export function rollCritical(move: SimMove, attacker: SimFighter, rng: Rng): boolean {
+  const denom = critChanceDenom(
+    move.critRate,
+    attacker.abilityKey,
+    simConfig.critChanceNormalDenom,
+    simConfig.critChanceHighDenom,
+    simConfig.critChanceSuperLuckDenom,
   )
+  return Math.floor(rng() * denom) === 0
+}
+
+export function rollCriticalAgainst(
+  move: SimMove,
+  attacker: SimFighter,
+  defender: SimFighter,
+  rng: Rng,
+): boolean {
+  if (isCritImmune(defender.abilityKey)) return false
+  return rollCritical(move, attacker, rng)
 }

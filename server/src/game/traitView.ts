@@ -2,6 +2,7 @@ import { natureInfo } from '../config/natures.js'
 import { isCombatAbility } from '../config/traits.js'
 import { abilitiesFor, learnsetFor, movesByName } from '../seed/traitsData.js'
 import { calcStats, ivRating, type StatBlock } from './stats.js'
+import { moveEffectText } from './moveEffectText.js'
 import {
   isFastMove,
   nextChargedLearn,
@@ -99,12 +100,16 @@ export function availableMovesFor(
 }
 
 function moveView(info: MoveInfo | undefined, fallback: string) {
+  const power = info?.power ?? 0
+  const slot = isFastMove(power) ? 'fast' : 'charged'
+  const effect = info ? moveEffectText(info, slot) : null
   return {
     name: info?.name ?? fallback,
     displayName: info?.displayName ?? fallback,
     type: info?.type ?? 'normal',
-    power: info?.power ?? 0,
+    power,
     damageClass: info?.damageClass ?? 'physical',
+    effectText: effect,
   }
 }
 

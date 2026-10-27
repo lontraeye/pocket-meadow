@@ -5,12 +5,36 @@ import type { StatBlock } from './stats.js'
 
 export type AbilitySlot = '1' | '2' | 'hidden'
 
+export type MoveAilmentName =
+  | 'burn'
+  | 'poison'
+  | 'paralysis'
+  | 'sleep'
+  | 'freeze'
+  | 'confusion'
+
+export type MoveStatChange = {
+  stat: 'attack' | 'defense' | 'spAttack' | 'spDefense' | 'speed'
+  stages: number
+}
+
 export type MoveInfo = {
   name: string
   displayName: string
   type: string
   power: number
   damageClass: 'physical' | 'special'
+  /** 8.6 — opcional nos snapshots antigos. */
+  ailment?: MoveAilmentName | null
+  ailmentChance?: number
+  statChanges?: MoveStatChange[]
+  statChance?: number
+  /** true = buff no usuário (damage-raise). */
+  statOnSelf?: boolean
+  /** % do dano: positivo cura, negativo recuo. */
+  drain?: number
+  /** 0 normal; ≥1 crítico alto (Slash…). */
+  critRate?: number
 }
 
 export type LearnEntry = { move: string; level: number }

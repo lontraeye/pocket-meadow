@@ -85,6 +85,8 @@ export type MoveView = {
   type: string
   power: number
   damageClass: 'physical' | 'special'
+  /** Texto curto do efeito (8.6); null se não tem. */
+  effectText?: string | null
 }
 
 export type LearnEntryView = {

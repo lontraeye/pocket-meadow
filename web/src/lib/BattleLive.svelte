@@ -178,7 +178,14 @@
   const waitMs = $derived(Math.max(0, active.readyAt - elapsed, snap.switchReadyAt - elapsed))
   const waitTotal = $derived(Math.max(1, active.readyAt - cdFrom, snap.switchReadyAt - cdFrom))
   const cdFill = $derived(waitMs <= 0 ? 1 : Math.max(0, Math.min(1, 1 - waitMs / waitTotal)))
-  const canAct = $derived(status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0)
+  const allyLocked =
+    $derived(active.status === 'sleep' || active.status === 'freeze')
+  const lockLabel = $derived(
+    active.status === 'sleep' ? 'Dormindo' : active.status === 'freeze' ? 'Congelado' : null,
+  )
+  const canAct = $derived(
+    status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0 && !allyLocked,
+  )
 
   // Ao ligar/desligar o Auto, zera o atraso de reação pendente.
   $effect(() => {
@@ -254,6 +261,12 @@
     let next = timeLimit
     if (!state.wild.fainted) next = Math.min(next, Math.max(state.wild.readyAt + simConfig.aiFastDelayMinMs, e + 1))
     if (state.team[state.activeSlot]?.fainted) next = Math.min(next, e + 1)
+    // Com status em campo, o tempo sozinho muda a luta (dano por segundo,
+    // acordar, descongelar, a confusão passar): re-simula a cada 100 ms.
+    const ally = state.team[state.activeSlot]
+    if (ally?.status || ally?.confused || state.wild.status || state.wild.confused) {
+      next = Math.min(next, e + 100)
+    }
     return next
   }
 
@@ -300,7 +313,15 @@
     if (!battleAuto) return
     const state = sim.snapshot
     const side = state.team[state.activeSlot]
-    if (!side || side.fainted || state.wild.fainted || state.result !== null) {
+    // Dormindo ou congelado: espera, senão mandaria um toque recusado por quadro.
+    if (
+      !side ||
+      side.fainted ||
+      side.status === 'sleep' ||
+      side.status === 'freeze' ||
+      state.wild.fainted ||
+      state.result !== null
+    ) {
       autoAt = null
       return
     }
@@ -413,13 +434,14 @@
       const attacker = event.side === 'player' ? setup.team[allySlot]! : wildFighter
       const defenderSide = event.side === 'player' ? 'wild' : 'player'
       const charged = event.move === 'charged'
+      const crit = event.critical === true
       if (event.side === 'player') play(charged ? 'charged' : 'fast')
       if (charged) showCharged(attacker, event.side, event.moveName)
       poseFor(event.side, attackSteps(attacker, event.side, event.move))
       if (event.damage > 0) {
         play('hit')
-        bumpJuice(defenderSide, charged)
-        spawnDamage(defenderSide, event.damage, event.effectiveness, charged)
+        bumpJuice(defenderSide, charged || crit)
+        spawnDamage(defenderSide, event.damage, event.effectiveness, charged || crit, crit)
         if (!event.fainted) {
           poseFor(
             defenderSide,
@@ -427,11 +449,14 @@
           )
         }
       }
-      // Câmera lenta só no desmaio que encerra a luta: o selvagem caiu, ou caiu
-      // o último do seu time (não quando ainda há outro para entrar).
       if (event.fainted && ended) endingFaint = true
-    } else if (event.kind === 'heal') {
+    } else if (event.kind === 'heal' || event.kind === 'drain') {
       spawnHeal(event.side, event.amount)
+    } else if (event.kind === 'status_damage' || event.kind === 'recoil' || event.kind === 'confusion_hit') {
+      spawnSoftDamage(event.side, event.damage)
+      if (event.fainted && ended) endingFaint = true
+    } else if (event.kind === 'stat_change') {
+      spawnStatArrow(event.side, event.stat, event.stages)
     } else if (event.kind === 'faint') {
       play('faint')
       const fighter = event.side === 'player' ? setup.team[event.slot]! : wildFighter
@@ -461,10 +486,17 @@
     shakeToken += 1
   }
 
-  function spawnDamage(side: 'player' | 'wild', damage: number, effectiveness: number, charged: boolean) {
+  function spawnDamage(
+    side: 'player' | 'wild',
+    damage: number,
+    effectiveness: number,
+    charged: boolean,
+    critical = false,
+  ) {
     floaterId += 1
     let note: string | undefined
-    if (effectiveness > 1) note = 'Super eficaz!'
+    if (critical) note = 'Crítico!'
+    else if (effectiveness > 1) note = 'Super eficaz!'
     else if (effectiveness > 0 && effectiveness < 1) note = 'Pouco eficaz'
     floaters = [
       ...floaters,
@@ -481,9 +513,67 @@
     ]
   }
 
+  function spawnSoftDamage(side: 'player' | 'wild', damage: number) {
+    floaterId += 1
+    floaters = [
+      ...floaters,
+      { id: floaterId, side, text: `-${damage}`, heal: false, born: performance.now() },
+    ]
+  }
+
   function spawnHeal(side: 'player' | 'wild', amount: number) {
     floaterId += 1
     floaters = [...floaters, { id: floaterId, side, text: `+${amount}`, heal: true, born: performance.now() }]
+  }
+
+  function spawnStatArrow(side: 'player' | 'wild', stat: string, stages: number) {
+    floaterId += 1
+    const arrow = stages > 0 ? '↑' : '↓'
+    floaters = [
+      ...floaters,
+      {
+        id: floaterId,
+        side,
+        text: `${arrow}${statShort(stat)}`,
+        heal: stages > 0,
+        born: performance.now(),
+      },
+    ]
+  }
+
+  function statShort(stat: string): string {
+    switch (stat) {
+      case 'attack':
+        return 'Atq'
+      case 'defense':
+        return 'Def'
+      case 'spAttack':
+        return 'AtqE'
+      case 'spDefense':
+        return 'DefE'
+      case 'speed':
+        return 'Vel'
+      default:
+        return stat
+    }
+  }
+
+  function statusSeal(status: string | null | undefined): { code: string; tone: string } | null {
+    if (!status) return null
+    switch (status) {
+      case 'burn':
+        return { code: 'QMD', tone: 'burn' }
+      case 'poison':
+        return { code: 'ENV', tone: 'poison' }
+      case 'paralysis':
+        return { code: 'PAR', tone: 'para' }
+      case 'sleep':
+        return { code: 'DRM', tone: 'sleep' }
+      case 'freeze':
+        return { code: 'CGL', tone: 'freeze' }
+      default:
+        return null
+    }
   }
 
   function shinySheet(fighter: SimFighter, side: 'player' | 'wild'): boolean {
@@ -667,7 +757,15 @@
       <p class="charged-banner" style:--glow={chargedFx.color}>{chargedFx.name}</p>
     {/if}
     <div class="plate wild-plate">
-      <span class="who"><b>{encounter.displayName}{#if encounter.isShiny} ★{/if}</b><small>Nv {wildFighter.level}</small></span>
+      <span class="who">
+        <b>{encounter.displayName}{#if encounter.isShiny} ★{/if}</b>
+        {#if statusSeal(snap.wild.status)}
+          {@const seal = statusSeal(snap.wild.status)!}
+          <span class="seal {seal.tone}" class:pop={!reduced}>{seal.code}</span>
+        {/if}
+        {#if snap.wild.confused}<span class="seal conf" class:pop={!reduced}>CNF</span>{/if}
+        <small>Nv {wildFighter.level}</small>
+      </span>
       <span role="progressbar" aria-label="HP do selvagem" aria-valuemin="0" aria-valuemax={snap.wild.maxHp} aria-valuenow={snap.wild.hp}>
         {@render bar(wildPercent, wildTrail, hpTone(wildPercent))}
       </span>
@@ -750,7 +848,15 @@
     </div>
 
     <div class="plate ally-plate">
-      <span class="who"><b>{nameOf(activeFighter)}{#if allyShiny} ★{/if}</b><small>Nv {activeFighter.level}</small></span>
+      <span class="who">
+        <b>{nameOf(activeFighter)}{#if allyShiny} ★{/if}</b>
+        {#if statusSeal(active.status)}
+          {@const seal = statusSeal(active.status)!}
+          <span class="seal {seal.tone}" class:pop={!reduced}>{seal.code}</span>
+        {/if}
+        {#if active.confused}<span class="seal conf" class:pop={!reduced}>CNF</span>{/if}
+        <small>Nv {activeFighter.level}</small>
+      </span>
       <span role="progressbar" aria-label="HP do seu Pokémon" aria-valuemin="0" aria-valuemax={active.maxHp} aria-valuenow={active.hp}>
         {@render bar(allyPercent, allyTrail, hpTone(allyPercent))}
       </span>
@@ -769,8 +875,8 @@
   <div class="moves" class:solo={!activeFighter.chargedMove}>
     <button type="button" class="btn act" disabled={!canAct} onclick={() => manual('fast')}>
       <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
-      <span class="label">Rápido</span>
-      <small>{moveLabel(activeFighter.fastMove.name)}</small>
+      <span class="label">{lockLabel ?? 'Rápido'}</span>
+      <small>{lockLabel ? lockLabel : moveLabel(activeFighter.fastMove.name)}</small>
     </button>
     {#if activeFighter.chargedMove && chargedCost !== null}
       <button
@@ -784,8 +890,8 @@
         <!-- Cada golpe rápido enche o botão de baixo para cima. -->
         <span class="charge" style:transform="scaleY({chargeFill})" aria-hidden="true"></span>
         {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
-        <span class="label">{chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`}</span>
-        <small>{moveLabel(activeFighter.chargedMove.name)}</small>
+        <span class="label">{lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}</span>
+        <small>{lockLabel ? lockLabel : moveLabel(activeFighter.chargedMove.name)}</small>
       </button>
     {/if}
   </div>
@@ -999,6 +1105,7 @@
     justify-content: space-between;
     gap: 0.3rem;
     font-size: 0.9rem;
+    flex-wrap: wrap;
   }
 
   .who b {
@@ -1011,6 +1118,59 @@
   .hp-text {
     font-size: 0.8rem;
     font-weight: 600;
+  }
+
+  .seal {
+    flex: 0 0 auto;
+    padding: 0.05rem 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    color: #fff;
+    background: #666;
+  }
+
+  .seal.pop {
+    animation: seal-pop 220ms ease-out;
+  }
+
+  .seal.burn {
+    background: #c04020;
+  }
+  .seal.poison {
+    background: #7040a0;
+  }
+  .seal.para {
+    background: #c0a020;
+    color: #1a1208;
+  }
+  .seal.sleep {
+    background: #4868a8;
+  }
+  .seal.freeze {
+    background: #58b0c8;
+    color: #0e2030;
+  }
+  .seal.conf {
+    background: #a05078;
+  }
+
+  @keyframes seal-pop {
+    from {
+      transform: scale(0.7);
+      opacity: 0.4;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .seal.pop {
+      animation: none;
+    }
   }
 
   .hp-text {

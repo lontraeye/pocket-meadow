@@ -89,6 +89,52 @@ export const simConfig = {
 
   /** Folga além do tempo limite para considerar a luta abandonada como derrota. */
   abandonSlackMs: 2000,
+
+  // ---- 8.6 status, crítico, efeitos ----
+
+  /** Crítico: 1/24 normal; 1/8 com crit_rate ≥ 1; Super Luck sobe um degrau (até 1/2). */
+  critChanceNormalDenom: 24,
+  critChanceHighDenom: 8,
+  critChanceSuperLuckDenom: 2,
+  /** Dano do crítico ×3/2; Sniper ×9/4. */
+  critDamageNum: 3,
+  critDamageDen: 2,
+  sniperCritDamageNum: 9,
+  sniperCritDamageDen: 4,
+
+  /** Tick de queimadura / veneno (ms). */
+  statusTickMs: 1000,
+  /** Fração da vida máxima perdida por tick (1/32). */
+  statusDotDenom: 32,
+  /** Queimadura: Ataque físico ×1/2 (salvo Guts). */
+  burnAttackNum: 1,
+  burnAttackDen: 2,
+  /** Paralisia: cooldown ×5/4 (+25%). */
+  paralysisCooldownNum: 5,
+  paralysisCooldownDen: 4,
+  sleepDurationMs: 2500,
+  freezeDurationMs: 3000,
+  confusionDurationMs: 4000,
+  /** Confusão: 1/3 de se bater. */
+  confusionSelfHitDenom: 3,
+  confusionSelfPower: 40,
+
+  /** No rápido, chance de efeito ÷ este valor. */
+  fastEffectChanceDivisor: 3,
+  /** Status que o golpe rápido pode aplicar. */
+  fastAilments: ['burn', 'poison', 'paralysis'] as const,
+
+  stageMin: -6,
+  stageMax: 6,
+
+  /** Static / Poison Point / Flame Body / Effect Spore (%). */
+  contactAbilityChance: 30,
+  shedSkinIntervalMs: 3000,
+  shedSkinChanceDenom: 3,
+  gutsAttackNum: 3,
+  gutsAttackDen: 2,
+  marvelScaleDefNum: 3,
+  marvelScaleDefDen: 2,
 } as const
 
 /** true se o tempo real ainda não alcançou a duração simulada. */

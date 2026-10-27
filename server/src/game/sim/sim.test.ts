@@ -19,12 +19,14 @@ import { mulberry32 } from '../mulberry32.js'
 import { traitsConfig } from '../../config/traits.js'
 
 function dmg(
-  input: Omit<DamageInput, 'attackerMaxHp' | 'defenderMaxHp'> & {
+  input: Omit<DamageInput, 'attackerMaxHp' | 'defenderMaxHp' | 'critical'> & {
     attackerMaxHp?: number
     defenderMaxHp?: number
+    critical?: boolean
   },
 ): number {
   return calcDamage({
+    critical: false,
     ...input,
     attackerMaxHp: input.attackerMaxHp ?? input.attackerHp,
     defenderMaxHp: input.defenderMaxHp ?? input.defenderHp,
@@ -34,6 +36,13 @@ function dmg(
 function move(partial: Partial<SimMove> & Pick<SimMove, 'name' | 'type' | 'power'>): SimMove {
   return {
     damageClass: 'physical',
+    ailment: null,
+    ailmentChance: 0,
+    statChanges: [],
+    statChance: 0,
+    statOnSelf: false,
+    drain: 0,
+    critRate: 0,
     ...partial,
   }
 }
@@ -239,10 +248,14 @@ test('habilidades do conjunto (5.18)', () => {
     39,
   )
 
-  // Huge Power / Hustle / Intimidate (ofensivo)
-  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'huge-power' }, 'physical', false), 160)
-  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'hustle' }, 'physical', false), 120)
-  assert.equal(offensiveStat(baseAtk, 'physical', true), Math.floor((80 * 2) / 3))
+  // Huge Power / Hustle / estágio −1 (Intimidate)
+  const flat = { attack: 0, defense: 0, spAttack: 0, spDefense: 0, speed: 0 }
+  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'huge-power' }, 'physical', flat, null, false), 160)
+  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'hustle' }, 'physical', flat, null, false), 120)
+  assert.equal(
+    offensiveStat(baseAtk, 'physical', { ...flat, attack: -1 }, null, false),
+    Math.floor((80 * 2) / 3),
+  )
 
   // Thick Fat
   const thick = { ...baseDef, abilityKey: 'thick-fat' }
@@ -350,8 +363,8 @@ test('habilidades do conjunto (5.18)', () => {
     0,
   )
 
-  // Sniper: só listado até haver crítico
-  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'sniper' }, 'physical', false), 80)
+  // Sniper: não mexe no ataque base (só no crítico)
+  assert.equal(offensiveStat({ ...baseAtk, abilityKey: 'sniper' }, 'physical', flat, null, false), 80)
 
   // Intimidate no log
   const result = runBattle({

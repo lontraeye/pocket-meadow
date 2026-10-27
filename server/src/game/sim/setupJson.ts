@@ -1,4 +1,5 @@
 import { isPokemonType } from '../../config/types.js'
+import { emptyMoveEffects, type MoveAilment, type StageStat } from './effects.js'
 import type { BattleSetup, SimFighter, SimMove } from './types.js'
 
 /** Forma serializada do setup (POST start / coluna battle_setup_json). */
@@ -13,8 +14,8 @@ export type SerializedFighter = {
   level: number
   types: string[]
   stats: SimFighter['stats']
-  fastMove: SimMove
-  chargedMove: SimMove | null
+  fastMove: Partial<SimMove> & Pick<SimMove, 'name' | 'type' | 'power' | 'damageClass'>
+  chargedMove: (Partial<SimMove> & Pick<SimMove, 'name' | 'type' | 'power' | 'damageClass'>) | null
   abilityKey: string
 }
 
@@ -78,14 +79,44 @@ function parseTypes(types: string[]): SimFighter['types'] {
   return [t0, t1]
 }
 
-function parseMove(raw: SimMove): SimMove {
+const AILMENTS = new Set<MoveAilment>([
+  'burn',
+  'poison',
+  'paralysis',
+  'sleep',
+  'freeze',
+  'confusion',
+])
+
+const STAGE_STATS = new Set<StageStat>(['attack', 'defense', 'spAttack', 'spDefense', 'speed'])
+
+/** Aceita setup antigo sem os campos de efeito (8.6) → golpe sem efeito. */
+function parseMove(raw: SerializedFighter['fastMove']): SimMove {
   if (!raw || !isPokemonType(raw.type) || typeof raw.power !== 'number') {
     throw new Error('invalid_battle_setup')
   }
+  const ailment =
+    raw.ailment && AILMENTS.has(raw.ailment as MoveAilment) ? (raw.ailment as MoveAilment) : null
+  const statChanges = Array.isArray(raw.statChanges)
+    ? raw.statChanges.filter(
+        (row): row is { stat: StageStat; stages: number } =>
+          !!row &&
+          STAGE_STATS.has(row.stat as StageStat) &&
+          typeof row.stages === 'number' &&
+          row.stages !== 0,
+      )
+    : []
   return {
-    name: raw.name,
+    name: typeof raw.name === 'string' ? raw.name : 'tackle',
     type: raw.type,
     power: raw.power,
     damageClass: raw.damageClass === 'special' ? 'special' : 'physical',
+    ailment,
+    ailmentChance: typeof raw.ailmentChance === 'number' ? raw.ailmentChance : emptyMoveEffects.ailmentChance,
+    statChanges,
+    statChance: typeof raw.statChance === 'number' ? raw.statChance : emptyMoveEffects.statChance,
+    statOnSelf: raw.statOnSelf === true,
+    drain: typeof raw.drain === 'number' ? raw.drain : emptyMoveEffects.drain,
+    critRate: typeof raw.critRate === 'number' ? raw.critRate : emptyMoveEffects.critRate,
   }
 }

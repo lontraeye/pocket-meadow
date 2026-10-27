@@ -2,6 +2,7 @@ import { isPokemonType, type PokemonType } from '../../config/types.js'
 import { calcStats, type StatBlock } from '../stats.js'
 import { resolveAbilityKey, type AbilitySlot, type MoveInfo } from '../traits.js'
 import type { SpeciesAbilities } from '../traits.js'
+import { emptyMoveEffects } from './effects.js'
 import type { SimFighter, SimMove } from './types.js'
 
 export type FighterSources = {
@@ -61,7 +62,7 @@ function resolveTypes(
   return [type1]
 }
 
-function toSimMove(info: MoveInfo | undefined, name: string): SimMove {
+export function toSimMove(info: MoveInfo | undefined, name: string): SimMove {
   if (!info) throw new Error(`unknown move ${name}`)
   if (!isPokemonType(info.type)) throw new Error(`unknown move type ${info.type}`)
   return {
@@ -69,5 +70,12 @@ function toSimMove(info: MoveInfo | undefined, name: string): SimMove {
     type: info.type,
     power: info.power,
     damageClass: info.damageClass,
+    ailment: info.ailment ?? emptyMoveEffects.ailment,
+    ailmentChance: info.ailmentChance ?? emptyMoveEffects.ailmentChance,
+    statChanges: info.statChanges ? [...info.statChanges] : [],
+    statChance: info.statChance ?? emptyMoveEffects.statChance,
+    statOnSelf: info.statOnSelf ?? emptyMoveEffects.statOnSelf,
+    drain: info.drain ?? emptyMoveEffects.drain,
+    critRate: info.critRate ?? emptyMoveEffects.critRate,
   }
 }

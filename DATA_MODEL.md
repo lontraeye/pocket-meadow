@@ -214,6 +214,8 @@ CREATE INDEX idx_pokemon_user_species  ON pokemon(user_id, species_id);
 
 Pools de golpes, detalhes e habilidades por espécie ficam em `server/snapshots/moves.json`, `learnsets.json` e `abilities.json` (não em tabelas). `ability_slot` é a posição na espécie atual: ao evoluir, o nome acompanha o slot.
 
+Cada entrada de `moves.json` traz, além de `name` / `displayName` / `type` / `power` / `damageClass`, os campos de efeito da 8.6 (PokéAPI `meta`): `ailment` (`burn` | `poison` | `paralysis` | `sleep` | `freeze` | `confusion` | `null`), `ailmentChance` (0–100), `statChanges` (`{ stat, stages }[]`), `statChance`, `statOnSelf`, `drain` (positivo = dreno %, negativo = recuo %), `critRate` (0 = chance normal 1/24; ≥1 = 1/8). Setups antigos em `battle_setup_json` sem esses campos são aceitos no parse e tratados como golpe sem efeito.
+
 Soltar = `DELETE` da linha (em transação, creditando os doces). Se quiser histórico, adicionar `released_at` e filtrar por `released_at IS NULL`.
 
 ### `candies`
@@ -279,7 +281,7 @@ CREATE TABLE encounters (
   expires_at         INTEGER NOT NULL,
   resolved_at        INTEGER,
   battle_started_at  INTEGER,                        -- início da luta manual (8.3); NULL = não iniciada
-  battle_setup_json  TEXT,                           -- setup congelado no start; finish refaz com este JSON
+  battle_setup_json  TEXT,                           -- setup congelado no start; finish refaz com este JSON (golpes podem omitir campos 8.6)
   won_at             INTEGER,                        -- vitória aguardando captura (8.4); NULL = ainda não venceu
   throw_count        INTEGER NOT NULL DEFAULT 0      -- lançamentos feitos após a vitória
 );

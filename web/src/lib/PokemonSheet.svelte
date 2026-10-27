@@ -435,6 +435,9 @@
           <p class="hint">
             {typeLabelPt(mon.fastMove.type)} · {mon.fastMove.power} · {damageClassLabelPt(mon.fastMove.damageClass)}
           </p>
+          {#if mon.fastMove.effectText}
+            <p class="hint effect">{mon.fastMove.effectText}</p>
+          {/if}
         </div>
         <button type="button" class="btn" disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
           Trocar
@@ -463,6 +466,9 @@
             <p class="hint">
               {typeLabelPt(mon.chargedMove.type)} · {mon.chargedMove.power} · {damageClassLabelPt(mon.chargedMove.damageClass)}
             </p>
+            {#if mon.chargedMove.effectText}
+              <p class="hint effect">{mon.chargedMove.effectText}</p>
+            {/if}
           {:else}
             <strong>Ainda não aprendeu um golpe carregado</strong>
             {#if mon.nextChargedMove}

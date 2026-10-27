@@ -1,13 +1,16 @@
 import type { PokemonType } from '../../config/types.js'
+import type { MoveAilment, MoveEffectFields, StageStat, Stages, StatusCondition } from './effects.js'
 
 export type DamageClass = 'physical' | 'special'
+
+export type { MoveAilment, StageStat, Stages, StatusCondition }
 
 export type SimMove = {
   name: string
   type: PokemonType
   power: number
   damageClass: DamageClass
-}
+} & MoveEffectFields
 
 export type SimFighter = {
   /** id do Pokémon do jogador, ou null para o selvagem. */
@@ -56,12 +59,64 @@ export type BattleEvent =
       damage: number
       /** Multiplicador de tipo (0, 0.25, 0.5, 1, 2, 4) — o mesmo que o dano usa. */
       effectiveness: number
+      critical: boolean
       fainted: boolean
     }
   | { t: number; kind: 'heal'; side: 'player' | 'wild'; amount: number }
   | { t: number; kind: 'faint'; side: 'player' | 'wild'; slot: number }
   | { t: number; kind: 'switch'; side: 'player'; slot: number; manual: boolean }
   | { t: number; kind: 'intimidate'; side: 'player' | 'wild' }
+  | {
+      t: number
+      kind: 'status'
+      side: 'player' | 'wild'
+      status: StatusCondition | 'confusion'
+      /** true = aplicado; false = curado. */
+      applied: boolean
+    }
+  | {
+      t: number
+      kind: 'status_damage'
+      side: 'player' | 'wild'
+      status: 'burn' | 'poison'
+      damage: number
+      fainted: boolean
+    }
+  | {
+      t: number
+      kind: 'stat_change'
+      side: 'player' | 'wild'
+      stat: StageStat
+      stages: number
+      /** Estágio depois da mudança (−6…+6). */
+      value: number
+    }
+  | {
+      t: number
+      kind: 'drain'
+      side: 'player' | 'wild'
+      amount: number
+    }
+  | {
+      t: number
+      kind: 'recoil'
+      side: 'player' | 'wild'
+      damage: number
+      fainted: boolean
+    }
+  | {
+      t: number
+      kind: 'confusion_hit'
+      side: 'player' | 'wild'
+      damage: number
+      fainted: boolean
+    }
+  | {
+      t: number
+      kind: 'cant_act'
+      side: 'player' | 'wild'
+      reason: 'sleep' | 'freeze'
+    }
   | {
       t: number
       kind: 'ignored'
@@ -82,6 +137,9 @@ export type BattleSnapshotSide = {
   energy: number
   readyAt: number
   fainted: boolean
+  status: StatusCondition | null
+  confused: boolean
+  stages: Stages
 }
 
 export type BattleSnapshot = {
