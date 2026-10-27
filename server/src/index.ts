@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
@@ -45,6 +46,16 @@ app.use('*', async (c, next) => {
   }
   await next()
 })
+
+// Nenhuma requisição do jogo passa de poucos KB (a maior é o fim da luta, com a
+// lista de toques). Sem limite, um corpo gigante estoura os 320 MB do serviço.
+app.use(
+  '*',
+  bodyLimit({
+    maxSize: 64 * 1024,
+    onError: (c) => c.json({ error: 'payload_too_large' }, 413),
+  }),
+)
 
 app.route('/auth', authRoutes)
 app.route('/state', stateRoutes)

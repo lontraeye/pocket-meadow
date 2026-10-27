@@ -195,6 +195,7 @@ function createEncounter(userId: number, region: Region, now: number) {
       level: wild.level,
       isShiny: wild.isShiny,
       rngSeed,
+      secretSeed: randomSeed(),
       status: 'pending',
       createdAt: now,
       expiresAt,
@@ -470,7 +471,7 @@ function applyBattleOutcome(input: {
   if (won) {
     // Chance só para a tela; o Pinap só gasta no 1º lançamento (throw).
     catchOdds = catchChance(wild.captureRate, peekBonus(userId, 'catch_boost'))
-    seedDrop = rollBattleSeed(mulberry32(seedDropRngSeed(encounter.rngSeed)))
+    seedDrop = rollBattleSeed(mulberry32(seedDropRngSeed(hiddenSeed(encounter))))
     if (seedDrop) creditItems(userId, [{ itemKey: seedDrop.itemKey, quantity: 1 }])
   }
 
@@ -537,6 +538,16 @@ function applyBattleOutcome(input: {
       log,
     },
   }
+}
+
+/**
+ * Lançamentos e semente da vitória saem da seed secreta, que nunca vai para o
+ * front. A seed da luta enviada ao front permite recuperar a rng_seed (as
+ * derivações são XOR), mas não esta. Encontros criados antes da coluna seguem
+ * com a rng_seed, como antes.
+ */
+function hiddenSeed(encounter: Pick<EncounterRow, 'rngSeed' | 'secretSeed'>): number {
+  return encounter.secretSeed ?? encounter.rngSeed
 }
 
 function loadPendingEncounter(userId: number, encounterId: number): { ok: true; row: EncounterRow } | Failure {
@@ -755,7 +766,7 @@ function throwBall(userId: number, encounterId: number, now: number) {
   const throwIndex = encounter.throwCount
   const berryBonus = takeBonus(userId, 'catch_boost')
   const roll = rollThrow({
-    encounterSeed: encounter.rngSeed,
+    encounterSeed: hiddenSeed(encounter),
     throwIndex,
     captureRate: wild.captureRate,
     berryBonus,
@@ -934,6 +945,7 @@ function parseTeam(value: unknown[]): number[] | null {
 }
 
 function parseInputs(value: unknown[]): BattleInput[] | null {
+  if (value.length > simConfig.maxInputs) return null
   const inputs: BattleInput[] = []
   for (const entry of value) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null

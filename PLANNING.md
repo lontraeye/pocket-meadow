@@ -967,6 +967,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 
 **PRNG (seção 7)**
 - A luta tem um número variável de rolagens, então cada parte usa a sua sequência, derivada da seed do encontro: **luta**, **lançamentos** e **traços do capturado** (6 IVs, nature, habilidade e 2 golpes). Assim o replay de cada parte continua simples.
+- **Seed secreta** (2026-10-28): o front recebe a seed da luta, e as derivações são XOR, então dá para chegar na `rng_seed` a partir dela. Por isso **lançamentos e semente da vitória** usam uma segunda seed, `encounters.secret_seed`, sorteada na criação do encontro e nunca enviada ao front. Sem ela, quem trapaceasse saberia antes qual lançamento captura (e, com pokébolas finitas, qual a bola mais barata que basta). Traços do selvagem continuam na `rng_seed`, porque a luta precisa deles e eles já aparecem na tela. Encontros anteriores à coluna seguem com a `rng_seed`.
 
 **Pokémon que já existem (inclusive o save em produção, seção 4.6)**
 - A migração sorteia IVs, nature, habilidade e golpes para cada Pokémon, com um PRNG derivado do `id` dele (determinístico e testável), pelas mesmas regras da captura e pelo nível atual. EVs começam em 0. Nada se perde: nível, XP, shiny, apelido e favorito ficam como estão.

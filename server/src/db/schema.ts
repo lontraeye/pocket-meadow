@@ -234,6 +234,9 @@ export const encounters = sqliteTable(
     level: integer('level').notNull(),
     isShiny: integer('is_shiny', { mode: 'boolean' }).notNull().default(false),
     rngSeed: integer('rng_seed').notNull(),
+    // Seed dos lançamentos e da semente da vitória: nunca vai para o front.
+    // A rng_seed é recuperável pela seed da luta; esta não (PLANNING.md, seção 5.18).
+    secretSeed: integer('secret_seed'),
     status: text('status', {
       enum: ['pending', 'lost', 'caught', 'escaped', 'fled'],
     })

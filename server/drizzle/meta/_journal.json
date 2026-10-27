@@ -92,6 +92,13 @@
       "when": 1793125000000,
       "tag": "0012_battle_auto",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1793144202194,
+      "tag": "0013_encounter_secret_seed",
+      "breakpoints": true
     }
   ]
 }
