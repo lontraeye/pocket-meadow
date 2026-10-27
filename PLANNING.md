@@ -492,10 +492,39 @@ O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê
 
 ### 5.9 Daycare
 - Slots limitados: começa com 1, +1 nos níveis de treinador definidos em config (ex.: 5, 15, 30).
-- Pokémon no daycare ganha `DAYCARE_XP_PER_HOUR` (inicial: 30) de XP passivo, calculado por timestamp ao retirar ou ao consultar o estado.
+- Pokémon no daycare ganha XP passivo por hora (taxa abaixo), calculado por timestamp ao retirar ou ao consultar o estado.
 - Limite de tempo acumulado: `DAYCARE_MAX_HOURS` (inicial: 24) para incentivar o jogador a voltar.
 - Pokémon no daycare **não pode** batalhar, ser solto nem evoluir enquanto estiver lá.
 - Qualquer Pokémon pode entrar (inclusive de nível baixo; o caso de uso principal é upar raros sem precisar de duplicatas).
+
+#### Taxa de XP (a confirmar)
+Com a batalha como fonte principal de XP (seção 5.5), uma taxa fixa só vale no começo. Com 30 XP/h, um dia rende 6,5 níveis num Nv 5 e menos de meio nível num Nv 30. **Proposta:** a taxa acompanha a curva, para render o mesmo número de níveis em qualquer ponto do jogo:
+```
+xpPorHora(level) = floor( xpToNext(level) / DAYCARE_HOURS_PER_LEVEL )   // inicial: 12 → ~2 níveis por dia cheio
+```
+- Na liquidação (seção 6), aplicar hora a hora, porque o nível pode subir no meio. São no máximo `DAYCARE_MAX_HOURS` iterações.
+- O bônus do efeito `daycare_boost` (Nanab, seção 5.10) multiplica a taxa da hora.
+- `DAYCARE_XP_PER_HOUR` sai do config.
+
+#### Regras
+- **Slots:** `DAYCARE_SLOT_LEVELS` no config (inicial: `[1, 5, 15, 30]`, um slot por nível de treinador atingido). O número de slots é derivado do nível, sem flag no banco (`DATA_MODEL.md`, seção 3).
+- **O jardim nunca fica vazio:** colocar no daycare exige que sobre pelo menos 1 Pokémon no jardim. Sem isso, o jogador fica sem time para batalhar. Erro `last_in_garden`.
+- **Tempo cheio:** o limite de 24 h conta de `entered_at`. Passado isso, o Pokémon para de ganhar XP até sair e entrar de novo. A tela mostra "Cheio", e uma ação **Renovar** faz retirar e colocar numa transação só (o tempo recomeça).
+- **XP ganho na estadia** em `daycare_slots.xp_gained`, somado a cada liquidação (precisa de migração). Assim, ao retirar, a resposta mostra "+X XP · +N níveis".
+- Pokémon no daycare continua aparecendo na coleção (filtro "No daycare"), mas **não anda no jardim**, porque está fora.
+
+#### Rotas
+- `POST /daycare/:slot` com `{ pokemonId }`. Valida: slot desbloqueado e vazio, Pokémon do jogador e no jardim, e que sobra alguém no jardim. Erros: `slot_locked`, `slot_taken`, `in_daycare`, `last_in_garden`, `pokemon_not_found`.
+- `DELETE /daycare/:slot`: liquida, apaga a linha, devolve o Pokémon ao jardim. Responde com o XP ganho, os níveis subidos, o nível e o XP novos e as horas na estadia.
+- `POST /daycare/:slot/renew`: retira e coloca de novo o mesmo Pokémon, na mesma transação.
+- `GET /state`, em `daycare`: além das linhas, traz `slotsUnlocked`, o próximo nível que abre um slot e, por slot, `fullAt` (`entered_at + DAYCARE_MAX_HOURS`) e `xpGained`.
+
+#### Tela (front)
+- **Entrada:** botão **Daycare** no dock, ao lado de Coleção e Explorar.
+- **Slots:** cada slot é um cartão com sprite, nível, barra de XP, "+X XP até agora" e uma barra do tempo até cheio, com contador. Slot vazio mostra **Colocar** e abre a lista do jardim para escolher. Slot bloqueado mostra "Abre no nível N".
+- **No sheet do Pokémon:** **Colocar no daycare**, que vai para o primeiro slot livre ou pede para escolher. Para quem já está lá, **Retirar**.
+- O contador é só visual, a partir de `fullAt` e do `now` do `/state`. O servidor decide tudo na próxima requisição.
+- Mobile primeiro (seção 4.4): cartões empilhados em retrato, ações embaixo, alvos de 44px ou mais.
 
 ### 5.10 Berries
 - O jardim tem canteiros (começa com 2, mais desbloqueados por nível de treinador).
@@ -663,6 +692,7 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 | PATCH | `/pokemon/:id` | `{ nickname?, isFavorite? }` |
 | POST | `/daycare/:slot` | `{ pokemonId }` → coloca |
 | DELETE | `/daycare/:slot` | Retira e aplica XP |
+| POST | `/daycare/:slot/renew` | Retira e coloca de novo (o tempo recomeça) |
 | POST | `/plots/:index/plant` | `{ berryKey }` |
 | POST | `/plots/:index/harvest` | Colhe |
 | POST | `/items/:key/use` | Usa berry → aplica efeito |
@@ -701,6 +731,14 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
   - nenhuma ação deixa o jogador com zero Pokémon nem com saldo negativo.
 
 **Fase 4 — Daycare**
+- Slots por nível de treinador, colocar, retirar e renovar, taxa de XP e tela (seção 5.9).
+- Migração: `daycare_slots.xp_gained`.
+- Pronto quando:
+  - colocar, esperar (ou adiantar o relógio num teste) e retirar mostra o XP certo, inclusive subindo de nível no meio;
+  - o tempo para no limite e "Renovar" recomeça;
+  - o jardim nunca fica vazio;
+  - quem está no daycare não batalha, não é solto e não evolui;
+  - a tela funciona em 360px.
 
 **Fase 5 — Berries e efeitos**
 

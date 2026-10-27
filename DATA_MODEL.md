@@ -195,14 +195,17 @@ CREATE TABLE daycare_slots (
   pokemon_id        INTEGER NOT NULL UNIQUE REFERENCES pokemon(id) ON DELETE CASCADE,
   entered_at        INTEGER NOT NULL,
   last_settled_at   INTEGER NOT NULL,                -- até quando a XP já foi aplicada
+  xp_gained         INTEGER NOT NULL DEFAULT 0,      -- XP somada nesta estadia, para mostrar ao retirar
   PRIMARY KEY (user_id, slot_index)
 );
 ```
 
 Regras:
 - Ao colocar: `pokemon.location = 'daycare'`, `entered_at = last_settled_at = now`.
-- No catch-up: `end = min(now, entered_at + DAYCARE_MAX_HOURS)`; XP = `(end - last_settled_at)` em horas × taxa (× bônus de efeito ativo); aplicar no Pokémon; `last_settled_at = end`.
+- No catch-up: `end = min(now, entered_at + DAYCARE_MAX_HOURS)`; para cada hora inteira entre `last_settled_at` e `end`, somar a taxa da hora (PLANNING.md, seção 5.9, × bônus de efeito ativo); aplicar no Pokémon; somar em `xp_gained`; `last_settled_at` avança só as horas inteiras.
+- Ao colocar: sobra pelo menos 1 Pokémon no jardim.
 - Ao retirar: aplicar o catch-up, apagar a linha e definir `pokemon.location = 'garden'`.
+- Renovar = retirar e colocar o mesmo Pokémon na mesma transação.
 - Slot vazio = linha ausente.
 
 ---
@@ -332,6 +335,8 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
 | Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
 | Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` → pokédex (vista e capturada) → XP do treinador. Não custa doce |
+| Colocar no daycare | catch-up → validar (slot desbloqueado e vazio, Pokémon do jogador e no jardim, sobra alguém no jardim) → inserir slot (`entered_at = last_settled_at = now`, `xp_gained = 0`) → `location = 'daycare'` |
+| Retirar / renovar | catch-up (liquida o XP) → apagar slot → `location = 'garden'`. Renovar insere de novo o mesmo Pokémon, na mesma transação |
 | Colher | validar `ready_at <= now` → apagar canteiro → creditar berries/sementes |
 
 Regra de segurança: o jogador **nunca** pode ficar com zero Pokémon (bloquear soltar o último).
