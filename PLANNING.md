@@ -605,6 +605,19 @@ Anotado depois do teste da Fase 2. Hoje o encontro é seco: abre a rota, aparece
 
 Sugestão: começar pelo formato 1. Ele já dá o "juice" e cabe no modelo atual (uma requisição por batalha). O formato 2 pode vir depois, se fizer falta.
 
+**Sprites da batalha: PMD em vez do Showdown.** O pack do PMD Sprite Collab (seção 4.5), que já usamos no jardim, tem animações de golpe por Pokémon, nas 8 direções. Conferido no commit fixado em `config/pmd.ts`:
+- Comuns a todos os conferidos: `Attack`, `Strike`, `Shoot`, `Charge`, `Hurt`, `Swing`, `Hop` e `Rotate`.
+- Golpes próprios em alguns: `Shock` (Pikachu), `Lick` (Gengar), `Stomp` (Snorlax), `Rumble` (Gyarados).
+- `Faint` só em parte (tem em Charizard, Pikachu e Gengar, falta em Gyarados, Snorlax, Unown e Lugia). Precisa de fallback, por exemplo `Hurt` seguido de sumir em CSS.
+
+A batalha pode acontecer num pedaço do chão isométrico, com o seu Pokémon olhando ↗ e o selvagem ↙ (linhas 3 e 7 da folha). Fica com a mesma arte do jardim, e o "juice" dos golpes vem do próprio pack. Isso pode aposentar os GIFs do Showdown.
+
+Antes de decidir:
+- **Cobertura:** os golpes vêm com `sprite_complete = 2` no `tracker.json`. Medir quantas espécies da faixa, e quantos shiny, têm cada animação. Hoje o script só exige `>= 1` (Walk, Idle e Sleep).
+- **Onde o Showdown ainda é usado:** card de detalhes, encontro, os 12 shiny sem PMD da Gen 1–2 (seção 4.5) e, no futuro, as espécies sem PMD (Gen 5+). Tirar o Showdown pede um fallback para esses casos, ou manter os GIFs só como reserva.
+- **Script e créditos:** `pmd-sprites.ts` passa a copiar as animações de batalha, e o `CREDITS-PMD.md` passa a incluir os autores delas (hoje só entram as linhas com Walk, Idle ou Sleep). A licença é a mesma (CC BY-NC 4.0).
+- **Tamanho:** as folhas de golpe são maiores. Medir o peso de `web/public/sprites/pmd/` e o carregamento no celular. Carregar as animações de batalha só ao abrir a batalha, não no jardim.
+
 **Juice no fluxo todo:** o Pokémon surgindo no mato, barras de HP, número de dano, piscada de acerto, animação da pokébola com chacoalhadas antes do resultado e comemoração ao capturar. Sons só com licença redistribuível (seção 4.3), creditados no `CREDITS.md`. Respeitar `prefers-reduced-motion`.
 
 **Pontos a decidir:**
