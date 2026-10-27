@@ -58,6 +58,13 @@ export const simConfig = {
   /** Chance de usar carregado quando a energia basta (por checagem). */
   aiChargedChance: 70 / 100,
 
+  /**
+   * Tempo de reação do jogador automático (ms), depois que o cooldown libera.
+   * Sequência: autoReactionSeed(seed da luta).
+   */
+  autoReactionMinMs: 150,
+  autoReactionMaxMs: 450,
+
   /** Intervalo após um aliado cair até o próximo entrar (ms). */
   faintSwitchDelayMs: 700,
 

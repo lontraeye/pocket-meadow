@@ -20,3 +20,11 @@ export const wildFightTraitsSeed = wildTraitsSeed
 export function throwRngSeed(source: number): number {
   return (source ^ 0x54485257) >>> 0 // "THRW"
 }
+
+/**
+ * Tempo de reação do jogador automático (atrasos 150–450 ms).
+ * Sequência separada da do dano/IA do selvagem.
+ */
+export function autoReactionSeed(source: number): number {
+  return (source ^ 0x4155544f) >>> 0 // "AUTO"
+}

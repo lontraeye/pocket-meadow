@@ -425,7 +425,8 @@ test('automático vence fraco e perde para forte', () => {
     chargedMove: move({ name: 'psychic', type: 'psychic', power: 90, damageClass: 'special' }),
   })
   assert.equal(runBattle({ setup: setup([hero], weak), seed: 1 }).result, 'win')
-  assert.ok(['lose', 'timeout'].includes(runBattle({ setup: setup([hero], strong), seed: 2 }).result))
+  const tough = runBattle({ setup: setup([hero], strong), seed: 2 }).result
+  assert.ok(tough === 'lose' || tough === 'timeout')
 })
 
 test('EVs respeitam tetos 252 e 510', () => {
@@ -530,4 +531,72 @@ test('moveCooldownMs usa traitsConfig.fastPowerMax, não 55 mágico', () => {
   const fastCd = moveCooldownMs(edge, 80, 50)
   const chargedCd = moveCooldownMs(over, 80, 50)
   assert.ok(chargedCd > fastCd)
+})
+
+test('untilMs: foto em t bate com o prefixo do log da luta completa', () => {
+  const s = setup(
+    [
+      fighter({
+        id: 1,
+        speciesId: 25,
+        level: 20,
+        stats: { hp: 60, attack: 55, defense: 40, spAttack: 50, spDefense: 40, speed: 70 },
+      }),
+    ],
+    fighter({
+      speciesId: 16,
+      level: 8,
+      stats: { hp: 40, attack: 30, defense: 30, spAttack: 25, spDefense: 30, speed: 45 },
+    }),
+  )
+  const inputs: BattleInput[] = []
+  for (let t = 0; t <= 25_000; t += 1200) inputs.push({ t, action: 'fast' })
+  const full = runBattle({ setup: s, seed: 21, inputs })
+  assert.ok(full.result)
+  const mid = Math.max(1, Math.floor(full.durationMs / 2))
+  const partial = runBattle({ setup: s, seed: 21, inputs, untilMs: mid })
+  assert.equal(partial.snapshot.t, mid)
+  assert.equal(partial.result, null)
+  assert.deepEqual(
+    partial.log,
+    full.log.filter((e) => e.t <= mid && e.kind !== 'end'),
+  )
+  const atEnd = runBattle({ setup: s, seed: 21, inputs, untilMs: full.durationMs })
+  assert.equal(atEnd.snapshot.wild.hp, full.snapshot.wild.hp)
+  assert.equal(atEnd.snapshot.team[0]?.hp, full.snapshot.team[0]?.hp)
+  assert.equal(atEnd.result, full.result)
+})
+
+test('automático: mesma seed → mesmos inputs; demora mais que o perfeito', () => {
+  const s = setup(
+    [
+      fighter({
+        id: 1,
+        speciesId: 25,
+        level: 25,
+        stats: { hp: 70, attack: 60, defense: 45, spAttack: 55, spDefense: 45, speed: 80 },
+        fastMove: move({ name: 'tackle', type: 'normal', power: 40 }),
+        chargedMove: null,
+      }),
+    ],
+    fighter({
+      speciesId: 16,
+      level: 10,
+      stats: { hp: 35, attack: 25, defense: 25, spAttack: 20, spDefense: 25, speed: 40 },
+      chargedMove: null,
+    }),
+  )
+  const a = runBattle({ setup: s, seed: 77 })
+  const b = runBattle({ setup: s, seed: 77 })
+  assert.deepEqual(a.inputs, b.inputs)
+  assert.ok(a.inputs.length > 0)
+  assert.ok(a.inputs[0]!.t >= simConfig.autoReactionMinMs)
+  // Mesmos inputs manuais reproduzem a luta automática.
+  assert.deepEqual(runBattle({ setup: s, seed: 77, inputs: a.inputs }).log, a.log)
+
+  // Perfeito tocaria em t=0; o automático atrasa o 1º toque (e os seguintes) pela reação.
+  assert.ok(a.inputs[0]!.t > 0)
+  assert.ok(a.inputs[0]!.t <= simConfig.autoReactionMaxMs)
+  const gaps = a.inputs.slice(1).map((inp, i) => inp.t - a.inputs[i]!.t)
+  assert.ok(gaps.every((g) => g >= simConfig.autoReactionMinMs))
 })

@@ -12,25 +12,20 @@ const outputDir = path.resolve(serverRoot, pmd.outputDir)
 const manifestPath = path.resolve(serverRoot, pmd.manifestPath)
 const creditsPath = path.resolve(serverRoot, pmd.creditsPath)
 const anims = pmd.anims
+const gardenAnims = ['Walk', 'Idle', 'Sleep'] as const satisfies ReadonlyArray<(typeof anims)[number]>
+const sheetGlobs = (base: string) => [
+  ...anims.map((anim) => `${base}/${anim}-Anim.png`),
+  ...anims.map((anim) => `${base}/${anim}-Shadow.png`),
+]
 const sparse = [
   '/tracker.json',
   '/credit_names.txt',
   '/sprite/*/AnimData.xml',
   '/sprite/*/credits.txt',
-  '/sprite/*/Walk-Anim.png',
-  '/sprite/*/Idle-Anim.png',
-  '/sprite/*/Sleep-Anim.png',
-  '/sprite/*/Walk-Shadow.png',
-  '/sprite/*/Idle-Shadow.png',
-  '/sprite/*/Sleep-Shadow.png',
+  ...sheetGlobs('/sprite/*'),
   '/sprite/*/0000/0001/AnimData.xml',
   '/sprite/*/0000/0001/credits.txt',
-  '/sprite/*/0000/0001/Walk-Anim.png',
-  '/sprite/*/0000/0001/Idle-Anim.png',
-  '/sprite/*/0000/0001/Sleep-Anim.png',
-  '/sprite/*/0000/0001/Walk-Shadow.png',
-  '/sprite/*/0000/0001/Idle-Shadow.png',
-  '/sprite/*/0000/0001/Sleep-Shadow.png',
+  ...sheetGlobs('/sprite/*/0000/0001'),
 ]
 
 // ground: ponto do chão em cada quadro, relativo ao canto do quadro. É o pixel
@@ -38,7 +33,9 @@ const sparse = [
 // [x, y] quando é igual em todos os quadros; senão, [x, y] por quadro, linha a
 // linha (direção × quadros).
 type AnimSheet = { w: number; h: number; dirs: number; durations: number[]; ground: number[] }
-type Variant = Record<(typeof anims)[number], AnimSheet>
+type GardenAnim = (typeof gardenAnims)[number]
+type BattleAnim = Exclude<(typeof anims)[number], GardenAnim>
+type Variant = Record<GardenAnim, AnimSheet> & Partial<Record<BattleAnim, AnimSheet>>
 type ParsedAnim = { name: string; copyOf?: string; w?: number; h?: number; durations?: number[] }
 
 type TrackerNode = {
@@ -181,7 +178,29 @@ function addCredits(id: number, creditsFile: string, names: Map<string, { name: 
   }
 }
 
-type Ready = { shadow: number; variant: Variant; sources: Record<string, string> }
+type Ready = { shadow: number; variant: Variant; sources: Partial<Record<(typeof anims)[number], string>> }
+
+function loadSheet(
+  folder: string,
+  label: string,
+  parsed: ParsedAnim[],
+  anim: (typeof anims)[number],
+): { sheet: AnimSheet; png: string } | { missing: string } | undefined {
+  const resolved = resolveAnim(parsed, anim)
+  if (!resolved?.w || !resolved.h || !resolved.durations?.length) return undefined
+  const relative = `${folder}/${resolved.name}-Anim.png`
+  const png = materialize(relative)
+  if (!png) return { missing: `${label}: ${resolved.name}-Anim.png ausente` }
+  const size = pngSize(png)
+  if (size.w !== resolved.w * resolved.durations.length || size.h % resolved.h !== 0) {
+    return {
+      missing: `${label}: ${anim} mede ${size.w}×${size.h}, esperado largura ${resolved.w * resolved.durations.length}`,
+    }
+  }
+  const dirs = size.h / resolved.h
+  const ground = readGround(folder, resolved.name, resolved.w, resolved.h, resolved.durations.length, dirs, size, label)
+  return { sheet: { w: resolved.w, h: resolved.h, dirs, durations: resolved.durations, ground }, png }
+}
 
 function loadVariant(folder: string, label: string): Ready | undefined {
   const xmlPath = materialize(`${folder}/AnimData.xml`)
@@ -191,28 +210,26 @@ function loadVariant(folder: string, label: string): Ready | undefined {
   }
   const parsed = parseAnimData(fs.readFileSync(xmlPath, 'utf8'))
   const variant = {} as Variant
-  const sources: Record<string, string> = {}
-  for (const anim of anims) {
-    const resolved = resolveAnim(parsed.anims, anim)
-    if (!resolved?.w || !resolved.h || !resolved.durations?.length) {
+  const sources: Ready['sources'] = {}
+  for (const anim of gardenAnims) {
+    const loaded = loadSheet(folder, label, parsed.anims, anim)
+    if (!loaded) {
       warnings.push(`${label}: ${anim} sem dados depois do CopyOf`)
       return undefined
     }
-    const relative = `${folder}/${resolved.name}-Anim.png`
-    const png = materialize(relative)
-    if (!png) {
-      warnings.push(`${label}: ${resolved.name}-Anim.png ausente`)
+    if ('missing' in loaded) {
+      warnings.push(loaded.missing)
       return undefined
     }
-    const size = pngSize(png)
-    if (size.w !== resolved.w * resolved.durations.length || size.h % resolved.h !== 0) {
-      warnings.push(`${label}: ${anim} mede ${size.w}×${size.h}, esperado largura ${resolved.w * resolved.durations.length}`)
-      return undefined
-    }
-    const dirs = size.h / resolved.h
-    const ground = readGround(folder, resolved.name, resolved.w, resolved.h, resolved.durations.length, dirs, size, label)
-    variant[anim] = { w: resolved.w, h: resolved.h, dirs, durations: resolved.durations, ground }
-    sources[anim] = png
+    variant[anim] = loaded.sheet
+    sources[anim] = loaded.png
+  }
+  for (const anim of anims) {
+    if (isGardenAnim(anim)) continue
+    const loaded = loadSheet(folder, label, parsed.anims, anim)
+    if (!loaded || 'missing' in loaded) continue
+    variant[anim] = loaded.sheet
+    sources[anim] = loaded.png
   }
   return { shadow: parsed.shadow, variant, sources }
 }
@@ -267,8 +284,10 @@ function copyVariant(id: number, shiny: boolean, ready: Ready): void {
   const folder = path.join(outputDir, String(id), ...(shiny ? ['shiny'] : []))
   fs.mkdirSync(folder, { recursive: true })
   for (const anim of anims) {
+    const src = ready.sources[anim]
+    if (!src) continue
     const dest = path.join(folder, `${anim}.png`)
-    fs.copyFileSync(ready.sources[anim] ?? '', dest)
+    fs.copyFileSync(src, dest)
     kept.add(path.relative(outputDir, dest).split(path.sep).join('/'))
   }
 }
@@ -299,7 +318,7 @@ function writeCredits(): void {
     '',
     'Licença da arte da comunidade: [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Os registros mais antigos usam `PMDCollab_1` e `PMDCollab_2`, também com crédito e uso não comercial. Os sprites marcados como Spike Chunsoft são extraídos dos jogos oficiais de Pokémon Mystery Dungeon.',
     '',
-    'Entram autores com crédito atual (`CUR`) em Walk, Idle ou Sleep.',
+    `Entram autores com crédito atual (\`CUR\`) em ${creditAnimList(anims)}.`,
     '',
     '| Autor | Contato | Dex |',
     '|---|---|---|',
@@ -314,6 +333,15 @@ function writeCredits(): void {
 
 function cell(value: string): string {
   return value.replaceAll('|', '\\|').replaceAll('\n', ' ')
+}
+
+function creditAnimList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} ou ${items[items.length - 1]}`
+}
+
+function isGardenAnim(anim: (typeof anims)[number]): anim is GardenAnim {
+  return (gardenAnims as readonly string[]).includes(anim)
 }
 
 function pruneOutput(): void {

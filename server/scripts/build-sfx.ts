@@ -25,8 +25,12 @@ function find(dir: string, name: string): string | null {
 }
 
 for (const [use, file] of Object.entries(sfxSources)) {
-  const source = packs.map((pack) => find(pack, file)).find((found) => found !== null)
+  // Aceita .ogg (pacote oficial) ou .wav (espelhos sem Ogg).
+  const wav = file.replace(/\.ogg$/i, '.wav')
+  const source = packs
+    .flatMap((pack) => [find(pack, file), find(pack, wav)])
+    .find((found) => found !== null)
   if (!source) throw new Error(`${file} (${use}) not found in ${packs.join(', ')}`)
   await toMp3(source, path.join(outputDir, `${use}.mp3`))
-  console.log(`${use}.mp3 ← ${file}`)
+  console.log(`${use}.mp3 ← ${path.basename(source)}`)
 }

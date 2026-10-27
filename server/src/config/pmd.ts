@@ -5,5 +5,5 @@ export const pmd = {
   outputDir: '../web/public/sprites/pmd',
   manifestPath: '../web/src/lib/pmd-manifest.json',
   creditsPath: '../CREDITS-PMD.md',
-  anims: ['Walk', 'Idle', 'Sleep'],
+  anims: ['Walk', 'Idle', 'Sleep', 'Attack', 'Hurt', 'Charge', 'Shoot', 'Faint'],
 } as const

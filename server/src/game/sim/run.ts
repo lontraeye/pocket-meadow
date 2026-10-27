@@ -9,27 +9,26 @@ import {
   offensiveStat,
 } from './damage.js'
 import { simConfig } from './config.js'
+import { autoReactionSeed } from './seeds.js'
 import type {
   BattleEvent,
   BattleInput,
   BattleResult,
   BattleResultKind,
   BattleSetup,
+  BattleSnapshot,
+  BattleSnapshotSide,
   SimFighter,
   SimMove,
 } from './types.js'
 
 type SideState = {
   fighter: SimFighter
-  /** HP atual de luta (já com battleHpMultiplier). */
   hp: number
-  /** HP máximo de luta (já com battleHpMultiplier). */
   maxHp: number
   energy: number
-  /** Próximo instante em que pode agir. */
   readyAt: number
   intimidated: boolean
-  /** Slot no time (player) ou 0 (wild). */
   slot: number
 }
 
@@ -43,8 +42,10 @@ type BattleState = {
   log: BattleEvent[]
   recordedInputs: BattleInput[]
   rng: Rng
-  /** Próximo instante em que o selvagem decide atacar (após delay). */
+  autoRng: Rng
   wildActAt: number | null
+  /** Próximo toque do automático (após reação). */
+  playerActAt: number | null
 }
 
 export type RunBattleOptions = {
@@ -52,6 +53,8 @@ export type RunBattleOptions = {
   seed: number
   /** Se omitido ou 'auto', o jogador automático gera as ações. */
   inputs?: BattleInput[] | 'auto'
+  /** Se definido, para neste instante e devolve snapshot (sem end se ainda em andamento). */
+  untilMs?: number
 }
 
 export function runBattle(options: RunBattleOptions): BattleResult {
@@ -62,7 +65,13 @@ export function runBattle(options: RunBattleOptions): BattleResult {
 
   const auto = options.inputs === undefined || options.inputs === 'auto'
   const inputs: BattleInput[] = auto ? [] : validateAndSortInputs(options.inputs as BattleInput[])
+  const untilMs =
+    options.untilMs === undefined
+      ? null
+      : Math.max(0, Math.min(simConfig.timeLimitMs, Math.floor(options.untilMs)))
+
   const rng = mulberry32(seed)
+  const autoRng = mulberry32(autoReactionSeed(seed))
 
   const team = setup.team.map((fighter, slot) => makeSide(fighter, slot))
   const wild = makeSide(setup.wild, 0)
@@ -76,15 +85,19 @@ export function runBattle(options: RunBattleOptions): BattleResult {
     log: [],
     recordedInputs: [],
     rng,
+    autoRng,
     wildActAt: null,
+    playerActAt: null,
   }
 
   enter(state, 'player', 0, false)
   enter(state, 'wild', 0, false)
   scheduleWild(state)
+  if (auto) schedulePlayer(state)
 
   let inputIndex = 0
   let result: BattleResultKind | null = null
+  let stoppedEarly = false
 
   while (result === null) {
     if (state.t >= simConfig.timeLimitMs) {
@@ -100,13 +113,20 @@ export function runBattle(options: RunBattleOptions): BattleResult {
         break
       }
       const switchAt = state.t + simConfig.faintSwitchDelayMs
+      if (untilMs !== null && switchAt > untilMs) {
+        state.t = untilMs
+        stoppedEarly = true
+        break
+      }
       state.t = switchAt
       if (state.t >= simConfig.timeLimitMs) {
         result = 'timeout'
         break
       }
       enter(state, 'player', next, false)
+      state.playerActAt = null
       scheduleWild(state)
+      if (auto) schedulePlayer(state)
       continue
     }
     if (state.wild.hp <= 0) {
@@ -114,15 +134,20 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       break
     }
 
-    // Auto: age assim que o cooldown libera (e a troca manual já passou).
-    if (auto && state.t >= player.readyAt && state.t >= state.switchReadyAt) {
-      const action = pickAutoAction(player)
-      applyPlayerAction(state, { t: state.t, action })
-      if (state.wild.hp <= 0) {
-        result = 'win'
-        break
+    // Automático: toca no instante agendado (cooldown + reação).
+    if (auto) {
+      if (state.playerActAt === null) schedulePlayer(state)
+      if (state.playerActAt !== null && state.playerActAt === state.t) {
+        const action = pickAutoAction(player)
+        applyPlayerAction(state, { t: state.t, action })
+        state.playerActAt = null
+        if (state.wild.hp <= 0) {
+          result = 'win'
+          break
+        }
+        if (state.team[state.activeSlot]!.hp > 0) schedulePlayer(state)
+        // Processa o resto deste instante (selvagem) antes de avançar.
       }
-      continue
     }
 
     // Inputs manuais neste instante (e os que ficaram no passado após um salto de t).
@@ -141,7 +166,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       if (state.team[state.activeSlot]!.hp <= 0) break
     }
     if (result !== null) break
-    if (player.hp <= 0) continue
+    if (state.team[state.activeSlot]!.hp <= 0) continue
 
     // Selvagem age.
     if (state.wildActAt !== null && state.wildActAt === state.t) {
@@ -151,34 +176,79 @@ export function runBattle(options: RunBattleOptions): BattleResult {
         result = 'win'
         break
       }
-      if (player.hp <= 0) continue
+      if (state.team[state.activeSlot]!.hp <= 0) continue
       scheduleWild(state)
     } else if (state.wildActAt === null && state.wild.hp > 0 && state.t >= state.wild.readyAt) {
       scheduleWild(state)
     }
 
-    const next = nextTime(state, auto, inputs, inputIndex)
-    if (next === null || next > simConfig.timeLimitMs) {
+    // Depois de processar este instante: se untilMs chegou, para (foto coerente com o log).
+    if (untilMs !== null && state.t >= untilMs) {
+      stoppedEarly = true
+      break
+    }
+
+    const next = nextTime(state, auto, inputs, inputIndex, untilMs)
+    if (next === null) {
+      if (untilMs !== null) {
+        state.t = untilMs
+        stoppedEarly = true
+        break
+      }
       state.t = simConfig.timeLimitMs
       result = 'timeout'
       break
     }
+    if (untilMs !== null && next > untilMs) {
+      state.t = untilMs
+      stoppedEarly = true
+      break
+    }
     if (next === state.t) {
-      // Evita loop se algo travar: avança 1 ms.
       state.t += 1
     } else {
       state.t = next
     }
   }
 
-  const kind = result ?? 'timeout'
-  state.log.push({ t: state.t, kind: 'end', result: kind })
+  if (result !== null) {
+    state.log.push({ t: state.t, kind: 'end', result })
+  } else if (!stoppedEarly) {
+    result = 'timeout'
+    state.log.push({ t: state.t, kind: 'end', result })
+  }
+
   return {
-    result: kind,
+    result,
     durationMs: state.t,
     log: state.log,
     inputs: state.recordedInputs,
     enteredSlots: [...state.enteredSlots].sort((a, b) => a - b),
+    snapshot: takeSnapshot(state, result),
+  }
+}
+
+function takeSnapshot(state: BattleState, result: BattleResultKind | null): BattleSnapshot {
+  return {
+    t: state.t,
+    activeSlot: state.activeSlot,
+    switchReadyAt: state.switchReadyAt,
+    team: state.team.map(snapshotSide),
+    wild: snapshotSide(state.wild),
+    result,
+  }
+}
+
+function snapshotSide(side: SideState): BattleSnapshotSide {
+  return {
+    slot: side.slot,
+    fighterId: side.fighter.id,
+    speciesId: side.fighter.speciesId,
+    hp: side.hp,
+    maxHp: side.maxHp,
+    energy: side.energy,
+    readyAt: side.readyAt,
+    fainted: side.hp <= 0,
   }
 }
 
@@ -195,7 +265,6 @@ function makeSide(fighter: SimFighter, slot: number): SideState {
   }
 }
 
-/** Input com t no passado (ex.: intervalo de troca após desmaio). */
 function ignorePastInput(state: BattleState, input: BattleInput) {
   state.recordedInputs.push({ ...input })
   const player = state.team[state.activeSlot]!
@@ -319,10 +388,9 @@ function resolveMove(
 ) {
   const absorb = abilityImmunity(defender.fighter.abilityKey, move.type)
   let damage = 0
-  let healed = 0
 
   if (absorb.immune && absorb.healFraction > 0) {
-    healed = Math.floor(defender.maxHp / 4)
+    const healed = Math.floor(defender.maxHp / 4)
     defender.hp = Math.min(defender.maxHp, defender.hp + healed)
     state.log.push({ t: state.t, kind: 'heal', side: side === 'player' ? 'wild' : 'player', amount: healed })
   } else {
@@ -381,6 +449,18 @@ function scheduleWild(state: BattleState) {
   state.wildActAt = ready + delay
 }
 
+function schedulePlayer(state: BattleState) {
+  const player = state.team[state.activeSlot]!
+  if (player.hp <= 0 || state.wild.hp <= 0) {
+    state.playerActAt = null
+    return
+  }
+  const ready = Math.max(state.t, player.readyAt, state.switchReadyAt)
+  const span = simConfig.autoReactionMaxMs - simConfig.autoReactionMinMs + 1
+  const delay = simConfig.autoReactionMinMs + Math.floor(state.autoRng() * span)
+  state.playerActAt = ready + delay
+}
+
 function nextLivingSlot(state: BattleState): number | null {
   for (let i = 0; i < state.team.length; i += 1) {
     if (i === state.activeSlot) continue
@@ -394,14 +474,12 @@ function nextTime(
   auto: boolean,
   inputs: BattleInput[],
   inputIndex: number,
+  untilMs: number | null,
 ): number | null {
   const candidates: number[] = [simConfig.timeLimitMs]
-  const player = state.team[state.activeSlot]!
-  if (player.hp > 0) {
-    if (auto) {
-      candidates.push(Math.max(player.readyAt, state.switchReadyAt, state.t))
-    }
-  }
+  if (untilMs !== null) candidates.push(untilMs)
+
+  if (auto && state.playerActAt !== null) candidates.push(state.playerActAt)
   if (!auto) {
     const nextInput = inputs[inputIndex]
     if (nextInput) candidates.push(nextInput.t)

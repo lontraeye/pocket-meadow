@@ -9,23 +9,30 @@
     errorText,
     type ApiError,
     type BattleOutcome,
+    type BattleStart,
     type GameState,
     type OwnedPokemon,
     type PendingEncounter,
     type RegionInfo,
   } from './api'
   import { percent } from './battle'
+  import BattleLive from './BattleLive.svelte'
   import BattleScene from './BattleScene.svelte'
+  import {
+    clearSavedBattle,
+    loadSavedBattle,
+  } from './battlePersist'
   import Highlights from './Highlights.svelte'
   import { battleHighlightCards, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
-  import { spriteReady } from './preload'
+  import { battleSpritesReady, spriteReady } from './preload'
   import { play, playCry, warmCries } from './sound'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
+  import { simConfig, type BattleInput } from './sim'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Step = 'regions' | 'encounter' | 'scene' | 'highlights' | 'result'
+  type Step = 'regions' | 'encounter' | 'fight' | 'scene' | 'highlights' | 'result'
   type Result = { kind: 'fled' } | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[] }
 
   let step = $state<Step>(untrack(() => (game.encounter ? 'encounter' : 'regions')))
@@ -41,6 +48,10 @@
   let fighting = $state(false)
   let time = $state(0)
   let battleCards = $state<ReturnType<typeof battleHighlightCards>>([])
+  let fightStart = $state<BattleStart | null>(null)
+  let fightTeam = $state<OwnedPokemon[]>([])
+  let fightInputs = $state<BattleInput[]>([])
+  let fightResumeMs = $state(0)
 
   const clock = serverClock(() => game.now)
 
@@ -75,6 +86,90 @@
     criedFor = encounter.id
     playCry(encounter.speciesId)
   })
+
+  // Retomar luta interrompida (o app fechou ou recarregou no meio).
+  let resumedFor: number | null = null
+  $effect(() => {
+    if (step !== 'encounter' || !encounter?.battleStartedAt || pending || fightStart) return
+    if (resumedFor === encounter.id) return
+    resumedFor = encounter.id
+    void resumeInterrupted(encounter)
+  })
+
+  /**
+   * A luta já começou no servidor (battleStartedAt). Com o save do aparelho
+   * (localStorage, ver battlePersist.ts) ela continua de onde parou, com o
+   * tempo contado pelo relógio do servidor; passado o limite (mais a folga),
+   * manda o que foi guardado e o servidor fecha o resultado.
+   */
+  async function resumeInterrupted(found: PendingEncounter) {
+    const startedAt = found.battleStartedAt
+    if (startedAt === null) return
+    const saved = loadSavedBattle(found.id)
+    if (!saved) {
+      message = 'Luta interrompida sem dados neste aparelho. Você pode fugir do encontro.'
+      return
+    }
+    pending = true
+    message = ''
+    try {
+      const members = saved.setup.team.flatMap((fighter) => game.pokemon.filter((mon) => mon.id === fighter.id))
+      const limit = saved.timeLimitMs || simConfig.timeLimitMs
+      const late = clock.now() - startedAt > limit + simConfig.abandonSlackMs
+      if (late) {
+        const response = await api(`/api/encounters/${found.id}/battle/finish`, { inputs: saved.inputs })
+        if (!response.ok) {
+          const error = await readError(response)
+          if (error.error === 'encounter_not_found') clearSavedBattle(found.id)
+          message = errorText(error)
+          await onState()
+          return
+        }
+        clearSavedBattle(found.id)
+        applyBattleResult((await response.json()) as BattleOutcome, members)
+        return
+      }
+      await battleSpritesReady([
+        { speciesId: found.speciesId, isShiny: found.isShiny },
+        ...saved.setup.team.map((fighter) => ({
+          speciesId: fighter.speciesId,
+          isShiny: members.find((mon) => mon.id === fighter.id)?.isShiny ?? false,
+        })),
+      ])
+      enterFight(
+        { encounterId: found.id, seed: saved.seed, setup: saved.setup, timeLimitMs: limit },
+        members,
+        saved.inputs,
+        clock.now() - startedAt,
+      )
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
+  function enterFight(start: BattleStart, members: OwnedPokemon[], inputs: BattleInput[], elapsedMs: number) {
+    fightStart = start
+    fightTeam = members
+    fightInputs = inputs
+    fightResumeMs = Math.min(start.timeLimitMs, Math.max(0, Math.floor(elapsedMs)))
+    step = 'fight'
+  }
+  function applyBattleResult(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
+    result = { kind: 'battle', battle, team: teamSnapshot }
+    battleCards = battleHighlightCards({
+      battle,
+      nameOf,
+      canEvolve: readyToEvolve,
+      learnsetOf: (id) => teamSnapshot.find((mon) => mon.id === id)?.learnset ?? [],
+      regions,
+      berries: game.berries,
+    })
+    if (prefersReducedMotion() || !battle.won) step = 'highlights'
+    else step = 'scene'
+    void onState().catch(() => undefined)
+  }
 
   async function loadRegions() {
     const response = await api('/api/regions')
@@ -148,7 +243,9 @@
     const teamSnapshot = [...chosen]
     const wild = encounter
     try {
-      const response = await api(`/api/encounters/${encounter.id}/battle`, { pokemonIds: chosen.map((mon) => mon.id) })
+      const response = await api(`/api/encounters/${encounter.id}/battle/start`, {
+        pokemonIds: chosen.map((mon) => mon.id),
+      })
       if (!response.ok) {
         message = errorText(await readError(response))
         if (response.status === 404) {
@@ -158,24 +255,20 @@
         await onState()
         return
       }
-      const battle = (await response.json()) as BattleOutcome
-      result = { kind: 'battle', battle, team: teamSnapshot }
-      battleCards = battleHighlightCards({
-        battle,
-        nameOf,
-        canEvolve: readyToEvolve,
-        learnsetOf: (id) => teamSnapshot.find((mon) => mon.id === id)?.learnset ?? [],
-        regions,
-        berries: game.berries,
-      })
-      // A cena só começa com os dois lados prontos (no máximo 2,5 s); o estado
-      // (XP, captura) chega em segundo plano.
-      const lead = teamSnapshot[0]
-      await Promise.all([
-        spriteReady(wild.speciesId, wild.isShiny),
-        lead ? spriteReady(lead.speciesId, lead.isShiny) : Promise.resolve(),
+      const start = (await response.json()) as BattleStart
+      // Marca na hora: se o finish falhar e voltarmos ao encontro, o Batalhar
+      // fica desligado (evita battle_already_started) até o onState confirmar.
+      encounter = { ...wild, battleStartedAt: Date.now() }
+      const startedAt = performance.now()
+      // O relógio da luta já corre no servidor: a espera pelos sprites (no
+      // máximo 2,5 s) conta, senão o fim passaria do limite de abandono.
+      await battleSpritesReady([
+        { speciesId: wild.speciesId, isShiny: wild.isShiny },
+        ...teamSnapshot.map((mon) => ({ speciesId: mon.speciesId, isShiny: mon.isShiny })),
       ])
-      step = prefersReducedMotion() ? 'highlights' : 'scene'
+      enterFight(start, teamSnapshot, [], performance.now() - startedAt)
+      // Atualiza o encontro (battleStartedAt) em segundo plano: se o jogador sair
+      // e voltar, a luta é retomada em vez de pedir um novo start.
       void onState().catch(() => undefined)
     } catch {
       message = 'Sem conexão com o servidor.'
@@ -183,6 +276,25 @@
       pending = false
       fighting = false
     }
+  }
+
+  function onFightFinished(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
+    fightStart = null
+    applyBattleResult(battle, teamSnapshot)
+  }
+
+  function onFightError(code: string) {
+    message = errorText({ error: code })
+    fightStart = null
+    if (code === 'encounter_not_found') {
+      encounter = null
+      step = 'regions'
+      void onState().catch(() => undefined)
+      return
+    }
+    step = 'encounter'
+    // Sincroniza battleStartedAt: o resume (ou o Batalhar desligado) toma conta.
+    void onState().catch(() => undefined)
   }
 
   function afterScene() {
@@ -370,7 +482,7 @@
         type="button"
         class="btn btn-primary"
         aria-busy={fighting}
-        disabled={pending || chosen.length === 0}
+        disabled={pending || chosen.length === 0 || encounter.battleStartedAt !== null}
         onclick={battle}
       >
         {#if fighting}
@@ -381,6 +493,20 @@
       </button>
       <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
       <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
+    </div>
+  {:else if step === 'fight' && encounter && fightStart}
+    <div class="scroll">
+      <section class="panel sheet fight">
+        <BattleLive
+          start={fightStart}
+          {encounter}
+          team={fightTeam}
+          initialInputs={fightInputs}
+          resumeElapsedMs={fightResumeMs}
+          onFinished={onFightFinished}
+          onError={onFightError}
+        />
+      </section>
     </div>
   {:else if step === 'scene' && result?.kind === 'battle' && encounter}
     <div class="scroll">

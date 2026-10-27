@@ -1,3 +1,5 @@
+import type { BattleSetup } from '@sim'
+
 export type BattleRules = {
   k: number
   minChance: number
@@ -29,6 +31,14 @@ export type RegionInfo = {
 }
 
 export type ItemCredit = { itemKey: string; quantity: number }
+
+export type BattleStart = {
+  encounterId: number
+  seed: number
+  /** O servidor manda o setup serializado; o formato é o mesmo do BattleSetup. */
+  setup: BattleSetup
+  timeLimitMs: number
+}
 
 export type BattleOutcome = {
   encounterId: number
@@ -256,6 +266,12 @@ export function errorText(error: ApiError): string {
       return 'Termine o encontro atual antes.'
     case 'encounter_not_found':
       return 'Esse encontro não está mais valendo.'
+    case 'battle_already_started':
+      return 'A luta desse encontro já começou.'
+    case 'battle_not_started':
+      return 'A luta ainda não começou.'
+    case 'finish_too_early':
+      return 'Espere a luta terminar.'
     case 'invalid_team':
       return 'Escolha de 1 a 3 Pokémon seus, no jardim, sem repetir.'
     case 'pokemon_not_found':

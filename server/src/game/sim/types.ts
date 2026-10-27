@@ -62,13 +62,37 @@ export type BattleEvent =
 
 export type BattleResultKind = 'win' | 'lose' | 'timeout'
 
+/** Foto do estado para a tela ao vivo (untilMs). */
+export type BattleSnapshotSide = {
+  slot: number
+  fighterId: number | null
+  speciesId: number
+  hp: number
+  maxHp: number
+  energy: number
+  readyAt: number
+  fainted: boolean
+}
+
+export type BattleSnapshot = {
+  t: number
+  activeSlot: number
+  switchReadyAt: number
+  team: BattleSnapshotSide[]
+  wild: BattleSnapshotSide
+  /** null = luta ainda em andamento (parou em untilMs). */
+  result: BattleResultKind | null
+}
+
 export type BattleResult = {
-  result: BattleResultKind
-  /** Duração até o fim (ms). */
+  /** null se parou cedo com untilMs sem fim. */
+  result: BattleResultKind | null
+  /** Duração até o fim ou até untilMs (ms). */
   durationMs: number
   log: BattleEvent[]
   /** Inputs efetivos (inclui os do automático). */
   inputs: BattleInput[]
   /** Slots do time que entraram na luta (para EVs). */
   enteredSlots: number[]
+  snapshot: BattleSnapshot
 }

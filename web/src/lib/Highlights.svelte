@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { HighlightCard } from './highlights'
-  import { prefersReducedMotion } from './highlights'
   import { play } from './sound'
 
   let {
@@ -12,8 +11,6 @@
   } = $props()
 
   let index = $state(0)
-  const reduced = prefersReducedMotion()
-  const cardMs = reduced ? 0 : 900
 
   const current = $derived(cards[index] ?? null)
   const last = $derived(cards.length === 0 || index >= cards.length - 1)
@@ -34,17 +31,10 @@
     play(current.sound)
   })
 
+  // Cada cartão passa só com um toque: avançando sozinho (0,9 s), o resumo
+  // depois da luta passava rápido demais para ler (2026-10-27).
   $effect(() => {
-    if (cards.length === 0) {
-      onDone()
-      return
-    }
-    if (reduced || cardMs <= 0) return
-    // O último espera o toque, como diz a dica; senão ele some antes de ser lido.
-    void index
-    if (last) return
-    const timer = window.setTimeout(() => advance(), cardMs)
-    return () => window.clearTimeout(timer)
+    if (cards.length === 0) onDone()
   })
 
   function advance() {

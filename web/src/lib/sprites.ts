@@ -1,7 +1,10 @@
 import { SvelteSet } from 'svelte/reactivity'
 import manifest from './pmd-manifest.json' with { type: 'json' }
 
-export type PmdAnimName = 'Walk' | 'Idle' | 'Sleep'
+export type PmdAnimName = 'Walk' | 'Idle' | 'Sleep' | 'Attack' | 'Hurt' | 'Charge' | 'Shoot' | 'Faint'
+
+const gardenAnims = ['Walk', 'Idle', 'Sleep'] as const
+const battleAnims = ['Attack', 'Hurt', 'Charge', 'Shoot', 'Faint'] as const
 
 export type PmdAnim = {
   w: number
@@ -12,7 +15,9 @@ export type PmdAnim = {
   ground: number[]
 }
 
-type PmdVariant = Record<PmdAnimName, PmdAnim>
+type GardenAnimName = (typeof gardenAnims)[number]
+type BattleAnimName = (typeof battleAnims)[number]
+type PmdVariant = Record<GardenAnimName, PmdAnim> & Partial<Record<BattleAnimName, PmdAnim>>
 
 type PmdEntry = {
   shadow: 0 | 1 | 2
@@ -49,27 +54,40 @@ const preloaded = new Map<string, { image: HTMLImageElement; ready: Promise<void
 // Folhas já decodificadas. Reativo: o PmdSprite mostra a Poké Ball até a dele entrar.
 const decoded = new SvelteSet<string>()
 
-/** Baixa e decodifica as três folhas. Resolve mesmo se alguma falhar. */
+function decodeSheet(url: string): Promise<void> {
+  const known = preloaded.get(url)
+  if (known) return known.ready
+  const image = new Image()
+  image.src = url
+  const ready = image.decode().then(
+    () => {
+      decoded.add(url)
+    },
+    () => {
+      // Falhou (rede caiu?): esquece, para a próxima chamada tentar de novo.
+      preloaded.delete(url)
+    },
+  )
+  // Guarda a imagem: sem referência, o navegador pode descartar a decodificação.
+  preloaded.set(url, { image, ready })
+  return ready
+}
+
+/** Baixa e decodifica as três folhas do jardim. Resolve mesmo se alguma falhar. */
 export function loadPmd(speciesId: number, shinySheet: boolean): Promise<void> {
-  const sheets = (['Walk', 'Idle', 'Sleep'] as const).map((anim) => {
-    const url = pmdSheetUrl(speciesId, shinySheet, anim)
-    const known = preloaded.get(url)
-    if (known) return known.ready
-    const image = new Image()
-    image.src = url
-    const ready = image.decode().then(
-      () => {
-        decoded.add(url)
-      },
-      () => {
-        // Falhou (rede caiu?): esquece, para a próxima chamada tentar de novo.
-        preloaded.delete(url)
-      },
-    )
-    // Guarda a imagem: sem referência, o navegador pode descartar a decodificação.
-    preloaded.set(url, { image, ready })
-    return ready
-  })
+  return Promise.all(gardenAnims.map((anim) => decodeSheet(pmdSheetUrl(speciesId, shinySheet, anim)))).then(
+    () => undefined,
+  )
+}
+
+/** Folhas de batalha que existirem no manifesto (Attack, Hurt, Charge, Shoot, Faint). */
+export function loadPmdBattle(speciesId: number, shinySheet: boolean): Promise<void> {
+  const entry = species[String(speciesId)]
+  const variant = shinySheet ? entry?.shiny : entry?.normal
+  if (!variant) return Promise.resolve()
+  const sheets = battleAnims
+    .filter((anim) => variant[anim])
+    .map((anim) => decodeSheet(pmdSheetUrl(speciesId, shinySheet, anim)))
   return Promise.all(sheets).then(() => undefined)
 }
 
@@ -86,6 +104,30 @@ export function pmdAnim(speciesId: number, shinySheet: boolean, anim: PmdAnimNam
   if (!entry) return null
   const variant = shinySheet ? entry.shiny : entry.normal
   return variant?.[anim] ?? null
+}
+
+export function pmdHasAnim(speciesId: number, shinySheet: boolean, anim: PmdAnimName): boolean {
+  return pmdAnim(speciesId, shinySheet, anim) !== null
+}
+
+/**
+ * Escolhe a folha PMD (ou o fallback em CSS) para um evento da batalha.
+ * `anim` é a preferida; a UI confirma com `pmdHasAnim` e, se faltar, usa `cssFallback`.
+ *
+ * Golpe carregado: devolve Charge como primária. A UI toca Charge e em seguida
+ * Attack ou Shoot (mesmo critério do golpe rápido: especial com Shoot → Shoot,
+ * senão Attack), com `lunge` se a folha seguinte também faltar.
+ */
+export function battleAnimChoice(input: {
+  kind: 'fast' | 'charged' | 'hurt' | 'faint'
+  damageClass?: 'physical' | 'special'
+  hasShoot?: boolean
+}): { anim: PmdAnimName | null; cssFallback: 'lunge' | 'hurt' | 'faint' | null } {
+  if (input.kind === 'hurt') return { anim: 'Hurt', cssFallback: 'hurt' }
+  if (input.kind === 'faint') return { anim: 'Faint', cssFallback: 'faint' }
+  if (input.kind === 'charged') return { anim: 'Charge', cssFallback: 'lunge' }
+  const anim = input.damageClass === 'special' && input.hasShoot ? 'Shoot' : 'Attack'
+  return { anim, cssFallback: 'lunge' }
 }
 
 const showdownSize = 64
@@ -106,7 +148,8 @@ export function gardenExtent(look: GardenLook): { left: number; right: number; u
     return { left: showdownSize / 2, right: showdownSize / 2, up: showdownSize, down: 0 }
   }
   const out = { left: 0, right: 0, up: 0, down: 0 }
-  for (const sheet of Object.values(look.anims)) {
+  for (const name of gardenAnims) {
+    const sheet = look.anims[name]
     for (let dir = 0; dir < sheet.dirs; dir += 1) {
       for (let frame = 0; frame < sheet.durations.length; frame += 1) {
         const ground = groundAt(sheet, dir, frame)

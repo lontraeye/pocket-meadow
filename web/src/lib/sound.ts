@@ -6,13 +6,36 @@
 // AudioContext liberado no primeiro toque toca o resto a qualquer momento.
 // Qualquer falha (arquivo, rede, navegador sem Web Audio) vira silêncio.
 
-export type SfxName = 'tap' | 'harvest' | 'release' | 'shake' | 'catch' | 'escape' | 'levelup'
+export type SfxName =
+  | 'tap'
+  | 'harvest'
+  | 'release'
+  | 'shake'
+  | 'catch'
+  | 'escape'
+  | 'levelup'
+  | 'fast'
+  | 'charged'
+  | 'hit'
+  | 'faint'
 
 const MUTE_KEY = 'pocket-meadow-mute'
 // Metade do volume da primeira versão, que estava alto demais (2026-10-27).
 const SFX_VOLUME = 0.14
 const CRY_VOLUME = 0.17
-const sfxNames: SfxName[] = ['tap', 'harvest', 'release', 'shake', 'catch', 'escape', 'levelup']
+const sfxNames: SfxName[] = [
+  'tap',
+  'harvest',
+  'release',
+  'shake',
+  'catch',
+  'escape',
+  'levelup',
+  'fast',
+  'charged',
+  'hit',
+  'faint',
+]
 // Som que demora mais que isso para ficar pronto (rede, decodificação) já não
 // combina com o que está na tela: melhor não tocar.
 const MAX_LATE_MS = 500

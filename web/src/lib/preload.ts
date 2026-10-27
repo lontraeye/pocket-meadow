@@ -1,5 +1,5 @@
 import type { GameState } from './api'
-import { gardenSprite, loadPmd, showdownSrc } from './sprites'
+import { gardenSprite, loadPmd, loadPmdBattle, showdownSrc } from './sprites'
 
 // Arte da abertura (App.svelte): o que aparece em quase toda tela. As molduras
 // entram por border-image no CSS; sem elas, painéis e botões aparecem crus.
@@ -65,6 +65,24 @@ export function gameTasks(game: GameState): Promise<unknown>[] {
 export function spriteReady(speciesId: number, isShiny: boolean, capMs = 2500): Promise<void> {
   const look = gardenSprite(speciesId, isShiny)
   const load = look.kind === 'pmd' ? loadPmd(speciesId, look.shinySheet) : loadImage(showdownSrc(speciesId, isShiny))
+  return Promise.race([load, new Promise<void>((resolve) => setTimeout(resolve, capMs))])
+}
+
+/**
+ * Folhas de jardim e de batalha dos lutadores, por no máximo `capMs`. Quem não
+ * tem PMD baixa o GIF. Mesmo teto do `spriteReady`: a cena segue se a rede atrasar.
+ */
+export function battleSpritesReady(
+  fighters: { speciesId: number; isShiny: boolean }[],
+  capMs = 2500,
+): Promise<void> {
+  const load = Promise.all(
+    fighters.map((fighter) => {
+      const look = gardenSprite(fighter.speciesId, fighter.isShiny)
+      if (look.kind !== 'pmd') return loadImage(showdownSrc(fighter.speciesId, fighter.isShiny))
+      return Promise.all([loadPmd(fighter.speciesId, look.shinySheet), loadPmdBattle(fighter.speciesId, look.shinySheet)])
+    }),
+  ).then(() => undefined)
   return Promise.race([load, new Promise<void>((resolve) => setTimeout(resolve, capMs))])
 }
 

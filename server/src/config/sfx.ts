@@ -9,6 +9,10 @@ export const sfxSources = {
   catch: 'confirmation_002.ogg', // Interface Sounds
   escape: 'minimize_006.ogg', // Interface Sounds: espelho do levelup, descendo
   levelup: 'maximize_006.ogg', // Interface Sounds
+  fast: 'click_002.ogg', // Interface Sounds: golpe rápido
+  charged: 'confirmation_001.ogg', // Interface Sounds: golpe carregado
+  hit: 'error_001.ogg', // Interface Sounds: acerto (batida curta)
+  faint: 'minimize_002.ogg', // Interface Sounds: desmaio
 } as const
 
 export type SfxName = keyof typeof sfxSources

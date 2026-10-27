@@ -4,33 +4,41 @@ Fonte: [PMD Sprite Collab](https://github.com/PMDCollab/SpriteCollab), commit `d
 
 Licença da arte da comunidade: [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Os registros mais antigos usam `PMDCollab_1` e `PMDCollab_2`, também com crédito e uso não comercial. Os sprites marcados como Spike Chunsoft são extraídos dos jogos oficiais de Pokémon Mystery Dungeon.
 
-Entram autores com crédito atual (`CUR`) em Walk, Idle ou Sleep.
+Entram autores com crédito atual (`CUR`) em Walk, Idle, Sleep, Attack, Hurt, Charge, Shoot ou Faint.
 
 | Autor | Contato | Dex |
 |---|---|---|
 | Spike Chunsoft (sprites originais de Pokémon Mystery Dungeon) | https://www.spike-chunsoft.com/ | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251 |
 | <@!195280695009083392> |  | 54, 222 |
+| <@!199989579682414592> |  | 5 |
 | ◥θ┴θ◤ | DC:<@215638650434617345> | 157 |
 | 3Monika4 | <@270755102178934785> | 20, 61, 63 |
+| 3P1C |  | 27 |
 | Adrian | <@218764902913802240> | 120 |
+| anomalocaris | https://twitter.com/radiodonta_lord | 48, 140 |
+| Anon |  | 194 |
 | Anonymous | <@200318546750865418> | 33, 49, 70, 84, 85, 114, 121, 151, 173, 174, 179, 180, 181, 188, 189, 195, 212, 213, 228 |
 | Audino | https://github.com/audinowho | 30, 69, 103, 108, 124, 159, 160, 249 |
 | Avery | <@527611425670037516> | 223 |
 | baronessfaron |  | 30, 38, 59, 133, 196, 238 |
-| bwappi | https://bsky.app/profile/bwappi.bsky.social | 17, 187, 233 |
-| Caitemis | https://caitemis-art.tumblr.com/ | 198 |
+| bwappi | https://bsky.app/profile/bwappi.bsky.social | 5, 17, 187, 233 |
+| Caitemis | https://caitemis-art.tumblr.com/ | 132, 198 |
 | Chi | <@95638225439166464> | 169, 210, 218, 230 |
 | Deeshura | https://bsky.app/profile/deeshura.bsky.social | 149, 154, 250 |
 | dmDash |  | 135 |
 | El_Pangoro_Parse | <@200385851069300736> | 50, 51, 52, 53, 55, 56, 60, 61, 62, 64, 74, 76, 78, 81, 82, 90, 91, 92, 95, 96, 105, 110, 127, 128, 142, 143, 144, 150, 177, 216, 217, 250 |
-| Emboarger |  | 6, 151 |
-| Emmuffin | https://twitter.com/Ernmuffin | 5, 6, 8, 12, 23, 28, 31, 38, 39, 45, 48, 65, 71, 75, 76, 77, 88, 91, 100, 104, 115, 130, 134, 140, 144, 145, 146, 153, 157, 164, 167, 176, 179, 197, 200, 209, 226, 232, 234, 235, 236, 243, 244, 251 |
+| Emboarger |  | 6, 66, 94, 100, 151, 191, 200, 240 |
+| Emmuffin | https://twitter.com/Ernmuffin | 5, 6, 8, 12, 23, 28, 31, 38, 39, 45, 48, 63, 65, 71, 75, 76, 77, 88, 91, 100, 104, 115, 130, 134, 140, 144, 145, 146, 153, 157, 164, 167, 176, 179, 180, 197, 200, 209, 226, 232, 234, 235, 236, 243, 244, 251 |
+| FlowerSnek | https://twitter.com/EthanLac13 | 136, 225 |
 | G〜 | https://bsky.app/profile/justtr4sh.pmd.social | 57, 89, 98, 205, 206, 239 |
-| JFain |  | 150, 156, 207, 228, 246 |
+| Grimlin | https://twitter.com/Griimlin | 5, 26 |
+| Hanbei | https://twitter.com/Hanbei | 177, 206 |
+| JFain |  | 16, 39, 77, 136, 150, 151, 156, 165, 171, 183, 190, 203, 207, 215, 228, 246 |
 | lokatts | https://twitter.com/lokatts | 29, 152, 155, 156 |
 | Lovi | <@95650095034273792> | 37, 83, 97, 122, 126, 135, 148, 163, 172, 184, 196, 199, 208, 219, 232, 238, 240, 241, 242, 245, 246 |
 | Moo | https://twitter.com/MoonMoonMemes | 17, 158, 193 |
-| Morei | https://bsky.app/profile/murpia57.bsky.social | 24, 40, 65, 66, 178, 182, 188, 224, 227, 228, 229 |
+| Morei | https://bsky.app/profile/murpia57.bsky.social | 24, 40, 65, 66, 135, 178, 182, 188, 224, 227, 228, 229 |
+| Neat_Neato | imneatneato@gmail.com | 161 |
 | Noo | https://artfight.net/~NooNoo_Skidoo | 78, 101, 102, 103, 121, 129, 130, 163, 164, 181, 184, 185, 190, 196, 202, 213, 222 |
 | Pencil | https://twitter.com/Sea_of_Pencils | 164 |
 | Pokejavi. | <@823932975916777512> | 165 |
@@ -40,5 +48,9 @@ Entram autores com crédito atual (`CUR`) em Walk, Idle ou Sleep.
 | Scizivire | <@207188665959448576> | 125, 129, 198, 221 |
 | ShyStarryRain |  | 1, 4, 5, 7, 13, 19, 27, 47, 54, 79, 92, 124, 136, 218, 231 |
 | SilverDeoxys563 | https://www.reddit.com/user/SilverDeoxys563 | 2, 3, 6, 7, 9, 10, 11, 14, 15, 18, 20, 21, 22, 25, 28 |
+| Smalusion | https://twitter.com/Smalusion | 251 |
+| Spikey-Valentine | https://twitter.com/spikeyvalentine | 172 |
 | Tacocoa | <@234720295292895232> | 32, 34, 35, 36, 41, 42, 43, 44, 46, 48, 59, 63, 67, 68, 72, 73, 77, 80, 86, 87, 93, 94, 98, 99, 101, 106, 107, 109, 111, 112, 113, 117, 118, 119, 123, 136, 137, 138, 139, 141, 166, 183, 186, 192, 201, 202, 204, 205, 220, 235, 247 |
+| Top_Kec | @topkec.bsky.social | 26 |
+| Uni | https://github.com/ArianaCastro01 | 194 |
 | XModxGodX |  | 28 |
