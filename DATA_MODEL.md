@@ -65,7 +65,7 @@ CREATE INDEX idx_species_chain ON species(evolution_chain_id);
 Sprites não são guardados: o caminho é derivado do ID. No jardim, `/sprites/pmd/{id}/` (shiny em `shiny/`); no card e no encontro, `/sprites/showdown/{id}.gif` e `/sprites/showdown/shiny/{id}.gif`.
 
 ### `evolutions`
-Simplificado: toda evolução é por nível mínimo. O `candy_cost` ficou de um modelo anterior e não é usado.
+Simplificado: toda evolução é por nível mínimo. A evolução por troca também tem nível, mas com `via_trade = 1` só acontece por missão de NPC. O `candy_cost` ficou de um modelo anterior e não é usado.
 
 ```sql
 CREATE TABLE evolutions (
@@ -73,6 +73,7 @@ CREATE TABLE evolutions (
   to_species_id    INTEGER NOT NULL REFERENCES species(id),
   min_level        INTEGER NOT NULL,                 -- da PokéAPI ou padrão do config
   candy_cost       INTEGER NOT NULL,                 -- sem uso: evolução é só por nível (PLANNING.md, seção 5.8)
+  via_trade        INTEGER NOT NULL DEFAULT 0,       -- 1 = evolução por troca: só por missão de NPC (PLANNING.md, seção 5.15)
   PRIMARY KEY (from_species_id, to_species_id)
 );
 ```
