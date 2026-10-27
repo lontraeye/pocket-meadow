@@ -760,6 +760,15 @@ O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca má
 - **Modo de edição** para construir. Escolher um bloco e o que colocar, por toque, sem arrastar com precisão. Mobile primeiro (seção 4.4).
 - **Arte:** o usuário faz a pixel art (tiles de bioma, máquinas, itens que faltarem), mesmo que simples. Antes, mapear a lista de peças necessárias. Arte própria entra no `CREDITS.md` com a licença escolhida para ela. Peças de terceiros seguem a seção 4.3.
 
+**Crafting com Pokémon trabalhando (ideia, junto desta seção):** um sistema de receitas com **árvore de ingredientes**, em que Pokémon trabalham nas estações para produzir. A referência de gênero é Pokémon trabalhando numa base (Palworld, Pokopia), com regras próprias.
+- **Receitas em config:** entradas (itens e quantidades), saída, tempo, estação e requisito de trabalhador (tipo, espécie e, depois, habilidade). Receita nova entra só no config.
+- **Árvore:** os ingredientes básicos vêm do que já existe (berries, sementes, doces genéricos, drops de batalha). Os intermediários são feitos em estações e viram entrada de outras receitas, até chegar nos itens finais: itens de evolução (pedras), itens de bioma, peças de máquina, pokébolas (seção 5.6) e roupas do avatar (5.17). Cada item final tem pelo menos um caminho de craft além dos outros jeitos de conseguir.
+- **Trabalhadores:** o mesmo modelo dos operadores de máquina. O Pokémon fica alocado, sai do jardim e não batalha, e o jardim nunca fica vazio. O nível ou a espécie certa podem acelerar ou render mais.
+- **Produção por horário, sem loop no servidor** (seção 2): cada trabalho guarda início e fim (`ready_at`), e o servidor entrega ao coletar. Uma fila por estação é possível, sempre calculada sob demanda.
+- **Debitar as entradas ao iniciar**, numa transação. Cancelar devolve todas as entradas, ou só parte delas (decidir).
+- Pede tabelas novas (ex.: `craft_jobs`: estação, receita, trabalhador, `started_at`, `ready_at`) e migração. Os itens continuam no `inventory`.
+- Liga com o aviso de "pronto" da Fase 6.1 (trabalho pronto entra na mesma lista).
+
 **Pontos a decidir quando for especificar:**
 - **Modelo de dados:** blocos do jardim (`garden_tiles`: posição, bioma, objeto), máquinas (`machines`: tipo, posição, operador, `ready_at`) e quais biomas e máquinas estão liberados. Tudo pede migração. Desbloqueios derivados do nível ficam fora do banco (`DATA_MODEL.md`, seção 3). Desbloqueios conquistados ficam no banco.
 - **Visitantes:** custo (energia ou nada), quantos ao mesmo tempo, quanto tempo ficam, e se viram encontro com batalha normal. O sorteio fica no servidor e é persistido antes de aparecer, como o encontro (seções 2 e 7). Tem paralelo com o campo de encontro (5.14).
