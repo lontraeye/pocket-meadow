@@ -28,7 +28,9 @@
       return
     }
     if (reduced || cardMs <= 0) return
+    // O último espera o toque, como diz a dica; senão ele some antes de ser lido.
     void index
+    if (last) return
     const timer = window.setTimeout(() => advance(), cardMs)
     return () => window.clearTimeout(timer)
   })
