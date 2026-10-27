@@ -536,6 +536,31 @@ xpPorHora(level) = DAYCARE_XP_PER_LEVEL_HOUR * level        // inicial: 3
 - O contador é só visual, a partir de `fullAt` e do `now` do `/state`. O servidor decide tudo na próxima requisição.
 - Mobile primeiro (seção 4.4): cartões empilhados em retrato, ações embaixo, alvos de 44px ou mais.
 
+#### Cuidador do daycare (ideia, ainda sem fase)
+Um Pokémon do jogador fica no daycare **cuidando dos outros**, num lugar próprio que não é slot de treino, e dá um bônus. Só uma lista pequena de espécies pode cuidar, escolhida pelo jeito delas nos jogos:
+
+| Espécie | Por que combina | Bônus (exemplo) |
+|---|---|---|
+| Chansey / Blissey | Enfermeiras dos Centros Pokémon | +XP por hora (Blissey mais que Chansey) |
+| Kangaskhan | Mãe que carrega o filhote na bolsa | Mais forte com Pokémon de nível baixo |
+| Miltank | Leite que cura, famosa em Johto | Limite de tempo maior que 24 h |
+| Clefairy / Clefable | Fada, cuidadosa | Chance de shiny maior no próximo encontro de quem sair do daycare |
+| Jigglypuff / Wigglytuff | Canção de ninar | Bônus enquanto o jogador está fora por muitas horas |
+
+Os bônus da tabela são só exemplos para discutir. Cada um precisa caber no modelo atual.
+
+- **Config:** `DAYCARE_CARETAKERS` com `speciesId` → bônus. Espécie nova entra só no config.
+- **Evolução conta:** Blissey cuida melhor que Chansey, e Wigglytuff melhor que Jigglypuff. Isso dá motivo para evoluir esses Pokémon.
+- **Liquidação:** o bônus entra hora a hora, como o da Nanab (seção 5.10), só nas horas em que o cuidador estava lá. Se a Nanab estiver ativa também, os dois multiplicam.
+- **O cuidador sai do jardim e não batalha**, igual a quem está treinando. A regra de nunca esvaziar o jardim vale para ele também.
+- **Por que guardar:** dá uso para espécies que hoje virariam doce, e combina com o álbum (seção 5.12).
+
+Pontos a decidir:
+- O cuidador também ganha XP, ou só trabalha.
+- Quantos cuidadores ao mesmo tempo (sugestão: 1) e a partir de que nível de treinador.
+- Se o bônus cresce com o nível do cuidador.
+- Precisa de dado novo no banco (ex.: uma linha em `daycare_slots` com um papel `caretaker`, ou uma tabela própria). Pede migração.
+
 ### 5.10 Berries
 - O jardim tem canteiros (começa com 2, mais desbloqueados por nível de treinador).
 - Plantar consome 1 semente do inventário; a berry fica pronta em `growMs` (definido por tipo).
