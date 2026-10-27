@@ -608,7 +608,14 @@ Sugestão: começar pelo formato 1. Ele já dá o "juice" e cabe no modelo atual
 **Sprites da batalha: PMD em vez do Showdown.** O pack do PMD Sprite Collab (seção 4.5), que já usamos no jardim, tem animações de golpe por Pokémon, nas 8 direções. Conferido no commit fixado em `config/pmd.ts`:
 - Comuns a todos os conferidos: `Attack`, `Strike`, `Shoot`, `Charge`, `Hurt`, `Swing`, `Hop` e `Rotate`.
 - Golpes próprios em alguns: `Shock` (Pikachu), `Lick` (Gengar), `Stomp` (Snorlax), `Rumble` (Gyarados).
-- `Faint` só em parte (tem em Charizard, Pikachu e Gengar, falta em Gyarados, Snorlax, Unown e Lugia). Precisa de fallback, por exemplo `Hurt` seguido de sumir em CSS.
+- `Faint` só em parte (tem em Charizard, Pikachu e Gengar, falta em Gyarados, Snorlax, Unown e Lugia).
+
+**Fallbacks genéricos em CSS (decidido).** Quando faltar uma animação, a batalha usa uma versão genérica em cima do sprite que existir (o `Idle` do PMD ou o GIF):
+- **Ataque:** investida estilo Tackle. O sprite avança na direção do alvo e volta.
+- **Dano:** o sprite treme e pisca.
+- **Desmaio:** o sprite treme, desce e some.
+
+A escolha fica numa função só (como `gardenSprite` em `web/src/lib/sprites.ts`), que lê o manifesto e devolve a animação do pack ou o fallback. Nada de lista fixa de espécies. Com isso, a cobertura de golpes deixa de bloquear a batalha: espécie sem golpe só fica menos animada. Respeitar `prefers-reduced-motion`.
 
 A batalha pode acontecer num pedaço do chão isométrico, com o seu Pokémon olhando ↗ e o selvagem ↙ (linhas 3 e 7 da folha). Fica com a mesma arte do jardim, e o "juice" dos golpes vem do próprio pack. Isso pode aposentar os GIFs do Showdown.
 
