@@ -154,7 +154,7 @@
     }
   }
 
-  // Zona andável 12×12; anel de gramado igual ao redor (parece infinito no pan).
+  // Zona andável 12×12; anel cinza ao redor (demarcação) grande o bastante p/ parecer infinito.
   const playCols = 12
   const playRows = 12
   const margin = 10
@@ -166,8 +166,10 @@
   const playRowEnd = margin + playRows
   // Faixa de z: chão (0..span-1), entidades (span..) — sprites grandes não furam o gramado.
   const depthSpan = worldCols + worldRows
-  // Alvo: ~5 tiles na largura da viewport (escala inteira 1–3).
-  const viewTiles = 5
+  // Zoom manual (1–3). Abertura mais afastada (~8 tiles de largura).
+  const scaleMin = 1
+  const scaleMax = 3
+  const defaultViewTiles = 8
   const baseTileW = 48
   const baseTileH = 24
   const showdownSize = 64
@@ -229,8 +231,8 @@
   let stageBoxH = $state(0)
   let panX = $state(0)
   let panY = $state(0)
-  /** Já centrou a câmera nesta montagem do gramado. */
-  let panSeeded = false
+  /** Já escolheu zoom inicial e centrou a câmera nesta montagem. */
+  let viewSeeded = false
   let time = $state(0)
   let walkers = $state<Walker[]>([])
   // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
@@ -242,7 +244,6 @@
   const tileW = $derived(baseTileW * scale)
   const tileH = $derived(baseTileH * scale)
   const pmdScale = $derived(2 * scale)
-  const depth = $derived(8 * scale)
   const halfW = $derived(tileW / 2)
   const halfH = $derived(tileH / 2)
 
@@ -272,17 +273,27 @@
     return out
   })
 
-  // Largura de referência da viewport (~5 tiles), sem pad de sprite — senão a
-  // escala fica 1 e o losango inteiro cabe com bordas do fundo aparecendo.
-  const viewUnitWidth = viewTiles * baseTileW
   const padX = $derived(Math.max(0, extent.side * scale - halfW))
   const padTop = $derived(Math.max(0, extent.up * scale - halfH))
-  const padBottom = $derived(Math.max(0, extent.down * scale - halfH - depth))
+  const padBottom = $derived(Math.max(0, extent.down * scale - halfH))
 
   const originX = $derived(worldRows * halfW + padX)
   const originY = $derived(padTop)
   const stageW = $derived((worldCols + worldRows) * halfW + padX * 2)
-  const stageH = $derived(originY + (worldCols + worldRows) * halfH + depth + padBottom)
+  const stageH = $derived(originY + (worldCols + worldRows) * halfH + padBottom)
+
+  function metricsFor(nextScale: number) {
+    const hw = (baseTileW * nextScale) / 2
+    const hh = (baseTileH * nextScale) / 2
+    const px = Math.max(0, extent.side * nextScale - hw)
+    const pt = Math.max(0, extent.up * nextScale - hh)
+    const pb = Math.max(0, extent.down * nextScale - hh)
+    const ox = worldRows * hw + px
+    const oy = pt
+    const sw = (worldCols + worldRows) * hw + px * 2
+    const sh = oy + (worldCols + worldRows) * hh + pb
+    return { hw, hh, ox, oy, sw, sh }
+  }
 
   const tiles = Array.from({ length: worldCols * worldRows }, (_, index) => ({
     col: index % worldCols,
@@ -337,10 +348,42 @@
     return clampPan(viewW / 2 - cx, viewH / 2 - cy, viewW, viewH, sw, sh)
   }
 
+  function applyZoom(nextRaw: number, keepCenter: boolean) {
+    const nextScale = Math.min(scaleMax, Math.max(scaleMin, Math.round(nextRaw)))
+    const node = lawn
+    const viewW = node?.clientWidth ?? lawnW
+    const viewH = node?.clientHeight ?? lawnH
+    const prevScale = untrack(() => scale)
+    const prevPanX = untrack(() => panX)
+    const prevPanY = untrack(() => panY)
+    const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
+    stageBoxW = sw
+    stageBoxH = sh
+    scale = nextScale
+    if (!viewW || !viewH) return
+    if (keepCenter && prevScale > 0) {
+      const ratio = nextScale / prevScale
+      const sx = viewW / 2 - prevPanX
+      const sy = viewH / 2 - prevPanY
+      const clamped = clampPan(viewW / 2 - sx * ratio, viewH / 2 - sy * ratio, viewW, viewH, sw, sh)
+      panX = clamped.x
+      panY = clamped.y
+    } else {
+      const centered = centerPanOnPlay(viewW, viewH, sw, sh, hw, hh, ox, oy)
+      panX = centered.x
+      panY = centered.y
+    }
+  }
+
+  function onZoomInput(event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value)
+    applyZoom(value, true)
+  }
+
   $effect(() => {
     const node = lawn
     if (!node) {
-      panSeeded = false
+      viewSeeded = false
       return
     }
     const measure = () => {
@@ -348,33 +391,28 @@
       const viewH = node.clientHeight
       lawnW = viewW
       lawnH = viewH
-      // Preenche a largura: no 360px com 5×48 cai em escala 2.
-      const fit = Math.round(viewW / viewUnitWidth)
-      const nextScale = Math.min(3, Math.max(1, fit))
-      scale = nextScale
-      const hw = (baseTileW * nextScale) / 2
-      const hh = (baseTileH * nextScale) / 2
-      const depthPx = 8 * nextScale
-      const px = Math.max(0, extent.side * nextScale - hw)
-      const pt = Math.max(0, extent.up * nextScale - hh)
-      const pb = Math.max(0, extent.down * nextScale - hh - depthPx)
-      const ox = worldRows * hw + px
-      const oy = pt
-      const sw = (worldCols + worldRows) * hw + px * 2
-      const sh = oy + (worldCols + worldRows) * hh + depthPx + pb
-      stageBoxW = sw
-      stageBoxH = sh
-      if (!panSeeded) {
-        panSeeded = true
+      if (!viewSeeded) {
+        viewSeeded = true
+        // Abertura mais afastada que o encaixe apertado de ~5 tiles.
+        const fit = Math.round(viewW / (defaultViewTiles * baseTileW))
+        const nextScale = Math.min(scaleMax, Math.max(scaleMin, fit))
+        scale = nextScale
+        const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
+        stageBoxW = sw
+        stageBoxH = sh
         const centered = centerPanOnPlay(viewW, viewH, sw, sh, hw, hh, ox, oy)
         panX = centered.x
         panY = centered.y
-      } else {
-        // Não ler pan reativo aqui: senão cada arrasto recria o observer.
-        const clamped = clampPan(untrack(() => panX), untrack(() => panY), viewW, viewH, sw, sh)
-        panX = clamped.x
-        panY = clamped.y
+        return
       }
+      const current = untrack(() => scale)
+      const { sw, sh } = metricsFor(current)
+      stageBoxW = sw
+      stageBoxH = sh
+      // Não ler pan reativo aqui: senão cada arrasto recria o observer.
+      const clamped = clampPan(untrack(() => panX), untrack(() => panY), viewW, viewH, sw, sh)
+      panX = clamped.x
+      panY = clamped.y
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -728,6 +766,7 @@
     >
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
+        {@const dim = !inPlay(tile.col, tile.row)}
         {@const isPlot = isPlotCell(tile.col, tile.row)}
         {@const plotIdx = isPlot ? plotIndexAt(tile.col) : -1}
         {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
@@ -743,9 +782,7 @@
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
-            style:height="{tileH + depth}px"
-            style:--half="{halfH}px"
-            style:--depth="{depth}px"
+            style:height="{tileH}px"
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row + depthSpan}
             aria-label={`Canteiro ${plotIdx + 1}`}
@@ -763,12 +800,11 @@
           <div
             class="tile"
             class:alt={(tile.col + tile.row) % 2 === 1}
+            class:dim={dim}
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
-            style:height="{tileH + depth}px"
-            style:--half="{halfH}px"
-            style:--depth="{depth}px"
+            style:height="{tileH}px"
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row}
           ></div>
@@ -816,6 +852,21 @@
         </button>
       {/each}
     </div>
+
+    <label class="zoom-bar panel">
+      <span>Zoom</span>
+      <input
+        type="range"
+        class="zoom-range"
+        min={scaleMin}
+        max={scaleMax}
+        step="1"
+        value={scale}
+        aria-valuetext={`${scale}×`}
+        oninput={onZoomInput}
+      />
+      <strong>{scale}×</strong>
+    </label>
   </div>
 
   {#if plotIndex !== null}
@@ -926,9 +977,9 @@
     overflow: hidden;
     touch-action: none;
     cursor: grab;
-    /* Mesmo tom do gramado claro — preenche qualquer fresta no pan. */
+    /* Tom da margem cinza — o anel demarca o 12×12 e parece infinito no pan. */
     background:
-      repeating-conic-gradient(var(--grass-1) 0% 25%, var(--grass-2) 0% 50%) 0 0 / 24px 24px;
+      repeating-conic-gradient(#6a7164 0% 25%, #5c6358 0% 50%) 0 0 / 24px 24px;
   }
 
   .lawn:active {
@@ -943,35 +994,34 @@
     will-change: transform;
   }
 
-  /* Bloco isométrico: losango de cima + duas laterais. */
+  /* Losango plano (sem extrusão 3D). */
   .tile {
     --top: var(--grass-1);
-    --left: var(--grass-side);
-    --right: #6ea44b;
     position: absolute;
-    background: var(--left);
-    clip-path: polygon(
-      50% 0,
-      100% var(--half),
-      100% calc(var(--half) + var(--depth)),
-      50% 100%,
-      0 calc(var(--half) + var(--depth)),
-      0 var(--half)
-    );
+    background: var(--top);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   }
 
   .tile.alt {
     --top: var(--grass-2);
   }
 
+  .tile.dim {
+    --top: #6a7164;
+  }
+
+  .tile.dim.alt {
+    --top: #5c6358;
+  }
+
   .tile.plot {
     cursor: pointer;
     --top: var(--soil);
-    --left: #7a5530;
-    --right: #93683c;
     padding: 0;
     border: 0;
-    cursor: pointer;
+    background:
+      repeating-linear-gradient(90deg, #00000018 0 4px, transparent 4px 8px),
+      var(--top);
     touch-action: manipulation;
   }
 
@@ -980,13 +1030,44 @@
     outline-offset: 2px;
   }
 
+  .tile.plot.alt {
+    --top: #c49a5e;
+  }
+
   .crop {
     position: absolute;
     left: 50%;
-    top: calc(var(--half) * 0.35);
+    top: 28%;
     z-index: 2;
     transform: translateX(-50%);
     pointer-events: none;
+  }
+
+  .zoom-bar {
+    position: absolute;
+    z-index: 6;
+    left: calc(0.5rem + env(safe-area-inset-left));
+    bottom: calc(4.1rem + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.25rem 0.45rem;
+    pointer-events: auto;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .zoom-bar strong {
+    min-width: 1.6rem;
+    text-align: right;
+  }
+
+  .zoom-range {
+    width: 7rem;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
   }
 
   .dev-row {
@@ -1030,30 +1111,6 @@
     50% {
       transform: translateX(-50%) translateY(-3px);
     }
-  }
-
-  .tile::before,
-  .tile::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-  }
-
-  .tile::after {
-    background: var(--right);
-    clip-path: polygon(50% calc(var(--half) * 2), 100% var(--half), 100% calc(var(--half) + var(--depth)), 50% 100%);
-  }
-
-  .tile::before {
-    z-index: 1;
-    background: var(--top);
-    clip-path: polygon(50% 0, 100% var(--half), 50% calc(var(--half) * 2), 0 var(--half));
-  }
-
-  .tile.plot::before {
-    background:
-      repeating-linear-gradient(90deg, #00000018 0 4px, transparent 4px 8px),
-      var(--top);
   }
 
   .mon {

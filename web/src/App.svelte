@@ -413,7 +413,7 @@
     gap: 0;
     padding: 0;
     overflow: hidden;
-    background: var(--grass-2);
+    background: #5c6358;
   }
 
   .garden-layer {
