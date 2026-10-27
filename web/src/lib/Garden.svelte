@@ -1,18 +1,30 @@
 <script lang="ts">
   import { serverClock } from './serverClock.svelte'
+  import { formatCountdown } from './time'
   import { untrack } from 'svelte'
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type PlotState } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
   import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
 
-  let { game, onState }: { game: GameState; onState: () => Promise<void> } = $props()
+  let {
+    game,
+    onState,
+    openPlotIndex = null,
+    onPlotOpened,
+  }: {
+    game: GameState
+    onState: () => Promise<void>
+    openPlotIndex?: number | null
+    onPlotOpened?: () => void
+  } = $props()
 
   let plotIndex = $state<number | null>(null)
   let plotMessage = $state('')
   let plotPending = $state(false)
   let harvestResult = $state<{ berryKey: string; berries: number; seeds: number } | null>(null)
   let confirmUproot = $state(false)
+  let selectedId = $state<number | null>(null)
 
   const plotsByIndex = $derived(new Map(game.plots.map((plot) => [plot.plotIndex, plot])))
   const seedRows = $derived(
@@ -34,15 +46,6 @@
     return Math.max(0, readyAt - clock.now())
   }
 
-  function formatRemaining(ms: number): string {
-    const total = Math.ceil(ms / 1000)
-    const h = Math.floor(total / 3600)
-    const m = Math.floor((total % 3600) / 60)
-    const s = total % 60
-    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
-
   function openPlot(index: number) {
     selectedId = null
     plotIndex = index
@@ -50,6 +53,12 @@
     harvestResult = null
     confirmUproot = false
   }
+
+  $effect(() => {
+    if (openPlotIndex === null || openPlotIndex === undefined) return
+    openPlot(openPlotIndex)
+    onPlotOpened?.()
+  })
 
   function closePlot() {
     plotIndex = null
@@ -178,7 +187,6 @@
   let lawn = $state<HTMLDivElement | null>(null)
   let scale = $state(1)
   let time = $state(0)
-  let selectedId = $state<number | null>(null)
   let walkers = $state<Walker[]>([])
   // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
   let devCommands: { sleep: (id: number) => void; wake: (id: number) => void } | null = null
@@ -585,7 +593,7 @@
           {@const progress = Math.min(1, 1 - left / total)}
           <p class="hint">{berry?.name ?? plot.berryKey} crescendo…</p>
           <div class="bar" aria-hidden="true"><span style:width="{progress * 100}%"></span></div>
-          <p class="timer">{formatRemaining(left)}</p>
+          <p class="timer">{formatCountdown(left)}</p>
           {#if game.devTools}
             <div class="dev-row">
               <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ minutes: 10 })}>+10 min (teste)</button>

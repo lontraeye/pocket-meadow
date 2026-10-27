@@ -1,5 +1,6 @@
 <script lang="ts">
   import { serverClock } from './serverClock.svelte'
+  import { formatCountdown } from './time'
   import {
     api,
     berryIconSrc,
@@ -49,15 +50,6 @@
   function hasSameEffect(berry: BerryInfo): ActiveEffect | undefined {
     if (!berry.effectKey) return undefined
     return game.effects.find((row) => row.effectKey === berry.effectKey)
-  }
-
-  function formatRemaining(ms: number): string {
-    const total = Math.ceil(ms / 1000)
-    const h = Math.floor(total / 3600)
-    const m = Math.floor((total % 3600) / 60)
-    const s = total % 60
-    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
-    return `${m}:${String(s).padStart(2, '0')}`
   }
 
   async function useBerry(itemKey: string, force = false) {
@@ -168,7 +160,7 @@
               {#if effect.charges !== null}
                 <strong>{effect.charges} carga{effect.charges === 1 ? '' : 's'}</strong>
               {:else if effect.expiresAt !== null}
-                <strong>{formatRemaining(Math.max(0, effect.expiresAt - clock.now()))}</strong>
+                <strong>{formatCountdown(Math.max(0, effect.expiresAt - clock.now()))}</strong>
               {/if}
             </li>
           {/each}

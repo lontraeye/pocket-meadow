@@ -4,7 +4,7 @@ import { daycareConfig, daycareXpPerHour } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
 import { applyDaycareHours, levelsGainedFromStay } from './daycare.js'
-import { applyCatchUp, type CatchUpState } from './catchUp.js'
+import { applyCatchUp, energyFullAt, nextEnergyAt, type CatchUpState } from './catchUp.js'
 
 const now = 1_800_000_000_000
 const regen = progressConfig.energyRegenMs
@@ -52,6 +52,14 @@ describe('energia', () => {
     const first = applyCatchUp(state({ trainer: { energy: 2, energyUpdatedAt: now - 3.7 * regen } }), now)
     const second = applyCatchUp(state({ trainer: first.trainer }), now)
     assert.deepEqual(second.trainer, first.trainer)
+  })
+
+  test('energyFullAt: null quando cheia; senão âncora + faltantes × regen', () => {
+    assert.equal(energyFullAt(max, now - regen), null)
+    assert.equal(energyFullAt(8, 1_000), 1_000 + 2 * regen)
+    assert.equal(energyFullAt(0, 500), 500 + max * regen)
+    assert.equal(nextEnergyAt(8, 1_000), 1_000 + regen)
+    assert.equal(nextEnergyAt(max, 1_000), null)
   })
 })
 

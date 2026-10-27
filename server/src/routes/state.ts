@@ -22,7 +22,7 @@ import {
   trainers,
 } from '../db/schema.js'
 import { power } from '../game/battle.js'
-import { nextEnergyAt } from '../game/catchUp.js'
+import { energyFullAt, nextEnergyAt } from '../game/catchUp.js'
 import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 
@@ -172,6 +172,7 @@ function readState(userId: number, now: number) {
       energy: trainer.energy,
       energyMax: trainerConfig.energyMax,
       energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),
+      energyFullAt: energyFullAt(trainer.energy, trainer.energyUpdatedAt),
       genericCandies: trainer.genericCandies,
     },
     pokemon: owned.map((mon) => ({

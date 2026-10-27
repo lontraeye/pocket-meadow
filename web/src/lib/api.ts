@@ -138,6 +138,7 @@ export type GameState = {
     energy: number
     energyMax: number
     energyNextAt: number | null
+    energyFullAt: number | null
     genericCandies: number
   }
   pokemon: OwnedPokemon[]

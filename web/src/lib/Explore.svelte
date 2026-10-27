@@ -1,5 +1,6 @@
 <script lang="ts">
   import { serverClock } from './serverClock.svelte'
+  import { formatCountdown } from './time'
   import { onMount, untrack } from 'svelte'
   import {
     api,
@@ -32,15 +33,6 @@
   let time = $state(0)
 
   const clock = serverClock(() => game.now)
-
-  function formatRemaining(ms: number): string {
-    const total = Math.ceil(ms / 1000)
-    const h = Math.floor(total / 3600)
-    const m = Math.floor((total % 3600) / 60)
-    const s = total % 60
-    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
 
   const groups = $derived([
     { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
@@ -237,7 +229,7 @@
                 {#if effect.charges !== null}
                   · {effect.charges} carga{effect.charges === 1 ? '' : 's'}
                 {:else if effect.expiresAt !== null}
-                  · {formatRemaining(Math.max(0, effect.expiresAt - clock.now()))}
+                  · {formatCountdown(Math.max(0, effect.expiresAt - clock.now()))}
                 {/if}
               </span>
             {/each}

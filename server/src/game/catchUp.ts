@@ -105,3 +105,14 @@ export function nextEnergyAt(energy: number, energyUpdatedAt: number): number | 
   if (energy >= trainerConfig.energyMax) return null
   return energyUpdatedAt + progressConfig.energyRegenMs
 }
+
+/** Quando a energia chega no máximo, pela mesma âncora do catch-up. Null se já está cheia. */
+export function energyFullAt(
+  energy: number,
+  energyUpdatedAt: number,
+  energyMax = trainerConfig.energyMax,
+  regenMs = progressConfig.energyRegenMs,
+): number | null {
+  if (energy >= energyMax) return null
+  return energyUpdatedAt + (energyMax - energy) * regenMs
+}

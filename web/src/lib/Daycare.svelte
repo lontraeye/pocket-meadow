@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, errorText, type ApiError, type DaycareSlot, type GameState, type OwnedPokemon } from './api'
   import { serverClock } from './serverClock.svelte'
+  import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
@@ -38,15 +39,6 @@
 
   function remainingMs(fullAt: number): number {
     return Math.max(0, fullAt - clock.now())
-  }
-
-  function formatRemaining(ms: number): string {
-    const total = Math.ceil(ms / 1000)
-    const h = Math.floor(total / 3600)
-    const m = Math.floor((total % 3600) / 60)
-    const s = total % 60
-    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
-    return `${m}:${String(s).padStart(2, '0')}`
   }
 
   async function run(path: string, body?: unknown, method?: 'POST' | 'DELETE'): Promise<Record<string, unknown> | null> {
@@ -165,7 +157,7 @@
                 <div class="bar clock" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={filled}>
                   <span style:width="{filled}%"></span>
                 </div>
-                <p class="hint">{full ? 'Cheio' : formatRemaining(left)}</p>
+                <p class="hint">{full ? 'Cheio' : formatCountdown(left)}</p>
               </div>
               <div class="actions">
                 {#if full}
