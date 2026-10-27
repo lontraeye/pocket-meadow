@@ -895,7 +895,8 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
 
 **Golpes (modelo do Pokémon GO: um básico e um especial)**
-- **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** em Red/Blue/Yellow/Gold/Silver/Crystal. São 121 golpes de dano distintos na Gen 1–2. Golpes de status (Growl, Leer) e de dano fixo (Dragon Rage, Seismic Toss, Night Shade, Sonic Boom, Super Fang) ficam de fora por enquanto.
+- **Vale para todas as gerações.** O jogo vai ter todos os Pokémon, não só a Gen 1–2: nenhuma regra pode depender de uma lista fixa de jogos ou de espécies.
+- **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** nos jogos da **geração em que ela estreou e da seguinte** (lista de jogos por geração no config). Para a Gen 1 isso dá Red/Blue/Yellow + Gold/Silver/Crystal: 121 golpes de dano distintos na faixa atual. Fica de fora todo golpe sem `power` nos dados da PokéAPI, ou seja, os de status (Growl, Leer) e os de dano fixo (Dragon Rage, Seismic Toss).
 - **Básico:** poder até 55 (50 golpes na faixa). Ataca rápido e **gera energia**.
 - **Especial:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
 - **Sorteio na captura:** 1 básico e 1 especial entre os que a espécie aprende **até o nível dela**.
@@ -908,7 +909,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 **Dano (fórmula dos jogos principais)**
 - dano = (⌊2L/5 + 2⌋ · Poder · A/D) / 50 + 2, × STAB (×1,5 se o golpe é do tipo do Pokémon), × efetividade de tipo (×0, ×0,5, ×2, ×4), × fator aleatório de 0,85 a 1.
 - Golpe **físico** usa Ataque contra Defesa; **especial** (a classe do golpe, não o slot) usa Ataque Especial contra Defesa Especial. A classe vem da PokéAPI (`damage_class`).
-- Tabela de tipos atual (com Dark e Steel), no config.
+- Tabela de tipos atual, com os **18 tipos** (inclui Fairy), no config. A PokéAPI já dá os tipos atuais até para a Gen 1 (Clefairy e Jigglypuff são Fairy).
 
 **O loop (tempo real, estilo Pokémon GO)**
 - O jogador toca no básico e, com energia, no especial. O selvagem ataca sozinho: básico sempre que o cooldown libera, especial quando tiver energia, com pequenas variações sorteadas pela seed.
