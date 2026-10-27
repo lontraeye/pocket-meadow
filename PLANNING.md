@@ -8,10 +8,10 @@
 
 ## 1. Visão
 
-Um jogo web idle/AFK com tema Pokémon. Não há batalhas manuais nem exploração. O jogador tem um **jardim** (um gramado simples) onde seus Pokémon ficam andando à toa. O progresso vem de:
+Um jogo web idle/AFK com tema Pokémon. Não há exploração livre; as batalhas são curtas e em tempo real, no estilo do Pokémon GO (seção 5.18). O jogador tem um **jardim** (um gramado simples) onde seus Pokémon ficam andando à toa. O progresso vem de:
 
 1. **Encontros**: gastar energia para tentar a sorte em uma região e encontrar um Pokémon aleatório.
-2. **Batalha automática**: se vencer, pode tentar capturar.
+2. **Batalha**: você toca nos golpes do seu time; se vencer, pode tentar capturar (não é garantido).
 3. **Batalhar faz o Pokémon crescer**, como nos jogos: quem luta ganha XP, sobe de nível e evolui ao chegar no nível. **Duplicatas dão um extra**: soltar gera doces da linha evolutiva, que viram XP para quem você quiser.
 4. **Daycare**: Pokémon colocados lá ganham XP com o tempo, sem gastar doces.
 5. **Berries**: plantadas no jardim, levam tempo real para crescer e dão bônus.
@@ -395,6 +395,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 6. Encontros pendentes expiram após `ENCOUNTER_TTL_MS` (inicial: 30 min) e viram `fled`.
 
 ### 5.5 Batalha (automática e probabilística)
+> **Será substituída pela seção 5.18 (Fase 8).** Vale até a Fase 8 entrar; depois, `power`, `teamPower` e `winChance` saem.
 - O jogador manda um **time de 1 a 3 Pokémon** contra o selvagem. O time serve para tentar capturar Pokémon muito fortes ou lendários, que um Pokémon sozinho quase nunca vence.
 - Os Pokémon do time precisam ser distintos, do jogador e estar no jardim (não no daycare).
 - Poder de um Pokémon:
@@ -704,6 +705,7 @@ Pontos a decidir antes de especificar:
 - Se os outros jogadores veem a Pokédex de alguém na visita ao jardim (seção 1).
 
 ### 5.13 Batalha com mais vida (ideia, ainda sem fase)
+> **As decisões desta seção viraram a 5.18 (Fase 8).** Continua valendo aqui o levantamento das animações do PMD e os fallbacks em CSS, usados na parte 8.3.
 Anotado depois do teste da Fase 2. Hoje o encontro é seco: abre a rota, aparece o Pokémon, escolhe o time, sai o resultado. A escolha pesa pouco e a derrota não é sentida. O objetivo é um combate simplificado, na linha do Pokémon GO, e mais "juice" no caminho todo.
 
 **Combate:**
@@ -870,6 +872,73 @@ Pontos a decidir:
 - **Modelo de dados:** o avatar como chaves por camada (`avatar` JSON ou colunas em `trainers`) e as peças liberadas, só as conquistadas, porque as do nível são derivadas (`DATA_MODEL.md`, seção 3). Pede migração.
 - Se o treinador aparece andando no jardim ou só no cartão e no HUD.
 - Validação no servidor: só aceitar peças que o jogador liberou.
+
+### 5.18 Combate em tempo real (rework, Fase 8)
+Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`, `teamPower`, `winChance`) e fecha a maior parte das ideias da 5.13. A captura da 5.6 continua, mas vira um passo separado depois da luta.
+
+**Atributos (como nos jogos principais)**
+- **6 atributos:** HP, Ataque, Defesa, Ataque Especial, Defesa Especial e Velocidade. Base por espécie da PokéAPI (já em `species`).
+- **IVs:** 0 a 31 por atributo, sorteados na captura. Na ficha aparecem como avaliação (estrelas ou %), não como número cru.
+- **EVs:** começam em 0. Cada vitória dá a cada lutador o EV yield do selvagem derrotado (`effort` na PokéAPI). Teto de 252 por atributo e 510 no total.
+- **Nature:** uma das 25, sorteada na captura, sem restrição por espécie. Cada uma dá ×1,1 em um atributo e ×0,9 em outro (nunca no HP); 5 são neutras.
+- **Fórmulas** (nível L, base B):
+  - HP = ⌊(2B + IV + ⌊EV/4⌋) · L/100⌋ + L + 10
+  - demais = ⌊(⌊(2B + IV + ⌊EV/4⌋) · L/100⌋ + 5) · nature⌋
+- **Velocidade** encurta o cooldown dos golpes (abaixo). É a função que ela ganha aqui, e que o Pokémon GO não tem.
+
+**Habilidade**
+- Sorteada na captura entre as habilidades normais da espécie, com chance pequena (config, inicial 5%) de sair a oculta. São 132 habilidades nas 251 espécies.
+- No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
+- As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
+
+**Golpes (modelo do Pokémon GO: um básico e um especial)**
+- **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** em Red/Blue/Yellow/Gold/Silver/Crystal. São 121 golpes de dano distintos na Gen 1–2. Golpes de status (Growl, Leer) e de dano fixo (Dragon Rage, Seismic Toss, Night Shade, Sonic Boom, Super Fang) ficam de fora por enquanto.
+- **Básico:** poder até 55 (50 golpes na faixa). Ataca rápido e **gera energia**.
+- **Especial:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
+- **Sorteio na captura:** 1 básico e 1 especial entre os que a espécie aprende **até o nível dela**.
+  - Sem básico até o nível: usa o primeiro básico que a espécie aprende, ou Tackle.
+  - **Sem especial até o nível**, que é o caso comum: usa o **especial padrão do tipo**, uma lista nossa no config com 1 golpe real por tipo, de poder médio. Medido: no Nv 5 só 32 das 251 espécies têm especial próprio; no Nv 30, 146; no Nv 100, 213. Abra, Magikarp, Ditto, Caterpie e afins nunca aprendem, e ficam sempre com o do tipo.
+- **Ao subir de nível,** se a espécie aprende um golpe de dano naquele nível, o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
+- **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o básico.
+- **Os números** (duração, energia gerada e gasta, poder efetivo) são nossos, em config, e não copiados do GO.
+
+**Dano (fórmula dos jogos principais)**
+- dano = (⌊2L/5 + 2⌋ · Poder · A/D) / 50 + 2, × STAB (×1,5 se o golpe é do tipo do Pokémon), × efetividade de tipo (×0, ×0,5, ×2, ×4), × fator aleatório de 0,85 a 1.
+- Golpe **físico** usa Ataque contra Defesa; **especial** (a classe do golpe, não o slot) usa Ataque Especial contra Defesa Especial. A classe vem da PokéAPI (`damage_class`).
+- Tabela de tipos atual (com Dark e Steel), no config.
+
+**O loop (tempo real, estilo Pokémon GO)**
+- O jogador toca no básico e, com energia, no especial. O selvagem ataca sozinho: básico sempre que o cooldown libera, especial quando tiver energia, com pequenas variações sorteadas pela seed.
+- Time de 1 a 3: um luta por vez; quando cai, entra o próximo. Troca manual com cooldown (config).
+- **Tempo limite** (config, inicial 60 s): passou, é derrota.
+- Derrota: o encontro acaba, sem penalidade (como hoje). Vitória: XP como hoje (seção 5.8) e EVs.
+
+**Quem decide (regra das seções 2 e 7 mantida)**
+- **Simulação compartilhada:** um módulo TypeScript puro, determinístico pela seed do encontro, usado igual no front e no servidor.
+- O front roda a luta ao vivo, com resposta imediata ao toque. No fim, manda **só a lista de toques** (`{ instante, ação }`). O servidor **refaz a luta inteira** aplicando cooldowns, energia e regras, e **o resultado dele é o que vale**.
+- O servidor registra o início da luta e recusa uma lista de toques que termine antes do tempo real possível. O máximo que alguém consegue trapaceando é "jogar perfeito", nunca tocar mais rápido que o cooldown ou causar dano que não existe.
+
+**Modo automático (para jogar idle)**
+- **Batalha automática:** o mesmo módulo de simulação, com um jogador automático no lugar dos toques: básico sempre que libera, especial quando a energia enche, troca quando o ativo cai. O servidor roda a luta sozinho e devolve o log; a tela pode animar ou pular direto para o resultado.
+- **Depois de vencer:** "perguntar" (padrão), "capturar sempre" (lança até capturar ou ele fugir) ou "deixar ir sempre".
+- As duas opções ficam no servidor, como preferência do treinador (vale em qualquer aparelho), e são marcadas na tela de exploração.
+- O automático joga direito, mas sem esperteza (não segura o especial, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
+
+**Captura depois da vitória**
+- O encontro fica com status `won` esperando a decisão (migração: refazer a tabela para o `CHECK` novo, testada num banco com dados).
+- O jogador lança a bola: a chance é a `catchChance` da seção 5.6. Errou: o selvagem pode fugir (config, chance por erro). Dá para lançar de novo até capturar, ele fugir, o jogador deixar ir ou o encontro expirar. A Poké Ball é infinita até as pokébolas virarem item.
+
+**PRNG (seção 7)**
+- A luta tem um número variável de rolagens, então cada parte usa a sua sequência, derivada da seed do encontro: **luta**, **lançamentos** e **traços do capturado** (6 IVs, nature, habilidade e 2 golpes). Assim o replay de cada parte continua simples.
+
+**Pokémon que já existem (inclusive o save em produção, seção 4.6)**
+- A migração sorteia IVs, nature, habilidade e golpes para cada Pokémon, com um PRNG derivado do `id` dele (determinístico e testável), pelas mesmas regras da captura e pelo nível atual. EVs começam em 0. Nada se perde: nível, XP, shiny, apelido e favorito ficam como estão.
+
+**Breed (futuro):** o filhote herda 3 dos 6 IVs dos pais (5 com Destiny Knot), a nature passa com Everstone, e os EVs não passam (são treino). Por isso os IVs ficam guardados por atributo desde já.
+
+**Dados:** snapshots commitados, como o de espécies: golpes (`moves.json`: nome, tipo, poder, classe), pool por espécie (golpe e nível em que aprende) e habilidades por espécie (normais e oculta). A fonte é a PokéAPI ou o espelho `PokeAPI/api-data` no GitHub, com o commit fixado.
+
+**Na tela:** a ficha mostra IVs (avaliação), nature, habilidade, os dois golpes e os EVs. Antes de lutar, a efetividade dos seus golpes contra o selvagem.
 
 ---
 
@@ -1040,7 +1109,15 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 **Fase 7 — Pokédex: guia e álbum** (seção 5.12)
 - Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
 
-**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
+**Fase 8 — Combate em tempo real** (seção 5.18; em partes, cada uma testada antes da próxima)
+- *8.1 — Traços dos Pokémon:* snapshots de golpes, pool por espécie e habilidades; colunas de IVs, EVs, nature, habilidade e golpes; sorteio na captura; migração dos que já existem (testada numa cópia do banco de produção, seção 4.6); ficha mostrando tudo; troca de golpe ao subir de nível.
+- *8.2 — Simulação compartilhada:* módulo puro com atributos, dano, tipos, cooldowns, energia, IA do selvagem, troca no time e habilidades do conjunto escolhido. Testes cobrindo determinismo (mesma seed e mesmos toques dão o mesmo resultado) e as regras (ninguém toca antes do cooldown). Rotas de início e de fim da luta, com o servidor refazendo a luta.
+- *8.3 — Tela de combate:* botões de básico e especial com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD (`Attack`, `Hurt`, `Faint`) com os fallbacks em CSS (seção 5.13), sons e tempo limite. Funciona em 360px.
+- *8.4 — Captura em passos:* status `won`, lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
+- *8.5 — Modo automático:* jogador automático na simulação, rota que roda a luta inteira no servidor, preferências do treinador (batalha automática; depois de vencer: perguntar, capturar sempre ou deixar ir) e os interruptores na tela de exploração.
+- Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
+
+**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
 
 ---
 
