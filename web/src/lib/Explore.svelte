@@ -76,6 +76,20 @@
     }
   }
 
+  async function refillEnergy() {
+    pending = true
+    message = ''
+    try {
+      const response = await api('/api/dev/energy', {})
+      if (!response.ok) message = errorText(await readError(response))
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
   function toggle(id: number) {
     if (selected.includes(id)) {
       selected = selected.filter((entry) => entry !== id)
@@ -192,6 +206,9 @@
           Cada encontro gasta 1 de energia. Energia {game.trainer.energy}/{game.trainer.energyMax}.
           {#if game.trainer.energy < 1}Sem energia no momento.{/if}
         </p>
+        {#if game.devTools}
+          <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+        {/if}
         {#if game.encounter}
           <button
             type="button"

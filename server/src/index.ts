@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
+import { devRoutes, devToolsEnabled } from './routes/dev.js'
 import { encounterRoutes } from './routes/encounters.js'
 import { pokemonRoutes } from './routes/pokemon.js'
 import { regionRoutes } from './routes/regions.js'
@@ -31,6 +32,10 @@ app.route('/state', stateRoutes)
 app.route('/regions', regionRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/pokemon', pokemonRoutes)
+if (devToolsEnabled()) {
+  app.route('/dev', devRoutes)
+  console.log('DEV_TOOLS ligado: rotas de teste em /dev')
+}
 
 app.get('/health', (c) => {
   return c.json({ ok: true, service: 'pocket-meadow' })

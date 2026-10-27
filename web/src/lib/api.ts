@@ -78,6 +78,7 @@ export type ProgressionRules = {
 }
 export type GameState = {
   now: number
+  devTools: boolean
   gardenMaxVisible: number
   plotSlots: number
   battle: BattleRules

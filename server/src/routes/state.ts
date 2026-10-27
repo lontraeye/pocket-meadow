@@ -21,6 +21,7 @@ import {
 } from '../db/schema.js'
 import { power } from '../game/battle.js'
 import { nextEnergyAt } from '../game/catchUp.js'
+import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
@@ -107,6 +108,7 @@ function readState(userId: number, now: number) {
 
   return {
     now,
+    devTools: devToolsEnabled(),
     gardenMaxVisible: progressConfig.gardenMaxVisible,
     plotSlots: progressConfig.basePlotSlots,
     battle: {
