@@ -741,6 +741,34 @@ Pontos a decidir:
 - Missões únicas ou repetíveis. Uma troca de Haunter por missão, ou o NPC aceita outros Haunters depois.
 - Se o NPC também troca espécie por espécie (dar um Pokémon e receber outro), como as trocas com NPC dos jogos.
 
+### 5.16 Construção do jardim: biomas, máquinas e itens de evolução (ideia, ainda sem fase)
+O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca máquinas operadas por Pokémon e, com isso, libera itens, espécies e evoluções. Liga várias peças que já existem (daycare, berries, missões, espécies sem rota) numa progressão só. A referência de gênero é construir o próprio espaço com Pokémon trabalhando, como no Pokopia. As regras, os biomas e as máquinas são nossos.
+
+**Decidido até agora:**
+- **Evolução por item existe e precisa do item.** As evoluções por pedra (Gloom → Vileplume, Pikachu → Raichu, Eevee etc.) deixam de sair por nível e passam a exigir o item no inventário. O seed marca essas evoluções e o item a partir do `evolution_details` da PokéAPI (`trigger` = `use-item`), como já marca a troca. Quando entrar, a seção 4.1 muda. Regra final por tipo de evolução:
+  - nível: sai por nível;
+  - troca: sai por nível, e a missão é atalho (seção 5.15);
+  - item: só com o item.
+- **Vários jeitos de conseguir os itens de evolução:** máquinas, missões de NPC (5.15), recompensas de nível de treinador, álbum (5.12) e, talvez, drop raro em batalha. Nenhum item fica com um único caminho.
+- **Máquinas com operador.** O jogador coloca um Pokémon para operar a máquina, que produz um item depois de um tempo. Não é qualquer Pokémon: cada máquina tem requisito de tipo e, mais adiante, de habilidade. Exemplo: um Pokémon elétrico opera o gerador que produz Thunder Stone, e um Rattata gira uma roda. Funciona como daycare e canteiro juntos: o operador sai do jardim e não batalha, e o servidor guarda quando a máquina fica pronta e entrega o item ao coletar. Nada roda em loop (seção 2). A regra de nunca esvaziar o jardim vale para operadores.
+- **Habilidades:** mapear só as que interessam ao jogo, não todas. Elas entram no seed (PokéAPI) quando forem necessárias e servem de requisito de máquina e de ação de campo. Também alimentam o "poder especial" da Pokédex (5.12). Até lá, os requisitos usam tipo e, quando precisar, uma lista de espécies no config.
+- **Pokémon transformam o terreno (ações de campo).** Um Pokémon com o tipo ou a habilidade certa muda um bloco do jardim. Exemplo: um Pokémon de água rega terra seca e ela vira grama, o que desbloqueia o bioma de grama. Um Pokémon que sabe construir produz um item especial, que libera outro item de bioma. Isso forma uma árvore: nível de treinador → ação de campo → bioma → máquina ou item → evolução ou espécie nova.
+- **Biomas dão bônus e atraem Pokémon.** Cada bioma (grama, água, pedra, areia, caverna…) dá bônus a certos tipos e **atrai visitantes**: espécies que aparecem no jardim e podem ser encontradas ali. É o segundo jeito de obter espécies, ao lado das rotas, e resolve parte do mapa das espécies sem rota (5.15).
+- **Modo de edição** para construir. Escolher um bloco e o que colocar, por toque, sem arrastar com precisão. Mobile primeiro (seção 4.4).
+- **Arte:** o usuário faz a pixel art (tiles de bioma, máquinas, itens que faltarem), mesmo que simples. Antes, mapear a lista de peças necessárias. Arte própria entra no `CREDITS.md` com a licença escolhida para ela. Peças de terceiros seguem a seção 4.3.
+
+**Pontos a decidir quando for especificar:**
+- **Modelo de dados:** blocos do jardim (`garden_tiles`: posição, bioma, objeto), máquinas (`machines`: tipo, posição, operador, `ready_at`) e quais biomas e máquinas estão liberados. Tudo pede migração. Desbloqueios derivados do nível ficam fora do banco (`DATA_MODEL.md`, seção 3). Desbloqueios conquistados ficam no banco.
+- **Visitantes:** custo (energia ou nada), quantos ao mesmo tempo, quanto tempo ficam, e se viram encontro com batalha normal. O sorteio fica no servidor e é persistido antes de aparecer, como o encontro (seções 2 e 7). Tem paralelo com o campo de encontro (5.14).
+- **Custo de construir:** nível libera e um recurso paga (itens produzidos, berries, doces genéricos), ou só desbloqueio por ação de campo.
+- **Ritmo de produção** das máquinas, e se o nível do operador acelera.
+- **Ordem sugerida:**
+  1. itens de evolução (seed marca, item no inventário, Evoluir exige; o item vem de missão ou recompensa no começo);
+  2. uma ou duas máquinas;
+  3. ações de campo e biomas, com o modo de edição;
+  4. visitantes.
+- **Lista de arte** para o usuário: tiles por bioma, estados da terra (seca, regada, grama), máquinas com e sem operador, ícones dos itens de evolução que não vierem do `PokeAPI/sprites`.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
@@ -858,6 +886,8 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 **Fase 6 — Polimento**
 - Pokédex (espécies vistas/capturadas; a versão com guia e informação por progresso está na seção 5.12), animações de captura, sons, contador de energia, notificações de berry pronta.
 - Testes das funções puras de `game/`.
+
+**Depois (ideias anotadas, ainda sem fase):** construção do jardim com biomas, máquinas e itens de evolução (5.16); batalha com mais vida (5.13); campo de encontro (5.14); missões de NPC (5.15); Pokédex como guia e álbum (5.12); pokébolas (5.6); cuidador do daycare (5.9).
 
 ---
 
