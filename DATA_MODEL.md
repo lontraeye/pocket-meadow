@@ -319,7 +319,7 @@ CREATE INDEX idx_effects_user ON active_effects(user_id);
 Regras:
 - Efeito por cargas: decrementa ao ser consumido; apaga quando chega a 0.
 - Efeito por tempo: apagado no catch-up quando `expires_at <= now`.
-- Política de empilhamento (somar, multiplicar ou renovar) definida por efeito no config. Sugestão inicial: o mesmo `effect_key` **renova** em vez de empilhar.
+- Política de empilhamento (somar, multiplicar ou renovar) definida por efeito no config. Decidido: o mesmo `effect_key` **renova** (a linha é substituída) em vez de empilhar.
 - Efeitos imediatos (ex.: Oran = +energia) não criam linha, só alteram o estado.
 
 ---
@@ -337,7 +337,9 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` → pokédex (vista e capturada) → XP do treinador. Não custa doce |
 | Colocar no daycare | catch-up → validar (slot desbloqueado e vazio, Pokémon do jogador e no jardim, sobra alguém no jardim) → inserir slot (`entered_at = last_settled_at = now`, `xp_gained = 0`) → `location = 'daycare'` |
 | Retirar / renovar | catch-up (liquida o XP) → apagar slot → `location = 'garden'`. Renovar insere de novo o mesmo Pokémon, na mesma transação |
-| Colher | validar `ready_at <= now` → apagar canteiro → creditar berries/sementes |
+| Plantar | catch-up → validar (canteiro desbloqueado e vazio, `seed:<berry>` no inventário) → debitar semente → inserir canteiro com `ready_at` |
+| Colher | catch-up → validar `ready_at <= now` → apagar canteiro → creditar berries e sementes (PLANNING.md, seção 5.10) |
+| Usar item | catch-up → validar saldo e efeito (Oran com energia cheia recusa) → debitar → aplicar: energia, ou substituir a linha do mesmo `effect_key` |
 
 Regra de segurança: o jogador **nunca** pode ficar com zero Pokémon (bloquear soltar o último).
 

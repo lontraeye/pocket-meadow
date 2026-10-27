@@ -553,6 +553,55 @@ xpPorHora(level) = DAYCARE_XP_PER_LEVEL_HOUR * level        // inicial: 3
 - Efeitos são **por cargas** (ex.: "próximo encontro") ou **por tempo** (ex.: "por 2 h"). Ver tabela `active_effects`.
 - Sementes vêm de: colheita, recompensas de nível de treinador e, ocasionalmente, de vencer batalhas.
 
+#### Config (`server/src/config/berries.ts`)
+Cada berry: `key`, `name`, `growMs`, `yield: [min, max]` e `effect`. O efeito tem um destes formatos:
+- `{ kind: 'energy', amount }`: imediato, não cria linha em `active_effects`;
+- `{ kind: 'charges', effectKey, multiplier, charges }`;
+- `{ kind: 'timed', effectKey, multiplier, durationMs }`.
+
+| Berry | `growMs` | `yield` | Efeito |
+|---|---|---|---|
+| Oran | 30 min | 2–3 | `energy`, +2 |
+| Pinap | 2 h | 1–2 | `charges`, `catch_boost` ×1,5, 1 carga |
+| Razz | 4 h | 1–2 | `charges`, `rare_boost` ×2, 1 carga |
+| Nanab | 6 h | 1–2 | `timed`, `daycare_boost` ×2, 2 h |
+| Lum | 12 h | 1 | `charges`, `shiny_boost` ×4, 1 carga |
+
+O código lê os efeitos pela `effectKey`, nunca pelo nome da berry. Berry nova entra só no config.
+
+#### Canteiros
+- **Slots:** `PLOT_SLOT_LEVELS` no config (inicial: `[1, 1, 8, 20]`, ou seja, 2 no começo, o 3º no Nv 8 e o 4º no Nv 20). O número de canteiros é derivado do nível, como os slots do daycare. Substitui o `basePlotSlots` fixo.
+- **Plantar** (`POST /plots/:index/plant`, `{ berryKey }`): canteiro desbloqueado e vazio, e pelo menos 1 `seed:<berry>` no inventário. Debita a semente e grava `ready_at = now + growMs`, fixado no plantio. Erros: `plot_locked`, `plot_taken`, `no_seed` e `unknown_berry`.
+- **Colher** (`POST /plots/:index/harvest`): só com `now >= ready_at` (erro `not_ready`, com o `readyAt`). Apaga o canteiro e credita `berry:<key>` (sorteio dentro de `yield`) e as sementes.
+- **Sementes na colheita (a confirmar):** **1 semente garantida** da mesma berry, mais `SEED_EXTRA_CHANCE` (inicial: 0,25) de ganhar uma 2ª. Sem a garantida, uma chance menor que 100% faz as sementes acabarem com o tempo, e o jardim para.
+- O sorteio da colheita usa `crypto` no servidor. Não precisa de replay, porque a colheita é uma ação única numa transação e não há como sortear de novo.
+
+#### Usar berry (`POST /items/:key/use`)
+- `key` é `berry:<berry>`. Debita 1 do inventário e aplica o efeito. Erros: `no_item`, `unknown_item` e `energy_full`.
+- **Energia (Oran):** soma até `ENERGY_MAX`, sem passar. Com a energia cheia, responde `energy_full` e não gasta a berry. Ao chegar no máximo, `energy_updated_at = now`, como no catch-up (seção 6). Abaixo do máximo, a âncora fica como está, para não perder a fração de regeneração.
+- **Mesmo efeito ativo: renova, não empilha.** A linha antiga é substituída pela nova (cargas cheias, ou `expires_at = now + durationMs`). O front avisa antes de usar: "Já tem esse efeito; vai renovar."
+- **Consumo das cargas**, como já está no código (`takeBonus`): `shiny_boost` e `rare_boost` ao criar o encontro; `catch_boost` só quando há tentativa de captura (vitória). A Pinap espera até a próxima vitória.
+
+#### Daycare com Nanab: bônus só dentro da janela
+Hoje o catch-up aplica o `daycare_boost` à liquidação inteira se o efeito estiver ativo na hora da leitura. Também ignora o bônus quando ele venceu enquanto o jogador estava fora. **Corrigir:** na liquidação hora a hora (seção 5.9), uma hora ganha o bônus só se estiver toda dentro da janela do efeito (`created_at` até `expires_at`). Liquidar antes de apagar os efeitos vencidos.
+
+#### Sementes por batalha e por nível
+- **Batalha:** numa vitória, `SEED_DROP_CHANCE` (inicial: 0,1) de ganhar 1 semente, sorteada por `SEED_DROP_WEIGHTS` no config (inicial: Oran 50, Pinap 25, Razz 15, Nanab 7, Lum 3). Usa o PRNG do encontro, depois da captura (seção 7).
+- **Nível de treinador:** `TRAINER_LEVEL_REWARDS` no config. Ao subir de nível, em batalha ou ao evoluir, os itens daquele nível entram no inventário, na mesma transação, e a resposta lista o que veio. Inicial: 1 `seed:oran` em todo nível, mais `seed:razz` no Nv 3, `seed:nanab` no Nv 5, `seed:lum` no Nv 8, e a partir daí 1 semente sorteada por `SEED_DROP_WEIGHTS` a cada 5 níveis. Subir vários níveis de uma vez dá a recompensa de todos.
+
+#### Tela (front)
+- **Canteiros no jardim:** cada canteiro é um bloco da grade (já existe o `tile.plot`), com o estágio visível: vazio, plantado, crescendo e pronto (com o ícone da berry). Tocar no canteiro abre um sheet:
+  - vazio: escolher a semente;
+  - crescendo: barra e contador até `readyAt`;
+  - pronto: **Colher**, mostrando o que veio.
+- O contador usa o `now` do servidor mais o tempo desde o `/state`, como no daycare. Não usar o relógio do celular.
+- **Mochila:** botão no HUD (44px ou mais) que abre um sheet com sementes, berries (com **Usar** e a descrição do efeito) e os efeitos ativos (cargas ou tempo restante).
+- **Explorar:** mostra os efeitos ativos em chips no topo da lista de regiões, porque é lá que Razz, Lum e Pinap importam.
+- **Arte:**
+  - ícones das berries: os PNG de `items/<berry>-berry.png` do repositório `PokeAPI/sprites`, baixados uma vez como os GIFs do Showdown (seção 4.2), com o mesmo status, e creditados no `CREDITS.md`;
+  - estágios do canteiro: em CSS (monte de terra, broto, arbusto) ou pixel art com licença redistribuível (CC0, CC-BY, CC BY-NC, OFL). Nada sem licença clara.
+- Mobile primeiro (seção 4.4).
+
 ### 5.11 Jardim (visual)
 Teste reversível. O chão e os objetos (grama, canteiro, itens) ficam numa grade isométrica, em blocos, porque colocar coisa num gramado frontal fica achatado. Os Pokémon usam os sprites do PMD (seção 4.5), que têm animação de andar nas 8 direções. O passo segue a grade, e cada passo usa a linha diagonal correspondente da folha, sem espelhar. Só o fallback com GIF do Showdown espelha (`transform: scaleX(-1)`) conforme o lado horizontal do movimento. A ordem de desenho segue a profundidade do bloco, para quem está na frente cobrir quem está atrás.
 
@@ -698,7 +747,7 @@ Retornar também `energyNextAt` para o frontend mostrar o contador regressivo.
 
 ## 7. RNG
 - Usar um PRNG com seed no servidor (ex.: `mulberry32` ou `seedrandom`), com seed gerada por `crypto.getRandomValues` a cada encontro e **salva no registro do encontro**. Permite reproduzir e depurar resultados.
-- Todas as rolagens de um encontro (espécie, nível, shiny, batalha, captura) usam a sequência desse PRNG, nessa ordem.
+- Todas as rolagens de um encontro (espécie, nível, shiny, batalha, captura) usam a sequência desse PRNG, nessa ordem. Numa vitória, depois da captura vêm a chance de semente e, se ganhou, qual semente (seção 5.10).
 
 ---
 
@@ -771,6 +820,15 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
   - a tela funciona em 360px.
 
 **Fase 5 — Berries e efeitos**
+- Config das berries, canteiros por nível, plantar, colher, usar, renovar efeito, bônus da Nanab só dentro da janela, sementes por batalha e por nível, e tela (seção 5.10).
+- Sem mudança de schema: `berry_plots`, `inventory` e `active_effects` já existem.
+- Pronto quando:
+  - o ciclo "plantar → esperar → colher → usar" funciona com os 5 efeitos;
+  - as sementes não acabam no uso normal;
+  - Oran com energia cheia não gasta a berry;
+  - Nanab só multiplica as horas dentro da janela;
+  - o replay do encontro continua batendo com a semente da batalha;
+  - a tela funciona em 360px.
 
 **Fase 6 — Polimento**
 - Pokédex (espécies vistas/capturadas; a versão com guia e informação por progresso está na seção 5.12), animações de captura, sons, contador de energia, notificações de berry pronta.
