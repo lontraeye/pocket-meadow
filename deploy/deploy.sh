@@ -26,8 +26,9 @@ echo "== build"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/server" "$stage/web"
-cp -r server/dist server/drizzle server/snapshots server/package.json server/package-lock.json "$stage/server/"
-cp -r web/dist/. "$stage/web/"
+cp -rp server/dist server/drizzle server/snapshots server/package.json server/package-lock.json "$stage/server/"
+# -p preserva a data: o ETag do Caddy vem dela, e sprite igual não é baixado de novo.
+cp -rp web/dist/. "$stage/web/"
 
 if [[ "${1:-}" == "setup" ]]; then
   echo "== setup da VM"
