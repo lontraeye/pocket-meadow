@@ -497,14 +497,24 @@ O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê
 - Pokémon no daycare **não pode** batalhar, ser solto nem evoluir enquanto estiver lá.
 - Qualquer Pokémon pode entrar (inclusive de nível baixo; o caso de uso principal é upar raros sem precisar de duplicatas).
 
-#### Taxa de XP (a confirmar)
-Com a batalha como fonte principal de XP (seção 5.5), uma taxa fixa só vale no começo. Com 30 XP/h, um dia rende 6,5 níveis num Nv 5 e menos de meio nível num Nv 30. **Proposta:** a taxa acompanha a curva, para render o mesmo número de níveis em qualquer ponto do jogo:
+#### Taxa de XP
+Com a batalha como fonte principal de XP (seção 5.5), uma taxa fixa só vale no começo. Com 30 XP/h, um dia rende 6,5 níveis num Nv 5 e menos de meio nível num Nv 30. A taxa cresce com o nível, mas **mais devagar que a curva**. Um Pokémon alto continua ganhando, só que cada nível demora mais:
 ```
-xpPorHora(level) = floor( xpToNext(level) / DAYCARE_HOURS_PER_LEVEL )   // inicial: 12 → ~2 níveis por dia cheio
+xpPorHora(level) = DAYCARE_XP_PER_LEVEL_HOUR * level        // inicial: 3
 ```
+
+| Nível | Níveis por dia cheio (24 h) |
+|---|---|
+| 5 | ~2,9 |
+| 10 | ~2,2 |
+| 20 | ~1,6 |
+| 30 | ~1,3 |
+| 50 | ~1,0 |
+| 80 | ~0,8 |
+
 - Na liquidação (seção 6), aplicar hora a hora, porque o nível pode subir no meio. São no máximo `DAYCARE_MAX_HOURS` iterações.
 - O bônus do efeito `daycare_boost` (Nanab, seção 5.10) multiplica a taxa da hora.
-- `DAYCARE_XP_PER_HOUR` sai do config.
+- `DAYCARE_XP_PER_HOUR` sai do config. Para mudar o ritmo, mexer só em `DAYCARE_XP_PER_LEVEL_HOUR`.
 
 #### Regras
 - **Slots:** `DAYCARE_SLOT_LEVELS` no config (inicial: `[1, 5, 15, 30]`, um slot por nível de treinador atingido). O número de slots é derivado do nível, sem flag no banco (`DATA_MODEL.md`, seção 3).
