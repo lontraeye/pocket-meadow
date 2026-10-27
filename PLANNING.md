@@ -888,6 +888,9 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 
 **Habilidade**
 - Sorteada na captura entre as habilidades normais da espécie, com chance pequena (config, inicial 5%) de sair a oculta. São 132 habilidades nas 251 espécies.
+- Guardada pela **posição** (1ª, 2ª ou oculta), não pelo nome, como nos jogos principais: ao evoluir, o Pokémon fica com a habilidade da mesma posição na espécie nova. Se a espécie nova não tem 2ª habilidade, vale a 1ª.
+
+**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova passam a valer para troca.
 - No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
 - As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
 
