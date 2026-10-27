@@ -1117,6 +1117,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 *6.5 — Revisão mobile e estados*
 - Passar todas as telas em 360px e num celular de verdade (seção 4.4).
 - Estados de carregando, erro e sem conexão em todas as ações. Nenhum botão fica "morto" sem explicação.
+- **Ficha do Pokémon em abas** (pedido de 2026-10-27): com a 8.1 ela ficou longa demais para rolar. Separar em abas (ex.: Resumo · Traços · Golpes · Ações). Se ainda sobrar rolagem, uma barra de rolagem própria no estilo pixel, no lugar da do sistema.
+- **Som:** o volume está alto. Baixar o padrão (hoje 0,28 nos efeitos e 0,34 nos gritos, em `web/src/lib/sound.ts`) e considerar um controle de volume além do mudo. O botão "Som" do HUD já silencia, mas passa despercebido: trocar por um ícone de alto-falante.
 
 **Fase 7 — Pokédex: guia e álbum** (seção 5.12)
 - Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
