@@ -890,7 +890,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - Sorteada na captura entre as habilidades normais da espécie, com chance pequena (config, inicial 5%) de sair a oculta. São 132 habilidades nas 251 espécies.
 - Guardada pela **posição** (1ª, 2ª ou oculta), não pelo nome, como nos jogos principais: ao evoluir, o Pokémon fica com a habilidade da mesma posição na espécie nova. Se a espécie nova não tem 2ª habilidade, vale a 1ª.
 
-**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova passam a valer para troca.
+**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova até o nível atual passam a valer para troca (e um especial entra direto se o slot estiver vazio).
 - No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
 - As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
 
@@ -899,10 +899,15 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** nos jogos da **geração em que ela estreou e da seguinte** (lista de jogos por geração no config). Para a Gen 1 isso dá Red/Blue/Yellow + Gold/Silver/Crystal: 121 golpes de dano distintos na faixa atual. Fica de fora todo golpe sem `power` nos dados da PokéAPI, ou seja, os de status (Growl, Leer) e os de dano fixo (Dragon Rage, Seismic Toss).
 - **Básico:** poder até 55 (50 golpes na faixa). Ataca rápido e **gera energia**.
 - **Especial:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
-- **Sorteio na captura:** 1 básico e 1 especial entre os que a espécie aprende **até o nível dela**.
-  - Sem básico até o nível: usa o primeiro básico que a espécie aprende, ou Tackle.
-  - **Sem especial até o nível**, que é o caso comum: usa o **especial padrão do tipo**, uma lista nossa no config com 1 golpe real por tipo, de poder médio. Medido: no Nv 5 só 32 das 251 espécies têm especial próprio; no Nv 30, 146; no Nv 100, 213. Abra, Magikarp, Ditto, Caterpie e afins nunca aprendem, e ficam sempre com o do tipo.
-- **Ao subir de nível,** se a espécie aprende um golpe de dano naquele nível, o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
+- Também fica de fora todo golpe cujo efeito desmaia quem usa (Self-Destruct, Explosion), pelo efeito nos dados da PokéAPI, não por lista de nomes.
+- Os poderes são os **atuais** da PokéAPI (uma regra só para todas as gerações). Isso gera casos como o Leech Life com poder 80, que era 20 na Gen 1.
+- **Sorteio na captura:** 1 básico e, **se houver**, 1 especial entre os que a espécie aprende **até o nível dela**.
+  - Sem básico até o nível: usa o primeiro básico que a espécie aprende, ou Tackle. Todo Pokémon tem um básico.
+  - **Sem especial até o nível: o slot fica vazio** e o Pokémon luta só com o básico até aprender um (decidido em 2026-10-27, no lugar de um "especial padrão do tipo"). Medido nos dados: primeiro especial no Nv 13 para o Rattata, 18 para o Squirtle, 20 para o Pikachu, 28 para o Pidgey, 30 para o Charmander e 46 para o Bulbasaur (Solar Beam). A mediana nas 251 é o Nv 25, e 25 espécies (Magikarp, Abra, Ditto…) nunca aprendem. O limite de poder do básico (55) é o ajuste, se alguma linha ficar fraca demais.
+- **Ao subir de nível** (evoluindo ou não, pelo pool da espécie atual), se a espécie aprende um golpe de dano naquele nível:
+  - o slot de especial está vazio e o golpe é especial → entra direto;
+  - senão → o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
+  - É assim que o básico "evolui": Tackle no início, oferta de Vine Whip no 10 e de Razor Leaf no 20. Diferente do Pokémon GO, onde os golpes não mudam com o nível e são ressorteados na evolução.
 - **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o básico.
   - O fator compara a Velocidade do Pokémon com a de um Pokémon **médio do mesmo nível** (base 80, IV 15, sem EV, nature neutra), e não com o número cru: a Velocidade absoluta cresce com o nível, e sem normalizar todo Pokémon de nível alto viraria "rápido". Assim um Rattata é rápido em qualquer nível, um Snorlax é lento em qualquer nível, e IV, nature e EV mexem dentro disso.
   - Faixas no nível 50, só com o que é sorteado na captura (EV 0): Snorlax (base 30) de 31 a 55; Rattata (base 72) de 69 a 101; Pikachu (base 90) de 85 a 118.
