@@ -890,36 +890,37 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - Sorteada na captura entre as habilidades normais da espécie, com chance pequena (config, inicial 5%) de sair a oculta. São 132 habilidades nas 251 espécies.
 - Guardada pela **posição** (1ª, 2ª ou oculta), não pelo nome, como nos jogos principais: ao evoluir, o Pokémon fica com a habilidade da mesma posição na espécie nova. Se a espécie nova não tem 2ª habilidade, vale a 1ª.
 
-**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova até o nível atual passam a valer para troca (e um especial entra direto se o slot estiver vazio).
+**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova até o nível atual passam a valer para troca (e um carregado entra direto se o slot estiver vazio).
 - No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
 - As demais aparecem na ficha como "sem efeito em combate por enquanto" e ganham efeito quando entrarem clima e condições de status.
 
-**Golpes (modelo do Pokémon GO: um básico e um especial)**
+**Golpes (modelo do Pokémon GO: um golpe rápido e um golpe carregado)**
+- Nomes: **golpe rápido** e **golpe carregado** são os slots. "Físico" e "especial" ficam só para a classe do golpe (qual atributo ele usa).
 - **Vale para todas as gerações.** O jogo vai ter todos os Pokémon, não só a Gen 1–2: nenhuma regra pode depender de uma lista fixa de jogos ou de espécies.
 - **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** nos jogos da **geração em que ela estreou e da seguinte** (lista de jogos por geração no config). Para a Gen 1 isso dá Red/Blue/Yellow + Gold/Silver/Crystal: 121 golpes de dano distintos na faixa atual. Fica de fora todo golpe sem `power` nos dados da PokéAPI, ou seja, os de status (Growl, Leer) e os de dano fixo (Dragon Rage, Seismic Toss).
-- **Básico:** poder até 55 (50 golpes na faixa). Ataca rápido e **gera energia**.
-- **Especial:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
+- **Golpe rápido:** poder até 55 (50 golpes na faixa). Cooldown curto e **gera energia**.
+- **Golpe carregado:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
 - Também fica de fora todo golpe cujo efeito desmaia quem usa (Self-Destruct, Explosion), pelo efeito nos dados da PokéAPI, não por lista de nomes.
 - Os poderes são os **atuais** da PokéAPI (uma regra só para todas as gerações). Isso gera casos como o Leech Life com poder 80, que era 20 na Gen 1.
-- **Sorteio na captura:** 1 básico e, **se houver**, 1 especial entre os que a espécie aprende **até o nível dela**.
-  - Sem básico até o nível: usa o primeiro básico que a espécie aprende, ou Tackle. Todo Pokémon tem um básico.
-  - **Sem especial até o nível: o slot fica vazio** e o Pokémon luta só com o básico até aprender um (decidido em 2026-10-27, no lugar de um "especial padrão do tipo"). Medido nos dados: primeiro especial no Nv 13 para o Rattata, 18 para o Squirtle, 20 para o Pikachu, 28 para o Pidgey, 30 para o Charmander e 46 para o Bulbasaur (Solar Beam). A mediana nas 251 é o Nv 25, e 25 espécies (Magikarp, Abra, Ditto…) nunca aprendem. O limite de poder do básico (55) é o ajuste, se alguma linha ficar fraca demais.
+- **Sorteio na captura:** 1 golpe rápido e, **se houver**, 1 carregado entre os que a espécie aprende **até o nível dela**.
+  - Sem rápido até o nível: usa o primeiro rápido que a espécie aprende, ou Tackle. Todo Pokémon tem um golpe rápido.
+  - **Sem carregado até o nível: o slot fica vazio** e o Pokémon luta só com o rápido até aprender um (decidido em 2026-10-27, no lugar de um "especial padrão do tipo"). Medido nos dados: primeiro carregado no Nv 13 para o Rattata, 18 para o Squirtle, 20 para o Pikachu, 28 para o Pidgey, 30 para o Charmander e 46 para o Bulbasaur (Solar Beam). A mediana nas 251 é o Nv 25, e 25 espécies (Magikarp, Abra, Ditto…) nunca aprendem. O limite de poder do golpe rápido (55) é o ajuste, se alguma linha ficar fraca demais.
 - **Ao subir de nível** (evoluindo ou não, pelo pool da espécie atual), se a espécie aprende um golpe de dano naquele nível:
-  - o slot de especial está vazio e o golpe é especial → entra direto;
+  - o slot de carregado está vazio e o golpe é carregado → entra direto;
   - senão → o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
-  - É assim que o básico "evolui": Tackle no início, oferta de Vine Whip no 10 e de Razor Leaf no 20. Diferente do Pokémon GO, onde os golpes não mudam com o nível e são ressorteados na evolução.
-- **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o básico.
+  - É assim que o golpe rápido "evolui": Tackle no início, oferta de Vine Whip no 10 e de Razor Leaf no 20. Diferente do Pokémon GO, onde os golpes não mudam com o nível e são ressorteados na evolução.
+- **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o rápido.
   - O fator compara a Velocidade do Pokémon com a de um Pokémon **médio do mesmo nível** (base 80, IV 15, sem EV, nature neutra), e não com o número cru: a Velocidade absoluta cresce com o nível, e sem normalizar todo Pokémon de nível alto viraria "rápido". Assim um Rattata é rápido em qualquer nível, um Snorlax é lento em qualquer nível, e IV, nature e EV mexem dentro disso.
   - Faixas no nível 50, só com o que é sorteado na captura (EV 0): Snorlax (base 30) de 31 a 55; Rattata (base 72) de 69 a 101; Pikachu (base 90) de 85 a 118.
 - **Os números** (duração, energia gerada e gasta, poder efetivo) são nossos, em config, e não copiados do GO.
 
 **Dano (fórmula dos jogos principais)**
 - dano = (⌊2L/5 + 2⌋ · Poder · A/D) / 50 + 2, × STAB (×1,5 se o golpe é do tipo do Pokémon), × efetividade de tipo (×0, ×0,5, ×2, ×4), × fator aleatório de 0,85 a 1.
-- Golpe **físico** usa Ataque contra Defesa; **especial** (a classe do golpe, não o slot) usa Ataque Especial contra Defesa Especial. A classe vem da PokéAPI (`damage_class`).
+- Golpe **físico** usa Ataque contra Defesa; **especial** (a classe do golpe, não o slot de carregado) usa Ataque Especial contra Defesa Especial. A classe vem da PokéAPI (`damage_class`).
 - Tabela de tipos atual, com os **18 tipos** (inclui Fairy), no config. A PokéAPI já dá os tipos atuais até para a Gen 1 (Clefairy e Jigglypuff são Fairy).
 
 **O loop (tempo real, estilo Pokémon GO)**
-- O jogador toca no básico e, com energia, no especial. O selvagem ataca sozinho: básico sempre que o cooldown libera, especial quando tiver energia, com pequenas variações sorteadas pela seed.
+- O jogador toca no golpe rápido e, com energia, no carregado. O selvagem ataca sozinho: rápido sempre que o cooldown libera, carregado quando tiver energia, com pequenas variações sorteadas pela seed.
 - Time de 1 a 3: um luta por vez; quando cai, entra o próximo. Troca manual com cooldown (config).
 - **Tempo limite** (config, inicial 60 s): passou, é derrota.
 - Derrota: o encontro acaba, sem penalidade (como hoje). Vitória: XP como hoje (seção 5.8) e EVs.
@@ -930,10 +931,10 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - O servidor registra o início da luta e recusa uma lista de toques que termine antes do tempo real possível. O máximo que alguém consegue trapaceando é "jogar perfeito", nunca tocar mais rápido que o cooldown ou causar dano que não existe.
 
 **Modo automático (para jogar idle)**
-- **Batalha automática:** o mesmo módulo de simulação, com um jogador automático no lugar dos toques: básico sempre que libera, especial quando a energia enche, troca quando o ativo cai. O servidor roda a luta sozinho e devolve o log; a tela pode animar ou pular direto para o resultado.
+- **Batalha automática:** o mesmo módulo de simulação, com um jogador automático no lugar dos toques: rápido sempre que libera, carregado quando a energia enche, troca quando o ativo cai. O servidor roda a luta sozinho e devolve o log; a tela pode animar ou pular direto para o resultado.
 - **Depois de vencer:** "perguntar" (padrão), "capturar sempre" (lança até capturar ou ele fugir) ou "deixar ir sempre".
 - As duas opções ficam no servidor, como preferência do treinador (vale em qualquer aparelho), e são marcadas na tela de exploração.
-- O automático joga direito, mas sem esperteza (não segura o especial, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
+- O automático joga direito, mas sem esperteza (não segura o carregado, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
 
 **Captura depois da vitória**
 - O encontro fica com status `won` esperando a decisão (migração: refazer a tabela para o `CHECK` novo, testada num banco com dados).
@@ -1123,7 +1124,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 **Fase 8 — Combate em tempo real** (seção 5.18; em partes, cada uma testada antes da próxima)
 - *8.1 — Traços dos Pokémon:* snapshots de golpes, pool por espécie e habilidades; colunas de IVs, EVs, nature, habilidade e golpes; sorteio na captura; migração dos que já existem (testada numa cópia do banco de produção, seção 4.6); ficha mostrando tudo; troca de golpe ao subir de nível.
 - *8.2 — Simulação compartilhada:* módulo puro com atributos, dano, tipos, cooldowns, energia, IA do selvagem, troca no time e habilidades do conjunto escolhido. Testes cobrindo determinismo (mesma seed e mesmos toques dão o mesmo resultado) e as regras (ninguém toca antes do cooldown). Rotas de início e de fim da luta, com o servidor refazendo a luta.
-- *8.3 — Tela de combate:* botões de básico e especial com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD (`Attack`, `Hurt`, `Faint`) com os fallbacks em CSS (seção 5.13), sons e tempo limite. Funciona em 360px.
+- *8.3 — Tela de combate:* botões de golpe rápido e carregado com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD (`Attack`, `Hurt`, `Faint`) com os fallbacks em CSS (seção 5.13), sons e tempo limite. Funciona em 360px.
 - *8.4 — Captura em passos:* status `won`, lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
 - *8.5 — Modo automático:* jogador automático na simulação, rota que roda a luta inteira no servidor, preferências do treinador (batalha automática; depois de vencer: perguntar, capturar sempre ou deixar ir) e os interruptores na tela de exploração.
 - Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
