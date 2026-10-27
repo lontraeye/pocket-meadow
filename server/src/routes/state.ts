@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { battleConfig } from '../config/battle.js'
+import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
 import { trainerConfig } from '../config/trainer.js'
@@ -59,16 +60,32 @@ function readState(userId: number, now: number) {
     .where(eq(pokemon.userId, userId))
     .all()
 
-  const daycare = db
+  const daycareRows = db
     .select({
       slotIndex: daycareSlots.slotIndex,
       pokemonId: daycareSlots.pokemonId,
       enteredAt: daycareSlots.enteredAt,
       lastSettledAt: daycareSlots.lastSettledAt,
+      xpGained: daycareSlots.xpGained,
     })
     .from(daycareSlots)
     .where(eq(daycareSlots.userId, userId))
     .all()
+  const slotsUnlocked = daycareSlotsUnlocked(trainer.level)
+  const daycare = {
+    slotsUnlocked,
+    nextSlotLevel: nextDaycareSlotLevel(trainer.level),
+    slots: daycareRows
+      .map((row) => ({
+        slotIndex: row.slotIndex,
+        pokemonId: row.pokemonId,
+        enteredAt: row.enteredAt,
+        lastSettledAt: row.lastSettledAt,
+        xpGained: row.xpGained,
+        fullAt: row.enteredAt + daycareConfig.maxMs,
+      }))
+      .sort((a, b) => a.slotIndex - b.slotIndex),
+  }
 
   const effects = db.select().from(activeEffects).where(eq(activeEffects.userId, userId)).all()
   const pending = db

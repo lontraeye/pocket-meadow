@@ -3,11 +3,12 @@
   import { api, type GameState } from './lib/api'
   import AuthForm from './lib/AuthForm.svelte'
   import Collection from './lib/Collection.svelte'
+  import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
-  let screen = $state<'meadow' | 'explore' | 'collection'>('meadow')
+  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare'>('meadow')
   let game = $state<GameState | null>(null)
 
   async function loadState() {
@@ -62,10 +63,13 @@
       <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
     {:else if screen === 'collection'}
       <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+    {:else if screen === 'daycare'}
+      <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
     {:else}
       <Garden {game} onState={loadState} />
       <div class="docks">
         <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
+        <button type="button" class="btn" onclick={() => (screen = 'daycare')}>Daycare</button>
         <button type="button" class="btn btn-primary" onclick={() => (screen = 'explore')}>
           {game.encounter ? 'Ver encontro' : 'Explorar'}
         </button>
@@ -157,9 +161,16 @@
 
   .docks {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 0.35rem;
     flex: none;
+  }
+
+  .docks .btn {
+    min-width: 0;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+    font-size: 16px;
   }
 
   /* A tela de encontro cabe no celular: o meio rola e os botões ficam embaixo. */

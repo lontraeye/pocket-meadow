@@ -783,3 +783,20 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Pokémon com IVs/natures ou só nível?
 - Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
+
+---
+
+## 11. Balanceamento pendente
+Ajustes anotados durante os testes, para a rodada de equilíbrio. Todos os números ficam em config.
+
+- **Daycare rende pouco em nível baixo** (teste da Fase 4). Um Pokémon Nv 12 passa 12 h no daycare e sobe só para o Nv 13. A taxa atual é `DAYCARE_XP_PER_LEVEL_HOUR = 3` (seção 5.9). Referência de outros valores:
+
+  | Multiplicador | Nv 12, 12 h | Nv 12, 24 h | Nv 50, 24 h |
+  |---|---|---|---|
+  | 3 (atual) | +1,0 nível | +2,0 | +1,0 |
+  | 5 | +1,7 | +3,3 | +1,7 |
+  | 6 | +2,0 | +3,9 | +2,0 |
+  | 8 | +2,7 | +5,1 | +2,7 |
+
+  Também dá para mexer no formato, não só no número: um piso de XP por hora para níveis baixos, ou uma curva com expoente entre 1 e 1,5. Comparar com o ritmo da batalha (seção 5.5) para o daycare não virar a melhor forma de upar.
+- **Ritmo dos doces** nos níveis altos (seção 5.8, "Ritmo").

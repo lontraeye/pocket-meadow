@@ -1,6 +1,7 @@
+import { daycareConfig } from '../config/daycare.js'
 import { progressConfig } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
-import { grantXp } from './xp.js'
+import { applyDaycareHours } from './daycare.js'
 
 export type CatchUpState = {
   trainer: { energy: number; energyUpdatedAt: number }
@@ -23,7 +24,7 @@ export type CatchUpState = {
 export type CatchUpResult = {
   trainer: { energy: number; energyUpdatedAt: number }
   energyNextAt: number | null
-  daycare: { pokemonId: number; level: number; xp: number; lastSettledAt: number }[]
+  daycare: { pokemonId: number; level: number; xp: number; lastSettledAt: number; xpGained: number }[]
   deleteEffectIds: number[]
   fleeEncounterIds: number[]
 }
@@ -38,9 +39,9 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
   const daycareBoost = state.effects.find(
     (effect) => effect.effectKey === 'daycare_boost' && !deleteEffectIds.includes(effect.id),
   )
-  const daycareRate = progressConfig.daycareXpPerHour * (daycareBoost?.multiplier ?? 1)
+  const boost = daycareBoost?.multiplier ?? 1
   const daycare = state.daycare.flatMap((slot) => {
-    const settled = settleDaycare(slot, now, daycareRate)
+    const settled = settleDaycare(slot, now, boost)
     return settled === undefined ? [] : [settled]
   })
   const fleeEncounterIds = state.encounters
@@ -73,20 +74,22 @@ function catchUpEnergy(
   }
 }
 
-function settleDaycare(
+export function settleDaycare(
   slot: CatchUpState['daycare'][number],
   now: number,
-  xpPerHour: number,
+  boost = 1,
 ): CatchUpResult['daycare'][number] | undefined {
-  const end = Math.min(now, slot.enteredAt + progressConfig.daycareMaxMs)
+  const end = Math.min(now, slot.enteredAt + daycareConfig.maxMs)
   const hours = Math.floor((end - slot.lastSettledAt) / hourMs)
   if (hours <= 0) return undefined
-  const progressed = grantXp(slot.level, slot.xp, hours * xpPerHour)
+
+  const { level, xp, xpGained } = applyDaycareHours(slot.level, slot.xp, hours, boost)
   return {
     pokemonId: slot.pokemonId,
-    level: progressed.level,
-    xp: progressed.xp,
+    level,
+    xp,
     lastSettledAt: slot.lastSettledAt + hours * hourMs,
+    xpGained,
   }
 }
 

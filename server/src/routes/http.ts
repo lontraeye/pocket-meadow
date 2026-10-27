@@ -22,6 +22,12 @@ export function parseId(value: string): number | null {
   return Number.isSafeInteger(id) ? id : null
 }
 
+export function parseSlot(value: string): number | null {
+  if (!/^(0|[1-9]\d*)$/.test(value)) return null
+  const slot = Number(value)
+  return Number.isSafeInteger(slot) ? slot : null
+}
+
 export async function readObject(c: Context): Promise<Record<string, unknown> | null> {
   try {
     const body = await c.req.json()

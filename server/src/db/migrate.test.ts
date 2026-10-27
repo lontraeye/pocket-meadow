@@ -101,3 +101,48 @@ test('a migração de via_trade preserva evoluções e o snapshot marca a troca'
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração de xp_gained preserva slots de daycare que já existem', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-daycare-xp-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(
+    `insert into users (username, password_hash, created_at) values ('misty', 'hash', 1)`,
+  ).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage
+    ) values (16, 'pidgey', 'Pidgey', 'normal', 40, 45, 40, 35, 35, 56, 251, 50, 255, 10, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, caught_at, original_species_id, location
+    ) values (1, 16, 5, 0, 1, 16, 'daycare')`,
+  ).run()
+  db.prepare(
+    `insert into daycare_slots (user_id, slot_index, pokemon_id, entered_at, last_settled_at)
+     values (1, 0, 1, 1000, 1000)`,
+  ).run()
+
+  execMigration(db, '0005_daycare_xp_gained.sql')
+
+  const row = db
+    .prepare('select pokemon_id, entered_at, xp_gained from daycare_slots where user_id = 1 and slot_index = 0')
+    .get() as { pokemon_id: number; entered_at: number; xp_gained: number }
+  assert.equal(row.pokemon_id, 1)
+  assert.equal(row.entered_at, 1000)
+  assert.equal(row.xp_gained, 0)
+  db.close()
+  fs.rmSync(file, { force: true })
+})

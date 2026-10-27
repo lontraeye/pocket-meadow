@@ -39,6 +39,23 @@
   const yield_ = $derived(releaseYield(mon.level, mon.isShiny, rules))
   const lastOne = $derived(game.pokemon.length <= 1)
   const inDaycare = $derived(mon.location === 'daycare')
+  const gardenCount = $derived(game.pokemon.filter((entry) => entry.location === 'garden').length)
+  const daycareSlot = $derived(game.daycare.slots.find((slot) => slot.pokemonId === mon.id) ?? null)
+  const freeSlot = $derived(
+    [...Array(game.daycare.slotsUnlocked).keys()].find((index) => !game.daycare.slots.some((slot) => slot.slotIndex === index)) ??
+      null,
+  )
+  const daycareReason = $derived(
+    inDaycare
+      ? ''
+      : freeSlot === null
+        ? game.daycare.nextSlotLevel
+          ? `Abre no nível ${game.daycare.nextSlotLevel}`
+          : 'Sem slot livre'
+        : gardenCount <= 1
+          ? 'Deixe alguém no jardim'
+          : '',
+  )
   const releaseReason = $derived(lastOne ? 'É o seu último Pokémon' : inDaycare ? 'Está no daycare' : '')
 
   $effect(() => {
@@ -112,6 +129,38 @@
 
   async function toggleFavorite() {
     await send(`/api/pokemon/${mon.id}`, { isFavorite: !mon.isFavorite }, 'PATCH')
+  }
+
+  async function putInDaycare() {
+    if (freeSlot === null) return
+    const ok = await send(`/api/daycare/${freeSlot}`, { pokemonId: mon.id })
+    if (ok) {
+      message = 'No daycare.'
+      onClose()
+    }
+  }
+
+  async function takeFromDaycare() {
+    if (daycareSlot === null) return
+    pending = true
+    message = ''
+    try {
+      const response = await api(`/api/daycare/${daycareSlot.slotIndex}`, undefined, 'DELETE')
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        xpGained?: number
+        levelsGained?: number
+      }
+      if (!response.ok) {
+        message = errorText(payload)
+        return
+      }
+      await onState()
+      message = `+${payload.xpGained ?? 0} XP · +${payload.levelsGained ?? 0} níveis`
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
   }
 </script>
 
@@ -201,6 +250,17 @@
         {/each}
       </div>
     {/if}
+
+    <div class="block">
+      <h3>Daycare</h3>
+      {#if inDaycare}
+        <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void takeFromDaycare()}>Retirar</button>
+      {:else}
+        <button type="button" class="btn" disabled={pending || daycareReason !== ''} onclick={() => void putInDaycare()}>
+          {daycareReason || 'Colocar no daycare'}
+        </button>
+      {/if}
+    </div>
 
     {#if dev}
       <button type="button" class="btn" onclick={dev.toggle}>{dev.asleep ? 'Acordar (teste)' : 'Dormir (teste)'}</button>

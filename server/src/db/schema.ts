@@ -174,6 +174,7 @@ export const daycareSlots = sqliteTable(
       .references(() => pokemon.id, { onDelete: 'cascade' }),
     enteredAt: integer('entered_at').notNull(),
     lastSettledAt: integer('last_settled_at').notNull(),
+    xpGained: integer('xp_gained').notNull().default(0),
   },
   (table) => [primaryKey({ columns: [table.userId, table.slotIndex] })],
 )

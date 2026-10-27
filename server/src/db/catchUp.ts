@@ -60,8 +60,16 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
       .set({ level: slot.level, xp: slot.xp })
       .where(and(eq(pokemon.id, slot.pokemonId), eq(pokemon.userId, userId)))
       .run()
+    const current = db
+      .select({ xpGained: daycareSlots.xpGained })
+      .from(daycareSlots)
+      .where(and(eq(daycareSlots.pokemonId, slot.pokemonId), eq(daycareSlots.userId, userId)))
+      .get()
     db.update(daycareSlots)
-      .set({ lastSettledAt: slot.lastSettledAt })
+      .set({
+        lastSettledAt: slot.lastSettledAt,
+        xpGained: (current?.xpGained ?? 0) + slot.xpGained,
+      })
       .where(and(eq(daycareSlots.pokemonId, slot.pokemonId), eq(daycareSlots.userId, userId)))
       .run()
   }

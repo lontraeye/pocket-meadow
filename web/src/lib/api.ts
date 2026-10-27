@@ -76,6 +76,21 @@ export type ProgressionRules = {
   xpBase: number
   xpExponent: number
 }
+export type DaycareSlot = {
+  slotIndex: number
+  pokemonId: number
+  enteredAt: number
+  lastSettledAt: number
+  xpGained: number
+  fullAt: number
+}
+
+export type DaycareState = {
+  slotsUnlocked: number
+  nextSlotLevel: number | null
+  slots: DaycareSlot[]
+}
+
 export type GameState = {
   now: number
   devTools: boolean
@@ -93,18 +108,21 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
+  daycare: DaycareState
   plots: { plotIndex: number; berryKey: string; readyAt: number }[]
   encounter: PendingEncounter | null
 }
 
 export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number }
 
-export async function api(path: string, body?: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<Response> {
+export async function api(path: string, body?: unknown, method?: 'POST' | 'PATCH' | 'DELETE'): Promise<Response> {
+  const verb = method ?? (body === undefined ? 'GET' : 'POST')
+  const hasBody = body !== undefined
   return fetch(path, {
-    method: body === undefined ? 'GET' : method,
+    method: verb,
     credentials: 'include',
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+    body: hasBody ? JSON.stringify(body) : undefined,
   })
 }
 
@@ -140,6 +158,12 @@ export function errorText(error: ApiError): string {
       return 'Esse Pokémon não está mais com você.'
     case 'in_daycare':
       return 'Ele está no daycare.'
+    case 'last_in_garden':
+      return 'Deixe pelo menos um Pokémon no jardim.'
+    case 'slot_locked':
+      return 'Esse slot ainda está bloqueado.'
+    case 'slot_taken':
+      return 'Esse slot já está ocupado.'
     case 'last_pokemon':
       return 'Você precisa ficar com pelo menos um Pokémon.'
     case 'level_cap':

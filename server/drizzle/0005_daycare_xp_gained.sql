@@ -1,0 +1,1 @@
+ALTER TABLE `daycare_slots` ADD `xp_gained` integer DEFAULT 0 NOT NULL;

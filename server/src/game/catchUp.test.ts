@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { daycareConfig, daycareXpPerHour } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
+import { applyDaycareHours, levelsGainedFromStay } from './daycare.js'
 import { applyCatchUp, type CatchUpState } from './catchUp.js'
 
 const now = 1_800_000_000_000
@@ -63,37 +65,65 @@ describe('daycare', () => {
 
   test('aplica só horas inteiras e guarda a fração para depois', () => {
     const result = applyCatchUp(state({ daycare: [{ ...slot, xp: 0, lastSettledAt: now - 2.5 * hour }] }), now)
-    const gained = 2 * progressConfig.daycareXpPerHour
+    const expected = applyDaycareHours(5, 0, 2)
     assert.equal(result.daycare.length, 1)
     assert.equal(result.daycare[0]?.lastSettledAt, now - 0.5 * hour)
-    assert.equal(result.daycare[0]?.xp, gained < xpToNext(5) ? gained : result.daycare[0]?.xp)
+    assert.equal(result.daycare[0]?.level, expected.level)
+    assert.equal(result.daycare[0]?.xp, expected.xp)
+    assert.equal(result.daycare[0]?.xpGained, expected.xpGained)
+  })
+
+  test('a taxa sobe quando o nível sobe no meio da liquidação', () => {
+    // 8 h no Nv 5: 7×15 = 105, na 8ª hora sobe e sobra 9 XP no Nv 6.
+    // A 9ª hora já rende no Nv 6: +18, fica 27.
+    const result = applyCatchUp(
+      state({ daycare: [{ ...slot, level: 5, xp: 0, lastSettledAt: now - 9 * hour }] }),
+      now,
+    )
+    assert.equal(result.daycare[0]?.level, 6)
+    assert.equal(result.daycare[0]?.xp, 27)
+    assert.equal(result.daycare[0]?.xpGained, 8 * 15 + 18)
+    assert.equal(daycareXpPerHour(5), 15)
+    assert.equal(daycareXpPerHour(6), 18)
   })
 
   test('sobe de nível e carrega o XP que sobrou', () => {
-    const hours = Math.ceil(xpToNext(5) / progressConfig.daycareXpPerHour)
+    const hours = 8
     const result = applyCatchUp(state({ daycare: [{ ...slot, lastSettledAt: now - hours * hour }] }), now)
-    assert.equal(result.daycare[0]?.level, 6)
-    assert.equal(result.daycare[0]?.xp, hours * progressConfig.daycareXpPerHour - xpToNext(5))
+    const expected = applyDaycareHours(5, 0, hours)
+    assert.equal(result.daycare[0]?.level, expected.level)
+    assert.equal(result.daycare[0]?.xp, expected.xp)
   })
 
-  test('para de render depois do limite de tempo acumulado', () => {
-    const enteredAt = now - progressConfig.daycareMaxMs - 10 * hour
+  test('para de render depois do limite de tempo acumulado a partir de entered_at', () => {
+    const enteredAt = now - daycareConfig.maxMs - 10 * hour
     const result = applyCatchUp(
       state({ daycare: [{ ...slot, level: 50, enteredAt, lastSettledAt: enteredAt }] }),
       now,
     )
-    assert.equal(result.daycare[0]?.lastSettledAt, enteredAt + progressConfig.daycareMaxMs)
+    assert.equal(result.daycare[0]?.lastSettledAt, enteredAt + daycareConfig.maxMs)
+    assert.equal(result.daycare[0]?.xpGained, applyDaycareHours(50, 0, daycareConfig.maxHours).xpGained)
     const again = applyCatchUp(
-      state({ daycare: [{ ...slot, level: 50, enteredAt, lastSettledAt: enteredAt + progressConfig.daycareMaxMs }] }),
+      state({ daycare: [{ ...slot, level: 50, enteredAt, lastSettledAt: enteredAt + daycareConfig.maxMs }] }),
       now,
     )
     assert.deepEqual(again.daycare, [])
   })
 
   test('não passa do nível máximo', () => {
-    const enteredAt = now - progressConfig.daycareMaxMs
+    const enteredAt = now - daycareConfig.maxMs
     const result = applyCatchUp(
-      state({ daycare: [{ ...slot, level: progressConfig.levelCap - 1, xp: xpToNext(progressConfig.levelCap - 1) - 1, enteredAt, lastSettledAt: enteredAt }] }),
+      state({
+        daycare: [
+          {
+            ...slot,
+            level: progressConfig.levelCap - 1,
+            xp: xpToNext(progressConfig.levelCap - 1) - 1,
+            enteredAt,
+            lastSettledAt: enteredAt,
+          },
+        ],
+      }),
       now,
     )
     assert.deepEqual(
@@ -111,7 +141,20 @@ describe('daycare', () => {
       }),
       now,
     )
+    assert.equal(boosted.daycare[0]?.xpGained, (base.daycare[0]?.xpGained ?? 0) * 2)
     assert.equal(boosted.daycare[0]?.xp, (base.daycare[0]?.xp ?? 0) * 2)
+  })
+
+  test('um dia cheio no Nv 5 rende cerca de 3 níveis e no Nv 50 cerca de 1', () => {
+    const from5 = applyDaycareHours(5, 0, daycareConfig.maxHours)
+    // Dois level ups + quase o terceiro (~2,9 da tabela da seção 5.9).
+    assert.equal(from5.level, 7)
+    assert.ok(from5.xp / xpToNext(7) > 0.8)
+
+    const from50 = applyDaycareHours(50, 0, daycareConfig.maxHours)
+    assert.equal(from50.level, 51)
+    assert.ok(from50.xp < xpToNext(51))
+    assert.equal(levelsGainedFromStay(from50.level, from50.xp, from50.xpGained), 1)
   })
 })
 
