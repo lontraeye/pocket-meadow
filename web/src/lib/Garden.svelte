@@ -1,11 +1,146 @@
 <script lang="ts">
+  import { serverClock } from './serverClock.svelte'
   import { untrack } from 'svelte'
-  import type { GameState } from './api'
+  import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type PlotState } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
   import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
 
   let { game, onState }: { game: GameState; onState: () => Promise<void> } = $props()
+
+  let plotIndex = $state<number | null>(null)
+  let plotMessage = $state('')
+  let plotPending = $state(false)
+  let harvestResult = $state<{ berryKey: string; berries: number; seeds: number } | null>(null)
+  let confirmUproot = $state(false)
+
+  const plotsByIndex = $derived(new Map(game.plots.map((plot) => [plot.plotIndex, plot])))
+  const seedRows = $derived(
+    game.inventory.filter((row) => row.itemKey.startsWith('seed:') && row.quantity > 0),
+  )
+
+  const clock = serverClock(() => game.now)
+
+  function plotStage(plot: PlotState | undefined): 'empty' | 'planted' | 'growing' | 'ready' {
+    if (!plot) return 'empty'
+    const now = clock.now()
+    if (now >= plot.readyAt) return 'ready'
+    const total = Math.max(1, plot.readyAt - plot.plantedAt)
+    const progress = (now - plot.plantedAt) / total
+    return progress < 0.2 ? 'planted' : 'growing'
+  }
+
+  function remainingMs(readyAt: number): number {
+    return Math.max(0, readyAt - clock.now())
+  }
+
+  function formatRemaining(ms: number): string {
+    const total = Math.ceil(ms / 1000)
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
+
+  function openPlot(index: number) {
+    selectedId = null
+    plotIndex = index
+    plotMessage = ''
+    harvestResult = null
+    confirmUproot = false
+  }
+
+  function closePlot() {
+    plotIndex = null
+    plotMessage = ''
+    harvestResult = null
+    confirmUproot = false
+  }
+
+  async function plant(berryKey: string) {
+    if (plotIndex === null) return
+    plotPending = true
+    plotMessage = ''
+    try {
+      const response = await api(`/api/plots/${plotIndex}/plant`, { berryKey })
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError
+      if (!response.ok) {
+        plotMessage = errorText(payload)
+        return
+      }
+      await onState()
+      closePlot()
+    } catch {
+      plotMessage = 'Sem conexão com o servidor.'
+    } finally {
+      plotPending = false
+    }
+  }
+
+  async function advancePlot(body: { minutes: number } | { ready: true }) {
+    if (plotIndex === null) return
+    plotPending = true
+    plotMessage = ''
+    try {
+      const response = await api('/api/dev/plots/advance', { plotIndex, ...body })
+      if (!response.ok) plotMessage = errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError)
+      await onState()
+    } catch {
+      plotMessage = 'Sem conexão com o servidor.'
+    } finally {
+      plotPending = false
+    }
+  }
+
+  async function uproot() {
+    if (plotIndex === null) return
+    plotPending = true
+    plotMessage = ''
+    try {
+      const response = await api(`/api/plots/${plotIndex}/uproot`, {})
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & { seedReturned?: boolean }
+      confirmUproot = false
+      if (!response.ok) {
+        plotMessage = errorText(payload)
+        return
+      }
+      await onState()
+      plotMessage = payload.seedReturned ? 'Arrancou. A semente voltou para a mochila.' : 'Arrancou. A semente se perdeu.'
+    } catch {
+      plotMessage = 'Sem conexão com o servidor.'
+    } finally {
+      plotPending = false
+    }
+  }
+
+  async function harvest() {
+    if (plotIndex === null) return
+    plotPending = true
+    plotMessage = ''
+    try {
+      const response = await api(`/api/plots/${plotIndex}/harvest`, {})
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        berryKey?: string
+        berries?: number
+        seeds?: number
+      }
+      if (!response.ok) {
+        plotMessage = errorText(payload)
+        return
+      }
+      harvestResult = {
+        berryKey: String(payload.berryKey ?? ''),
+        berries: Number(payload.berries ?? 0),
+        seeds: Number(payload.seeds ?? 0),
+      }
+      await onState()
+    } catch {
+      plotMessage = 'Sem conexão com o servidor.'
+    } finally {
+      plotPending = false
+    }
+  }
 
   const columns = 6
   const gridRows = 6
@@ -323,19 +458,50 @@
     <div class="stage" style:width="{stageW}px" style:height="{stageH}px">
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
-        <div
-          class="tile"
-          class:alt={(tile.col + tile.row) % 2 === 1}
-          class:plot={tile.row === gridRows - 1 && tile.col < game.plotSlots}
-          style:left="{spot.x}px"
-          style:top="{spot.y}px"
-          style:width="{tileW}px"
-          style:height="{tileH + depth}px"
-          style:--half="{halfH}px"
-          style:--depth="{depth}px"
-          style:margin-left="{-halfW}px"
-          style:z-index={tile.col + tile.row}
-        ></div>
+        {@const isPlot = tile.row === gridRows - 1 && tile.col < game.plotSlotsUnlocked}
+        {@const plot = isPlot ? plotsByIndex.get(tile.col) : undefined}
+        {@const stage = isPlot ? plotStage(plot) : null}
+        {#if isPlot}
+          <button
+            type="button"
+            class="tile plot"
+            class:alt={(tile.col + tile.row) % 2 === 1}
+            class:planted={stage === 'planted'}
+            class:growing={stage === 'growing'}
+            class:ready={stage === 'ready'}
+            style:left="{spot.x}px"
+            style:top="{spot.y}px"
+            style:width="{tileW}px"
+            style:height="{tileH + depth}px"
+            style:--half="{halfH}px"
+            style:--depth="{depth}px"
+            style:margin-left="{-halfW}px"
+            style:z-index={tile.col + tile.row}
+            aria-label={`Canteiro ${tile.col + 1}`}
+            onclick={() => openPlot(tile.col)}
+          >
+            {#if stage === 'planted'}
+              <span class="crop sprout" aria-hidden="true"></span>
+            {:else if stage === 'growing'}
+              <span class="crop bush" aria-hidden="true"></span>
+            {:else if stage === 'ready' && plot}
+              <img class="crop berry" src={berryIconSrc(plot.berryKey)} alt="" />
+            {/if}
+          </button>
+        {:else}
+          <div
+            class="tile"
+            class:alt={(tile.col + tile.row) % 2 === 1}
+            style:left="{spot.x}px"
+            style:top="{spot.y}px"
+            style:width="{tileW}px"
+            style:height="{tileH + depth}px"
+            style:--half="{halfH}px"
+            style:--depth="{depth}px"
+            style:margin-left="{-halfW}px"
+            style:z-index={tile.col + tile.row}
+          ></div>
+        {/if}
       {/each}
       {#each walkers as walker (walker.id)}
         {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
@@ -377,7 +543,74 @@
     </div>
   </div>
 
-  {#if selected}
+  {#if plotIndex !== null}
+    {@const plot = plotsByIndex.get(plotIndex)}
+    {@const stage = plotStage(plot)}
+    {@const berry = plot ? game.berries.find((row) => row.key === plot.berryKey) : null}
+    <div class="details plot-sheet">
+      <section class="panel sheet" aria-label="Canteiro">
+        <header class="sheet-head">
+          <h2>Canteiro {plotIndex + 1}</h2>
+          <button type="button" class="btn" onclick={closePlot}>Fechar</button>
+        </header>
+        {#if plotMessage}<p class="alert" role="status">{plotMessage}</p>{/if}
+        {#if harvestResult}
+          <p class="good">
+            Colheu {harvestResult.berries} {itemLabel(`berry:${harvestResult.berryKey}`, game.berries)}
+            e {harvestResult.seeds} semente{harvestResult.seeds === 1 ? '' : 's'}.
+          </p>
+          <button type="button" class="btn btn-primary" onclick={closePlot}>Ok</button>
+        {:else if stage === 'empty'}
+          <p class="hint">Escolha uma semente para plantar.</p>
+          {#if seedRows.length === 0}
+            <p class="hint">Sem sementes na mochila.</p>
+          {:else}
+            <ul class="seed-list">
+              {#each seedRows as row (row.itemKey)}
+                {@const key = row.itemKey.slice(5)}
+                {@const info = game.berries.find((berry) => berry.key === key)}
+                <li>
+                  <button type="button" class="btn choice" disabled={plotPending} onclick={() => void plant(key)}>
+                    <img src={berryIconSrc(key)} alt="" width="28" height="28" />
+                    <span>{itemLabel(row.itemKey, game.berries)} ×{row.quantity}</span>
+                    {#if info}<small>{Math.round(info.growMs / 60000)} min</small>{/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {:else if plot && (stage === 'planted' || stage === 'growing')}
+          {@const left = remainingMs(plot.readyAt)}
+          {@const total = Math.max(1, plot.readyAt - plot.plantedAt)}
+          {@const progress = Math.min(1, 1 - left / total)}
+          <p class="hint">{berry?.name ?? plot.berryKey} crescendo…</p>
+          <div class="bar" aria-hidden="true"><span style:width="{progress * 100}%"></span></div>
+          <p class="timer">{formatRemaining(left)}</p>
+          {#if game.devTools}
+            <div class="dev-row">
+              <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ minutes: 10 })}>+10 min (teste)</button>
+              <button type="button" class="btn" disabled={plotPending} onclick={() => void advancePlot({ ready: true })}>Pronta agora (teste)</button>
+            </div>
+          {/if}
+          {#if confirmUproot}
+            <p class="hint">
+              Arrancar antes de ficar pronta tem {Math.round((1 - game.uprootSeedReturnChance) * 100)}% de chance de
+              perder a semente.
+            </p>
+            <button type="button" class="btn" disabled={plotPending} onclick={() => void uproot()}>Arrancar mesmo assim</button>
+            <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = false)}>Cancelar</button>
+          {:else}
+            <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = true)}>Arrancar</button>
+          {/if}
+        {:else if plot && stage === 'ready'}
+          <p class="hint">{berry?.name ?? plot.berryKey} pronta.</p>
+          <button type="button" class="btn btn-primary" disabled={plotPending} onclick={() => void harvest()}>
+            Colher
+          </button>
+        {/if}
+      </section>
+    </div>
+  {:else if selected}
     <div class="details">
       <PokemonSheet
         {game}
@@ -397,7 +630,7 @@
       />
     </div>
   {:else}
-    <p class="hint">Toque em um Pokémon para ver os detalhes.</p>
+    <p class="hint">Toque em um Pokémon ou canteiro.</p>
   {/if}
 </div>
 
@@ -449,6 +682,67 @@
     --top: var(--soil);
     --left: #7a5530;
     --right: #93683c;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tile.plot:focus-visible {
+    outline: var(--px) dashed var(--ink);
+    outline-offset: 2px;
+  }
+
+  .crop {
+    position: absolute;
+    left: 50%;
+    top: calc(var(--half) * 0.35);
+    z-index: 2;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .dev-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+
+  .crop.sprout {
+    width: 10px;
+    height: 14px;
+    background: #5f9e3a;
+    clip-path: polygon(50% 0, 100% 70%, 70% 100%, 30% 100%, 0 70%);
+  }
+
+  .crop.bush {
+    width: 18px;
+    height: 16px;
+    background: #4f8a32;
+    border-radius: 40% 40% 20% 20%;
+    box-shadow: 6px 4px 0 #3f7228, -6px 4px 0 #3f7228;
+  }
+
+  .crop.berry {
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tile.ready .crop.berry {
+      animation: berry-bob 1.4s ease-in-out infinite;
+    }
+  }
+
+  @keyframes berry-bob {
+    0%,
+    100% {
+      transform: translateX(-50%) translateY(0);
+    }
+    50% {
+      transform: translateX(-50%) translateY(-3px);
+    }
   }
 
   .tile::before,
@@ -551,6 +845,75 @@
     margin: 0;
     color: var(--ink-soft);
     font-weight: 600;
+  }
+
+  .plot-sheet .sheet {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .sheet-head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .seed-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .seed-list .choice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+  }
+
+  .seed-list img {
+    image-rendering: pixelated;
+  }
+
+  .seed-list span {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bar {
+    height: 12px;
+    background: #00000022;
+    box-shadow: inset 0 0 0 var(--px) #00000033;
+  }
+
+  .bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .timer {
+    margin: 0;
+    font-weight: 700;
+  }
+
+  .good,
+  .alert {
+    margin: 0;
+  }
+
+  .good {
+    font-weight: 700;
   }
 
   @media (min-width: 800px) {

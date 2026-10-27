@@ -6,6 +6,7 @@ import { GENERIC_PER_CANDY, evolveTrainerXp } from '../config/progression.js'
 import { trainerXpToNext } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
+import { grantTrainerLevelRewards } from '../db/inventory.js'
 import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
 import { grantXp } from '../game/xp.js'
@@ -311,6 +312,10 @@ function evolveOne(
 
   const trainerXpGained = evolveTrainerXp(next.evolutionStage)
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
+  const levelRewards =
+    trainerNext.levelsGained > 0
+      ? grantTrainerLevelRewards(userId, clock.level, trainerNext.level)
+      : []
   db.update(trainers)
     .set({ level: trainerNext.level, xp: trainerNext.xp, updatedAt: now })
     .where(eq(trainers.userId, userId))
@@ -334,6 +339,7 @@ function evolveOne(
         xp: trainerNext.xp,
         levelsGained: trainerNext.levelsGained,
       },
+      levelRewards,
       evolutions: evolutionsFrom(next.id),
     },
   }
@@ -351,6 +357,7 @@ type EvolutionResult = {
   isFavorite: boolean
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
+  levelRewards: { itemKey: string; quantity: number }[]
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
 }
 

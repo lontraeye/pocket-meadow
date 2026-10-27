@@ -5,6 +5,8 @@ import { grantXp } from './xp.js'
 
 export { daycareXpPerHour }
 
+const hourMs = 60 * 60 * 1000
+
 /** Desfaz `grantXp` para descobrir o nível de entrada a partir do XP da estadia. */
 export function rewindXp(
   level: number,
@@ -35,20 +37,53 @@ export function levelsGainedFromStay(level: number, xp: number, xpGained: number
   return Math.max(0, level - start.level)
 }
 
-/** Aplica `hours` horas de daycare, com a taxa subindo quando o nível sobe. */
+export type DaycareTimedBoost = {
+  createdAt: number
+  expiresAt: number
+  multiplier: number
+}
+
+/**
+ * A hora [start, end) ganha o bônus na fração que coincide com a janela do
+ * efeito. As horas do daycare contam da entrada, não do uso da berry: com a
+ * regra "só hora inteira", uma Nanab de 2 h usada no meio de uma hora cobriria
+ * só 1 h. Proporcional, as 2 h valem 2 h.
+ */
+export function boostForHour(
+  hourStart: number,
+  boost: DaycareTimedBoost | null | undefined,
+): number {
+  if (!boost) return 1
+  const overlap = Math.min(hourStart + hourMs, boost.expiresAt) - Math.max(hourStart, boost.createdAt)
+  if (overlap <= 0) return 1
+  return 1 + (boost.multiplier - 1) * Math.min(1, overlap / hourMs)
+}
+
+/**
+ * Aplica `hours` horas de daycare. `boost` pode ser um número fixo (testes) ou
+ * uma janela timed: cada hora olha o seu próprio multiplicador.
+ */
 export function applyDaycareHours(
   level: number,
   xp: number,
   hours: number,
-  boost = 1,
-  cap = progressConfig.levelCap,
+  boost: number | DaycareTimedBoost | ((hourIndex: number) => number) = 1,
+  options: { from?: number; cap?: number } = {},
 ): { level: number; xp: number; xpGained: number } {
+  const cap: number = options.cap ?? progressConfig.levelCap
+  const from = options.from ?? 0
   let nextLevel = level
   let nextXp = xp
   let xpGained = 0
   for (let hour = 0; hour < hours; hour += 1) {
     if (nextLevel >= cap) break
-    const rate = daycareXpPerHour(nextLevel, boost)
+    const mult =
+      typeof boost === 'function'
+        ? boost(hour)
+        : typeof boost === 'number'
+          ? boost
+          : boostForHour(from + hour * hourMs, boost)
+    const rate = daycareXpPerHour(nextLevel, mult)
     const applied = Math.min(rate, xpUntilCap(nextLevel, nextXp, cap))
     const progressed = grantXp(nextLevel, nextXp, rate, xpToNext, cap)
     xpGained += applied

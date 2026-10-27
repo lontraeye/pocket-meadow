@@ -5,7 +5,7 @@ export function grantXp(
   xp: number,
   gain: number,
   toNext: (level: number) => number = xpToNext,
-  cap = progressConfig.levelCap,
+  cap: number = progressConfig.levelCap,
 ): { level: number; xp: number; levelsGained: number } {
   if (gain < 0) throw new Error('xp gain must be >= 0')
   let nextLevel = level

@@ -27,6 +27,8 @@ export type RegionInfo = {
   unlocked: boolean
 }
 
+export type ItemCredit = { itemKey: string; quantity: number }
+
 export type BattleOutcome = {
   encounterId: number
   winChance: number
@@ -43,6 +45,8 @@ export type BattleOutcome = {
   }[]
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
+  seedDrop: { itemKey: string; berryKey: string } | null
+  levelRewards: ItemCredit[]
 }
 
 export type OwnedPokemon = {
@@ -76,6 +80,7 @@ export type ProgressionRules = {
   xpBase: number
   xpExponent: number
 }
+
 export type DaycareSlot = {
   slotIndex: number
   pokemonId: number
@@ -91,11 +96,40 @@ export type DaycareState = {
   slots: DaycareSlot[]
 }
 
+export type BerryInfo = {
+  key: string
+  name: string
+  growMs: number
+  effectDescription: string
+  effectKey: string | null
+}
+
+export type PlotState = {
+  plotIndex: number
+  berryKey: string
+  plantedAt: number
+  readyAt: number
+}
+
+export type InventoryRow = { itemKey: string; quantity: number }
+
+export type ActiveEffect = {
+  id: number
+  effectKey: string
+  multiplier: number
+  charges: number | null
+  expiresAt: number | null
+  createdAt: number
+}
+
 export type GameState = {
   now: number
   devTools: boolean
   gardenMaxVisible: number
-  plotSlots: number
+  plotSlotsUnlocked: number
+  nextPlotSlotLevel: number | null
+  berries: BerryInfo[]
+  uprootSeedReturnChance: number
   battle: BattleRules
   progression: ProgressionRules
   trainer: {
@@ -109,11 +143,13 @@ export type GameState = {
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
   daycare: DaycareState
-  plots: { plotIndex: number; berryKey: string; readyAt: number }[]
+  plots: PlotState[]
+  inventory: InventoryRow[]
+  effects: ActiveEffect[]
   encounter: PendingEncounter | null
 }
 
-export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number }
+export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number; readyAt?: number }
 
 export async function api(path: string, body?: unknown, method?: 'POST' | 'PATCH' | 'DELETE'): Promise<Response> {
   const verb = method ?? (body === undefined ? 'GET' : 'POST')
@@ -124,6 +160,37 @@ export async function api(path: string, body?: unknown, method?: 'POST' | 'PATCH
     headers: hasBody ? { 'content-type': 'application/json' } : undefined,
     body: hasBody ? JSON.stringify(body) : undefined,
   })
+}
+
+export function berryIconSrc(berryKey: string): string {
+  return `/sprites/items/${berryKey}-berry.png`
+}
+
+export function itemLabel(itemKey: string, berries: BerryInfo[]): string {
+  if (itemKey.startsWith('seed:')) {
+    const berry = berries.find((row) => row.key === itemKey.slice(5))
+    return berry ? `Semente ${berry.name}` : itemKey
+  }
+  if (itemKey.startsWith('berry:')) {
+    const berry = berries.find((row) => row.key === itemKey.slice(6))
+    return berry ? `Berry ${berry.name}` : itemKey
+  }
+  return itemKey
+}
+
+export function effectLabel(effectKey: string): string {
+  switch (effectKey) {
+    case 'catch_boost':
+      return 'Captura ×'
+    case 'rare_boost':
+      return 'Raros ×'
+    case 'daycare_boost':
+      return 'Daycare ×'
+    case 'shiny_boost':
+      return 'Shiny ×'
+    default:
+      return effectKey
+  }
 }
 
 export function errorText(error: ApiError): string {
@@ -176,6 +243,26 @@ export function errorText(error: ApiError): string {
       return 'Essa evolução não existe.'
     case 'invalid_nickname':
       return 'O apelido precisa ter de 1 a 12 caracteres, sem quebra de linha.'
+    case 'plot_locked':
+      return 'Esse canteiro ainda está bloqueado.'
+    case 'plot_empty':
+      return 'Não há nada plantado aqui.'
+    case 'already_ready':
+      return 'Já está pronta: é só colher.'
+    case 'plot_taken':
+      return 'Esse canteiro já tem uma berry.'
+    case 'no_seed':
+      return 'Você não tem essa semente.'
+    case 'unknown_berry':
+      return 'Essa berry não existe.'
+    case 'not_ready':
+      return 'A berry ainda não está pronta.'
+    case 'no_item':
+      return 'Você não tem esse item.'
+    case 'unknown_item':
+      return 'Esse item não existe.'
+    case 'energy_full':
+      return 'Energia já está cheia.'
     default:
       return 'Algo deu errado.'
   }

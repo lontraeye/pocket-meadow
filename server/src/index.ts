@@ -6,6 +6,8 @@ import { authRoutes } from './routes/auth.js'
 import { devRoutes, devToolsEnabled } from './routes/dev.js'
 import { daycareRoutes } from './routes/daycare.js'
 import { encounterRoutes } from './routes/encounters.js'
+import { itemRoutes } from './routes/items.js'
+import { plotRoutes } from './routes/plots.js'
 import { pokemonRoutes } from './routes/pokemon.js'
 import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
@@ -34,6 +36,8 @@ app.route('/regions', regionRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/daycare', daycareRoutes)
+app.route('/plots', plotRoutes)
+app.route('/items', itemRoutes)
 if (devToolsEnabled()) {
   app.route('/dev', devRoutes)
   console.log('DEV_TOOLS ligado: rotas de teste em /dev')

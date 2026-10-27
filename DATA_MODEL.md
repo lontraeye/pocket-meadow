@@ -338,6 +338,7 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Colocar no daycare | catch-up → validar (slot desbloqueado e vazio, Pokémon do jogador e no jardim, sobra alguém no jardim) → inserir slot (`entered_at = last_settled_at = now`, `xp_gained = 0`) → `location = 'daycare'` |
 | Retirar / renovar | catch-up (liquida o XP) → apagar slot → `location = 'garden'`. Renovar insere de novo o mesmo Pokémon, na mesma transação |
 | Plantar | catch-up → validar (canteiro desbloqueado e vazio, `seed:<berry>` no inventário) → debitar semente → inserir canteiro com `ready_at` |
+| Arrancar | catch-up → validar canteiro ocupado e `now < ready_at` → apagar canteiro → sortear a volta da semente → creditar se voltou |
 | Colher | catch-up → validar `ready_at <= now` → apagar canteiro → creditar berries e sementes (PLANNING.md, seção 5.10) |
 | Usar item | catch-up → validar saldo e efeito (Oran com energia cheia recusa) → debitar → aplicar: energia, ou substituir a linha do mesmo `effect_key` |
 

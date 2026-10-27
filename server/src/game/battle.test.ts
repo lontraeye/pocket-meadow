@@ -15,6 +15,7 @@ import {
   teamPower,
   winChance,
 } from './battle.js'
+import { rollBattleSeed } from './berries.js'
 import { mulberry32 } from './rng.js'
 import { grantXp } from './xp.js'
 
@@ -61,12 +62,15 @@ describe('rolagens do encontro', () => {
     assert.equal(index, 5)
   })
 
-  test('a mesma seed gera o mesmo selvagem, a mesma batalha e a mesma captura', () => {
+  test('a mesma seed gera o mesmo selvagem, batalha, captura e semente', () => {
     const seed = 0xabcde
     const play = () => {
       const rng = mulberry32(seed)
       const wild = rollWild(rng, demo)
-      return { wild, won: rollChance(0.42, rng), caught: rollChance(0.8, rng) }
+      const won = rollChance(0.42, rng)
+      const caught = rollChance(0.8, rng)
+      const drop = won ? rollBattleSeed(rng) : null
+      return { wild, won, caught, drop }
     }
     assert.deepEqual(play(), play())
 

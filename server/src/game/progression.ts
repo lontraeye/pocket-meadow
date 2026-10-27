@@ -34,7 +34,7 @@ export function releaseCandies(level: number, isShiny: boolean): { chain: number
   }
 }
 
-export function xpUntilCap(level: number, xp: number, cap = progressConfig.levelCap): number {
+export function xpUntilCap(level: number, xp: number, cap: number = progressConfig.levelCap): number {
   if (level >= cap) return 0
   let total = xpToNext(level) - xp
   for (let cursor = level + 1; cursor < cap; cursor += 1) total += xpToNext(cursor)

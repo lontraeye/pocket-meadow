@@ -1,6 +1,18 @@
 <script lang="ts">
+  import { serverClock } from './serverClock.svelte'
   import { onMount, untrack } from 'svelte'
-  import { api, errorText, type ApiError, type BattleOutcome, type GameState, type PendingEncounter, type RegionInfo } from './api'
+  import {
+    api,
+    berryIconSrc,
+    effectLabel,
+    errorText,
+    itemLabel,
+    type ApiError,
+    type BattleOutcome,
+    type GameState,
+    type PendingEncounter,
+    type RegionInfo,
+  } from './api'
   import { percent, previewWinChance } from './battle'
   import PmdSprite from './PmdSprite.svelte'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
@@ -18,6 +30,17 @@
   let message = $state('')
   let pending = $state(false)
   let time = $state(0)
+
+  const clock = serverClock(() => game.now)
+
+  function formatRemaining(ms: number): string {
+    const total = Math.ceil(ms / 1000)
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
 
   const groups = $derived([
     { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
@@ -206,6 +229,20 @@
           Cada encontro gasta 1 de energia. Energia {game.trainer.energy}/{game.trainer.energyMax}.
           {#if game.trainer.energy < 1}Sem energia no momento.{/if}
         </p>
+        {#if game.effects.length > 0}
+          <div class="chips" aria-label="Efeitos ativos">
+            {#each game.effects as effect (effect.id)}
+              <span class="chip">
+                {effectLabel(effect.effectKey)}{effect.multiplier}
+                {#if effect.charges !== null}
+                  · {effect.charges} carga{effect.charges === 1 ? '' : 's'}
+                {:else if effect.expiresAt !== null}
+                  · {formatRemaining(Math.max(0, effect.expiresAt - clock.now()))}
+                {/if}
+              </span>
+            {/each}
+          </div>
+        {/if}
         {#if game.devTools}
           <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
         {/if}
@@ -317,6 +354,20 @@
                 {/if}
               </li>
             {/if}
+            {#if result.battle.seedDrop}
+              <li class="loot">
+                <img src={berryIconSrc(result.battle.seedDrop.berryKey)} alt="" width="24" height="24" />
+                Semente {itemLabel(result.battle.seedDrop.itemKey, game.berries)}
+              </li>
+            {/if}
+            {#each result.battle.levelRewards ?? [] as reward (reward.itemKey)}
+              <li class="loot">
+                {#if reward.itemKey.startsWith('seed:')}
+                  <img src={berryIconSrc(reward.itemKey.slice(5))} alt="" width="24" height="24" />
+                {/if}
+                Nível: {itemLabel(reward.itemKey, game.berries)} ×{reward.quantity}
+              </li>
+            {/each}
           </ul>
         {/if}
       </section>
@@ -502,5 +553,30 @@
 
   .gains li.ready {
     color: var(--grass-side);
+  }
+
+  .gains li.loot {
+    gap: 0.35rem;
+  }
+
+  .gains li.loot img {
+    image-rendering: pixelated;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0.2rem 0.55rem;
+    background: #00000014;
+    box-shadow: inset 0 0 0 var(--px) #00000022;
+    font-size: 0.85rem;
+    font-weight: 700;
   }
 </style>

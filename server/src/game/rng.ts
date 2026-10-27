@@ -21,3 +21,8 @@ export function randomSeed(): number {
   if (seed === undefined) throw new Error('failed to draw encounter seed')
   return seed
 }
+
+/** Unidade em [0, 1) via crypto — colheita e recompensas sem seed de replay. */
+export function unitRoll(): number {
+  return randomSeed() / 4294967296
+}

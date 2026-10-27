@@ -137,12 +137,108 @@ describe('daycare', () => {
     const boosted = applyCatchUp(
       state({
         daycare: [{ ...slot, level: 50, lastSettledAt: now - 3 * hour }],
-        effects: [{ id: 1, effectKey: 'daycare_boost', multiplier: 2, expiresAt: now + hour }],
+        effects: [
+          {
+            id: 1,
+            effectKey: 'daycare_boost',
+            multiplier: 2,
+            createdAt: now - 3 * hour,
+            expiresAt: now + hour,
+          },
+        ],
       }),
       now,
     )
     assert.equal(boosted.daycare[0]?.xpGained, (base.daycare[0]?.xpGained ?? 0) * 2)
     assert.equal(boosted.daycare[0]?.xp, (base.daycare[0]?.xp ?? 0) * 2)
+  })
+
+  test('Nanab desalinhada: 2 h de efeito valem 2 h de bônus, divididas entre 3 horas', () => {
+    // Nv 50: 150 XP/h. Janela de settledFrom+0,5h a +2,5h: horas com 0,5, 1 e 0,5
+    // de bônus → 225 + 300 + 225 = 750, ou seja, 450 normais + 300 (2 h de bônus).
+    const settledFrom = now - 3 * hour
+    const result = applyCatchUp(
+      state({
+        daycare: [{ ...slot, level: 50, lastSettledAt: settledFrom }],
+        effects: [
+          {
+            id: 4,
+            effectKey: 'daycare_boost',
+            multiplier: 2,
+            createdAt: settledFrom + 0.5 * hour,
+            expiresAt: settledFrom + 2.5 * hour,
+          },
+        ],
+      }),
+      now,
+    )
+    assert.equal(daycareXpPerHour(50), 150)
+    assert.equal(result.daycare[0]?.xpGained, 750)
+  })
+
+  test('Nanab: hora ganha bônus na fração dentro da janela', () => {
+    const settledFrom = now - 3 * hour
+    const base = applyCatchUp(
+      state({ daycare: [{ ...slot, level: 50, lastSettledAt: settledFrom }] }),
+      now,
+    )
+    const baseXp = base.daycare[0]?.xpGained ?? 0
+    assert.equal(baseXp, 3 * daycareXpPerHour(50))
+
+    // Venceu no fim da 1ª hora: só ela tem bônus.
+    const expiredMid = applyCatchUp(
+      state({
+        daycare: [{ ...slot, level: 50, lastSettledAt: settledFrom }],
+        effects: [
+          {
+            id: 1,
+            effectKey: 'daycare_boost',
+            multiplier: 2,
+            createdAt: settledFrom - hour,
+            expiresAt: settledFrom + hour,
+          },
+        ],
+      }),
+      now,
+    )
+    assert.equal(expiredMid.daycare[0]?.xpGained, daycareXpPerHour(50) * 2 + 2 * daycareXpPerHour(50))
+    assert.deepEqual(expiredMid.deleteEffectIds, [1])
+
+    // Criado no início da 3ª hora: só ela tem bônus.
+    const createdMid = applyCatchUp(
+      state({
+        daycare: [{ ...slot, level: 50, lastSettledAt: settledFrom }],
+        effects: [
+          {
+            id: 2,
+            effectKey: 'daycare_boost',
+            multiplier: 2,
+            createdAt: settledFrom + 2 * hour,
+            expiresAt: now + hour,
+          },
+        ],
+      }),
+      now,
+    )
+    assert.equal(createdMid.daycare[0]?.xpGained, 2 * daycareXpPerHour(50) + daycareXpPerHour(50) * 2)
+
+    // Ativo o período inteiro.
+    const full = applyCatchUp(
+      state({
+        daycare: [{ ...slot, level: 50, lastSettledAt: settledFrom }],
+        effects: [
+          {
+            id: 3,
+            effectKey: 'daycare_boost',
+            multiplier: 2,
+            createdAt: settledFrom,
+            expiresAt: now,
+          },
+        ],
+      }),
+      now,
+    )
+    assert.equal(full.daycare[0]?.xpGained, baseXp * 2)
   })
 
   test('um dia cheio no Nv 5 rende cerca de 3 níveis e no Nv 50 cerca de 1', () => {
@@ -163,9 +259,9 @@ describe('efeitos e encontros', () => {
     const result = applyCatchUp(
       state({
         effects: [
-          { id: 1, effectKey: 'catch_boost', multiplier: 1.5, expiresAt: now },
-          { id: 2, effectKey: 'daycare_boost', multiplier: 2, expiresAt: now + 1 },
-          { id: 3, effectKey: 'rare_boost', multiplier: 2, expiresAt: null },
+          { id: 1, effectKey: 'catch_boost', multiplier: 1.5, createdAt: now - hour, expiresAt: now },
+          { id: 2, effectKey: 'daycare_boost', multiplier: 2, createdAt: now - hour, expiresAt: now + 1 },
+          { id: 3, effectKey: 'rare_boost', multiplier: 2, createdAt: now - hour, expiresAt: null },
         ],
       }),
       now,

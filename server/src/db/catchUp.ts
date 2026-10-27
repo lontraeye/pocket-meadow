@@ -29,7 +29,17 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
     .where(eq(daycareSlots.userId, userId))
     .all()
 
-  const effects = db.select().from(activeEffects).where(eq(activeEffects.userId, userId)).all()
+  const effects = db
+    .select({
+      id: activeEffects.id,
+      effectKey: activeEffects.effectKey,
+      multiplier: activeEffects.multiplier,
+      createdAt: activeEffects.createdAt,
+      expiresAt: activeEffects.expiresAt,
+    })
+    .from(activeEffects)
+    .where(eq(activeEffects.userId, userId))
+    .all()
   const pending = db
     .select({ id: encounters.id, status: encounters.status, expiresAt: encounters.expiresAt })
     .from(encounters)

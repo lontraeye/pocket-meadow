@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, errorText, type ApiError, type DaycareSlot, type GameState, type OwnedPokemon } from './api'
+  import { serverClock } from './serverClock.svelte'
   import { showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
@@ -7,7 +8,6 @@
   let pickingSlot = $state<number | null>(null)
   let message = $state('')
   let pending = $state(false)
-  let tick = $state(Date.now())
 
   const byId = $derived(new Map(game.pokemon.map((mon) => [mon.id, mon])))
   const occupied = $derived(new Map(game.daycare.slots.map((slot) => [slot.slotIndex, slot])))
@@ -34,24 +34,10 @@
     return list
   })
 
-  $effect(() => {
-    const timer = window.setInterval(() => {
-      tick = Date.now()
-    }, 1000)
-    return () => window.clearInterval(timer)
-  })
-
-  // O relógio do celular pode estar errado: conta só o tempo que passou desde
-  // que o /state chegou, somado ao `now` do servidor.
-  let receivedAt = $state(Date.now())
-  $effect.pre(() => {
-    void game.now
-    receivedAt = Date.now()
-  })
+  const clock = serverClock(() => game.now)
 
   function remainingMs(fullAt: number): number {
-    const serverNow = game.now + Math.max(0, tick - receivedAt)
-    return Math.max(0, fullAt - serverNow)
+    return Math.max(0, fullAt - clock.now())
   }
 
   function formatRemaining(ms: number): string {

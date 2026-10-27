@@ -2,13 +2,14 @@
   import { onMount } from 'svelte'
   import { api, type GameState } from './lib/api'
   import AuthForm from './lib/AuthForm.svelte'
+  import Bag from './lib/Bag.svelte'
   import Collection from './lib/Collection.svelte'
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
-  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare'>('meadow')
+  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare' | 'bag'>('meadow')
   let game = $state<GameState | null>(null)
 
   async function loadState() {
@@ -57,6 +58,9 @@
           {/each}
         </div>
       </div>
+      <button type="button" class="btn bag-btn" aria-label="Mochila" onclick={() => (screen = 'bag')}>
+        Mochila
+      </button>
       <button type="button" class="btn" onclick={logout}>Sair</button>
     </header>
     {#if screen === 'explore'}
@@ -65,6 +69,8 @@
       <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
     {:else if screen === 'daycare'}
       <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+    {:else if screen === 'bag'}
+      <Bag {game} onClose={() => (screen = 'meadow')} onState={loadState} />
     {:else}
       <Garden {game} onState={loadState} />
       <div class="docks">
@@ -159,6 +165,12 @@
       inset 0 var(--px) 0 #fff3a0;
   }
 
+  .bag-btn {
+    min-width: 44px;
+    min-height: 44px;
+    flex: none;
+  }
+
   .docks {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -173,7 +185,7 @@
     font-size: 16px;
   }
 
-  /* A tela de encontro cabe no celular: o meio rola e os botões ficam embaixo. */
+  /* Telas cheias: o meio rola e os botões ficam embaixo. */
   .meadow.fit {
     height: var(--screen-h);
     max-height: var(--screen-h);

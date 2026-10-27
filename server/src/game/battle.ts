@@ -17,8 +17,8 @@ export type WildRoll = {
   isShiny: boolean
 }
 
-// Slot, nível dentro da faixa do slot e shiny gastam um rng() cada, nessa
-// ordem. A batalha é a 4ª chamada e a captura a 5ª (PLANNING.md, seção 7).
+// Slot, nível e shiny: 3 rng(). Depois: batalha, captura; numa vitória,
+// chance de semente e, se caiu, qual semente (PLANNING.md, seção 7).
 export const wildRollCount = 3
 
 export function power(baseStatTotal: number, level: number): number {

@@ -1,7 +1,7 @@
 import { daycareConfig } from '../config/daycare.js'
 import { progressConfig } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
-import { applyDaycareHours } from './daycare.js'
+import { applyDaycareHours, type DaycareTimedBoost } from './daycare.js'
 
 export type CatchUpState = {
   trainer: { energy: number; energyUpdatedAt: number }
@@ -16,6 +16,7 @@ export type CatchUpState = {
     id: number
     effectKey: string
     multiplier: number
+    createdAt: number
     expiresAt: number | null
   }[]
   encounters: { id: number; status: string; expiresAt: number }[]
@@ -33,17 +34,16 @@ const hourMs = 60 * 60 * 1000
 
 export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
   const trainer = catchUpEnergy(state.trainer, now)
+  // Liquidar o daycare antes de apagar efeitos vencidos: horas passadas ainda
+  // usam a janela do Nanab (PLANNING.md, seção 5.10).
+  const daycareBoost = timedDaycareBoost(state.effects) ?? 1
+  const daycare = state.daycare.flatMap((slot) => {
+    const settled = settleDaycare(slot, now, daycareBoost)
+    return settled === undefined ? [] : [settled]
+  })
   const deleteEffectIds = state.effects
     .filter((effect) => effect.expiresAt !== null && effect.expiresAt <= now)
     .map((effect) => effect.id)
-  const daycareBoost = state.effects.find(
-    (effect) => effect.effectKey === 'daycare_boost' && !deleteEffectIds.includes(effect.id),
-  )
-  const boost = daycareBoost?.multiplier ?? 1
-  const daycare = state.daycare.flatMap((slot) => {
-    const settled = settleDaycare(slot, now, boost)
-    return settled === undefined ? [] : [settled]
-  })
   const fleeEncounterIds = state.encounters
     .filter((encounter) => encounter.status === 'pending' && encounter.expiresAt <= now)
     .map((encounter) => encounter.id)
@@ -55,6 +55,12 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
     deleteEffectIds,
     fleeEncounterIds,
   }
+}
+
+function timedDaycareBoost(effects: CatchUpState['effects']): DaycareTimedBoost | null {
+  const boost = effects.find((effect) => effect.effectKey === 'daycare_boost' && effect.expiresAt !== null)
+  if (!boost || boost.expiresAt === null) return null
+  return { createdAt: boost.createdAt, expiresAt: boost.expiresAt, multiplier: boost.multiplier }
 }
 
 function catchUpEnergy(
@@ -77,13 +83,15 @@ function catchUpEnergy(
 export function settleDaycare(
   slot: CatchUpState['daycare'][number],
   now: number,
-  boost = 1,
+  boost: number | DaycareTimedBoost = 1,
 ): CatchUpResult['daycare'][number] | undefined {
   const end = Math.min(now, slot.enteredAt + daycareConfig.maxMs)
   const hours = Math.floor((end - slot.lastSettledAt) / hourMs)
   if (hours <= 0) return undefined
 
-  const { level, xp, xpGained } = applyDaycareHours(slot.level, slot.xp, hours, boost)
+  const { level, xp, xpGained } = applyDaycareHours(slot.level, slot.xp, hours, boost, {
+    from: slot.lastSettledAt,
+  })
   return {
     pokemonId: slot.pokemonId,
     level,

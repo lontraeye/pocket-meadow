@@ -6,12 +6,13 @@ export type Failure = {
   status: 400 | 404 | 409
   pokemonId?: number
   min?: number
+  readyAt?: number
 }
 
 export function fail(
   error: string,
   status: Failure['status'],
-  extra?: { pokemonId?: number; min?: number },
+  extra?: { pokemonId?: number; min?: number; readyAt?: number },
 ): Failure {
   return { ok: false, error, status, ...extra }
 }

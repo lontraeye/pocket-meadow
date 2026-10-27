@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { battleConfig } from '../config/battle.js'
+import { berryConfig, berryList, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
 import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
@@ -136,7 +137,16 @@ function readState(userId: number, now: number) {
     now,
     devTools: devToolsEnabled(),
     gardenMaxVisible: progressConfig.gardenMaxVisible,
-    plotSlots: progressConfig.basePlotSlots,
+    plotSlotsUnlocked: plotSlotsUnlocked(trainer.level),
+    nextPlotSlotLevel: nextPlotSlotLevel(trainer.level),
+    uprootSeedReturnChance: berryConfig.uprootSeedReturnChance,
+    berries: berryList.map((berry) => ({
+      key: berry.key,
+      name: berry.name,
+      growMs: berry.growMs,
+      effectDescription: berry.effectDescription,
+      effectKey: berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
+    })),
     battle: {
       k: battleConfig.k,
       minChance: battleConfig.minChance,
@@ -183,7 +193,17 @@ function readState(userId: number, now: number) {
     })),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
     daycare,
-    plots: db.select().from(berryPlots).where(eq(berryPlots.userId, userId)).all(),
+    plots: db
+      .select({
+        plotIndex: berryPlots.plotIndex,
+        berryKey: berryPlots.berryKey,
+        plantedAt: berryPlots.plantedAt,
+        readyAt: berryPlots.readyAt,
+      })
+      .from(berryPlots)
+      .where(eq(berryPlots.userId, userId))
+      .all()
+      .sort((a, b) => a.plotIndex - b.plotIndex),
     inventory: db.select().from(inventory).where(eq(inventory.userId, userId)).all(),
     effects: effects.map((effect) => ({
       id: effect.id,
@@ -191,6 +211,7 @@ function readState(userId: number, now: number) {
       multiplier: effect.multiplier,
       charges: effect.charges,
       expiresAt: effect.expiresAt,
+      createdAt: effect.createdAt,
     })),
     encounter: pending ? toEncounterView(pending) : null,
   }

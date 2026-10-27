@@ -16,6 +16,7 @@ import {
   species,
   trainers,
 } from '../db/schema.js'
+import { creditItems, grantTrainerLevelRewards } from '../db/inventory.js'
 import {
   catchChance,
   fighterXp,
@@ -26,6 +27,7 @@ import {
   teamPower,
   winChance,
 } from '../game/battle.js'
+import { rollBattleSeed } from '../game/berries.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { grantXp } from '../game/xp.js'
 import { toEncounterView } from './encounterView.js'
@@ -243,6 +245,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   let catchOdds: number | null = null
   let caught = false
   let caughtPokemonId: number | null = null
+  let seedDrop: { itemKey: string; berryKey: string } | null = null
   if (won) {
     const bonus = takeBonus(userId, 'catch_boost')
     catchOdds = catchChance(wild.captureRate, bonus)
@@ -274,10 +277,17 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
         .run()
       if (pokedex.changes !== 1) throw new Error(`pokedex missing for species ${encounter.speciesId}`)
     }
+    // Depois da captura: chance de semente e, se ganhou, qual (PLANNING.md §7).
+    seedDrop = rollBattleSeed(rng)
+    if (seedDrop) creditItems(userId, [{ itemKey: seedDrop.itemKey, quantity: 1 }])
   }
 
   const trainerXpGained = won ? trainerWinXp(encounter.level) + (caught ? trainerCatchXp(encounter.level) : 0) : 0
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
+  const levelRewards =
+    won && trainerNext.levelsGained > 0
+      ? grantTrainerLevelRewards(userId, clock.level, trainerNext.level)
+      : []
   if (won) {
     db.update(trainers)
       .set({
@@ -318,6 +328,8 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
         xp: trainerNext.xp,
         levelsGained: trainerNext.levelsGained,
       },
+      seedDrop,
+      levelRewards,
     },
   }
 }

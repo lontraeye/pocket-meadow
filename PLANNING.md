@@ -599,6 +599,7 @@ O código lê os efeitos pela `effectKey`, nunca pelo nome da berry. Berry nova 
 - **Plantar** (`POST /plots/:index/plant`, `{ berryKey }`): canteiro desbloqueado e vazio, e pelo menos 1 `seed:<berry>` no inventário. Debita a semente e grava `ready_at = now + growMs`, fixado no plantio. Erros: `plot_locked`, `plot_taken`, `no_seed` e `unknown_berry`.
 - **Colher** (`POST /plots/:index/harvest`): só com `now >= ready_at` (erro `not_ready`, com o `readyAt`). Apaga o canteiro e credita `berry:<key>` (sorteio dentro de `yield`) e as sementes.
 - **Sementes na colheita (a confirmar):** **1 semente garantida** da mesma berry, mais `SEED_EXTRA_CHANCE` (inicial: 0,25) de ganhar uma 2ª. Sem a garantida, uma chance menor que 100% faz as sementes acabarem com o tempo, e o jardim para.
+- **Arrancar** (`POST /plots/:index/uproot`): para desfazer um plantio errado. Só antes de ficar pronta (pronta responde `already_ready`, e o caminho é colher). Apaga o canteiro, e a semente volta com `UPROOT_SEED_RETURN_CHANCE` (inicial: 0,5). Se não voltar, ela se perde. O front pede confirmação e mostra a chance.
 - O sorteio da colheita usa `crypto` no servidor. Não precisa de replay, porque a colheita é uma ação única numa transação e não há como sortear de novo.
 
 #### Usar berry (`POST /items/:key/use`)
@@ -608,7 +609,7 @@ O código lê os efeitos pela `effectKey`, nunca pelo nome da berry. Berry nova 
 - **Consumo das cargas**, como já está no código (`takeBonus`): `shiny_boost` e `rare_boost` ao criar o encontro; `catch_boost` só quando há tentativa de captura (vitória). A Pinap espera até a próxima vitória.
 
 #### Daycare com Nanab: bônus só dentro da janela
-Hoje o catch-up aplica o `daycare_boost` à liquidação inteira se o efeito estiver ativo na hora da leitura. Também ignora o bônus quando ele venceu enquanto o jogador estava fora. **Corrigir:** na liquidação hora a hora (seção 5.9), uma hora ganha o bônus só se estiver toda dentro da janela do efeito (`created_at` até `expires_at`). Liquidar antes de apagar os efeitos vencidos.
+Hoje o catch-up aplica o `daycare_boost` à liquidação inteira se o efeito estiver ativo na hora da leitura. Também ignora o bônus quando ele venceu enquanto o jogador estava fora. **Corrigir:** na liquidação hora a hora (seção 5.9), cada hora ganha o bônus **na fração que coincide com a janela** do efeito (`created_at` até `expires_at`). As horas do daycare contam da entrada do Pokémon, não do uso da berry. Por isso a regra "só hora inteira" faria uma Nanab de 2 h usada no meio de uma hora valer só 1 h. Proporcional, as 2 h valem 2 h. Liquidar antes de apagar os efeitos vencidos.
 
 #### Sementes por batalha e por nível
 - **Batalha:** numa vitória, `SEED_DROP_CHANCE` (inicial: 0,1) de ganhar 1 semente, sorteada por `SEED_DROP_WEIGHTS` no config (inicial: Oran 50, Pinap 25, Razz 15, Nanab 7, Lum 3). Usa o PRNG do encontro, depois da captura (seção 7).
@@ -625,6 +626,7 @@ Hoje o catch-up aplica o `daycare_boost` à liquidação inteira se o efeito est
 - **Arte:**
   - ícones das berries: os PNG de `items/<berry>-berry.png` do repositório `PokeAPI/sprites`, baixados uma vez como os GIFs do Showdown (seção 4.2), com o mesmo status, e creditados no `CREDITS.md`;
   - estágios do canteiro: em CSS (monte de terra, broto, arbusto) ou pixel art com licença redistribuível (CC0, CC-BY, CC BY-NC, OFL). Nada sem licença clara.
+  - **Depois:** procurar um tileset gratuito com licença redistribuível para os canteiros e o jardim. Hoje os estágios são 3 em CSS (broto até 20%, arbusto, pronta), e quase todo o tempo fica no arbusto. Com a arte nova, considerar mais fases (ex.: broto → arbusto → flor → pronta). Só muda o visual e a função `plotStage` no `Garden.svelte`. O servidor continua guardando só `planted_at` e `ready_at`.
 - Mobile primeiro (seção 4.4).
 
 ### 5.11 Jardim (visual)
@@ -767,6 +769,7 @@ O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca má
   2. uma ou duas máquinas;
   3. ações de campo e biomas, com o modo de edição;
   4. visitantes.
+- **Canteiros de berry no modo de construção.** Hoje os canteiros ficam fixos na última fileira do jardim, e o número cresce com o nível (seção 5.10). Com o modo de edição, o jogador escolhe onde ficam, e o canteiro vira um objeto como os outros. O número máximo continua derivado do nível. Dá para casar com os biomas: certas berries só crescem, ou crescem mais rápido, num bioma específico. O `plot_index` do banco passaria a ter uma posição no jardim.
 - **Lista de arte** para o usuário: tiles por bioma, estados da terra (seca, regada, grama), máquinas com e sem operador, ícones dos itens de evolução que não vierem do `PokeAPI/sprites`.
 
 ---
@@ -827,6 +830,7 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 | POST | `/daycare/:slot/renew` | Retira e coloca de novo (o tempo recomeça) |
 | POST | `/plots/:index/plant` | `{ berryKey }` |
 | POST | `/plots/:index/harvest` | Colhe |
+| POST | `/plots/:index/uproot` | Arranca antes de ficar pronta; a semente volta com chance |
 | POST | `/items/:key/use` | Usa berry → aplica efeito |
 
 Respostas de ação devem retornar o resultado detalhado (rolagens relevantes, XP ganho, level ups, doces) para o frontend animar.
