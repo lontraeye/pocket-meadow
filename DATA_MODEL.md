@@ -89,8 +89,22 @@ Suporta evoluções ramificadas (ex.: Eevee → várias): o jogador escolhe o de
 CREATE TABLE users (
   id             INTEGER PRIMARY KEY,
   username       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-  password_hash  TEXT    NOT NULL,                   -- argon2id
+  google_sub     TEXT    UNIQUE,                     -- `sub` do Google (PLANNING.md, seção 4.7). NULL só em contas de teste locais
   created_at     INTEGER NOT NULL
+);
+```
+
+Sem senha desde a migração `0007_drop_password` (login só pelo Google). Nada de e-mail, nome ou foto da conta Google.
+
+### `google_signups`
+Quem voltou do Google sem conta e ainda vai escolher nome e inicial. Linha apagada ao criar a conta; as vencidas saem no próximo cadastro.
+
+```sql
+CREATE TABLE google_signups (
+  id          TEXT    PRIMARY KEY,                   -- SHA-256 do token do cookie `signup`, como em sessions
+  google_sub  TEXT    NOT NULL,
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL                       -- 30 min
 );
 ```
 

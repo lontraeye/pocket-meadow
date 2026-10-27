@@ -34,7 +34,7 @@ function backups(prefix: string): string[] {
 
 function addUser(username: string): void {
   const db = openDatabase()
-  db.prepare(`insert into users (username, password_hash, created_at) values (?, 'hash', 1)`).run(username)
+  db.prepare(`insert into users (username, created_at) values (?, 1)`).run(username)
   db.close()
 }
 
@@ -49,7 +49,7 @@ describe('backup', () => {
   test('a cópia tem os dados, inclusive os que ainda estão só no WAL', () => {
     migrateDatabase()
     const db = openDatabase()
-    db.prepare(`insert into users (username, password_hash, created_at) values ('ash', 'hash', 1)`).run()
+    db.prepare(`insert into users (username, created_at) values ('ash', 1)`).run()
     const file = backupDatabase(db, 'daily')
     db.close()
     assert.deepEqual(usernames(file), ['ash'])

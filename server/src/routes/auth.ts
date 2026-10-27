@@ -1,149 +1,135 @@
-import { randomBytes } from 'node:crypto'
-import { hash, verify } from '@node-rs/argon2'
+import { Google, decodeIdToken, generateCodeVerifier, generateState } from 'arctic'
 import { SqliteError } from 'better-sqlite3'
-import { eq } from 'drizzle-orm'
+import { and, eq, gt, lte } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
-import { deleteCookie, setCookie } from 'hono/cookie'
-import { getConnInfo } from '@hono/node-server/conninfo'
+import { deleteCookie, getCookie } from 'hono/cookie'
+import {
+  asUsername,
+  createPlayer,
+  isStarter,
+  newToken,
+  openSession,
+  requestMeta,
+  setAuthCookie,
+  setSessionCookie,
+} from '../auth/accounts.js'
+import { googleSubFromClaims, sameToken } from '../auth/google.js'
 import { currentSession, hashToken } from '../auth/session.js'
-import { authConfig } from '../config/auth.js'
-import { type StarterKey, trainerConfig } from '../config/trainer.js'
+import { authConfig, googleConfig } from '../config/auth.js'
+import { trainerConfig } from '../config/trainer.js'
 import { getDb, immediate } from '../db/client.js'
-import { authEvents, inventory, pokedexEntries, pokemon, sessions, species, trainers, users } from '../db/schema.js'
+import { authEvents, googleSignups, sessions, users } from '../db/schema.js'
+import { readObject } from './http.js'
 
+// Login só pelo Google (PLANNING.md, seção 4.7). O app volta para "/" com
+// ?auth=<motivo> quando algo dá errado, e o front traduz o motivo.
 export const authRoutes = new Hono()
 
-authRoutes.post('/register', async (c) => {
-  const parsed = await readBody(c)
-  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
-  const username = asUsername(parsed.body.username)
+authRoutes.get('/google', (c) => {
+  const config = googleConfig()
+  if (!config) return c.redirect('/?auth=unavailable')
+  const state = generateState()
+  const verifier = generateCodeVerifier()
+  // Só openid: o jogo guarda o ID da conta, sem e-mail, nome ou foto.
+  const url = new Google(config.clientId, config.clientSecret, config.redirectUri).createAuthorizationURL(
+    state,
+    verifier,
+    ['openid'],
+  )
+  url.searchParams.set('prompt', 'select_account')
+  setAuthCookie(c, authConfig.oauthStateCookie, state, authConfig.oauthCookieTtlMs)
+  setAuthCookie(c, authConfig.oauthVerifierCookie, verifier, authConfig.oauthCookieTtlMs)
+  return c.redirect(url.toString())
+})
+
+authRoutes.get('/google/callback', async (c) => {
+  const config = googleConfig()
+  if (!config) return c.redirect('/?auth=unavailable')
+  const state = getCookie(c, authConfig.oauthStateCookie)
+  const verifier = getCookie(c, authConfig.oauthVerifierCookie)
+  deleteCookie(c, authConfig.oauthStateCookie, { path: '/' })
+  deleteCookie(c, authConfig.oauthVerifierCookie, { path: '/' })
+
+  if (c.req.query('error')) return c.redirect('/?auth=cancelled')
+  const code = c.req.query('code')
+  if (!code || !verifier || !sameToken(c.req.query('state'), state)) return c.redirect('/?auth=failed')
+
+  let googleSub: string | null
+  try {
+    const tokens = await new Google(config.clientId, config.clientSecret, config.redirectUri).validateAuthorizationCode(
+      code,
+      verifier,
+    )
+    googleSub = googleSubFromClaims(decodeIdToken(tokens.idToken()), config.clientId, Date.now())
+  } catch (error) {
+    console.error('google callback failed', error)
+    return c.redirect('/?auth=failed')
+  }
+  if (!googleSub) return c.redirect('/?auth=failed')
+
+  const sub = googleSub
+  const now = Date.now()
+  const db = getDb()
+  const outcome = immediate(() => {
+    const user = db.select({ id: users.id }).from(users).where(eq(users.googleSub, sub)).get()
+    if (user) return { kind: 'login' as const, token: openSession(c, user.id, 'login', now) }
+    // Conta nova: guarda o sub e pede nome e inicial no front.
+    db.delete(googleSignups).where(lte(googleSignups.expiresAt, now)).run()
+    const token = newToken()
+    db.insert(googleSignups)
+      .values({ id: hashToken(token), googleSub: sub, createdAt: now, expiresAt: now + authConfig.signupTtlMs })
+      .run()
+    return { kind: 'signup' as const, token }
+  })
+
+  if (outcome.kind === 'login') {
+    setSessionCookie(c, outcome.token)
+    return c.redirect('/')
+  }
+  setAuthCookie(c, authConfig.signupCookie, outcome.token, authConfig.signupTtlMs)
+  return c.redirect('/?auth=signup')
+})
+
+// O front pergunta se há um cadastro esperando nome e inicial.
+authRoutes.get('/signup', (c) => {
+  if (!pendingSignup(c, Date.now())) return c.json({ error: 'signup_expired' }, 404)
+  return c.json({ starters: Object.keys(trainerConfig.starters) })
+})
+
+authRoutes.post('/signup', async (c) => {
+  const body = await readObject(c)
+  if (!body) return c.json({ error: 'invalid_body' }, 400)
+  const username = asUsername(body.username)
   if (!username) {
     return c.json({ error: 'invalid_username', min: authConfig.usernameMin, max: authConfig.usernameMax }, 400)
   }
-  const password = asPassword(parsed.body.password)
-  if (!password) {
-    return c.json({ error: 'invalid_password', min: authConfig.passwordMin, max: authConfig.passwordMax }, 400)
-  }
-  const starter = parsed.body.starter
-  if (!isStarter(starter)) return c.json({ error: 'invalid_starter', starters: Object.keys(trainerConfig.starters) }, 400)
-
-  const db = getDb()
-  const starterSpecies = db.select({ id: species.id }).from(species).where(eq(species.id, trainerConfig.starters[starter])).get()
-  if (!starterSpecies) throw new Error(`starter species ${trainerConfig.starters[starter]} is not seeded`)
+  const starter = body.starter
+  if (!isStarter(starter)) return c.json({ error: 'invalid_starter' }, 400)
 
   const now = Date.now()
-  const passwordHash = await hash(password)
-  const meta = requestMeta(c)
-  const token = randomBytes(32).toString('base64url')
-
   try {
-    immediate(() => {
-      const user = db
-        .insert(users)
-        .values({ username, passwordHash, createdAt: now })
-        .returning({ id: users.id })
-        .get()
-      if (!user) throw new Error('failed to create user')
-
-      db.insert(trainers)
-        .values({
-          userId: user.id,
-          energy: trainerConfig.energyMax,
-          energyUpdatedAt: now,
-          updatedAt: now,
-        })
-        .run()
-
-      db.insert(pokemon)
-        .values({
-          userId: user.id,
-          speciesId: starterSpecies.id,
-          level: trainerConfig.starterLevel,
-          caughtAt: now,
-          originalSpeciesId: starterSpecies.id,
-        })
-        .run()
-
-      db.insert(pokedexEntries)
-        .values({
-          userId: user.id,
-          speciesId: starterSpecies.id,
-          seenCount: 1,
-          caughtCount: 1,
-          firstSeenAt: now,
-          firstCaughtAt: now,
-        })
-        .run()
-
-      db.insert(inventory)
-        .values(trainerConfig.startingItems.map((item) => ({ userId: user.id, ...item })))
-        .run()
-
-      db.insert(sessions)
-        .values({
-          id: hashToken(token),
-          userId: user.id,
-          createdAt: now,
-          expiresAt: now + authConfig.sessionTtlMs,
-        })
-        .run()
-
-      db.insert(authEvents)
-        .values({ userId: user.id, event: 'register', ip: meta.ip, userAgent: meta.userAgent, createdAt: now })
-        .run()
+    const result = immediate(() => {
+      const signup = pendingSignup(c, now)
+      if (!signup) return null
+      const db = getDb()
+      // Duas abas no mesmo cadastro: a segunda só entra na conta criada pela primeira.
+      const existing = db.select({ id: users.id }).from(users).where(eq(users.googleSub, signup.googleSub)).get()
+      const userId = existing
+        ? existing.id
+        : createPlayer({ username, googleSub: signup.googleSub, starter, now }).userId
+      db.delete(googleSignups).where(eq(googleSignups.id, signup.id)).run()
+      return { token: openSession(c, userId, existing ? 'login' : 'register', now) }
     })
+    if (!result) return c.json({ error: 'signup_expired' }, 401)
+    deleteCookie(c, authConfig.signupCookie, { path: '/' })
+    setSessionCookie(c, result.token)
+    return c.json({ username }, 201)
   } catch (error) {
     if (error instanceof SqliteError && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return c.json({ error: 'username_taken' }, 409)
     }
     throw error
   }
-
-  setSessionCookie(c, token)
-  return c.json(
-    {
-      username,
-      starter: { speciesId: starterSpecies.id, level: trainerConfig.starterLevel },
-    },
-    201,
-  )
-})
-
-authRoutes.post('/login', async (c) => {
-  const parsed = await readBody(c)
-  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
-  const username = asUsername(parsed.body.username)
-  const password = asPassword(parsed.body.password)
-  if (!username || !password) return c.json({ error: 'invalid_credentials' }, 401)
-
-  const db = getDb()
-  const user = db
-    .select({ id: users.id, passwordHash: users.passwordHash, username: users.username })
-    .from(users)
-    .where(eq(users.username, username))
-    .get()
-  const valid = user !== undefined && (await verify(user.passwordHash, password))
-  if (!user || !valid) return c.json({ error: 'invalid_credentials' }, 401)
-
-  const now = Date.now()
-  const token = randomBytes(32).toString('base64url')
-  const meta = requestMeta(c)
-  immediate(() => {
-    db.insert(sessions)
-      .values({
-        id: hashToken(token),
-        userId: user.id,
-        createdAt: now,
-        expiresAt: now + authConfig.sessionTtlMs,
-      })
-      .run()
-    db.insert(authEvents)
-      .values({ userId: user.id, event: 'login', ip: meta.ip, userAgent: meta.userAgent, createdAt: now })
-      .run()
-  })
-
-  setSessionCookie(c, token)
-  return c.json({ username: user.username })
 })
 
 authRoutes.post('/logout', (c) => {
@@ -153,7 +139,8 @@ authRoutes.post('/logout', (c) => {
   const meta = requestMeta(c)
   const now = Date.now()
   immediate(() => {
-    getDb().insert(authEvents)
+    getDb()
+      .insert(authEvents)
       .values({ userId: session.userId, event: 'logout', ip: meta.ip, userAgent: meta.userAgent, createdAt: now })
       .run()
     getDb().delete(sessions).where(eq(sessions.id, session.id)).run()
@@ -163,49 +150,12 @@ authRoutes.post('/logout', (c) => {
   return c.body(null, 204)
 })
 
-function setSessionCookie(c: Context, token: string) {
-  setCookie(c, authConfig.cookieName, token, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: authConfig.sessionTtlMs / 1000,
-  })
-}
-
-function requestMeta(c: Context): { ip: string; userAgent: string | null } {
-  const socketIp = getConnInfo(c).remote.address ?? 'unknown'
-  const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-  const ip = process.env.TRUST_PROXY === '1' && forwarded ? forwarded : socketIp
-  const userAgent = c.req.header('user-agent')?.slice(0, authConfig.userAgentMax) ?? null
-  return { ip, userAgent }
-}
-
-async function readBody(c: Context): Promise<{ ok: true; body: { username?: unknown; password?: unknown; starter?: unknown } } | { ok: false; error: string }> {
-  try {
-    const body = await c.req.json()
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      return { ok: false, error: 'invalid_body' }
-    }
-    return { ok: true, body }
-  } catch {
-    return { ok: false, error: 'invalid_body' }
-  }
-}
-
-function asUsername(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !authConfig.usernamePattern.test(value)) return undefined
-  if (value.length < authConfig.usernameMin || value.length > authConfig.usernameMax) return undefined
-  return value
-}
-
-function asPassword(value: unknown): string | undefined {
-  if (typeof value !== 'string' || value.length < authConfig.passwordMin || value.length > authConfig.passwordMax) {
-    return undefined
-  }
-  return value
-}
-
-function isStarter(value: unknown): value is StarterKey {
-  return typeof value === 'string' && Object.hasOwn(trainerConfig.starters, value)
+function pendingSignup(c: Context, now: number) {
+  const token = getCookie(c, authConfig.signupCookie)
+  if (!token) return undefined
+  return getDb()
+    .select()
+    .from(googleSignups)
+    .where(and(eq(googleSignups.id, hashToken(token)), gt(googleSignups.expiresAt, now)))
+    .get()
 }

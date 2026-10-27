@@ -15,7 +15,8 @@ sudo install -d -o pocket-meadow -g pocket-meadow -m 750 /var/lib/pocket-meadow
 sudo install -d -m 755 /opt/pocket-meadow /opt/pocket-meadow/releases
 
 # O .env não é sobrescrito: na VM ele pode ter ganhado ajustes.
-[[ -f /etc/pocket-meadow.env ]] || sudo install -m 644 "$src/pocket-meadow.env" /etc/pocket-meadow.env
+[[ -f /etc/pocket-meadow.env ]] || sudo install -m 600 "$src/pocket-meadow.env" /etc/pocket-meadow.env
+sudo chmod 600 /etc/pocket-meadow.env
 for unit in pocket-meadow.service pocket-meadow-backup.service pocket-meadow-backup.timer; do
   sudo install -m 644 "$src/$unit" "/etc/systemd/system/$unit"
 done

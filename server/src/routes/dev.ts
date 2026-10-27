@@ -1,10 +1,11 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { asUsername, createPlayer, isStarter, openSession, setSessionCookie } from '../auth/accounts.js'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { trainerConfig } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
-import { berryPlots, daycareSlots, trainers } from '../db/schema.js'
+import { berryPlots, daycareSlots, trainers, users } from '../db/schema.js'
 import { readObject } from './http.js'
 
 // Ferramentas de teste. Só existem com DEV_TOOLS=1 e fora de produção;

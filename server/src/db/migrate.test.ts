@@ -146,3 +146,52 @@ test('a migração de xp_gained preserva slots de daycare que já existem', () =
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('as migrações do login pelo Google preservam contas e o save', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-google-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, password_hash, created_at) values ('brock', 'hash', 1)`).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage
+    ) values (74, 'geodude', 'Geodude', 'rock', 40, 80, 100, 30, 30, 20, 300, 60, 255, 31, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (user_id, species_id, level, xp, caught_at, original_species_id)
+     values (1, 74, 12, 40, 1, 74)`,
+  ).run()
+  db.prepare(`insert into sessions (id, user_id, created_at, expires_at) values ('s', 1, 1, 9999999999999)`).run()
+
+  execMigration(db, '0006_google_login.sql')
+  execMigration(db, '0007_drop_password.sql')
+
+  const user = db.prepare('select * from users where id = 1').get() as Record<string, unknown>
+  assert.equal(user.username, 'brock')
+  assert.equal(user.google_sub, null)
+  assert.equal('password_hash' in user, false)
+  const mon = db.prepare('select level, xp from pokemon where user_id = 1').get() as { level: number; xp: number }
+  assert.deepEqual({ ...mon }, { level: 12, xp: 40 })
+  assert.equal((db.prepare('select count(*) as n from sessions').get() as { n: number }).n, 1)
+
+  // google_sub é único quando preenchido; várias contas locais podem ficar sem.
+  db.prepare(`update users set google_sub = 'g1' where id = 1`).run()
+  db.prepare(`insert into users (username, created_at) values ('misty', 1)`).run()
+  db.prepare(`insert into users (username, created_at) values ('erika', 1)`).run()
+  assert.throws(() => db.prepare(`insert into users (username, google_sub, created_at) values ('x', 'g1', 1)`).run())
+  db.close()
+  fs.rmSync(file, { force: true })
+})

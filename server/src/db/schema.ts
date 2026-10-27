@@ -63,8 +63,20 @@ export const users = sqliteTable(
   {
     id: integer('id').primaryKey(),
     username: usernameText('username').notNull().unique(),
-    passwordHash: text('password_hash').notNull(),
+    // `sub` do Google (só o ID, sem e-mail). NULL só em contas de teste locais.
+    googleSub: text('google_sub').unique(),
     createdAt: integer('created_at').notNull(),
+  },
+)
+
+// Quem voltou do Google sem conta e ainda vai escolher nome e inicial.
+export const googleSignups = sqliteTable(
+  'google_signups',
+  {
+    id: text('id').primaryKey(), // SHA-256 do token do cookie, como em sessions
+    googleSub: text('google_sub').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
   },
 )
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { api, errorText, type ApiError } from './api'
 
   let { onSignedIn }: { onSignedIn: () => void } = $props()
@@ -9,26 +10,62 @@
     { key: 'squirtle', speciesId: 7, name: 'Squirtle' },
   ]
 
-  let mode = $state<'login' | 'register'>('login')
+  // O servidor volta para /?auth=<motivo> (server/src/routes/auth.ts).
+  const returnMessages: Record<string, string> = {
+    cancelled: 'Login cancelado.',
+    failed: 'Não deu para entrar com o Google. Tente de novo.',
+    unavailable: 'O login pelo Google não está configurado neste servidor.',
+  }
+
+  // 'checking': perguntando se há cadastro esperando nome e inicial.
+  let mode = $state<'checking' | 'login' | 'signup'>('checking')
   let username = $state('')
-  let password = $state('')
   let starter = $state('charmander')
   let message = $state('')
   let pending = $state(false)
+  const devLogin = import.meta.env.DEV
 
-  async function submit(event: SubmitEvent) {
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search)
+    const reason = params.get('auth')
+    if (reason) {
+      message = returnMessages[reason] ?? ''
+      params.delete('auth')
+      const query = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''))
+    }
+    void checkSignup()
+  })
+
+  async function checkSignup() {
+    try {
+      const response = await api('/api/auth/signup')
+      mode = response.ok ? 'signup' : 'login'
+    } catch {
+      mode = 'login'
+      message = 'Sem conexão com o servidor.'
+    }
+  }
+
+  async function submitSignup(event: SubmitEvent) {
     event.preventDefault()
+    await send('/api/auth/signup', { username, starter })
+  }
+
+  async function submitDev(event: SubmitEvent) {
+    event.preventDefault()
+    await send('/api/dev/login', { username, starter })
+  }
+
+  async function send(path: string, body: unknown) {
     pending = true
     message = ''
     try {
-      const response = await api(mode === 'login' ? '/api/auth/login' : '/api/auth/register', {
-        username,
-        password,
-        ...(mode === 'register' ? { starter } : {}),
-      })
+      const response = await api(path, body)
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError
-        message = errorText(body)
+        const error = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError
+        message = errorText(error)
+        if (error.error === 'signup_expired') mode = 'login'
         return
       }
       onSignedIn()
@@ -40,65 +77,71 @@
   }
 </script>
 
+{#snippet starterPicker()}
+  <fieldset>
+    <legend>Escolha seu parceiro</legend>
+    <div class="starters" role="radiogroup">
+      {#each starters as option (option.key)}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={starter === option.key}
+          class="starter"
+          class:selected={starter === option.key}
+          onclick={() => (starter = option.key)}
+        >
+          <img src="/sprites/showdown/{option.speciesId}.gif" alt="" />
+          <span>{option.name}</span>
+        </button>
+      {/each}
+    </div>
+  </fieldset>
+{/snippet}
+
+{#snippet nameField()}
+  <label>
+    Nome de treinador
+    <input
+      class="field"
+      name="username"
+      autocomplete="nickname"
+      autocapitalize="none"
+      spellcheck="false"
+      bind:value={username}
+    />
+  </label>
+{/snippet}
+
 <main class="screen">
   <h1 class="logo">Pocket<span>Meadow</span></h1>
 
-  <form class="panel" onsubmit={submit}>
-    <h2>{mode === 'login' ? 'Bem-vindo de volta' : 'Novo treinador'}</h2>
+  {#if mode === 'signup'}
+    <form class="panel" onsubmit={submitSignup}>
+      <h2>Novo treinador</h2>
+      {@render nameField()}
+      {@render starterPicker()}
+      {#if message}<p class="message" role="alert">{message}</p>{/if}
+      <button class="btn btn-primary submit" type="submit" disabled={pending}>
+        {#if pending}…{:else}Começar{/if}
+      </button>
+    </form>
+  {:else}
+    <section class="panel">
+      <h2>Bem-vindo</h2>
+      <p class="hint">Entre com a sua conta Google. O jogo guarda só um identificador da conta, sem e-mail nem nome.</p>
+      {#if message}<p class="message" role="alert">{message}</p>{/if}
+      <a class="btn btn-primary submit" href="/api/auth/google" aria-disabled={mode === 'checking'}>Entrar com Google</a>
+    </section>
 
-    <label>
-      Usuário
-      <input class="field" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" bind:value={username} />
-    </label>
-    <label>
-      Senha
-      <input
-        class="field"
-        name="password"
-        type="password"
-        autocomplete={mode === 'login' ? 'current-password' : 'new-password'}
-        bind:value={password}
-      />
-    </label>
-
-    {#if mode === 'register'}
-      <fieldset>
-        <legend>Escolha seu parceiro</legend>
-        <div class="starters" role="radiogroup">
-          {#each starters as option (option.key)}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={starter === option.key}
-              class="starter"
-              class:selected={starter === option.key}
-              onclick={() => (starter = option.key)}
-            >
-              <img src="/sprites/showdown/{option.speciesId}.gif" alt="" />
-              <span>{option.name}</span>
-            </button>
-          {/each}
-        </div>
-      </fieldset>
+    {#if devLogin}
+      <form class="panel" onsubmit={submitDev}>
+        <h2>Entrar sem Google (teste)</h2>
+        {@render nameField()}
+        {@render starterPicker()}
+        <button class="btn submit" type="submit" disabled={pending}>Entrar</button>
+      </form>
     {/if}
-
-    {#if message}<p class="message" role="alert">{message}</p>{/if}
-
-    <button class="btn btn-primary submit" type="submit" disabled={pending}>
-      {#if pending}…{:else}{mode === 'login' ? 'Entrar' : 'Criar conta'}{/if}
-    </button>
-  </form>
-
-  <button
-    type="button"
-    class="btn-link"
-    onclick={() => {
-      mode = mode === 'login' ? 'register' : 'login'
-      message = ''
-    }}
-  >
-    {mode === 'login' ? 'Ainda não tenho conta' : 'Já tenho conta'}
-  </button>
+  {/if}
 </main>
 
 <style>
@@ -136,7 +179,8 @@
     margin-top: -0.15em;
   }
 
-  form {
+  form,
+  section {
     display: grid;
     gap: 0.75rem;
     width: 100%;
@@ -203,6 +247,15 @@
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .hint {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  a.submit {
+    text-decoration: none;
   }
 
   .message {

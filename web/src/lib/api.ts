@@ -197,15 +197,13 @@ export function effectLabel(effectKey: string): string {
 export function errorText(error: ApiError): string {
   switch (error.error) {
     case 'invalid_username':
-      return `O usuário precisa ter de ${error.min} a ${error.max} caracteres: letras, números ou _.`
-    case 'invalid_password':
-      return `A senha precisa ter de ${error.min} a ${error.max} caracteres.`
+      return `O nome precisa ter de ${error.min} a ${error.max} caracteres: letras, números ou _.`
     case 'invalid_starter':
       return 'Escolha Bulbasaur, Charmander ou Squirtle.'
     case 'username_taken':
-      return 'Esse usuário já existe.'
-    case 'invalid_credentials':
-      return 'Usuário ou senha não confere.'
+      return 'Esse nome já está em uso.'
+    case 'signup_expired':
+      return 'O cadastro expirou. Entre com o Google de novo.'
     case 'invalid_body':
       return 'Não entendi o pedido.'
     case 'not_signed_in':

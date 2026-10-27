@@ -45,7 +45,7 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 | ORM | Drizzle ORM | Migrações versionadas, bom suporte a SQLite |
 | Banco | SQLite com WAL | Um arquivo; backup por `VACUUM INTO` (seção 4.6) |
 | Frontend | Vite + Svelte + TypeScript | Build estático servido pelo Caddy |
-| Auth | Usuário + senha (argon2), sessão por cookie httpOnly | Simples; projeto pessoal |
+| Auth | Só Google (OAuth com PKCE, via `arctic`), sessão por cookie httpOnly | Sem senha guardada. Seção 4.7 |
 | Dados | PokéAPI (seed único) | Não consultar em tempo real |
 | Sprites | GIFs animados do Showdown via repositório `PokeAPI/sprites` | Baixados uma vez e servidos localmente |
 
@@ -268,6 +268,25 @@ Desde 2026-10-27 o jogo tem save de verdade em produção. Até ali, as contas e
 - **Diário:** o timer `pocket-meadow-backup.timer` (04:30 UTC) roda `node dist/db/backup.js` e grava `daily-<data>.sqlite`. Guarda 14.
 - **Fora da VM:** a pasta `/var/lib/pocket-meadow/backups/` também vai para fora da VM (destino a definir; o Object Storage da Oracle é o candidato). Backup que só existe na própria máquina não protege contra perder a máquina.
 - **Restore:** `sudo systemctl stop pocket-meadow`, depois `cd /opt/pocket-meadow/current/server && sudo -u pocket-meadow env $(xargs < /etc/pocket-meadow.env) node dist/db/backup.js restore /var/lib/pocket-meadow/backups/<arquivo>` e `sudo systemctl start pocket-meadow`. O banco atual vira `pre-restore-<data>.sqlite` antes da troca. Testar o restore de vez em quando, porque backup que nunca foi restaurado não é garantia.
+
+### 4.7 Login
+
+Só pelo Google, sem senha (desde 2026-10-27; o cadastro por senha nunca teve conta em produção).
+
+**Fluxo** (`server/src/routes/auth.ts`)
+1. `GET /auth/google`: gera `state` e o verificador PKCE, guarda os dois em cookies httpOnly de 10 min e manda para o Google com o escopo **só `openid`**.
+2. `GET /auth/google/callback`: confere o `state` com o cookie, troca o código pelo token (com o verificador) e lê o `sub` do ID token, conferindo emissor, público e validade. A assinatura não precisa ser conferida, porque o token vem direto do endpoint do Google por TLS (OpenID Connect Core, 3.1.3.7).
+3. Conta existente (`users.google_sub`): abre a sessão e volta para `/`.
+4. Conta nova: grava `google_signups` (30 min), põe o cookie `signup` e volta para `/?auth=signup`. O front pede nome e inicial, e `POST /auth/signup` cria a conta e consome o cadastro.
+5. Erros voltam para `/?auth=cancelled|failed|unavailable`, e o front mostra a mensagem.
+
+**Dados:** o jogo guarda só o `sub`, um ID estável da conta Google. Sem e-mail, nome ou foto.
+
+**Configuração:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `PUBLIC_URL` no ambiente (`/etc/pocket-meadow.env` na VM, `server/.env` local). Sem os três, o botão volta com "não configurado". O client OAuth fica num projeto do Google Cloud em modo "Testing": só os e-mails da lista de test users entram, e não é preciso verificação do app nem política de privacidade. Redirect URIs: `https://pocket.lontraeye.com/api/auth/google/callback` e `http://localhost:5173/api/auth/google/callback`.
+
+**Teste local:** `POST /dev/login { username, starter? }` entra sem Google (só com `DEV_TOOLS=1`) e cria a conta se ela não existir, sem `google_sub`. A tela de login mostra esse formulário no `npm run dev`.
+
+**Por que não Firebase Auth:** a sessão continuaria sendo o nosso cookie, então o Firebase seria só um intermediário. Validar o token dele pede o `firebase-admin`, pesado para a VM de 1 GB; o login por redirect quebra no Safari do iPhone sem proxy extra; e o SDK pesa no front.
 
 ---
 
@@ -893,8 +912,9 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/auth/register` | Cria usuário + treinador + itens iniciais + Pokémon inicial |
-| POST | `/auth/login` / `/auth/logout` | Sessão por cookie |
+| GET | `/auth/google` → `/auth/google/callback` | Login pelo Google (seção 4.7) |
+| GET / POST | `/auth/signup` | Conta nova depois do Google: `{ username, starter }` cria usuário + treinador + itens iniciais + Pokémon inicial |
+| POST | `/auth/logout` | Encerra a sessão |
 | GET | `/state` | Estado completo: treinador, energia, Pokémon, doces, daycare, canteiros, inventário, efeitos, encontro pendente |
 | GET | `/regions` | Regiões com status de bloqueio (sem revelar a tabela exata de spawn) |
 | POST | `/encounters` | `{ regionSlug }` → cria encontro pendente |
@@ -916,7 +936,7 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 Respostas de ação devem retornar o resultado detalhado (rolagens relevantes, XP ganho, level ups, doces) para o frontend animar.
 
 ### Início do jogo
-Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 5. Inventário inicial: 3 sementes de Oran, 1 de Pinap. Energia cheia.
+Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 5. Inventário inicial: 3 sementes de Oran, 1 de Pinap. Energia cheia.
 
 ---
 
