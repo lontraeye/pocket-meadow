@@ -154,8 +154,20 @@
     }
   }
 
-  const columns = 6
-  const gridRows = 6
+  // Zona andável 12×12; anel de gramado igual ao redor (parece infinito no pan).
+  const playCols = 12
+  const playRows = 12
+  const margin = 10
+  const worldCols = playCols + margin * 2
+  const worldRows = playRows + margin * 2
+  const playCol0 = margin
+  const playRow0 = margin
+  const playColEnd = margin + playCols
+  const playRowEnd = margin + playRows
+  // Faixa de z: chão (0..span-1), entidades (span..) — sprites grandes não furam o gramado.
+  const depthSpan = worldCols + worldRows
+  // Alvo: ~5 tiles na largura da viewport (escala inteira 1–3).
+  const viewTiles = 5
   const baseTileW = 48
   const baseTileH = 24
   const showdownSize = 64
@@ -169,6 +181,7 @@
   // numa direção nova, em vez de girar na hora.
   const turnStepMs = 110
   const sleepDir = 0
+  const panDragPx = 6
 
   // A pose de sono do PMD olha para ↙ em quase todas as espécies. Quem dorme
   // olhando para a direita (↘ → ↗) usa a pose espelhada, para não virar de lado.
@@ -176,13 +189,25 @@
     return walker.anim === 'Sleep' && walker.dir >= 1 && walker.dir <= 3
   }
 
-  /** Canteiros na última fileira (mesma regra do desenho dos tiles). */
+  function inPlay(col: number, row: number): boolean {
+    return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
+  }
+
+  /** Canteiros na última fileira da zona jogável; plotIndex = col − margem. */
   function isPlotCell(col: number, row: number): boolean {
-    return row === gridRows - 1 && col >= 0 && col < game.plotSlotsUnlocked
+    return (
+      row === playRowEnd - 1 &&
+      col >= playCol0 &&
+      col < playCol0 + game.plotSlotsUnlocked
+    )
+  }
+
+  function plotIndexAt(col: number): number {
+    return col - playCol0
   }
 
   function isWalkable(col: number, row: number): boolean {
-    return col >= 0 && col < columns && row >= 0 && row < gridRows && !isPlotCell(col, row)
+    return inPlay(col, row) && !isPlotCell(col, row)
   }
 
   type Walker = {
@@ -198,6 +223,14 @@
 
   let lawn = $state<HTMLDivElement | null>(null)
   let scale = $state(1)
+  let lawnW = $state(0)
+  let lawnH = $state(0)
+  let stageBoxW = $state(0)
+  let stageBoxH = $state(0)
+  let panX = $state(0)
+  let panY = $state(0)
+  /** Já centrou a câmera nesta montagem do gramado. */
+  let panSeeded = false
   let time = $state(0)
   let walkers = $state<Walker[]>([])
   // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
@@ -239,21 +272,21 @@
     return out
   })
 
-  const unitWidth = $derived(
-    ((columns + gridRows) * baseTileW) / 2 + 2 * Math.max(0, extent.side - baseTileW / 2),
-  )
+  // Largura de referência da viewport (~5 tiles), sem pad de sprite — senão a
+  // escala fica 1 e o losango inteiro cabe com bordas do fundo aparecendo.
+  const viewUnitWidth = viewTiles * baseTileW
   const padX = $derived(Math.max(0, extent.side * scale - halfW))
   const padTop = $derived(Math.max(0, extent.up * scale - halfH))
   const padBottom = $derived(Math.max(0, extent.down * scale - halfH - depth))
 
-  const originX = $derived(gridRows * halfW + padX)
+  const originX = $derived(worldRows * halfW + padX)
   const originY = $derived(padTop)
-  const stageW = $derived((columns + gridRows) * halfW + padX * 2)
-  const stageH = $derived(originY + (columns + gridRows) * halfH + depth + padBottom)
+  const stageW = $derived((worldCols + worldRows) * halfW + padX * 2)
+  const stageH = $derived(originY + (worldCols + worldRows) * halfH + depth + padBottom)
 
-  const tiles = Array.from({ length: columns * gridRows }, (_, index) => ({
-    col: index % columns,
-    row: Math.floor(index / columns),
+  const tiles = Array.from({ length: worldCols * worldRows }, (_, index) => ({
+    col: index % worldCols,
+    row: Math.floor(index / worldCols),
   }))
 
   function place(col: number, row: number): { x: number; y: number } {
@@ -263,17 +296,165 @@
     }
   }
 
+  /** Limita o pan para a viewport não alcançar a borda do mundo (gramado “sem fim”). */
+  function clampPan(x: number, y: number, viewW: number, viewH: number, sw: number, sh: number): { x: number; y: number } {
+    // Folga ~2 tiles: a câmera para antes da última fileira do estágio.
+    const padX = Math.min(viewW * 0.35, baseTileW * scale * 2)
+    const padY = Math.min(viewH * 0.35, baseTileH * scale * 4)
+    let minX: number
+    let maxX: number
+    let minY: number
+    let maxY: number
+    if (sw <= viewW) {
+      minX = maxX = (viewW - sw) / 2
+    } else {
+      minX = viewW - sw + padX
+      maxX = -padX
+      if (minX > maxX) {
+        minX = maxX = (viewW - sw) / 2
+      }
+    }
+    if (sh <= viewH) {
+      minY = maxY = (viewH - sh) / 2
+    } else {
+      minY = viewH - sh + padY
+      maxY = -padY
+      if (minY > maxY) {
+        minY = maxY = (viewH - sh) / 2
+      }
+    }
+    return {
+      x: Math.min(maxX, Math.max(minX, x)),
+      y: Math.min(maxY, Math.max(minY, y)),
+    }
+  }
+
+  function centerPanOnPlay(viewW: number, viewH: number, sw: number, sh: number, hw: number, hh: number, ox: number, oy: number) {
+    const midCol = playCol0 + (playCols - 1) / 2
+    const midRow = playRow0 + (playRows - 1) / 2
+    const cx = ox + (midCol - midRow) * hw
+    const cy = oy + (midCol + midRow) * hh + hh
+    return clampPan(viewW / 2 - cx, viewH / 2 - cy, viewW, viewH, sw, sh)
+  }
+
   $effect(() => {
     const node = lawn
-    if (!node) return
+    if (!node) {
+      panSeeded = false
+      return
+    }
     const measure = () => {
-      const fit = Math.floor(node.clientWidth / unitWidth)
-      scale = Math.min(2, Math.max(1, fit))
+      const viewW = node.clientWidth
+      const viewH = node.clientHeight
+      lawnW = viewW
+      lawnH = viewH
+      // Preenche a largura: no 360px com 5×48 cai em escala 2.
+      const fit = Math.round(viewW / viewUnitWidth)
+      const nextScale = Math.min(3, Math.max(1, fit))
+      scale = nextScale
+      const hw = (baseTileW * nextScale) / 2
+      const hh = (baseTileH * nextScale) / 2
+      const depthPx = 8 * nextScale
+      const px = Math.max(0, extent.side * nextScale - hw)
+      const pt = Math.max(0, extent.up * nextScale - hh)
+      const pb = Math.max(0, extent.down * nextScale - hh - depthPx)
+      const ox = worldRows * hw + px
+      const oy = pt
+      const sw = (worldCols + worldRows) * hw + px * 2
+      const sh = oy + (worldCols + worldRows) * hh + depthPx + pb
+      stageBoxW = sw
+      stageBoxH = sh
+      if (!panSeeded) {
+        panSeeded = true
+        const centered = centerPanOnPlay(viewW, viewH, sw, sh, hw, hh, ox, oy)
+        panX = centered.x
+        panY = centered.y
+      } else {
+        // Não ler pan reativo aqui: senão cada arrasto recria o observer.
+        const clamped = clampPan(untrack(() => panX), untrack(() => panY), viewW, viewH, sw, sh)
+        panX = clamped.x
+        panY = clamped.y
+      }
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(node)
     return () => observer.disconnect()
+  })
+
+  // Pan por arrastar: limiar evita roubar toque em canteiro/Pokémon.
+  $effect(() => {
+    const node = lawn
+    if (!node) return
+    let pointerId: number | null = null
+    let startX = 0
+    let startY = 0
+    let originPanX = 0
+    let originPanY = 0
+    let dragging = false
+    let suppressClick = false
+
+    const onDown = (event: PointerEvent) => {
+      if (event.button !== 0 && event.pointerType === 'mouse') return
+      pointerId = event.pointerId
+      startX = event.clientX
+      startY = event.clientY
+      originPanX = panX
+      originPanY = panY
+      dragging = false
+    }
+
+    const onMove = (event: PointerEvent) => {
+      if (pointerId !== event.pointerId) return
+      const dx = event.clientX - startX
+      const dy = event.clientY - startY
+      if (!dragging) {
+        if (dx * dx + dy * dy < panDragPx * panDragPx) return
+        dragging = true
+        suppressClick = true
+        try {
+          node.setPointerCapture(event.pointerId)
+        } catch {
+          // Alguns alvos já capturam; seguimos sem capture.
+        }
+      }
+      const next = clampPan(originPanX + dx, originPanY + dy, lawnW, lawnH, stageBoxW, stageBoxH)
+      panX = next.x
+      panY = next.y
+    }
+
+    const onUp = (event: PointerEvent) => {
+      if (pointerId !== event.pointerId) return
+      pointerId = null
+      if (dragging) {
+        try {
+          node.releasePointerCapture(event.pointerId)
+        } catch {
+          // ignore
+        }
+      }
+      dragging = false
+    }
+
+    const onClickCapture = (event: MouseEvent) => {
+      if (!suppressClick) return
+      suppressClick = false
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    node.addEventListener('pointerdown', onDown)
+    node.addEventListener('pointermove', onMove)
+    node.addEventListener('pointerup', onUp)
+    node.addEventListener('pointercancel', onUp)
+    node.addEventListener('click', onClickCapture, true)
+    return () => {
+      node.removeEventListener('pointerdown', onDown)
+      node.removeEventListener('pointermove', onMove)
+      node.removeEventListener('pointerup', onUp)
+      node.removeEventListener('pointercancel', onUp)
+      node.removeEventListener('click', onClickCapture, true)
+    }
   })
 
   $effect(() => {
@@ -289,7 +470,7 @@
     void game.plotSlotsUnlocked
     const spots = walkableSpots()
     const created = mons.map((mon, index) => {
-      const spot = spots[index % Math.max(1, spots.length)] ?? { col: 1, row: 1 }
+      const spot = spots[index % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
       return {
         id: mon.id,
         speciesId: mon.speciesId,
@@ -465,8 +646,8 @@
 
   function walkableSpots(): { col: number; row: number }[] {
     const spots: { col: number; row: number }[] = []
-    for (let row = 0; row < gridRows; row += 1) {
-      for (let col = 0; col < columns; col += 1) {
+    for (let row = playRow0; row < playRowEnd; row += 1) {
+      for (let col = playCol0; col < playColEnd; col += 1) {
         if (isWalkable(col, row)) spots.push({ col, row })
       }
     }
@@ -491,7 +672,7 @@
       const escape: Step[] = [{ col: fromCol, row: fromRow - 1, dir: 3 }]
       return [...escape, ...route(fromCol, fromRow - 1, toCol, toRow)]
     }
-    const viaRow = Math.min(fromRow, toRow, gridRows - 2)
+    const viaRow = Math.min(fromRow, toRow, playRowEnd - 2)
     const via = orthRoute(fromCol, fromRow, fromCol, viaRow, false)
     const rest = orthRoute(fromCol, viaRow, toCol, toRow, true)
     if (via && rest && pathClear(via) && pathClear(rest)) return [...via, ...rest]
@@ -539,11 +720,17 @@
 
 <div class="layout">
   <div class="lawn" bind:this={lawn} aria-label="Jardim">
-    <div class="stage" style:width="{stageW}px" style:height="{stageH}px">
+    <div
+      class="stage"
+      style:width="{stageW}px"
+      style:height="{stageH}px"
+      style:transform="translate({panX}px, {panY}px)"
+    >
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
-        {@const isPlot = tile.row === gridRows - 1 && tile.col < game.plotSlotsUnlocked}
-        {@const plot = isPlot ? plotsByIndex.get(tile.col) : undefined}
+        {@const isPlot = isPlotCell(tile.col, tile.row)}
+        {@const plotIdx = isPlot ? plotIndexAt(tile.col) : -1}
+        {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
         {@const stage = isPlot ? plotStage(plot) : null}
         {#if isPlot}
           <button
@@ -560,9 +747,9 @@
             style:--half="{halfH}px"
             style:--depth="{depth}px"
             style:margin-left="{-halfW}px"
-            style:z-index={tile.col + tile.row}
-            aria-label={`Canteiro ${tile.col + 1}`}
-            onclick={() => openPlot(tile.col)}
+            style:z-index={tile.col + tile.row + depthSpan}
+            aria-label={`Canteiro ${plotIdx + 1}`}
+            onclick={() => openPlot(plotIdx)}
           >
             {#if stage === 'planted'}
               <span class="crop sprout" aria-hidden="true"></span>
@@ -597,7 +784,7 @@
           style:left="{spot.x}px"
           style:top="{spot.y + halfH}px"
           style:--size="{showdownSize * scale}px"
-          style:z-index={Math.round(walker.col + walker.row) + 1}
+          style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
           aria-label={walker.displayName}
           onclick={() => {
             selectedId = walker.id
@@ -726,22 +913,34 @@
     display: flex;
     flex: 1;
     flex-direction: column;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
   }
 
   .lawn {
-    display: flex;
+    position: relative;
     flex: 1;
-    align-items: center;
-    justify-content: center;
     min-height: 0;
     overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+    /* Mesmo tom do gramado claro — preenche qualquer fresta no pan. */
+    background:
+      repeating-conic-gradient(var(--grass-1) 0% 25%, var(--grass-2) 0% 50%) 0 0 / 24px 24px;
+  }
+
+  .lawn:active {
+    cursor: grabbing;
   }
 
   .stage {
-    position: relative;
+    position: absolute;
+    left: 0;
+    top: 0;
     flex: none;
+    will-change: transform;
   }
 
   /* Bloco isométrico: losango de cima + duas laterais. */
@@ -766,6 +965,7 @@
   }
 
   .tile.plot {
+    cursor: pointer;
     --top: var(--soil);
     --left: #7a5530;
     --right: #93683c;

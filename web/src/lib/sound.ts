@@ -181,13 +181,14 @@ function ensureContext(): AudioContext | null {
 }
 
 function readVolume(): number {
+  // Sem preferência salva: metade do máximo (barra do HUD em 50%).
   try {
     const raw = localStorage.getItem(VOLUME_KEY)
-    if (raw === null) return 1
+    if (raw === null) return 0.5
     const value = Number(raw)
-    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.5
   } catch {
-    return 1
+    return 0.5
   }
 }
 
