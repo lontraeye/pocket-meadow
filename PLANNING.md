@@ -904,6 +904,8 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
   - **Sem especial até o nível**, que é o caso comum: usa o **especial padrão do tipo**, uma lista nossa no config com 1 golpe real por tipo, de poder médio. Medido: no Nv 5 só 32 das 251 espécies têm especial próprio; no Nv 30, 146; no Nv 100, 213. Abra, Magikarp, Ditto, Caterpie e afins nunca aprendem, e ficam sempre com o do tipo.
 - **Ao subir de nível,** se a espécie aprende um golpe de dano naquele nível, o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
 - **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o básico.
+  - O fator compara a Velocidade do Pokémon com a de um Pokémon **médio do mesmo nível** (base 80, IV 15, sem EV, nature neutra), e não com o número cru: a Velocidade absoluta cresce com o nível, e sem normalizar todo Pokémon de nível alto viraria "rápido". Assim um Rattata é rápido em qualquer nível, um Snorlax é lento em qualquer nível, e IV, nature e EV mexem dentro disso.
+  - Faixas no nível 50, só com o que é sorteado na captura (EV 0): Snorlax (base 30) de 31 a 55; Rattata (base 72) de 69 a 101; Pikachu (base 90) de 85 a 118.
 - **Os números** (duração, energia gerada e gasta, poder efetivo) são nossos, em config, e não copiados do GO.
 
 **Dano (fórmula dos jogos principais)**
