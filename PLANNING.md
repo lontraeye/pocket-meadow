@@ -444,6 +444,34 @@ Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só vis
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
 - Canteiros de berry ocupam um bloco da grade.
 
+### 5.12 Pokédex e guia do jogo (ideia, ainda sem fase)
+Anotado para depois. Precisa de especificação própria antes de virar tarefa.
+
+A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela.
+
+- **Informação por progresso.** Cada espécie tem camadas que abrem por marcos do jogador. Exemplo de escada:
+  - visto: sprite e nome;
+  - capturado: tipos e linha evolutiva;
+  - nível X: regiões onde aparece e faixa de nível;
+  - nível Y: ataques e poder especial.
+
+  Os marcos e o que cada um abre ficam em config.
+- **Onde encontrar** usa os dados de `snapshots/regions.json` (seção 5.3). Mostrar a raridade em faixas (comum, incomum, raro), não o peso exato, para não entregar a tabela.
+- **Guia do jogo** na mesma tela: tutoriais e explicação das mecânicas (energia, batalha em time, doces, daycare, berries). É conteúdo estático do front, sem API.
+- **Álbum por blocos.** A Pokédex também se organiza em blocos, como um álbum de figurinhas. Completar um bloco dá uma recompensa.
+  - O bloco principal é a **região**: todas as espécies que podem sair nela, tiradas de `snapshots/regions.json`. Os raros de 1% (Clefairy no Mt. Moon, Pidgeotto na Floresta Verde) é que fazem o bloco valer a pena.
+  - Outros blocos possíveis, também derivados de dados que já existem: linha evolutiva completa, tipo, região do jogo inteira (Kanto, Johto) e shiny.
+  - "Completo" = cada espécie do bloco com `caught_count > 0` em `pokedex_entries`. Isso sobrevive a soltar o Pokémon e a evoluir, porque evoluir já conta a nova espécie como capturada.
+  - As recompensas ficam em config, por bloco: sementes, doces genéricos, energia e, depois, cosméticos para o jardim.
+  - O jogador resgata a recompensa com uma ação, que roda em transação no servidor. O servidor confere se o bloco está completo e se a recompensa ainda não foi resgatada. O cliente nunca informa que completou.
+- Mobile primeiro (seção 4.4): lista com busca e filtro, detalhes num sheet por toque.
+
+Pontos a decidir antes de especificar:
+- **Resgate do álbum:** precisa de uma tabela de resgates (`user_id`, `block_key`, `claimed_at`), com migração. Se um bloco ganhar espécies novas, porque a tabela da região mudou num re-seed, decidir se ele reabre com uma recompensa nova ou se o resgate antigo vale para sempre. Sugestão: o resgate antigo vale, e a mudança de tabela vira um bloco novo com outra chave.
+- **Marco de "upar":** precisa sobreviver a soltar o Pokémon. A sugestão é guardar `max_level_reached` em `pokedex_entries`, em vez de olhar a coleção atual. Isso pede migração. Ver `DATA_MODEL.md`, seção 5.
+- **Ataques e poder especial** ainda não existem no jogo. A batalha é só poder × probabilidade. Falta decidir se viram mecânica (afetam a batalha) ou só informação. Se for informação, dá para tirar da PokéAPI no seed (moves por nível, abilities).
+- Se os outros jogadores veem a Pokédex de alguém na visita ao jardim (seção 1).
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
@@ -534,7 +562,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 **Fase 5 — Berries e efeitos**
 
 **Fase 6 — Polimento**
-- Pokédex (espécies vistas/capturadas), animações de captura, sons, contador de energia, notificações de berry pronta.
+- Pokédex (espécies vistas/capturadas; a versão com guia e informação por progresso está na seção 5.12), animações de captura, sons, contador de energia, notificações de berry pronta.
 - Testes das funções puras de `game/`.
 
 ---
