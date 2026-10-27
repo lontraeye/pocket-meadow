@@ -252,8 +252,11 @@
     gap: 0.35rem;
   }
 
+  /* Cresce até encher a linha (no 360px ficam ~2 por fileira; o último sozinho ocupa a linha). */
   .chip {
+    flex: 1 1 7rem;
     width: auto;
+    text-align: center;
   }
 
   .sort {
