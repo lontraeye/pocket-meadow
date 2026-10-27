@@ -110,7 +110,7 @@
     gap: 0.75rem;
     width: 100%;
     max-width: 26rem;
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     margin: 0 auto;
     padding: 1.5rem 1rem 2rem;
   }

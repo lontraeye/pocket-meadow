@@ -15,6 +15,13 @@
       "when": 1793039738868,
       "tag": "0001_auth_events",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793058993654,
+      "tag": "0002_encounter_fighters",
+      "breakpoints": true
     }
   ]
 }

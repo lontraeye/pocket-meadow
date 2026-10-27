@@ -1,8 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { battleConfig } from '../config/battle.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
+import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import {
   activeEffects,
@@ -15,15 +17,21 @@ import {
   species,
   trainers,
 } from '../db/schema.js'
-import { applyCatchUp } from '../game/catchUp.js'
+import { power } from '../game/battle.js'
+import { nextEnergyAt } from '../game/catchUp.js'
+import { toEncounterView } from './encounterView.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
 stateRoutes.get('/', requireUser, (c) => {
   const userId = c.get('userId')
-  const db = getDb()
   const now = Date.now()
+  return c.json(immediate(() => readState(userId, now)))
+})
 
+function readState(userId: number, now: number) {
+  persistCatchUp(userId, now)
+  const db = getDb()
   const trainer = db.select().from(trainers).where(eq(trainers.userId, userId)).get()
   if (!trainer) throw new Error(`trainer missing for user ${userId}`)
 
@@ -34,6 +42,7 @@ stateRoutes.get('/', requireUser, (c) => {
       name: species.name,
       displayName: species.displayName,
       evolutionChainId: species.evolutionChainId,
+      baseStatTotal: species.baseStatTotal,
       level: pokemon.level,
       xp: pokemon.xp,
       isShiny: pokemon.isShiny,
@@ -52,125 +61,73 @@ stateRoutes.get('/', requireUser, (c) => {
       pokemonId: daycareSlots.pokemonId,
       enteredAt: daycareSlots.enteredAt,
       lastSettledAt: daycareSlots.lastSettledAt,
-      level: pokemon.level,
-      xp: pokemon.xp,
     })
     .from(daycareSlots)
-    .innerJoin(pokemon, eq(daycareSlots.pokemonId, pokemon.id))
     .where(eq(daycareSlots.userId, userId))
     .all()
 
   const effects = db.select().from(activeEffects).where(eq(activeEffects.userId, userId)).all()
-  const encounterRows = db.select().from(encounters).where(eq(encounters.userId, userId)).all()
-  const caughtUp = applyCatchUp(
-    {
-      trainer: { energy: trainer.energy, energyUpdatedAt: trainer.energyUpdatedAt },
-      daycare,
-      effects,
-      encounters: encounterRows,
-    },
+  const pending = db
+    .select({
+      id: encounters.id,
+      regionSlug: encounters.regionSlug,
+      speciesId: encounters.speciesId,
+      name: species.name,
+      displayName: species.displayName,
+      level: encounters.level,
+      isShiny: encounters.isShiny,
+      expiresAt: encounters.expiresAt,
+      baseStatTotal: species.baseStatTotal,
+    })
+    .from(encounters)
+    .innerJoin(species, eq(encounters.speciesId, species.id))
+    .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .get()
+
+  return {
     now,
-  )
-
-  immediate(() => {
-    db.update(trainers)
-      .set({
-        energy: caughtUp.trainer.energy,
-        energyUpdatedAt: caughtUp.trainer.energyUpdatedAt,
-        updatedAt: now,
-      })
-      .where(eq(trainers.userId, userId))
-      .run()
-
-    for (const slot of caughtUp.daycare) {
-      db.update(pokemon)
-        .set({ level: slot.level, xp: slot.xp })
-        .where(and(eq(pokemon.id, slot.pokemonId), eq(pokemon.userId, userId)))
-        .run()
-      db.update(daycareSlots)
-        .set({ lastSettledAt: slot.lastSettledAt })
-        .where(and(eq(daycareSlots.pokemonId, slot.pokemonId), eq(daycareSlots.userId, userId)))
-        .run()
-    }
-
-    for (const id of caughtUp.deleteEffectIds) {
-      db.delete(activeEffects)
-        .where(and(eq(activeEffects.id, id), eq(activeEffects.userId, userId)))
-        .run()
-    }
-
-    for (const id of caughtUp.fleeEncounterIds) {
-      db.update(encounters)
-        .set({ status: 'fled', resolvedAt: now })
-        .where(and(eq(encounters.id, id), eq(encounters.userId, userId)))
-        .run()
-    }
-  })
-
-  const progressed = new Map(caughtUp.daycare.map((slot) => [slot.pokemonId, slot]))
-  const visiblePokemon = owned.map((mon) => {
-    const update = progressed.get(mon.id)
-    const level = update?.level ?? mon.level
-    return {
+    gardenMaxVisible: progressConfig.gardenMaxVisible,
+    plotSlots: progressConfig.basePlotSlots,
+    battle: {
+      k: battleConfig.k,
+      minChance: battleConfig.minChance,
+      maxChance: battleConfig.maxChance,
+      teamWeights: battleConfig.teamWeights,
+    },
+    trainer: {
+      level: trainer.level,
+      xp: trainer.xp,
+      energy: trainer.energy,
+      energyMax: trainerConfig.energyMax,
+      energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),
+      genericCandies: trainer.genericCandies,
+    },
+    pokemon: owned.map((mon) => ({
       id: mon.id,
       speciesId: mon.speciesId,
       name: mon.name,
       displayName: mon.displayName,
       evolutionChainId: mon.evolutionChainId,
-      level,
-      xp: update?.xp ?? mon.xp,
-      xpToNext: level >= progressConfig.levelCap ? null : xpToNext(level),
+      level: mon.level,
+      xp: mon.xp,
+      xpToNext: mon.level >= progressConfig.levelCap ? null : xpToNext(mon.level),
       isShiny: mon.isShiny,
       nickname: mon.nickname,
       isFavorite: mon.isFavorite,
       location: mon.location,
-    }
-  })
-
-  const pending = encounterRows.find(
-    (encounter) => encounter.status === 'pending' && !caughtUp.fleeEncounterIds.includes(encounter.id),
-  )
-
-  return c.json({
-    now,
-    gardenMaxVisible: progressConfig.gardenMaxVisible,
-    plotSlots: progressConfig.basePlotSlots,
-    trainer: {
-      level: trainer.level,
-      xp: trainer.xp,
-      energy: caughtUp.trainer.energy,
-      energyMax: trainerConfig.energyMax,
-      energyNextAt: caughtUp.energyNextAt,
-      genericCandies: trainer.genericCandies,
-    },
-    pokemon: visiblePokemon,
-    candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
-    daycare: daycare.map((slot) => ({
-      slotIndex: slot.slotIndex,
-      pokemonId: slot.pokemonId,
-      enteredAt: slot.enteredAt,
-      lastSettledAt: progressed.get(slot.pokemonId)?.lastSettledAt ?? slot.lastSettledAt,
+      power: power(mon.baseStatTotal, mon.level),
     })),
+    candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
+    daycare,
     plots: db.select().from(berryPlots).where(eq(berryPlots.userId, userId)).all(),
     inventory: db.select().from(inventory).where(eq(inventory.userId, userId)).all(),
-    effects: effects
-      .filter((effect) => !caughtUp.deleteEffectIds.includes(effect.id))
-      .map((effect) => ({
-        id: effect.id,
-        effectKey: effect.effectKey,
-        multiplier: effect.multiplier,
-        charges: effect.charges,
-        expiresAt: effect.expiresAt,
-      })),
-    encounter: pending
-      ? {
-          id: pending.id,
-          regionSlug: pending.regionSlug,
-          speciesId: pending.speciesId,
-          level: pending.level,
-          isShiny: pending.isShiny,
-          expiresAt: pending.expiresAt,
-        }
-      : null,
-  })
-})
+    effects: effects.map((effect) => ({
+      id: effect.id,
+      effectKey: effect.effectKey,
+      multiplier: effect.multiplier,
+      charges: effect.charges,
+      expiresAt: effect.expiresAt,
+    })),
+    encounter: pending ? toEncounterView(pending) : null,
+  }
+}

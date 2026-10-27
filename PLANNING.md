@@ -260,6 +260,12 @@ CC BY-NC 4.0 (os mais antigos usam `PMDCollab_1`/`PMDCollab_2`, também com cré
 - Tem **nível de treinador** e **XP de treinador**.
 - XP de treinador vem de: vencer batalhas, capturar, evoluir.
 - O nível de treinador **desbloqueia regiões, slots de daycare e canteiros de berry**.
+- Vitória e captura ficam em `server/src/config/trainer.ts`:
+  - vitória: `8 + 2 × nível do selvagem`
+  - captura: `10 + nível do selvagem`, somada à da vitória no mesmo encontro
+  - evoluir fica para a Fase 3
+- Próximo nível: `trainerXpToNext(level) = floor(30 × level ^ 1.7)`. No `LEVEL_CAP`, o XP que sobra zera, como no Pokémon.
+- Com essa curva, vencer e capturar um selvagem por volta do nível 4 rende 30 XP e completa o nível 2. Cerca de cinco encontros assim na Rota 1 abrem a Floresta Verde (nível 3). A Rota 30 (nível 6) pede mais algumas dezenas.
 
 ### 5.2 Energia
 - Cada encontro custa 1 de energia.
@@ -295,7 +301,7 @@ Sorteio por peso. Exemplo:
 2. Servidor aplica catch-up, verifica energia, gasta 1 energia.
 3. Sorteia espécie, nível e shiny. **Salva como encontro pendente.**
 4. Jogador vê o Pokémon selvagem e pode:
-   - **Batalhar** (escolhendo 1 Pokémon seu), ou
+   - **Batalhar** (mandando um time de 1 a 3 Pokémon seus, seção 5.5), ou
    - **Fugir** (encontro encerrado, energia não volta).
 5. Só pode existir **um encontro pendente por jogador** por vez.
 6. Encontros pendentes expiram após `ENCOUNTER_TTL_MS` (inicial: 30 min) e viram `fled`.

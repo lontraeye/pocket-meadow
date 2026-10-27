@@ -16,6 +16,8 @@
   --accent: #ffcc00;
   --danger: #b33a2b;
   --px: 2px;
+  /* Altura útil: o body já tem o padding de safe-area em cima e embaixo. */
+  --screen-h: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 
   font: 18px/1.4 'Pixelify Sans', system-ui, sans-serif;
   color: var(--ink);

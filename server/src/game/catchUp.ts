@@ -1,5 +1,6 @@
-import { progressConfig, xpToNext } from '../config/progress.js'
+import { progressConfig } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
+import { grantXp } from './xp.js'
 
 export type CatchUpState = {
   trainer: { energy: number; energyUpdatedAt: number }
@@ -48,8 +49,7 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
 
   return {
     trainer,
-    energyNextAt:
-      trainer.energy >= trainerConfig.energyMax ? null : trainer.energyUpdatedAt + progressConfig.energyRegenMs,
+    energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),
     daycare,
     deleteEffectIds,
     fleeEncounterIds,
@@ -81,7 +81,7 @@ function settleDaycare(
   const end = Math.min(now, slot.enteredAt + progressConfig.daycareMaxMs)
   const hours = Math.floor((end - slot.lastSettledAt) / hourMs)
   if (hours <= 0) return undefined
-  const progressed = applyXp(slot.level, slot.xp, hours * xpPerHour)
+  const progressed = grantXp(slot.level, slot.xp, hours * xpPerHour)
   return {
     pokemonId: slot.pokemonId,
     level: progressed.level,
@@ -90,15 +90,7 @@ function settleDaycare(
   }
 }
 
-function applyXp(level: number, xp: number, gain: number): { level: number; xp: number } {
-  let nextLevel = level
-  let nextXp = xp + gain
-  while (nextLevel < progressConfig.levelCap) {
-    const need = xpToNext(nextLevel)
-    if (nextXp < need) break
-    nextXp -= need
-    nextLevel += 1
-  }
-  if (nextLevel >= progressConfig.levelCap) return { level: progressConfig.levelCap, xp: 0 }
-  return { level: nextLevel, xp: nextXp }
+export function nextEnergyAt(energy: number, energyUpdatedAt: number): number | null {
+  if (energy >= trainerConfig.energyMax) return null
+  return energyUpdatedAt + progressConfig.energyRegenMs
 }

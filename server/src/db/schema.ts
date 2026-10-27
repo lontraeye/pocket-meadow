@@ -195,9 +195,6 @@ export const encounters = sqliteTable(
     })
       .notNull()
       .default('pending'),
-    fighterPokemonId: integer('fighter_pokemon_id').references(() => pokemon.id, {
-      onDelete: 'set null',
-    }),
     winChance: real('win_chance'),
     catchChance: real('catch_chance'),
     caughtPokemonId: integer('caught_pokemon_id').references(() => pokemon.id, {
@@ -216,6 +213,22 @@ export const encounters = sqliteTable(
       'ck_encounters_status',
       sql`${table.status} in ('pending', 'lost', 'caught', 'escaped', 'fled')`,
     ),
+  ],
+)
+
+export const encounterFighters = sqliteTable(
+  'encounter_fighters',
+  {
+    encounterId: integer('encounter_id')
+      .notNull()
+      .references(() => encounters.id, { onDelete: 'cascade' }),
+    slot: integer('slot').notNull(),
+    pokemonId: integer('pokemon_id').references(() => pokemon.id, { onDelete: 'set null' }),
+    power: real('power').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.encounterId, table.slot] }),
+    check('ck_encounter_fighters_slot', sql`${table.slot} between 0 and 2`),
   ],
 )
 

@@ -326,7 +326,7 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Ação | Passos |
 |---|---|
 | Criar encontro | catch-up → validar região/energia/sem pendente → `energy -= 1` → consumir efeitos de encontro → inserir encontro → atualizar pokédex (visto) |
-| Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → XP dividido entre o time e XP do treinador → (se venceu) rolar captura → inserir Pokémon → atualizar status do encontro e pokédex |
+| Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → (se venceu) XP dividido entre o time, XP do treinador, rolar captura e, se capturou, inserir Pokémon → atualizar status do encontro e pokédex |
 | Soltar | validar (não está no daycare, não é o último Pokémon) → apagar → creditar `candies` + `generic_candies` |
 | Alimentar | validar saldo → debitar doces → aplicar XP e level ups |
 | Evoluir | validar `min_level` e doces → debitar → trocar `species_id` → pokédex |

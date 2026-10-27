@@ -2,9 +2,11 @@
   import { onMount } from 'svelte'
   import { api, type GameState } from './lib/api'
   import AuthForm from './lib/AuthForm.svelte'
+  import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
 
-  let phase = $state<'loading' | 'auth' | 'garden'>('loading')
+  let phase = $state<'loading' | 'auth' | 'play'>('loading')
+  let screen = $state<'meadow' | 'explore'>('meadow')
   let game = $state<GameState | null>(null)
 
   async function loadState() {
@@ -12,20 +14,22 @@
     if (response.status === 401) {
       game = null
       phase = 'auth'
+      screen = 'meadow'
       return
     }
     if (!response.ok) {
-      phase = 'auth'
+      if (!game) phase = 'auth'
       return
     }
     game = (await response.json()) as GameState
-    phase = 'garden'
+    phase = 'play'
   }
 
   async function logout() {
     await api('/api/auth/logout', {})
     game = null
     phase = 'auth'
+    screen = 'meadow'
   }
 
   onMount(() => {
@@ -38,7 +42,7 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow">
+  <main class="meadow" class:fit={screen === 'explore'}>
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -53,7 +57,14 @@
       </div>
       <button type="button" class="btn" onclick={logout}>Sair</button>
     </header>
-    <Garden {game} />
+    {#if screen === 'explore'}
+      <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+    {:else}
+      <Garden {game} />
+      <button type="button" class="btn btn-primary dock" onclick={() => (screen = 'explore')}>
+        {game.encounter ? 'Ver encontro' : 'Explorar'}
+      </button>
+    {/if}
   </main>
 {/if}
 
@@ -69,13 +80,13 @@
   .status {
     display: grid;
     place-items: center;
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     font-size: 1.2rem;
   }
 
   .meadow {
     max-width: 64rem;
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -136,5 +147,17 @@
     box-shadow:
       inset 0 calc(var(--px) * -2) 0 #c79a00,
       inset 0 var(--px) 0 #fff3a0;
+  }
+
+  .dock {
+    width: 100%;
+    flex: none;
+  }
+
+  /* A tela de encontro cabe no celular: o meio rola e os botões ficam embaixo. */
+  .meadow.fit {
+    height: var(--screen-h);
+    max-height: var(--screen-h);
+    overflow: hidden;
   }
 </style>
