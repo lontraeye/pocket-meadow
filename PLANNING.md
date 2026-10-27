@@ -743,7 +743,7 @@ O que isso muda no modelo atual:
 Pontos a decidir antes de especificar:
 - **De onde vêm os golpes.** A PokéAPI tem os golpes que cada espécie aprende e o poder e o tipo de cada um, mas não tem os números de golpe rápido e carregado (energia, duração). Caminhos: uma tabela própria de golpes no config, com um golpe padrão por tipo para cobrir as 251 espécies rápido, mais ajustes por espécie onde fizer diferença; ou montar a partir da PokéAPI com regras (ex.: golpe físico fraco vira rápido, especial forte vira carregado). Os números são nossos, não copiados de outro jogo.
 - **Os golpes são fixos por espécie ou variam por Pokémon** (sorteados na captura, trocáveis com algum item ou doce).
-- **Faixa dos IVs:** 0–15 (mais simples de mostrar) ou 0–31. E se entram natures. Hoje: IVs e EVs, sem natures.
+- ~~**Faixa dos IVs** e natures~~: decidido na seção 5.18 (IVs de 0 a 31, com nature).
 - **Pokémon que já existem** quando os IVs entrarem: sortear IVs na migração ou usar um valor médio fixo.
 - **A luta:** simulação de verdade turno a turno (HP, dano, energia, quando soltar a ult) no lugar da `winChance`, ou a `winChance` decide e a simulação só gera um log coerente. Com IVs, EVs e tipos, a simulação de verdade faz mais sentido. O balanceamento vai precisar de testes.
 - **Mostrar ao jogador:** uma avaliação dos IVs no sheet (ex.: estrelas), os dois golpes e a efetividade contra o selvagem antes de lutar.
@@ -829,7 +829,7 @@ O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca má
 
 **Crafting com Pokémon trabalhando (ideia, junto desta seção):** um sistema de receitas com **árvore de ingredientes**, em que Pokémon trabalham nas estações para produzir. A referência de gênero é Pokémon trabalhando numa base (Palworld, Pokopia), com regras próprias.
 - **Receitas em config:** entradas (itens e quantidades), saída, tempo, estação e requisito de trabalhador (tipo, espécie e, depois, habilidade). Receita nova entra só no config.
-- **Árvore:** os ingredientes básicos vêm do que já existe (berries, sementes, doces genéricos, drops de batalha). Os intermediários são feitos em estações e viram entrada de outras receitas, até chegar nos itens finais: itens de evolução (pedras), itens de bioma, peças de máquina, pokébolas (seção 5.6) e roupas do avatar (5.17). Cada item final tem pelo menos um caminho de craft além dos outros jeitos de conseguir.
+- **Árvore:** os ingredientes básicos vêm do que já existe (berries, sementes, doces genéricos, drops de batalha). Os intermediários são feitos em estações e viram entrada de outras receitas, até chegar nos itens finais: itens de evolução (pedras), itens de bioma, peças de máquina, pokébolas (seção 5.6), TMs (5.18) e roupas do avatar (5.17). Cada item final tem pelo menos um caminho de craft além dos outros jeitos de conseguir.
 - **Trabalhadores:** o mesmo modelo dos operadores de máquina. O Pokémon fica alocado, sai do jardim e não batalha, e o jardim nunca fica vazio. O nível ou a espécie certa podem acelerar ou render mais.
 - **Produção por horário, sem loop no servidor** (seção 2): cada trabalho guarda início e fim (`ready_at`), e o servidor entrega ao coletar. Uma fila por estação é possível, sempre calculada sob demanda.
 - **Debitar as entradas ao iniciar**, numa transação. Cancelar devolve todas as entradas, ou só parte delas (decidir).
@@ -891,7 +891,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - Sorteada na captura entre as habilidades normais da espécie, com chance pequena (config, inicial 5%) de sair a oculta. São 132 habilidades nas 251 espécies.
 - Guardada pela **posição** (1ª, 2ª ou oculta), não pelo nome, como nos jogos principais: ao evoluir, o Pokémon fica com a habilidade da mesma posição na espécie nova. Se a espécie nova não tem 2ª habilidade, vale a 1ª.
 
-**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. Os golpes também ficam; os da espécie nova até o nível atual passam a valer para troca (e um carregado entra direto se o slot estiver vazio).
+**Evolução:** IVs, EVs, nature e a posição da habilidade não mudam (como nos jogos principais e no GO). Os atributos finais mudam porque a base da espécie muda. **Os golpes são sorteados de novo** pelo conjunto da espécie nova até o nível atual, pelas mesmas regras da captura, como no Pokémon GO (decidido em 2026-10-28). A ficha avisa antes de confirmar a evolução.
 - No combate entra só um **conjunto escolhido**, que cabe na simulação: entrada (Intimidate), reforço com pouca vida (Blaze, Torrent, Overgrow, Swarm), imunidade (Levitate, Flash Fire, Water Absorb, Volt Absorb), sobrevivência (Sturdy) e multiplicadores (Thick Fat, Hustle, Huge Power, Sniper e afins). A lista fica no config.
 - As demais aparecem na ficha como "sem efeito em combate por enquanto". As ligadas a status ganham efeito na 8.6, e as de clima quando ele entrar.
 
@@ -899,6 +899,8 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - Nomes: **golpe rápido** e **golpe carregado** são os slots. "Físico" e "especial" ficam só para a classe do golpe (qual atributo ele usa).
 - **Vale para todas as gerações.** O jogo vai ter todos os Pokémon, não só a Gen 1–2: nenhuma regra pode depender de uma lista fixa de jogos ou de espécies.
 - **Pool da espécie:** os golpes **de dano** que ela aprende **por nível** nos jogos da **geração em que ela estreou e da seguinte** (lista de jogos por geração no config). Para a Gen 1 isso dá Red/Blue/Yellow + Gold/Silver/Crystal: 121 golpes de dano distintos na faixa atual. Fica de fora todo golpe sem `power` nos dados da PokéAPI, ou seja, os de status (Growl, Leer) e os de dano fixo (Dragon Rage, Seismic Toss).
+- **Pool da linha evolutiva** (decidido em 2026-10-28): o sorteio usa os golpes da espécie **e das pré-evoluções**. Cada golpe vale a partir do menor nível em que alguém da linha o aprende, e o nível do Pokémon continua limitando o sorteio (um Pokémon de nível baixo não recebe golpe de nível alto). Sem isso, 37 das 122 evoluções da Gen 1–2 tinham uma faixa de nível em que evoluir tirava o carregado, e 4 espécies (Ninetales, Wigglytuff, Clefairy, Politoed) nunca teriam carregado. Com o pool da linha, nenhuma evolução tira o carregado (teste em `seed/traitsData.test.ts`).
+  - Diferença do Pokémon GO: lá o golpe não depende do nível, e cada espécie tem uma lista fixa montada à mão, sempre com pelo menos um rápido e um carregado. Aqui o pool sai dos dados dos jogos principais (vale para todas as gerações sem lista fixa), e o nível dá o limite que o GO não tem.
 - **Golpe rápido:** poder até 55 (50 golpes na faixa). Cooldown curto e **gera energia**.
 - **Golpe carregado:** poder acima de 55 (71 golpes). **Gasta energia**: o custo sobe com o poder, em 3 faixas (1, 2 ou 3 barras, como no GO).
 - Também fica de fora todo golpe cujo efeito desmaia quem usa (Self-Destruct, Explosion), pelo efeito nos dados da PokéAPI, não por lista de nomes.
@@ -906,10 +908,11 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - **Sorteio na captura:** 1 golpe rápido e, **se houver**, 1 carregado entre os que a espécie aprende **até o nível dela**.
   - Sem rápido até o nível: usa o primeiro rápido que a espécie aprende, ou Tackle. Todo Pokémon tem um golpe rápido.
   - **Sem carregado até o nível: o slot fica vazio** e o Pokémon luta só com o rápido até aprender um (decidido em 2026-10-27, no lugar de um "especial padrão do tipo"). Medido nos dados: primeiro carregado no Nv 13 para o Rattata, 18 para o Squirtle, 20 para o Pikachu, 28 para o Pidgey, 30 para o Charmander e 46 para o Bulbasaur (Solar Beam). A mediana nas 251 é o Nv 25, e 25 espécies (Magikarp, Abra, Ditto…) nunca aprendem. O limite de poder do golpe rápido (55) é o ajuste, se alguma linha ficar fraca demais.
-- **Ao subir de nível** (evoluindo ou não, pelo pool da espécie atual), se a espécie aprende um golpe de dano naquele nível:
-  - o slot de carregado está vazio e o golpe é carregado → entra direto;
-  - senão → o jogo **oferece a troca** ("Charmeleon pode aprender Flamethrower. Trocar por Ember?"). Recusar não perde nada.
-  - É assim que o golpe rápido "evolui": Tackle no início, oferta de Vine Whip no 10 e de Razor Leaf no 20. Diferente do Pokémon GO, onde os golpes não mudam com o nível e são ressorteados na evolução.
+- **Os golpes não se escolhem nem se trocam** (decidido em 2026-10-28, no lugar das ofertas de troca). O sorteio dá valor ao indivíduo: o mesmo Pokémon com o golpe bom vale mais, como no Pokémon GO.
+  - **Ao subir de nível** o golpe rápido não muda. Se o slot de carregado estiver vazio, entra **um carregado sorteado** entre os que a espécie conhece até o nível novo. Sem ofertas.
+  - **Ao evoluir**, os dois golpes são sorteados de novo (acima).
+  - A troca livre na ficha existe só em teste (`DEV_TOOLS`).
+  - **Futuro: TMs** (anotado em 2026-10-28). Item que sorteia de novo o golpe rápido ou o carregado, sem escolher qual vem, como no Pokémon GO. Entra quando os itens do jogo forem mapeados, provavelmente pelo crafting (seção 5.16). Um TM raro que deixa escolher (como o Elite TM) fica em aberto.
 - **Cooldown:** cada golpe tem uma duração base (config, pela faixa de poder), multiplicada por um fator da Velocidade do Pokémon (config, entre ~0,8× para os muito rápidos e ~1,2× para os muito lentos). Nenhum golpe é usado sem limite, nem o rápido.
   - O fator compara a Velocidade do Pokémon com a de um Pokémon **médio do mesmo nível** (base 80, IV 15, sem EV, nature neutra), e não com o número cru: a Velocidade absoluta cresce com o nível, e sem normalizar todo Pokémon de nível alto viraria "rápido". Assim um Rattata é rápido em qualquer nível, um Snorlax é lento em qualquer nível, e IV, nature e EV mexem dentro disso.
   - Faixas no nível 50, só com o que é sorteado na captura (EV 0): Snorlax (base 30) de 31 a 55; Rattata (base 72) de 69 a 101; Pikachu (base 90) de 85 a 118.
@@ -1147,7 +1150,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
 
 **Fase 8 — Combate em tempo real** (seção 5.18; em partes, cada uma testada antes da próxima)
-- *8.1 — Traços dos Pokémon:* snapshots de golpes, pool por espécie e habilidades; colunas de IVs, EVs, nature, habilidade e golpes; sorteio na captura; migração dos que já existem (testada numa cópia do banco de produção, seção 4.6); ficha mostrando tudo; troca de golpe ao subir de nível.
+- *8.1 — Traços dos Pokémon:* snapshots de golpes, pool por espécie e habilidades; colunas de IVs, EVs, nature, habilidade e golpes; sorteio na captura; migração dos que já existem (testada numa cópia do banco de produção, seção 4.6); ficha mostrando tudo. (A troca de golpe ao subir de nível saiu em 2026-10-28: golpes sorteados, seção 5.18.)
 - *8.2 — Simulação compartilhada:* módulo puro com atributos, dano, tipos, cooldowns, energia, IA do selvagem, troca no time e habilidades do conjunto escolhido. Testes cobrindo determinismo (mesma seed e mesmos toques dão o mesmo resultado) e as regras (ninguém toca antes do cooldown). Rotas de início e de fim da luta, com o servidor refazendo a luta.
   - Para o jogo não ficar quebrado até a 8.3: o "Batalhar" atual passa a rodar a simulação com o jogador automático no servidor, no lugar de `power`/`winChance`. A cena da 6.2 continua mostrando o resultado, e a captura segue automática até a 8.4.
   - **Mesmo resultado em todo motor de JavaScript** (Safari no celular, Node no servidor): a simulação usa só `+ − × ÷` e `Math.floor`/`Math.min`/`Math.max`, nada de `Math.exp`, `Math.pow`, `Math.log` ou trigonometria, e o tempo é em milissegundos inteiros.
@@ -1174,7 +1177,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 
 ## 10. Questões em aberto
 - ~~Mais de uma tentativa de captura por encontro (gastando algo)?~~ Decidido: dá para lançar de novo até capturar ou ele fugir (seção 5.18). Gastar bola fica para quando as pokébolas virarem item (5.6).
-- ~~Pokémon com IVs/natures ou só nível?~~ Decidido: IVs e EVs, sem natures por enquanto (seção 5.13).
+- ~~Pokémon com IVs/natures ou só nível?~~ Decidido: IVs, EVs e nature (seção 5.18).
 - Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
 

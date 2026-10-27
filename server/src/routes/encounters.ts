@@ -426,7 +426,7 @@ function applyBattleOutcome(input: {
             yieldEvs,
           )
         : null
-    let moveOffers: ReturnType<typeof applyLevelMovesToPokemon>['offers'] = []
+    let learnedMove: ReturnType<typeof applyLevelMovesToPokemon>['learned'] = null
     if (share > 0 || nextEvs) {
       db.update(pokemon)
         .set({
@@ -445,15 +445,14 @@ function applyBattleOutcome(input: {
         .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
         .run()
       if (share > 0 && granted.levelsGained > 0 && mon.fastMove) {
-        moveOffers = applyLevelMovesToPokemon({
+        learnedMove = applyLevelMovesToPokemon({
           userId,
           pokemonId: mon.id,
           speciesId: mon.speciesId,
           fromLevel: mon.level,
           toLevel: granted.level,
-          fastMove: mon.fastMove,
           chargedMove: mon.chargedMove,
-        }).offers
+        }).learned
       }
     }
     return {
@@ -462,7 +461,7 @@ function applyBattleOutcome(input: {
       level: share > 0 ? granted.level : mon.level,
       xp: share > 0 ? granted.xp : mon.xp,
       levelsGained: share > 0 ? granted.levelsGained : 0,
-      moveOffers,
+      learnedMove,
     }
   })
 

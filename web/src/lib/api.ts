@@ -58,7 +58,8 @@ export type BattleOutcome = {
     level: number
     xp: number
     levelsGained: number
-    moveOffers?: LearnEntryView[]
+    /** Carregado sorteado ao subir de nível, se o slot estava vazio (seção 5.18). */
+    learnedMove?: MoveView | null
   }[]
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }

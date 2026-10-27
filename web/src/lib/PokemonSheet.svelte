@@ -5,6 +5,7 @@
     errorText,
     type ApiError,
     type GameState,
+    type MoveView,
     type OwnedPokemon,
     type RegionInfo,
   } from './api'
@@ -37,6 +38,8 @@
   let useGeneric = $state(false)
   let nickname = $state('')
   let confirmRelease = $state(false)
+  /** Espécie de destino esperando confirmação: evoluir sorteia os golpes de novo. */
+  let confirmEvolve = $state<number | null>(null)
   let popping = $state(false)
   let message = $state('')
   let pending = $state(false)
@@ -90,6 +93,7 @@
     nickname = mon.nickname ?? ''
     doses = 1
     confirmRelease = false
+    confirmEvolve = null
     swapping = null
     void current
   })
@@ -160,7 +164,7 @@
         xpGained?: number
         levelsGained?: number
         level?: number
-        moveOffers?: OwnedPokemon['learnset']
+        learnedMove?: MoveView | null
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -177,8 +181,7 @@
           levelsGained: levels,
           level,
           canEvolve: crossedEvolve(beforeLevel, level, evolutions),
-          moveOffers: payload.moveOffers,
-          learnset: mon.learnset,
+          learnedMove: payload.learnedMove ?? null,
         })
       } else {
         message = 'Alimentado.'
@@ -202,7 +205,7 @@
         trainerXpGained?: number
         trainer?: { level: number; levelsGained: number }
         levelRewards?: { itemKey: string; quantity: number }[]
-        moveOffers?: OwnedPokemon['learnset']
+        newMoves?: { fast: MoveView | null; charged: MoveView | null } | null
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -221,7 +224,7 @@
         levelRewards: payload.levelRewards ?? [],
         regions,
         berries: game.berries,
-        moveOffers: payload.moveOffers,
+        newMoves: payload.newMoves ?? null,
       })
     } catch {
       message = 'Sem conexão com o servidor.'
@@ -272,7 +275,6 @@
         xpGained?: number
         levelsGained?: number
         level?: number
-        moveOffers?: OwnedPokemon['learnset']
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -290,8 +292,6 @@
           levelsGained: levels,
           level,
           canEvolve: crossedEvolve(before, level, evolutions),
-          moveOffers: payload.moveOffers,
-          learnset: mon.learnset,
         })
       } else {
         message = `+${xpGained} XP`
@@ -540,8 +540,25 @@
       <div class="block">
         <h3>Evoluir</h3>
         {#each mon.evolutions as option (option.toSpeciesId)}
-          {#if mon.level >= option.minLevel && !inDaycare}
-            <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void evolve(option.toSpeciesId)}>
+          {#if mon.level >= option.minLevel && !inDaycare && confirmEvolve === option.toSpeciesId}
+            <p class="hint">
+              Ao evoluir, os golpes de {mon.nickname ?? mon.displayName} são sorteados de novo pela espécie nova. IVs,
+              nature e habilidade continuam.
+            </p>
+            <button
+              type="button"
+              class="btn btn-primary"
+              disabled={pending}
+              onclick={() => {
+                confirmEvolve = null
+                void evolve(option.toSpeciesId)
+              }}
+            >
+              Evoluir mesmo assim
+            </button>
+            <button type="button" class="btn" disabled={pending} onclick={() => (confirmEvolve = null)}>Cancelar</button>
+          {:else if mon.level >= option.minLevel && !inDaycare}
+            <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (confirmEvolve = option.toSpeciesId)}>
               Evoluir para {option.displayName}
             </button>
           {:else}

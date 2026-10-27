@@ -8,7 +8,7 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { grantTrainerLevelRewards } from '../db/inventory.js'
 import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
-import { applyLevelMovesToPokemon, type MoveOfferView } from '../game/levelMoves.js'
+import { applyLevelMovesToPokemon, rerollMovesOnEvolve, type MoveView } from '../game/levelMoves.js'
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
 import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
@@ -254,18 +254,17 @@ function feedOne(
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
 
-  let moveOffers: MoveOfferView[] = []
-  if (plan.levelsGained > 0 && mon.fastMove) {
-    moveOffers = applyLevelMovesToPokemon({
-      userId,
-      pokemonId: id,
-      speciesId: mon.speciesId,
-      fromLevel: mon.level,
-      toLevel: plan.level,
-      fastMove: mon.fastMove,
-      chargedMove: mon.chargedMove,
-    }).offers
-  }
+  const learnedMove =
+    plan.levelsGained > 0 && mon.fastMove
+      ? applyLevelMovesToPokemon({
+          userId,
+          pokemonId: id,
+          speciesId: mon.speciesId,
+          fromLevel: mon.level,
+          toLevel: plan.level,
+          chargedMove: mon.chargedMove,
+        }).learned
+      : null
 
   return {
     ok: true,
@@ -279,7 +278,7 @@ function feedOne(
       xpToNext: plan.level >= progressConfig.levelCap ? null : xpToNext(plan.level),
       useGeneric,
       balance,
-      moveOffers,
+      learnedMove,
     },
   }
 }
@@ -294,7 +293,7 @@ type FeedResult = {
   xpToNext: number | null
   useGeneric: boolean
   balance: number
-  moveOffers: MoveOfferView[]
+  learnedMove: MoveView | null
 }
 
 function evolveOne(
@@ -346,25 +345,17 @@ function evolveOne(
     .get()
   if (!next) throw new Error(`species ${toSpeciesId} is not seeded`)
 
-  // Traços ficam (inclusive ability_slot); o nome resolve na leitura.
+  // IVs, EVs, nature e ability_slot ficam; o nome da habilidade resolve na
+  // leitura. Os golpes são sorteados de novo pela espécie nova (seção 5.18).
   db.update(pokemon)
     .set({ speciesId: next.id })
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
   markCaught(userId, next.id, mon.isShiny, now)
 
-  let moveOffers: MoveOfferView[] = []
-  if (mon.fastMove) {
-    moveOffers = applyLevelMovesToPokemon({
-      userId,
-      pokemonId: id,
-      speciesId: next.id,
-      fromLevel: 0,
-      toLevel: mon.level,
-      fastMove: mon.fastMove,
-      chargedMove: mon.chargedMove,
-    }).offers
-  }
+  const newMoves = mon.fastMove
+    ? rerollMovesOnEvolve({ userId, pokemonId: id, speciesId: next.id, level: mon.level })
+    : null
 
   const trainerXpGained = evolveTrainerXp(next.evolutionStage)
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
@@ -396,7 +387,7 @@ function evolveOne(
         levelsGained: trainerNext.levelsGained,
       },
       levelRewards,
-      moveOffers,
+      newMoves,
       evolutions: evolutionsFrom(next.id),
     },
   }
@@ -415,7 +406,7 @@ type EvolutionResult = {
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
   levelRewards: { itemKey: string; quantity: number }[]
-  moveOffers: MoveOfferView[]
+  newMoves: { fast: MoveView | null; charged: MoveView | null } | null
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
 }
 

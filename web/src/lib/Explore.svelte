@@ -225,7 +225,6 @@
       battle,
       nameOf,
       canEvolve: readyToEvolve,
-      learnsetOf: (id) => teamSnapshot.find((mon) => mon.id === id)?.learnset ?? [],
       regions,
       berries: game.berries,
     })
