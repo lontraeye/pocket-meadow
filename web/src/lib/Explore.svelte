@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
   import { onMount, untrack } from 'svelte'
@@ -218,7 +219,7 @@
         />
       </div>
     {:else}
-      <img class="fallback" src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
+      <img class="fallback" use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
     {/if}
   </div>
   <h2>

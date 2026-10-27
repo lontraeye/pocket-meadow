@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import type { BattleOutcome, OwnedPokemon, PendingEncounter } from './api'
   import { catchShakes, pokeBallSrc, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
@@ -124,7 +125,7 @@
             />
           </div>
         {:else}
-          <img class="gif" src={showdownSrc(encounter.speciesId, encounter.isShiny)} alt="" />
+          <img class="gif" use:spriteLoading={showdownSrc(encounter.speciesId, encounter.isShiny)} src={showdownSrc(encounter.speciesId, encounter.isShiny)} alt="" />
         {/if}
       </div>
     </div>
@@ -145,7 +146,7 @@
               />
             </div>
           {:else}
-            <img class="gif flip" src={showdownSrc(lead.speciesId, lead.isShiny)} alt="" />
+            <img class="gif flip" use:spriteLoading={showdownSrc(lead.speciesId, lead.isShiny)} src={showdownSrc(lead.speciesId, lead.isShiny)} alt="" />
           {/if}
         {/if}
       </div>

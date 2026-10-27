@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import { api, errorText, type ApiError, type DaycareSlot, type GameState, type OwnedPokemon } from './api'
   import Highlights from './Highlights.svelte'
   import { xpHighlightCards, type HighlightCard } from './highlights'
@@ -124,7 +125,7 @@
           <div class="list">
             {#each garden as mon (mon.id)}
               <button type="button" class="choice" disabled={pending} onclick={() => void place(pickingSlot!, mon.id)}>
-                <img src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
+                <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
                 <span>{mon.nickname ?? mon.displayName}</span>
                 <small>Nv {mon.level}</small>
               </button>
@@ -157,7 +158,7 @@
             <section class="panel card">
               <div class="head">
                 <div class="portrait">
-                  <img src={showdownSrc(card.mon.speciesId, card.mon.isShiny)} alt="" />
+                  <img use:spriteLoading={showdownSrc(card.mon.speciesId, card.mon.isShiny)} src={showdownSrc(card.mon.speciesId, card.mon.isShiny)} alt="" />
                 </div>
                 <div class="info">
                   <h2>{card.mon.nickname ?? card.mon.displayName}</h2>

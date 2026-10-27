@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import { onMount } from 'svelte'
   import { api, errorText, type ApiError } from './api'
 
@@ -90,7 +91,7 @@
           class:selected={starter === option.key}
           onclick={() => (starter = option.key)}
         >
-          <img src="/sprites/showdown/{option.speciesId}.gif" alt="" />
+          <img use:spriteLoading src="/sprites/showdown/{option.speciesId}.gif" alt="" />
           <span>{option.name}</span>
         </button>
       {/each}

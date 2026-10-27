@@ -16,6 +16,25 @@ export function devToolsEnabled(): boolean {
 
 export const devRoutes = new Hono<AuthEnv>()
 
+// Entra sem Google, para testar local e tirar prints. Cria a conta se não existir
+// (sem google_sub), com o inicial pedido ou o Bulbasaur.
+devRoutes.post('/login', async (c) => {
+  const body = (await readObject(c)) ?? {}
+  const username = asUsername(body.username)
+  if (!username) return c.json({ error: 'invalid_username' }, 400)
+  const starter = body.starter === undefined ? 'bulbasaur' : body.starter
+  if (!isStarter(starter)) return c.json({ error: 'invalid_starter' }, 400)
+  const now = Date.now()
+  const token = immediate(() => {
+    const existing = getDb().select({ id: users.id }).from(users).where(eq(users.username, username)).get()
+    if (existing) return openSession(c, existing.id, 'login', now)
+    const created = createPlayer({ username, googleSub: null, starter, now })
+    return openSession(c, created.userId, 'register', now)
+  })
+  setSessionCookie(c, token)
+  return c.json({ username })
+})
+
 devRoutes.post('/energy', requireUser, (c) => {
   const userId = c.get('userId')
   const now = Date.now()

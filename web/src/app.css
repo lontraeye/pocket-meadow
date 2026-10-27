@@ -58,6 +58,27 @@ img {
   image-rendering: pixelated;
 }
 
+/* Sprite ainda baixando (spriteLoading.ts e PmdSprite): Poké Ball quicando no
+   lugar dele, em vez de um vazio que parece quebrado. A bola vem de src/assets
+   para o Vite embutir no CSS: em /sprites ela esperaria na mesma fila lenta. */
+img.sprite-loading,
+.sprite-wait {
+  background: url('./assets/poke-ball.png') center 60% / 24px 24px no-repeat;
+  animation: sprite-wait 0.7s steps(2, jump-none) infinite alternate;
+}
+
+/* <img> só com max-width fica 0x0 até a imagem chegar; a bola precisa de espaço. */
+img.sprite-loading {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+@keyframes sprite-wait {
+  to {
+    background-position: center 40%;
+  }
+}
+
 h1,
 h2,
 h3 {
@@ -152,5 +173,11 @@ h3 {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Em loop infinito, a duração mínima viraria pisca-pisca: a bola fica parada. */
+  img.sprite-loading,
+  .sprite-wait {
+    animation: none !important;
   }
 }

@@ -147,3 +147,21 @@ describe('cadastro depois do Google', () => {
     assert.equal(userBySub('sub-old'), undefined)
   })
 })
+
+describe('login de teste', () => {
+  test('cria a conta sem Google na primeira vez e depois só entra', async () => {
+    const { devRoutes } = await import('./dev.js')
+    const dev = new Hono().route('/dev', devRoutes)
+    const login = (username: string) =>
+      dev.request(
+        '/dev/login',
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username }) },
+        env,
+      )
+    assert.equal((await login('brock')).status, 200)
+    assert.equal((await login('brock')).status, 200)
+    const rows = getSqlite().prepare(`select google_sub from users where username = 'brock'`).all()
+    assert.deepEqual(rows.map((row) => ({ ...(row as object) })), [{ google_sub: null }])
+    assert.equal((await login('x')).status, 400)
+  })
+})

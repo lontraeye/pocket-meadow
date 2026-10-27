@@ -1,3 +1,4 @@
+import { SvelteSet } from 'svelte/reactivity'
 import manifest from './pmd-manifest.json' with { type: 'json' }
 
 export type PmdAnimName = 'Walk' | 'Idle' | 'Sleep'
@@ -45,6 +46,8 @@ export function pmdSheetUrl(speciesId: number, shinySheet: boolean, anim: PmdAni
 // Mantém as folhas decodificadas na memória. Sem isso, a primeira troca para
 // uma animação (ex.: o primeiro Sleep) mostra o sprite vazio até o PNG chegar.
 const preloaded = new Map<string, HTMLImageElement>()
+// Folhas já decodificadas. Reativo: o PmdSprite mostra a Poké Ball até a dele entrar.
+const decoded = new SvelteSet<string>()
 
 export function preloadPmd(speciesId: number, shinySheet: boolean): void {
   for (const anim of ['Walk', 'Idle', 'Sleep'] as const) {
@@ -52,9 +55,16 @@ export function preloadPmd(speciesId: number, shinySheet: boolean): void {
     if (preloaded.has(url)) continue
     const image = new Image()
     image.src = url
-    image.decode().catch(() => preloaded.delete(url))
+    image
+      .decode()
+      .then(() => decoded.add(url))
+      .catch(() => preloaded.delete(url))
     preloaded.set(url, image)
   }
+}
+
+export function pmdSheetReady(url: string): boolean {
+  return decoded.has(url)
 }
 
 export function pmdAnim(speciesId: number, shinySheet: boolean, anim: PmdAnimName): PmdAnim | null {

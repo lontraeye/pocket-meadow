@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import {
     api,
     errorText,
@@ -286,7 +287,7 @@
     {/if}
     <div class="head">
       <div class="portrait" class:popping>
-        <img src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
+        <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
       </div>
       <div class="info">
         <h2>

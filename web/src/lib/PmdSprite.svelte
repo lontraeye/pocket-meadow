@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { frameIndex, groundAt, pmdAnim, pmdSheetUrl, type PmdAnimName } from './sprites'
+  import { frameIndex, groundAt, pmdAnim, pmdSheetReady, pmdSheetUrl, preloadPmd, type PmdAnimName } from './sprites'
 
   // Desenha a partir do ponto do chão: quem usa posiciona o componente no chão
   // (ex.: centro do bloco) e o quadro se alinha pelo pixel de sombra da folha.
@@ -36,19 +36,26 @@
   const height = $derived((sheet?.h ?? 0) * scale)
   // Espelhado, o pixel do chão vai de x para (w - 1 - x).
   const groundX = $derived(sheet && flip ? sheet.w - 1 - ground.x : ground.x)
+  const url = $derived(pmdSheetUrl(speciesId, shiny, anim))
+  // Até a folha chegar, a Poké Ball fica no chão no lugar do sprite.
+  const ready = $derived(pmdSheetReady(url))
+
+  $effect(() => preloadPmd(speciesId, shiny))
 </script>
 
 {#if sheet}
   <span class="ground" aria-hidden="true">
     <span class="shadow s{shadow}" style:--scale={scale}></span>
+    {#if !ready}<span class="wait sprite-wait"></span>{/if}
     <span
+      class:hidden={!ready}
       class="sprite"
       class:flip
       style:left="{-groundX * scale}px"
       style:top="{-ground.y * scale}px"
       style:width="{width}px"
       style:height="{height}px"
-      style:background-image="url('{pmdSheetUrl(speciesId, shiny, anim)}')"
+      style:background-image="url('{url}')"
       style:background-size="{sheet.w * sheet.durations.length * scale}px {sheet.h * sheet.dirs * scale}px"
       style:background-position="{-frame * width}px {-row * height}px"
     >
@@ -89,6 +96,20 @@
 
   .sprite.flip {
     transform: scaleX(-1);
+  }
+
+  /* Não some do layout: só não aparece até a folha estar decodificada. */
+  .sprite.hidden {
+    visibility: hidden;
+  }
+
+  /* Caixa de 32x32 com a base no chão; a bola de 24px quica dentro dela. */
+  .wait {
+    position: absolute;
+    left: -16px;
+    top: -32px;
+    width: 32px;
+    height: 32px;
   }
 
   .sprite {

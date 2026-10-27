@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import { api, errorText, type ApiError, type GameState, type OwnedPokemon } from './api'
   import PokemonSheet from './PokemonSheet.svelte'
   import { releaseYield } from './progression'
@@ -188,7 +189,7 @@
               aria-pressed={selecting ? picked.includes(mon.id) : undefined}
               onclick={() => (selecting ? toggle(mon.id) : (openId = mon.id))}
             >
-              <img src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" loading="lazy" width="72" height="72" />
+              <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" loading="lazy" width="72" height="72" />
               <span class="name">{mon.nickname ?? mon.displayName}</span>
               <small>Nv {mon.level}{mon.isShiny ? ' ★' : ''}{mon.isFavorite ? ' ♥' : ''}</small>
             </button>

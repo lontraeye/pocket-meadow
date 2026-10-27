@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
   import { untrack } from 'svelte'
@@ -541,6 +542,7 @@
           {:else}
             <span class="shadow" aria-hidden="true"></span>
             <img
+              use:spriteLoading={showdownSrc(walker.speciesId, walker.isShiny)}
               src={showdownSrc(walker.speciesId, walker.isShiny)}
               alt=""
               style:transform={walker.dir === 5 || walker.dir === 7 ? 'scaleX(-1)' : undefined}
