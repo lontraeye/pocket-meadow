@@ -1139,11 +1139,27 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Sem mudança no servidor.
 
 *6.4 — Instalar na tela inicial (PWA)*
-- `manifest.webmanifest` (nome, ícones, cores, `display: standalone`), ícones nos tamanhos pedidos e service worker simples que cacheia os arquivos estáticos. A API nunca é cacheada, porque o estado vem sempre do servidor.
+- **Manifest** (`web/public/manifest.webmanifest`): nome "Pocket Meadow", nome curto, `display: standalone`, `orientation: portrait`, `start_url` e `scope` em `/`, `theme_color` e `background_color` da paleta (`--sky`, `--grass-side`), e os ícones.
+- **Ícone:** o `favicon.svg` atual ainda é o logo padrão do Vite. Trocar por um ícone **original e provisório**, em pixel art simples (folha ou gramado, com as cores do jogo), feito como SVG no próprio repo e convertido em PNG por um script de desenvolvimento: 192, 512 e 512 *maskable* (com margem segura), mais `apple-touch-icon` 180. CC0 e listado no `CREDITS.md`. O usuário troca pela arte dele depois, mudando só o SVG de origem e rodando o script.
+- **`index.html`:** `<link rel="manifest">`, `theme-color`, `apple-touch-icon` e as metas do iOS (`apple-mobile-web-app-capable`, título e barra de status). O `viewport-fit=cover` e a safe-area já existem.
+- **Service worker** (`web/public/sw.js`, sem biblioteca nova), registrado só no build de produção (no `npm run dev` não):
+  - `/api/*` **nunca** passa pelo cache: o estado vem sempre do servidor (seção 2);
+  - `/assets/*` (com hash): cache primeiro;
+  - `/sprites/*`, `/sounds/*`, `/ui/*`: cache primeiro com atualização em segundo plano, **sob demanda** (nada de baixar tudo na instalação: são dezenas de MB) e com teto de entradas, apagando as mais antigas;
+  - navegação (`index.html`): rede primeiro, cache se estiver sem conexão. Sem conexão e sem cache, uma página simples "sem conexão" no estilo do jogo.
+- **Versão nova:** o service worker novo espera. O jogo mostra "Versão nova disponível · Atualizar", e o toque troca e recarrega. Nunca recarregar no meio de uma luta (o estado da luta já é salvo em `battlePersist`, mas a troca espera a luta acabar).
+- **Caddy:** `/sw.js` e `/manifest.webmanifest` sem cache longo (o bloco `@page` já dá `no-cache` a quem não é `/assets`, `/sprites`, `/sounds` ou `/ui`; conferir).
+- **Login no app instalado:** testar o login pelo Google com o app instalado no Android e no iPhone. No iOS, o app instalado e o Safari não dividem cookies, e o redirecionamento do OAuth pode voltar no Safari em vez do app. Se acontecer, registrar e decidir à parte (não bloqueia a 6.4).
+- Pronto quando: o Chrome do Android oferece "Instalar", o iPhone adiciona pela tela de compartilhar com o ícone certo, o app abre em tela cheia sem barra do navegador, um deploy novo aparece com o aviso de atualizar, a API nunca vem do cache, e sem rede o app abre e mostra "sem conexão" em vez de erro do navegador.
 
 *6.5 — Revisão mobile e estados*
-- Passar todas as telas em 360px e num celular de verdade (seção 4.4).
-- Estados de carregando, erro e sem conexão em todas as ações. Nenhum botão fica "morto" sem explicação.
+- Passar todas as telas em 360px e num celular de verdade (seção 4.4). Telas: abertura e login, cadastro (nome e inicial), jardim (com zoom e pan), canteiro, ficha (as três abas), coleção (com seleção múltipla), daycare, mochila, exploração, encontro, luta ao vivo, captura e destaques.
+- Em cada tela, conferir: sem rolagem horizontal; nada escondido atrás do HUD, do dock ou da barra de gestos (safe-area); alvos de 44px ou mais; texto de 16px ou mais em campos; nada que dependa de hover; retrato em 360×640 e 412×915; teclado do celular não cobrindo o campo de apelido nem o de nome.
+- **Estados em todas as ações:** carregando (o botão que disparou fica `aria-busy`, como já existe no CSS), erro com a mensagem do `errorText` (nenhum erro "engolido") e sem conexão.
+- **Sem conexão:** um aviso fixo e discreto no topo ("Sem conexão · tentando de novo") quando o `/state` ou uma ação falha por rede, que some sozinho quando volta. As ações não ficam presas em "carregando" para sempre: tempo limite na requisição (config, ex.: 15 s) e o botão volta com a mensagem.
+- Nenhum botão fica "morto" sem explicação: botão desativado mostra o motivo (como já fazem soltar e daycare).
+- Usar os módulos comuns (`serverClock`, `time`, `ready`, `api`) e não criar outro jeito de tratar erro por tela.
+- Pronto quando: a lista de telas acima passou em 360px e num celular de verdade, desligar o Wi-Fi no meio de uma ação mostra o aviso e nada trava, e religar volta sozinho.
 - ~~Ficha do Pokémon em abas~~ (feito em 2026-10-27): abas Perfil · Golpes · Treino, com topo e rodapé fixos, e barra de rolagem pixel no jogo todo.
 - ~~Som~~ (feito em 2026-10-27): volume base pela metade, ícone de alto-falante no HUD com painel de volume e mudo, e som atrasado descartado.
 
