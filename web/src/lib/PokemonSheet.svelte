@@ -45,6 +45,14 @@
   let regionsCache = $state<RegionInfo[] | null>(null)
   let swapping = $state<'fast' | 'charged' | null>(null)
 
+  type SheetTab = 'perfil' | 'golpes' | 'treino'
+  const sheetTabs: { key: SheetTab; label: string }[] = [
+    { key: 'perfil', label: 'Perfil' },
+    { key: 'golpes', label: 'Golpes' },
+    { key: 'treino', label: 'Treino' },
+  ]
+  let tab = $state<SheetTab>('perfil')
+
   const rules = $derived(game.progression)
   const chainCandies = $derived(game.candies.find((row) => row.evolutionChainId === mon.evolutionChainId)?.amount ?? 0)
   const generic = $derived(game.trainer.genericCandies)
@@ -332,7 +340,6 @@
 <div class="overlay" role="presentation">
   <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
   <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
-  <div class="scroll">
     {#if highlightCards.length > 0}
       <div class="highlights">
         <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
@@ -365,6 +372,25 @@
 
     {#if message}<p class="alert" role="alert">{message}</p>{/if}
 
+    <!-- Abas: a ficha inteira não cabia numa rolagem só no celular. -->
+    <div class="tabs" role="tablist" aria-label="Seções da ficha">
+      {#each sheetTabs as entry (entry.key)}
+        <button
+          type="button"
+          role="tab"
+          id="tab-{entry.key}"
+          class="tab"
+          aria-selected={tab === entry.key}
+          aria-controls="panel-{entry.key}"
+          onclick={() => (tab = entry.key)}
+        >
+          {entry.label}
+        </button>
+      {/each}
+    </div>
+
+  <div class="scroll" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
+    {#if tab === 'perfil'}
     <form
       class="nick"
       onsubmit={(event) => {
@@ -399,6 +425,7 @@
       </ul>
     </div>
 
+    {:else if tab === 'golpes'}
     <div class="block">
       <h3>Golpes</h3>
       <div class="move">
@@ -469,6 +496,7 @@
       {/if}
     </div>
 
+    {:else}
     <div class="block">
       <h3>Alimentar</h3>
       {#if atCap}
@@ -527,6 +555,7 @@
     {#if dev}
       <button type="button" class="btn" onclick={dev.toggle}>{dev.asleep ? 'Acordar (teste)' : 'Dormir (teste)'}</button>
     {/if}
+    {/if}
   </div>
 
   <div class="dock">
@@ -583,7 +612,9 @@
     flex-direction: column;
     gap: 0.5rem;
     width: min(100%, 28rem);
-    height: fit-content;
+    /* Altura fixa: com fit-content a ficha mudava de tamanho a cada aba e
+       pulava na tela. Só a área da aba varia por dentro. */
+    height: min(100%, 46rem);
     max-height: 100%;
     min-width: 0;
     margin: 0;
@@ -593,7 +624,8 @@
   .scroll {
     display: grid;
     gap: 0.6rem;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    align-content: start;
     min-width: 0;
     min-height: 0;
     overflow-x: hidden;
@@ -604,6 +636,36 @@
 
   .dock {
     flex: none;
+  }
+
+  /* Só o conteúdo da aba rola; topo, abas e rodapé ficam no lugar. */
+  .sheet > :not(.scroll) {
+    flex: none;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    flex: none;
+  }
+
+  /* Mesmas molduras das escolhas de time: inlay solto, selected marcado. */
+  .tab {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 44px;
+    border: 8px solid transparent;
+    border-image: url('/ui/inlay.png') 4 fill / 8px round;
+    background: none;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tab[aria-selected='true'] {
+    border-image: url('/ui/selected.png') 6 fill / 8px round;
+    font-weight: 700;
   }
 
   .head {

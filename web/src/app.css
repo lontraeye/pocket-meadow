@@ -36,6 +36,9 @@ body,
 }
 
 body {
+  /* A Pixelify Sans junta "fi" numa ligadura que vira um glifo estranho
+     ("Perfil" aparecia como "PerAl"). */
+  font-variant-ligatures: none;
   /* Quadriculado leve de grama ao fundo, em pixels de 8px. */
   background:
     repeating-conic-gradient(#c6e2a9 0 25%, transparent 0 50%) 0 0 / 16px 16px,
@@ -59,6 +62,35 @@ textarea {
 
 img {
   image-rendering: pixelated;
+}
+
+/* Barra de rolagem no estilo pixel, em todo o jogo: trilho afundado e
+   "pegador" quadrado com borda escura, sem cantos arredondados. No celular
+   ela costuma ficar escondida até rolar; no desktop aparece sempre. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-soft) #00000014;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #00000014;
+  box-shadow: inset 2px 0 0 #00000018;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ink-soft);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: inset -2px -2px 0 #00000033;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Sprite ainda baixando (spriteLoading.ts e PmdSprite): Poké Ball quicando no

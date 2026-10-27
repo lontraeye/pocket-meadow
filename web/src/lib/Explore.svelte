@@ -20,7 +20,7 @@
   import { battleHighlightCards, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import { spriteReady } from './preload'
-  import { play, playCry } from './sound'
+  import { play, playCry, warmCries } from './sound'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
@@ -99,6 +99,8 @@
         return
       }
       const found = (await response.json()) as PendingEncounter
+      // O grito baixa junto com o sprite, para tocar assim que ele aparecer.
+      warmCries([found.speciesId])
       await spriteReady(found.speciesId, found.isShiny)
       encounter = found
       selected = []

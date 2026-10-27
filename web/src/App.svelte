@@ -11,10 +11,14 @@
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
   import { formatClockTime, formatCountdown } from './lib/time'
   import { serverClock } from './lib/serverClock.svelte'
-  import { bindAudioUnlock, isMuted, play, toggleMute } from './lib/sound'
+  import { bindAudioUnlock, getVolume, isMuted, play, setVolume, toggleMute, warmCries } from './lib/sound'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
   let muted = $state(isMuted())
+  let volumeLevel = $state(getVolume())
+  let volumeOpen = $state(false)
+  // Ícone com X quando não sai som, seja pelo mudo ou pela barra no zero.
+  const silent = $derived(muted || volumeLevel === 0)
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
   let progress = $state({ done: 0, total: 0 })
   let offline = $state(false)
@@ -126,8 +130,19 @@
     void loadState()
   })
 
+  // Gritos do jardim prontos antes de tocar num Pokémon (só baixa os novos).
+  $effect(() => {
+    if (!game) return
+    warmCries([...new Set(game.pokemon.filter((mon) => mon.location === 'garden').map((mon) => mon.speciesId))])
+  })
+
   function onMute() {
     muted = toggleMute()
+  }
+
+  function onVolume(event: Event) {
+    volumeLevel = Number((event.currentTarget as HTMLInputElement).value) / 100
+    setVolume(volumeLevel)
   }
 </script>
 
@@ -179,16 +194,57 @@
       <button
         type="button"
         class="btn mute-btn"
-        aria-pressed={muted}
-        aria-label={muted ? 'Ativar som' : 'Silenciar'}
-        onclick={onMute}
+        aria-expanded={volumeOpen}
+        aria-controls="volume-panel"
+        aria-label="Som"
+        title="Som"
+        onclick={() => (volumeOpen = !volumeOpen)}
       >
-        {muted ? 'Mudo' : 'Som'}
+        <!-- Alto-falante em pixels (grade 12×12): ondas com som, X no mudo. -->
+        <svg class="speaker" viewBox="0 0 12 12" width="22" height="22" aria-hidden="true">
+          <rect x="1" y="4" width="2" height="4" />
+          <rect x="3" y="3" width="1" height="6" />
+          <rect x="4" y="2" width="1" height="8" />
+          <rect x="5" y="1" width="1" height="10" />
+          {#if silent}
+            <rect x="7" y="4" width="1" height="1" /><rect x="8" y="5" width="1" height="1" />
+            <rect x="9" y="6" width="1" height="1" /><rect x="10" y="7" width="1" height="1" />
+            <rect x="10" y="4" width="1" height="1" /><rect x="9" y="5" width="1" height="1" />
+            <rect x="8" y="6" width="1" height="1" /><rect x="7" y="7" width="1" height="1" />
+          {:else}
+            <rect x="7" y="4" width="1" height="4" />
+            <rect x="9" y="2" width="1" height="1" /><rect x="10" y="3" width="1" height="6" />
+            <rect x="9" y="9" width="1" height="1" />
+          {/if}
+        </svg>
       </button>
       <button type="button" class="btn bag-btn" aria-label="Mochila" onclick={() => (screen = 'bag')}>
         Mochila
       </button>
       <button type="button" class="btn" onclick={logout}>Sair</button>
+      {#if volumeOpen}
+        <!-- Toque fora fecha o painel. -->
+        <button type="button" class="volume-dismiss" aria-label="Fechar volume" onclick={() => (volumeOpen = false)}></button>
+        <div class="panel volume-panel" id="volume-panel">
+          <label class="volume-row">
+            <span>Volume</span>
+            <input
+              type="range"
+              class="volume-range"
+              min="0"
+              max="100"
+              step="5"
+              value={Math.round(volumeLevel * 100)}
+              disabled={muted}
+              oninput={onVolume}
+            />
+            <strong>{muted ? '—' : `${Math.round(volumeLevel * 100)}%`}</strong>
+          </label>
+          <button type="button" class="btn" aria-pressed={muted} onclick={onMute}>
+            {muted ? 'Ligar som' : 'Silenciar'}
+          </button>
+        </div>
+      {/if}
     </header>
     <!-- Mundo: área fixa. HUD flutuante (banner) não entra no fluxo e não empurra. -->
     <div class="world">
@@ -323,6 +379,8 @@
   }
 
   .hud {
+    /* Referência do painel de volume, que abre logo abaixo. */
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -399,10 +457,10 @@
     text-overflow: ellipsis;
   }
 
+  /* Altura vem do .btn (48px), igual para Som, Mochila e Sair. */
   .bag-btn,
   .mute-btn {
     min-width: 44px;
-    min-height: 44px;
     flex: none;
   }
 
@@ -415,7 +473,106 @@
     color: var(--ink-soft);
   }
 
-  /* Celular: nível e energia numa linha; Som, Mochila e Sair embaixo. */
+  /* 22px: com as bordas de 12px o botão fica nos mesmos 48px dos vizinhos. */
+  .speaker {
+    display: block;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    shape-rendering: crispEdges;
+  }
+
+  .volume-dismiss {
+    position: fixed;
+    z-index: 30;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: default;
+  }
+
+  .volume-panel {
+    position: absolute;
+    z-index: 31;
+    top: calc(100% + 0.25rem);
+    left: 0;
+    display: grid;
+    gap: 0.5rem;
+    width: min(100%, 20rem);
+    box-sizing: border-box;
+  }
+
+  .volume-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 3.2rem;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+  }
+
+  .volume-row strong {
+    text-align: right;
+  }
+
+  /* Barra em pixel: trilho afundado e pegador quadrado amarelo. */
+  .volume-range {
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    background: none;
+    appearance: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .volume-range:disabled {
+    filter: grayscale(1) opacity(0.5);
+    cursor: default;
+  }
+
+  .volume-range::-webkit-slider-runnable-track {
+    height: 10px;
+    background: #00000022;
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
+
+  .volume-range::-moz-range-track {
+    height: 10px;
+    background: #00000022;
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
+
+  .volume-range::-moz-range-progress {
+    height: 10px;
+    background: var(--grass-side);
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
+
+  .volume-range::-webkit-slider-thumb {
+    width: 18px;
+    height: 26px;
+    margin-top: -8px;
+    border: 3px solid var(--ink);
+    border-radius: 0;
+    background: var(--accent);
+    box-shadow: inset 0 -3px 0 #c79a00;
+    appearance: none;
+  }
+
+  .volume-range::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 18px;
+    height: 26px;
+    border: 3px solid var(--ink);
+    border-radius: 0;
+    background: var(--accent);
+    box-shadow: inset 0 -3px 0 #c79a00;
+  }
+
+  /* Celular: nível e energia numa linha; som, Mochila e Sair embaixo. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;
@@ -428,6 +585,12 @@
 
     .hud .btn {
       flex: 1;
+    }
+
+    /* O ícone não precisa da largura de um botão com texto. */
+    .hud .mute-btn {
+      flex: none;
+      width: 56px;
     }
   }
 
