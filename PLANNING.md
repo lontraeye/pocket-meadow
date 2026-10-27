@@ -587,6 +587,21 @@ Hoje, gastar 1 de energia dá exatamente um Pokémon. A ideia é gastar a energi
 - Pokédex: todos os candidatos contam como vistos, ou só o escolhido.
 - Shiny no campo: aparece de cara, o que vira o grande momento do campo.
 
+### 5.15 Missões de NPC: Pokédex completa jogando sozinho (ideia, ainda sem fase)
+Nos jogos, nenhuma Pokédex fecha sem outra pessoa: há evoluções por troca e espécies exclusivas de versão. Aqui, **a experiência solo tem que ser completa**. A troca entre jogadores (seção 1) continua prevista, mas nunca é obrigatória. Quem cobre essa lacuna são NPCs com missões.
+
+- **Como funciona:** um NPC passa um objetivo. Ao cumprir, ele faz a troca. Exemplo: "capture 5 Pokémon do tipo fantasma". Você entrega seu Haunter, ele volta como Gengar. Como na troca dos jogos, o Pokémon é o mesmo e mantém nível, XP, shiny, apelido e favorito.
+- **Evoluções por troca na Gen 1–2:** Kadabra → Alakazam, Machoke → Machamp, Graveler → Golem, Haunter → Gengar, Onix → Steelix, Scyther → Scizor, Poliwhirl → Politoed, Slowpoke → Slowking, Seadra → Kingdra e Porygon → Porygon2. **Hoje o seed transforma todas em evolução por nível**, com o nível padrão do config: Haunter → Gengar no Nv 36, Onix → Steelix e Scyther → Scizor já no Nv 16.
+- **Espécies que não aparecem no mato** (iniciais da outra região, fósseis, presentes como Eevee e Lapras, exclusivas de versão) também podem vir de missões. Isso responde parte da questão em aberto sobre essas espécies.
+- **Objetivos derivados do que o jogo já guarda,** para não precisar de rastreio novo: capturar N de um tipo ou espécie (`pokedex_entries`), ter um Pokémon em tal nível, completar um bloco do álbum (seção 5.12), vencer N batalhas numa região (`encounters`). As missões e os NPCs ficam em config.
+- **Servidor decide:** cumprir e resgatar é uma ação em transação. O servidor confere o objetivo e se a missão já foi feita, e quem escolhe o Pokémon entregue é o jogador. Resgates numa tabela (`user_id`, `quest_key`, `claimed_at`), que pode ser a mesma do álbum.
+- **Visual:** o NPC pode morar no jardim ou numa tela de região, com um diálogo curto. Arte só com licença redistribuível (seção 4.3).
+
+Pontos a decidir:
+- **Evolução por troca:** a missão vira o **único** caminho (mais fiel aos jogos, e o seed para de gerar essas evoluções por nível) ou um **atalho** (o nível continua valendo, e a missão adianta).
+- Missões únicas ou repetíveis. Uma troca de Haunter por missão, ou o NPC aceita outros Haunters depois.
+- Se o NPC também troca espécie por espécie (dar um Pokémon e receber outro), como as trocas com NPC dos jogos.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
