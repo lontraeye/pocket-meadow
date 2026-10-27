@@ -12,11 +12,11 @@ Um jogo web idle/AFK com tema Pokémon. Não há batalhas manuais nem exploraç�
 
 1. **Encontros**: gastar energia para tentar a sorte em uma região e encontrar um Pokémon aleatório.
 2. **Batalha automática**: se vencer, pode tentar capturar.
-3. **Duplicatas viram recurso**: soltar Pokémon gera pontos (doces) da linha evolutiva, usados para upar e evoluir.
+3. **Batalhar faz o Pokémon crescer**, como nos jogos: quem luta ganha XP, sobe de nível e evolui ao chegar no nível. **Duplicatas dão um extra**: soltar gera doces da linha evolutiva, que viram XP para quem você quiser.
 4. **Daycare**: Pokémon colocados lá ganham XP com o tempo, sem gastar doces.
 5. **Berries**: plantadas no jardim, levam tempo real para crescer e dão bônus.
 
-Loop principal: **encontro → captura → soltar duplicatas → time mais forte → regiões novas**.
+Loop principal: **encontro → batalha (XP) → captura → time mais forte → regiões novas**, com as duplicatas virando doce para acelerar quem ficou para trás.
 
 O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta entre jogadores. As interações sociais previstas são adicionar amigos, deixar um presente para um amigo e trocar Pokémon. O schema e a fase disso ficam para depois do loop single-player. Presente e troca seguem as regras que já existem: o servidor resolve, a operação roda em transação, e um jogador não pode ficar com zero Pokémon.
 
@@ -90,7 +90,7 @@ A pasta `server/src/game/` deve conter **funções puras** (recebem estado + `no
 - De `/pokemon-species/{id}`: `capture_rate`, `is_legendary`, `is_mythical`, `evolution_chain.url` (extrair o ID), `evolves_from_species`.
 - De `/evolution-chain/{id}`: pares de evolução (de → para) e `min_level` quando houver.
 
-Evoluções por item, troca, amizade etc. são **simplificadas**: toda evolução vira "por nível + custo em doces". Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
+Evoluções por item, troca, amizade etc. são **simplificadas**: toda evolução vira "por nível". Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
 
 Respeitar a PokéAPI: fazer as requisições em sequência com pequeno delay e cachear as respostas em disco durante o seed.
 
@@ -381,6 +381,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
 - **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
 - **Vitória**: o `BATTLE_XP` é **dividido igualmente** entre quem lutou (`floor(BATTLE_XP / tamanho do time)` para cada um), o treinador ganha XP normalmente, e segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
+- **Fórmula do `BATTLE_XP` em aberto.** Com o modelo tradicional, a batalha é a fonte principal de XP, e `wildLevel × 5` é pouco. A candidata é a fórmula clássica, `baseExperience × wildLevel ÷ 7`, com o `base_experience` da PokéAPI, o que pede uma coluna nova em `species`. A alternativa sem migração é aproximar pelo BST (`BST × wildLevel ÷ 35`), que dá o mesmo valor para os comuns, mas subestima os especiais (Pikachu 112 contra 64, Chansey 395 contra 90).
 
 ### 5.6 Captura
 - Após a vitória, uma tentativa de captura:
@@ -391,7 +392,20 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 - Sucesso: o Pokémon entra na coleção (no jardim). Falha: ele foge.
 - Uma tentativa por encontro (pode ser revisto no futuro).
 
+#### Pokébolas (ideia, ainda sem fase)
+Anotado para depois. Precisa de especificação própria.
+- Tipos de bola com multiplicador na captura (ex.: Poké Ball ×1, Great Ball ×1,5, Ultra Ball ×2), todos em config. O multiplicador entra na fórmula acima, ao lado do `berryBonus`.
+- As bolas são itens do `inventory` (`ball:poke`, `ball:great`…), sem tabela nova.
+- Responde a questão em aberto "mais de uma tentativa de captura por encontro": cada tentativa gasta uma bola, e o jogador escolhe qual usar. Cada tentativa é uma rolagem a mais no PRNG (seção 7), na ordem em que foram feitas.
+- A decidir:
+  - de onde vêm as bolas (inicial, recompensa de nível de treinador, álbum da seção 5.12, colheita);
+  - se encontro sem bola permite capturar;
+  - um limite de tentativas por encontro;
+  - a relação com a animação da pokébola da seção 5.13.
+
 ### 5.7 Doces (pontos ao soltar)
+O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com ele. Ele não é requisito para evoluir (seção 5.8).
+
 - Doces pertencem a uma **linha evolutiva** (`evolution_chain_id`), não a uma espécie. Soltar um Charmander dá doces que servem para Charmander, Charmeleon e Charizard.
 - Ao soltar:
   ```
@@ -411,7 +425,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   xpToNext(level) = floor(10 * level ^ 1.5)
   ```
 - Fontes de XP do Pokémon: vencer batalha (`BATTLE_XP = wildLevel * 5`), daycare, e **usar doces** (cada doce = `CANDY_XP` XP, inicial: 25).
-- **Evolução**: requer `level >= minLevel` da evolução **e** custo em doces da linha (inicial: estágio 1→2 custa 25, 2→3 custa 100). Mantém nível, XP, shiny e apelido.
+- **Evolução**: requer só `level >= minLevel` da evolução, como nos jogos. Não custa doce. Não é automática: ao chegar no nível, aparece o botão **Evoluir**, porque o jogador escolhe o destino nas ramificações (Eevee, Gloom) e pode preferir esperar. Mantém nível, XP, shiny e apelido. A coluna `evolutions.candy_cost` fica sem uso, e não vale uma migração só para tirá-la.
 
 #### Alimentar (`POST /pokemon/:id/feed`)
 - Corpo: `{ candies, useGeneric? }`. `candies` é a quantidade de **doses**, de 1 a `FEED_MAX_PER_REQUEST` (inicial: 999). Cada dose dá `CANDY_XP`.
@@ -423,22 +437,22 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 
 #### Evoluir (`POST /pokemon/:id/evolve`)
 - Corpo: `{ toSpeciesId }`. Precisa existir a linha em `evolutions` saindo da espécie atual para `toSpeciesId`, o que cobre as ramificações, como Eevee e Gloom.
-- Valida que o Pokémon é do jogador, está no jardim, tem `level >= minLevel` e que há `candyCost` doces **da linha**. Genérico não paga evolução.
+- Valida que o Pokémon é do jogador, está no jardim e tem `level >= minLevel`. Não debita doce.
 - Troca `species_id` e mantém nível, XP, shiny, apelido e favorito. `original_species_id` não muda.
 - Pokédex: a nova espécie conta como vista e capturada (cria a entrada, se não existir, com `seen_count` e `caught_count` +1, `first_seen_at` e `first_caught_at` se ainda forem nulos, e `shiny_caught` se for shiny).
 - XP de treinador: `EVOLVE_XP_BY_STAGE` (inicial: 30 para chegar ao estágio 2, 60 para o 3), pelo estágio da espécie nova. Pode subir o nível de treinador e abrir regiões.
-- Erros: `evolution_not_found`, `level_too_low` (com o nível pedido), `not_enough_candies` (com o custo) e `in_daycare`.
-- **O estado precisa mostrar as opções.** `GET /state` passa a trazer, em cada Pokémon, `evolutions: [{ toSpeciesId, displayName, minLevel, candyCost }]`. O front mostra o que falta (nível ou doces), mas só o servidor decide.
+- Erros: `evolution_not_found`, `level_too_low` (com o nível pedido) e `in_daycare`.
+- **O estado precisa mostrar as opções.** `GET /state` passa a trazer, em cada Pokémon, `evolutions: [{ toSpeciesId, displayName, minLevel }]`. O front mostra quantos níveis faltam, mas só o servidor decide.
 
 #### Ritmo (para revisar depois de jogar)
-Com os valores iniciais, o doce custa caro nos níveis altos, porque `CANDY_XP` é fixo e `xpToNext` cresce:
+A fonte principal de XP é a batalha. O doce é atalho. Referência com `xpToNext` atual:
 
-| Trecho | XP | Doces | Solturas de Pokémon Nv 3 (3 doces) |
-|---|---|---|---|
-| Nv 5 → 16 (1ª evolução) | ~3.600 | ~145 | ~49 |
-| Nv 16 → 36 (2ª evolução) | ~26.000 | ~1.050 | ~350 |
+| Trecho | XP | Doces (25 XP cada) |
+|---|---|---|
+| Nv 5 → 16 (1ª evolução) | ~3.600 | ~145 |
+| Nv 16 → 36 (2ª evolução) | ~26.000 | ~1.050 |
 
-A primeira evolução sai em cerca de um dia de jogo. A segunda leva uma semana só de doce, sem contar batalha e daycare. Não mexer agora. Rever com a Fase 3 rodando, mexendo em `CANDY_XP`, nos doces por soltura ou nos níveis mínimos de evolução, que ficam todos em config.
+O `BATTLE_XP` atual (`wildLevel × 5`) é baixo demais para ser a fonte principal: um selvagem Nv 3 dá 15 XP. A fórmula nova do XP de batalha está em aberto (seção 5.5). Rever os números com a Fase 3 rodando.
 
 #### Apelido e favorito (`PATCH /pokemon/:id`)
 - `{ nickname?, isFavorite? }`. Apelido: texto aparado, de 1 a 12 caracteres, sem caracteres de controle. `null` ou vazio volta ao nome da espécie. Vale também para Pokémon no daycare.
@@ -452,7 +466,7 @@ O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê
 - **Detalhes:** tocar no cartão abre o mesmo sheet do jardim. Ele vira um componente único (ex.: `PokemonSheet.svelte`), usado pelo jardim e pela coleção. O sheet mostra:
   - sprite, apelido editável, favorito, nível, barra de XP, poder, doces da linha e genéricos;
   - **Alimentar:** seletor de doses com − e +, alvos de 44px, limitado pelo saldo e pelo nível máximo. Mostra antes "+X XP → Nv Y" e permite escolher entre doce da linha e genérico;
-  - **Evoluir:** uma opção por destino, com o requisito que falta quando não dá. Ao evoluir, troca o sprite e mostra uma pequena animação, respeitando `prefers-reduced-motion`;
+  - **Evoluir:** uma opção por destino. Aparece habilitada a partir do nível mínimo e, antes disso, mostra "Evolui no Nv X". Ao evoluir, troca o sprite e mostra uma pequena animação, respeitando `prefers-reduced-motion`;
   - **Soltar:** mostra quantos doces vai render. Pede confirmação para shiny ou favorito. Fica desativado, com o motivo, para o último Pokémon e para quem está no daycare.
 - **Soltar vários:** um modo "Selecionar" na coleção. Tocar marca os cartões. Uma barra fixa embaixo mostra "Soltar N · +X doces". Se o lote tiver shiny ou favorito, a confirmação lista quais são. O filtro Repetidos combinado com "selecionar todos menos o de maior nível" é o atalho principal.
 - Nada depende de hover. Ações principais embaixo, ao alcance do polegar (seção 4.4).

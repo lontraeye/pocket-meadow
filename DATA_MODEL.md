@@ -64,14 +64,14 @@ CREATE INDEX idx_species_chain ON species(evolution_chain_id);
 Sprites não são guardados: o caminho é derivado do ID. No jardim, `/sprites/pmd/{id}/` (shiny em `shiny/`); no card e no encontro, `/sprites/showdown/{id}.gif` e `/sprites/showdown/shiny/{id}.gif`.
 
 ### `evolutions`
-Simplificado: toda evolução é "nível mínimo + doces".
+Simplificado: toda evolução é por nível mínimo. O `candy_cost` ficou de um modelo anterior e não é usado.
 
 ```sql
 CREATE TABLE evolutions (
   from_species_id  INTEGER NOT NULL REFERENCES species(id),
   to_species_id    INTEGER NOT NULL REFERENCES species(id),
   min_level        INTEGER NOT NULL,                 -- da PokéAPI ou padrão do config
-  candy_cost       INTEGER NOT NULL,                 -- inicial: 25 (estágio 1→2), 100 (2→3)
+  candy_cost       INTEGER NOT NULL,                 -- sem uso: evolução é só por nível (PLANNING.md, seção 5.8)
   PRIMARY KEY (from_species_id, to_species_id)
 );
 ```
@@ -329,7 +329,7 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → (se venceu) XP dividido entre o time, XP do treinador, rolar captura e, se capturou, inserir Pokémon → atualizar status do encontro e pokédex |
 | Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
 | Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
-| Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`, doces da linha) → debitar → trocar `species_id` → pokédex (vista e capturada) → XP do treinador |
+| Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` → pokédex (vista e capturada) → XP do treinador. Não custa doce |
 | Colher | validar `ready_at <= now` → apagar canteiro → creditar berries/sementes |
 
 Regra de segurança: o jogador **nunca** pode ficar com zero Pokémon (bloquear soltar o último).
