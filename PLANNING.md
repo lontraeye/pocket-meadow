@@ -86,7 +86,7 @@ A pasta `server/src/game/` deve conter **funções puras** (recebem estado + `no
 ### 4.1 Seed das espécies (script único)
 `scripts/seed-species.ts` percorre a faixa de IDs configurada (começar com Gen 1–2, IDs 1–251; faixa em config) e salva:
 
-- De `/pokemon/{id}`: `name`, base stats (hp, attack, defense, special-attack, special-defense, speed), `types`.
+- De `/pokemon/{id}`: `name`, base stats (hp, attack, defense, special-attack, special-defense, speed), `types`, `base_experience`.
 - De `/pokemon-species/{id}`: `capture_rate`, `is_legendary`, `is_mythical`, `evolution_chain.url` (extrair o ID), `evolves_from_species`.
 - De `/evolution-chain/{id}`: pares de evolução (de → para) e `min_level` quando houver.
 
@@ -380,8 +380,26 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   ```
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
 - **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
-- **Vitória**: o `BATTLE_XP` é **dividido igualmente** entre quem lutou (`floor(BATTLE_XP / tamanho do time)` para cada um), o treinador ganha XP normalmente, e segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
-- **Fórmula do `BATTLE_XP` em aberto.** Com o modelo tradicional, a batalha é a fonte principal de XP, e `wildLevel × 5` é pouco. A candidata é a fórmula clássica, `baseExperience × wildLevel ÷ 7`, com o `base_experience` da PokéAPI, o que pede uma coluna nova em `species`. A alternativa sem migração é aproximar pelo BST (`BST × wildLevel ÷ 35`), que dá o mesmo valor para os comuns, mas subestima os especiais (Pikachu 112 contra 64, Chansey 395 contra 90).
+- **Vitória**: cada Pokémon que lutou ganha XP pela fórmula abaixo, **dividido pelo tamanho do time**. O treinador ganha XP normalmente, e o encontro segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
+- **XP de batalha**, igual aos jogos a partir da Geração 5. O BST decide a luta (poder, acima), e o `base_experience` decide a recompensa:
+  ```
+  b  = base_experience do selvagem (PokéAPI)
+  L  = nível do selvagem
+  Lp = nível de quem lutou (calculado para cada Pokémon do time)
+  xp = floor( (b * L / BATTLE_XP_DIV) * ((2L + 10) / (L + Lp + 10)) ^ BATTLE_XP_LEVEL_EXP ) + 1
+  ganho = floor(xp / tamanho do time)                 // BATTLE_XP_DIV inicial: 5; BATTLE_XP_LEVEL_EXP: 2.5
+  ```
+  O fator de nível dá mais XP por vencer alguém mais forte e quase nada por vencer alguém bem mais fraco. No time, o Pokémon de nível mais baixo ganha mais, o que ajuda a puxar quem ficou para trás. Exemplos com os valores iniciais:
+
+  | Selvagem | Quem venceu | XP | O nível pede |
+  |---|---|---|---|
+  | Pidgey Nv 3 (b 50) | Nv 5 | 23 | 111 |
+  | Pidgey Nv 3 | Nv 30 | 3 | 1.643 |
+  | Pikachu Nv 4 (b 112) | Nv 5 | 79 | 111 |
+  | Zubat Nv 8 (b 49) | Nv 6 | 96 | 146 |
+  | Chansey Nv 10 (b 395) | Nv 10 | 791 | 316 |
+
+  Os raros viram prêmio também em XP, e ficar batendo em selvagem fraco não compensa.
 
 ### 5.6 Captura
 - Após a vitória, uma tentativa de captura:
@@ -424,7 +442,7 @@ O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com e
   ```
   xpToNext(level) = floor(10 * level ^ 1.5)
   ```
-- Fontes de XP do Pokémon: vencer batalha (`BATTLE_XP = wildLevel * 5`), daycare, e **usar doces** (cada doce = `CANDY_XP` XP, inicial: 25).
+- Fontes de XP do Pokémon: vencer batalha (fórmula da seção 5.5), daycare, e **usar doces** (cada doce = `CANDY_XP` XP, inicial: 25).
 - **Evolução**: requer só `level >= minLevel` da evolução, como nos jogos. Não custa doce. Não é automática: ao chegar no nível, aparece o botão **Evoluir**, porque o jogador escolhe o destino nas ramificações (Eevee, Gloom) e pode preferir esperar. Mantém nível, XP, shiny e apelido. A coluna `evolutions.candy_cost` fica sem uso, e não vale uma migração só para tirá-la.
 
 #### Alimentar (`POST /pokemon/:id/feed`)
@@ -452,7 +470,7 @@ A fonte principal de XP é a batalha. O doce é atalho. Referência com `xpToNex
 | Nv 5 → 16 (1ª evolução) | ~3.600 | ~145 |
 | Nv 16 → 36 (2ª evolução) | ~26.000 | ~1.050 |
 
-O `BATTLE_XP` atual (`wildLevel × 5`) é baixo demais para ser a fonte principal: um selvagem Nv 3 dá 15 XP. A fórmula nova do XP de batalha está em aberto (seção 5.5). Rever os números com a Fase 3 rodando.
+Com o XP de batalha da seção 5.5, um nível leva de 5 a 8 batalhas na rota certa no começo, e a primeira evolução sai em cerca de um dia de jogo. Rever os números com a Fase 3 rodando.
 
 #### Apelido e favorito (`PATCH /pokemon/:id`)
 - `{ nickname?, isFavorite? }`. Apelido: texto aparado, de 1 a 12 caracteres, sem caracteres de controle. `null` ou vazio volta ao nome da espécie. Vale também para Pokémon no daycare.
@@ -652,6 +670,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Encontro, batalha, captura, XP de treinador e desbloqueio de regiões.
 
 **Fase 3 — Progressão**
+- XP de batalha pela fórmula da seção 5.5: coluna `base_experience` em `species` (migração e seed de novo).
 - Soltar (um ou vários), doces, alimentar, evoluir, apelido e favorito (seções 5.7 e 5.8).
 - Tela de coleção (lista, busca, filtros e seleção múltipla) e sheet de detalhes compartilhado com o jardim.
 - Pronto quando:

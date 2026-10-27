@@ -50,6 +50,7 @@ CREATE TABLE species (
   sp_defense            INTEGER NOT NULL,
   speed                 INTEGER NOT NULL,
   base_stat_total       INTEGER NOT NULL,              -- soma dos 6 stats (usado no poder)
+  base_experience       INTEGER NOT NULL,              -- XP que dá ao ser derrotado (PLANNING.md, seção 5.5)
   capture_rate          INTEGER NOT NULL,              -- 3..255, da PokéAPI
   evolution_chain_id    INTEGER NOT NULL,              -- chave dos doces
   evolves_from_id       INTEGER REFERENCES species(id),
