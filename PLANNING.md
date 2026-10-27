@@ -414,6 +414,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 Anotado para depois. Precisa de especificação própria.
 - Tipos de bola com multiplicador na captura (ex.: Poké Ball ×1, Great Ball ×1,5, Ultra Ball ×2), todos em config. O multiplicador entra na fórmula acima, ao lado do `berryBonus`.
 - As bolas são itens do `inventory` (`ball:poke`, `ball:great`…), sem tabela nova.
+- **Sprites:** cada bola com o seu ícone do `PokeAPI/sprites` (`items/poke-ball.png`, `great-ball.png`, `ultra-ball.png`…), baixados pelo mesmo script e com o mesmo crédito da Poké Ball da parte 6.2. A cena de captura da 6.2 deve receber a bola como parâmetro, para trocar o sprite sem mexer na animação.
 - Responde a questão em aberto "mais de uma tentativa de captura por encontro": cada tentativa gasta uma bola, e o jogador escolhe qual usar. Cada tentativa é uma rolagem a mais no PRNG (seção 7), na ordem em que foram feitas.
 - A decidir:
   - de onde vêm as bolas (inicial, recompensa de nível de treinador, álbum da seção 5.12, colheita);
