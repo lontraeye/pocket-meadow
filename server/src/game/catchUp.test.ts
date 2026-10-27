@@ -249,6 +249,39 @@ describe('daycare', () => {
     assert.equal(full.daycare[0]?.xpGained, baseXp * 2)
   })
 
+  test('Nanab que vence no meio da hora fica até essa hora ser liquidada', () => {
+    const settledFrom = now - 0.5 * hour
+    const nanab = {
+      id: 5,
+      effectKey: 'daycare_boost',
+      multiplier: 2,
+      createdAt: settledFrom - 1.5 * hour,
+      expiresAt: settledFrom + 0.25 * hour,
+    }
+    const daycare = [{ ...slot, level: 50, lastSettledAt: settledFrom }]
+    // Hora ainda aberta: nada liquida e o efeito não pode sair.
+    const early = applyCatchUp(state({ daycare, effects: [nanab] }), now)
+    assert.deepEqual(early.daycare, [])
+    assert.deepEqual(early.deleteEffectIds, [])
+
+    // Fechada a hora, ela leva 1/4 de bônus e aí o efeito sai.
+    const later = applyCatchUp(state({ daycare, effects: [nanab] }), settledFrom + hour)
+    assert.equal(later.daycare[0]?.xpGained, Math.floor(daycareXpPerHour(50) * 1.25))
+    assert.deepEqual(later.deleteEffectIds, [5])
+  })
+
+  test('Nanab vencido sai logo quando o slot já bateu o limite de horas', () => {
+    const enteredAt = now - daycareConfig.maxMs - 0.5 * hour
+    const result = applyCatchUp(
+      state({
+        daycare: [{ ...slot, level: 50, enteredAt, lastSettledAt: enteredAt + daycareConfig.maxMs }],
+        effects: [{ id: 6, effectKey: 'daycare_boost', multiplier: 2, createdAt: now - 3 * hour, expiresAt: now - hour }],
+      }),
+      now,
+    )
+    assert.deepEqual(result.deleteEffectIds, [6])
+  })
+
   test('um dia cheio no Nv 5 rende cerca de 3 níveis e no Nv 50 cerca de 1', () => {
     const from5 = applyDaycareHours(5, 0, daycareConfig.maxHours)
     // Dois level ups + quase o terceiro (~2,9 da tabela da seção 5.9).

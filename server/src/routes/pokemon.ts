@@ -205,7 +205,7 @@ function feedOne(
   let spent: number
   let balance: number
   if (useGeneric) {
-    if (trainer.genericCandies < doses * GENERIC_PER_CANDY) return fail('not_enough_candies', 400)
+    if (trainer.genericCandies < plan.doses * GENERIC_PER_CANDY) return fail('not_enough_candies', 400)
     spent = plan.doses * GENERIC_PER_CANDY
     balance = trainer.genericCandies - spent
     db.update(trainers).set({ genericCandies: balance, updatedAt: now }).where(eq(trainers.userId, userId)).run()
@@ -215,7 +215,7 @@ function feedOne(
       .from(candies)
       .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, mon.evolutionChainId)))
       .get()
-    if (!row || row.amount < doses) return fail('not_enough_candies', 400)
+    if (!row || row.amount < plan.doses) return fail('not_enough_candies', 400)
     spent = plan.doses
     balance = row.amount - spent
     db.update(candies)

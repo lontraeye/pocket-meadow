@@ -206,7 +206,8 @@ function readState(userId: number, now: number) {
       .all()
       .sort((a, b) => a.plotIndex - b.plotIndex),
     inventory: db.select().from(inventory).where(eq(inventory.userId, userId)).all(),
-    effects: effects.map((effect) => ({
+    // O Nanab vencido pode ficar no banco até o daycare liquidar a última hora.
+    effects: effects.filter((effect) => effect.expiresAt === null || effect.expiresAt > now).map((effect) => ({
       id: effect.id,
       effectKey: effect.effectKey,
       multiplier: effect.multiplier,

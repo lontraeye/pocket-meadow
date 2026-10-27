@@ -41,8 +41,17 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
     const settled = settleDaycare(slot, now, daycareBoost)
     return settled === undefined ? [] : [settled]
   })
+  // O Nanab vencido só sai quando nenhum slot tem mais hora a liquidar dentro
+  // da janela. Senão a hora em andamento no vencimento perde a parte do bônus.
+  const settledUntil = new Map(daycare.map((slot) => [slot.pokemonId, slot.lastSettledAt]))
+  const daycareDone = (expiresAt: number) =>
+    state.daycare.every((slot) => {
+      const settled = settledUntil.get(slot.pokemonId) ?? slot.lastSettledAt
+      return settled >= expiresAt || settled + hourMs > slot.enteredAt + daycareConfig.maxMs
+    })
   const deleteEffectIds = state.effects
     .filter((effect) => effect.expiresAt !== null && effect.expiresAt <= now)
+    .filter((effect) => effect.effectKey !== 'daycare_boost' || daycareDone(effect.expiresAt as number))
     .map((effect) => effect.id)
   const fleeEncounterIds = state.encounters
     .filter((encounter) => encounter.status === 'pending' && encounter.expiresAt <= now)

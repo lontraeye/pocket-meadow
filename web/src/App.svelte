@@ -267,6 +267,23 @@
     flex: none;
   }
 
+  /* Celular: nível e energia numa linha, Mochila e Sair embaixo. Numa linha só
+     a energia ficava com ~40px e as barrinhas passavam por baixo da Mochila. */
+  @media (max-width: 420px) {
+    .hud {
+      flex-wrap: wrap;
+      row-gap: 0.25rem;
+    }
+
+    .energy {
+      flex-basis: calc(100% - 44px - 0.5rem);
+    }
+
+    .hud .btn {
+      flex: 1;
+    }
+  }
+
   .ready-banner {
     display: flex;
     align-items: stretch;

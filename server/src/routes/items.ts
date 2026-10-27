@@ -14,7 +14,8 @@ type Ok<T> = { ok: true } & T
 export const itemRoutes = new Hono<AuthEnv>()
 
 itemRoutes.post('/:key/use', requireUser, (c) => {
-  const itemKey = decodeURIComponent(c.req.param('key'))
+  // O Hono já decodifica o parâmetro; decodificar de novo dá 500 com "%" solto.
+  const itemKey = c.req.param('key')
   const result = immediate(() => useItem(c.get('userId'), itemKey, Date.now()))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.used)
