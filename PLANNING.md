@@ -1017,8 +1017,18 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Sem mudança no servidor. Se faltar algum dado na resposta para os destaques, acrescentar na resposta, sem mudar regra.
 
 *6.3 — Sons*
-- Sons curtos nos momentos da 6.2 e em ações (colher, soltar, botão principal). Botão de mudo lembrado no `localStorage`. No celular, o som só toca depois do primeiro toque, por regra do navegador.
-- Só com licença redistribuível (ex.: pacotes CC0 do Kenney), creditados no `CREDITS.md`.
+- **Gritos dos Pokémon:** versão `latest` do repositório `PokeAPI/cries`, o mesmo que a PokéAPI aponta (`cries/pokemon/latest/<id>.ogg`).
+  - Por que `latest` e não `legacy`: o `legacy` só existe do #1 ao #649 (Gen 1–5, conferido em 2026-10-27). Misturar os dois estilos quando entrarem gerações novas soaria desigual; o `latest` cobre do #1 ao #1025.
+  - `npm run sounds:cries` baixa do commit fixado em `server/src/config/cries.ts` e converte para `web/public/sounds/cries/<id>.mp3` (2,9 MB para os 251).
+  - Tocados sob demanda: cada grito só é buscado na primeira vez que toca. Não entram na tela de abertura.
+  - Onde: o selvagem aparece no encontro; o capturado sai da bola na cena da 6.2; tocar num Pokémon no jardim (o mesmo toque que abre a ficha).
+  - Licença: o repositório não declara; o áudio é da Nintendo / Game Freak. Mesmo status dos GIFs do Showdown e dos ícones das berries, e entra no `CREDITS.md` do mesmo jeito.
+- **Efeitos:** pacote CC0 Interface Sounds, do Kenney, no mesmo espírito das molduras de UI. (O RPG Audio foi testado e saiu: porta, pano e clique de metal soavam como objetos, não como o jogo.) Momentos: botão principal, colher, soltar, chacoalhada da Poké Ball, clique da captura, fuga do selvagem e level up. O arquivo de origem de cada um fica em `server/src/config/sfx.ts`; `npm run sounds:sfx -- <pastas dos pacotes>` gera `web/public/sounds/sfx/<uso>.mp3`. Para trocar um som, troque o arquivo no config e rode de novo.
+- **Formato MP3** para tudo: o Safari de iPhones mais antigos não toca Ogg. A conversão usa o `ffmpeg-static`, só no desenvolvimento; a VM recebe os MP3 prontos.
+- **Web Audio** (`web/src/lib/sound.ts`): um único `AudioContext` liberado no primeiro toque. Com `new Audio()`, o Safari bloqueia som fora de um toque, como o grito quando o encontro volta do servidor, as chacoalhadas por timer e o level up nos destaques.
+- **Mudo:** botão no HUD, lembrado no `localStorage`. Volume baixo por padrão: é um jogo idle, aberto em qualquer lugar.
+- **Celular:** o navegador só libera áudio depois do primeiro toque. O jogo não tenta tocar antes disso, e o primeiro toque destrava sem som.
+- Sem mudança no servidor.
 
 *6.4 — Instalar na tela inicial (PWA)*
 - `manifest.webmanifest` (nome, ícones, cores, `display: standalone`), ícones nos tamanhos pedidos e service worker simples que cacheia os arquivos estáticos. A API nunca é cacheada, porque o estado vem sempre do servidor.

@@ -1,5 +1,5 @@
 import type { GameState } from './api'
-import { gardenSprite, loadPmd } from './sprites'
+import { gardenSprite, loadPmd, showdownSrc } from './sprites'
 
 // Arte da abertura (App.svelte): o que aparece em quase toda tela. As molduras
 // entram por border-image no CSS; sem elas, painéis e botões aparecem crus.
@@ -55,6 +55,17 @@ export function gameTasks(game: GameState): Promise<unknown>[] {
     tasks.push(look.kind === 'pmd' ? loadPmd(mon.speciesId, look.shinySheet) : loadImage(look.src))
   }
   return tasks
+}
+
+/**
+ * Sprite de uma espécie pronto para aparecer (folhas PMD ou o GIF), por no
+ * máximo `capMs`. Usado antes de mostrar o encontro e a cena: o botão segura o
+ * "Procurando…" em vez de o Pokémon surgir pela metade.
+ */
+export function spriteReady(speciesId: number, isShiny: boolean, capMs = 2500): Promise<void> {
+  const look = gardenSprite(speciesId, isShiny)
+  const load = look.kind === 'pmd' ? loadPmd(speciesId, look.shinySheet) : loadImage(showdownSrc(speciesId, isShiny))
+  return Promise.race([load, new Promise<void>((resolve) => setTimeout(resolve, capMs))])
 }
 
 /**

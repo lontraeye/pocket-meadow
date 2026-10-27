@@ -11,8 +11,10 @@
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
   import { formatClockTime, formatCountdown } from './lib/time'
   import { serverClock } from './lib/serverClock.svelte'
+  import { bindAudioUnlock, isMuted, play, toggleMute } from './lib/sound'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
+  let muted = $state(isMuted())
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
   let progress = $state({ done: 0, total: 0 })
   let offline = $state(false)
@@ -119,8 +121,14 @@
   }
 
   onMount(() => {
+    bindAudioUnlock()
+    muted = isMuted()
     void loadState()
   })
+
+  function onMute() {
+    muted = toggleMute()
+  }
 </script>
 
 {#if phase === 'loading'}
@@ -168,6 +176,15 @@
         </div>
         <span class="timer">{energyCaption()}</span>
       </button>
+      <button
+        type="button"
+        class="btn mute-btn"
+        aria-pressed={muted}
+        aria-label={muted ? 'Ativar som' : 'Silenciar'}
+        onclick={onMute}
+      >
+        {muted ? 'Mudo' : 'Som'}
+      </button>
       <button type="button" class="btn bag-btn" aria-label="Mochila" onclick={() => (screen = 'bag')}>
         Mochila
       </button>
@@ -202,7 +219,14 @@
             <span class="badge" aria-label={`${ready.daycareFullCount} prontos`}>{ready.daycareFullCount}</span>
           {/if}
         </button>
-        <button type="button" class="btn btn-primary" onclick={() => (screen = 'explore')}>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick={() => {
+            play('tap')
+            screen = 'explore'
+          }}
+        >
           {game.encounter ? 'Ver encontro' : 'Explorar'}
         </button>
       </div>
@@ -370,14 +394,23 @@
     text-overflow: ellipsis;
   }
 
-  .bag-btn {
+  .bag-btn,
+  .mute-btn {
     min-width: 44px;
     min-height: 44px;
     flex: none;
   }
 
-  /* Celular: nível e energia numa linha, Mochila e Sair embaixo. Numa linha só
-     a energia ficava com ~40px e as barrinhas passavam por baixo da Mochila. */
+  .mute-btn {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  .mute-btn[aria-pressed='true'] {
+    color: var(--ink-soft);
+  }
+
+  /* Celular: nível e energia numa linha; Som, Mochila e Sair embaixo. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;

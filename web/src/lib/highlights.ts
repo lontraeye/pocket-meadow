@@ -1,4 +1,5 @@
 import { berryIconSrc, itemLabel, type BattleOutcome, type BerryInfo, type RegionInfo } from './api'
+import type { SfxName } from './sound'
 
 export type HighlightCard = {
   id: string
@@ -6,6 +7,8 @@ export type HighlightCard = {
   detail?: string
   tone?: 'good' | 'bad' | 'neutral'
   iconSrc?: string
+  /** Toca quando o cartão aparece. */
+  sound?: SfxName
 }
 
 export function prefersReducedMotion(): boolean {
@@ -44,7 +47,13 @@ export function battleHighlightCards(input: {
       fighter.levelsGained > 0
         ? `+${fighter.xpGained} XP · subiu para Nv ${fighter.level}`
         : `+${fighter.xpGained} XP`
-    cards.push({ id: `xp-${fighter.pokemonId}`, title: name, detail, tone: 'good' })
+    cards.push({
+      id: `xp-${fighter.pokemonId}`,
+      title: name,
+      detail,
+      tone: 'good',
+      ...(fighter.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
+    })
     if (canEvolve(fighter)) {
       cards.push({
         id: `evolve-${fighter.pokemonId}`,
@@ -81,7 +90,7 @@ function trainerCards(
   }
   const from = trainer.level - trainer.levelsGained
   return [
-    { id: 'trainer', title: `Treinador Nv ${trainer.level}`, detail: `Subiu do Nv ${from}`, tone: 'good' },
+    { id: 'trainer', title: `Treinador Nv ${trainer.level}`, detail: `Subiu do Nv ${from}`, tone: 'good', sound: 'levelup' },
     ...unlockedRegions(regions, from, trainer.level).map((region): HighlightCard => ({
       id: `region-${region.slug}`,
       title: `Nova região: ${region.name}`,
@@ -126,6 +135,7 @@ export function xpHighlightCards(input: {
         ? `+${input.xpGained} XP · subiu para Nv ${input.level}`
         : `+${input.xpGained} XP`,
     tone: 'good',
+    ...(input.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
   })
   if (input.canEvolve) {
     cards.push({ id: 'feed-evolve', title: `${input.name} pode evoluir`, tone: 'good' })

@@ -19,6 +19,8 @@
   import Highlights from './Highlights.svelte'
   import { battleHighlightCards, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
+  import { spriteReady } from './preload'
+  import { play, playCry } from './sound'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
@@ -33,6 +35,10 @@
   let result = $state<Result | null>(null)
   let message = $state('')
   let pending = $state(false)
+  // Região tocada, enquanto o encontro e o sprite do selvagem chegam.
+  let searching = $state<string | null>(null)
+  // "Batalhar" tocado, até a cena estar pronta para começar.
+  let fighting = $state(false)
   let time = $state(0)
   let battleCards = $state<ReturnType<typeof battleHighlightCards>>([])
 
@@ -64,6 +70,15 @@
     return () => cancelAnimationFrame(frame)
   })
 
+  // Grito quando o selvagem aparece (busca nova ou encontro já pendente).
+  let criedFor = $state<number | null>(null)
+  $effect(() => {
+    if (step !== 'encounter' || !encounter) return
+    if (criedFor === encounter.id) return
+    criedFor = encounter.id
+    playCry(encounter.speciesId)
+  })
+
   async function loadRegions() {
     const response = await api('/api/regions')
     if (!response.ok) {
@@ -75,7 +90,9 @@
   }
 
   async function search(slug: string) {
+    play('tap')
     pending = true
+    searching = slug
     message = ''
     try {
       const response = await api('/api/encounters', { regionSlug: slug })
@@ -84,14 +101,19 @@
         await onState()
         return
       }
-      encounter = (await response.json()) as PendingEncounter
+      const found = (await response.json()) as PendingEncounter
+      await spriteReady(found.speciesId, found.isShiny)
+      encounter = found
       selected = []
       step = 'encounter'
-      await onState()
+      // A tela já tem o que precisa; o HUD (energia) se atualiza em segundo
+      // plano, sem segurar a escolha do time por mais uma ida ao servidor.
+      void onState().catch(() => undefined)
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
       pending = false
+      searching = null
     }
   }
 
@@ -120,9 +142,12 @@
 
   async function battle() {
     if (!encounter || chosen.length === 0) return
+    play('tap')
     pending = true
+    fighting = true
     message = ''
     const teamSnapshot = [...chosen]
+    const wild = encounter
     try {
       const response = await api(`/api/encounters/${encounter.id}/battle`, { pokemonIds: chosen.map((mon) => mon.id) })
       if (!response.ok) {
@@ -143,12 +168,20 @@
         regions,
         berries: game.berries,
       })
-      await onState()
+      // A cena só começa com os dois lados prontos (no máximo 2,5 s); o estado
+      // (XP, captura) chega em segundo plano.
+      const lead = teamSnapshot[0]
+      await Promise.all([
+        spriteReady(wild.speciesId, wild.isShiny),
+        lead ? spriteReady(lead.speciesId, lead.isShiny) : Promise.resolve(),
+      ])
       step = prefersReducedMotion() ? 'highlights' : 'scene'
+      void onState().catch(() => undefined)
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
       pending = false
+      fighting = false
     }
   }
 
@@ -177,7 +210,7 @@
       }
       result = { kind: 'fled' }
       step = 'result'
-      await onState()
+      void onState().catch(() => undefined)
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -279,11 +312,16 @@
                 type="button"
                 class="btn choice"
                 class:btn-primary={region.unlocked && !game.encounter}
+                aria-busy={searching === region.slug}
                 disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
                 onclick={() => search(region.slug)}
               >
                 <span>{region.name}</span>
-                <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
+                {#if searching === region.slug}
+                  <small class="waiting"><span class="ball sprite-wait" aria-hidden="true"></span>Procurando…</small>
+                {:else}
+                  <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
+                {/if}
                 {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
               </button>
             {/each}
@@ -328,7 +366,19 @@
     </div>
     <div class="dock">
       <p class="odds">{chance === null ? 'Escolha de 1 a 3 Pokémon.' : `Chance de vitória ${percent(chance)}`}</p>
-      <button type="button" class="btn btn-primary" disabled={pending || chosen.length === 0} onclick={battle}>Batalhar</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        aria-busy={fighting}
+        disabled={pending || chosen.length === 0}
+        onclick={battle}
+      >
+        {#if fighting}
+          <span class="ball sprite-wait" aria-hidden="true"></span>Batalhando…
+        {:else}
+          Batalhar
+        {/if}
+      </button>
       <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
       <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
     </div>
@@ -540,6 +590,21 @@
 
   .dock .btn-link {
     justify-self: center;
+  }
+
+  /* Poké Ball quicando dentro do botão enquanto espera (sprite-wait, app.css). */
+  .ball {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+    background-size: 18px 18px;
+  }
+
+  .waiting {
+    display: inline-flex;
+    align-items: center;
   }
 
   .chips {

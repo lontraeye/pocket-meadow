@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HighlightCard } from './highlights'
   import { prefersReducedMotion } from './highlights'
+  import { play } from './sound'
 
   let {
     cards,
@@ -17,9 +18,20 @@
   const current = $derived(cards[index] ?? null)
   const last = $derived(cards.length === 0 || index >= cards.length - 1)
 
+  let soundedFor = $state<string | null>(null)
+
   $effect(() => {
     void cards
     index = 0
+    soundedFor = null
+  })
+
+  // Um som por cartão, não a cada reexecução do efeito.
+  $effect(() => {
+    if (!current?.sound) return
+    if (soundedFor === current.id) return
+    soundedFor = current.id
+    play(current.sound)
   })
 
   $effect(() => {

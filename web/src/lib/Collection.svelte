@@ -3,6 +3,7 @@
   import { api, errorText, type ApiError, type GameState, type OwnedPokemon } from './api'
   import PokemonSheet from './PokemonSheet.svelte'
   import { releaseYield } from './progression'
+  import { play } from './sound'
   import { showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
@@ -146,6 +147,7 @@
       picked = []
       confirm = false
       selecting = false
+      play('release')
       await onState()
     } catch {
       message = 'Sem conexão com o servidor.'

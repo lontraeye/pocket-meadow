@@ -2,6 +2,7 @@
   import { spriteLoading } from './spriteLoading'
   import { onMount } from 'svelte'
   import { api, errorText, type ApiError } from './api'
+  import { play } from './sound'
 
   let { onSignedIn }: { onSignedIn: () => void } = $props()
 
@@ -59,6 +60,7 @@
   }
 
   async function send(path: string, body: unknown) {
+    play('tap')
     pending = true
     message = ''
     try {

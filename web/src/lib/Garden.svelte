@@ -6,6 +6,7 @@
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type PlotState } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
+  import { play, playCry } from './sound'
   import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
 
   let {
@@ -144,6 +145,7 @@
         berries: Number(payload.berries ?? 0),
         seeds: Number(payload.seeds ?? 0),
       }
+      play('harvest')
       await onState()
     } catch {
       plotMessage = 'Sem conexão com o servidor.'
@@ -524,7 +526,10 @@
           style:--size="{showdownSize * scale}px"
           style:z-index={Math.round(walker.col + walker.row) + 1}
           aria-label={walker.displayName}
-          onclick={() => (selectedId = walker.id)}
+          onclick={() => {
+            selectedId = walker.id
+            playCry(walker.speciesId)
+          }}
         >
           {#if look.kind === 'pmd'}
             <PmdSprite

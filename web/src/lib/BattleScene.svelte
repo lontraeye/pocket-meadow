@@ -3,6 +3,7 @@
   import type { BattleOutcome, OwnedPokemon, PendingEncounter } from './api'
   import { catchShakes, pokeBallSrc, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
+  import { play, playCry } from './sound'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
 
   let {
@@ -65,14 +66,18 @@
     function runShakes(index: number) {
       if (finished) return
       shakeIndex = index
+      play('shake')
       if (index + 1 >= shakeTotal) {
         wait(380, () => {
           if (finished) return
           if (battle.caught) {
             phase = 'celebrate'
+            play('catch')
+            playCry(encounter.speciesId)
             wait(650, finish)
           } else {
             phase = 'escape'
+            play('escape')
             wait(550, finish)
           }
         })

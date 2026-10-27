@@ -15,6 +15,7 @@
     type HighlightCard,
   } from './highlights'
   import { dosesToCap, previewFeed, releaseYield } from './progression'
+  import { play } from './sound'
   import { showdownSrc } from './sprites'
 
   let {
@@ -212,7 +213,10 @@
 
   async function release() {
     const ok = await send(`/api/pokemon/${mon.id}/release`, {})
-    if (ok) onClose()
+    if (ok) {
+      play('release')
+      onClose()
+    }
   }
 
   // Sempre confirma: o botão fica no dock, onde o polegar passa.

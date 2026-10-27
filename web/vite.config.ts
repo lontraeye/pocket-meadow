@@ -6,7 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        // 127.0.0.1, não localhost: no Windows o localhost tenta o IPv6 antes e
+        // cada chamada da API perdia uns 200 ms (o servidor só ouve IPv4).
+        target: 'http://127.0.0.1:3001',
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

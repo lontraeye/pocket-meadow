@@ -139,6 +139,12 @@ h3 {
   cursor: default;
 }
 
+/* O botão que disparou a espera fica com a cor normal (os outros acinzentam). */
+.btn[aria-busy='true']:disabled {
+  filter: none;
+  cursor: progress;
+}
+
 .btn-link {
   min-height: 44px;
   border: 0;
