@@ -472,6 +472,42 @@ Pontos a decidir antes de especificar:
 - **Ataques e poder especial** ainda não existem no jogo. A batalha é só poder × probabilidade. Falta decidir se viram mecânica (afetam a batalha) ou só informação. Se for informação, dá para tirar da PokéAPI no seed (moves por nível, abilities).
 - Se os outros jogadores veem a Pokédex de alguém na visita ao jardim (seção 1).
 
+### 5.13 Batalha com mais vida (ideia, ainda sem fase)
+Anotado depois do teste da Fase 2. Hoje o encontro é seco: abre a rota, aparece o Pokémon, escolhe o time, sai o resultado. A escolha pesa pouco e a derrota não é sentida. O objetivo é um combate simplificado, na linha do Pokémon GO, e mais "juice" no caminho todo.
+
+**Combate:**
+- Turnos curtos com ataque rápido e ataque carregado. HP visível dos dois lados e troca de Pokémon do time quando um cai.
+- Tipos contam. `type1` e `type2` já estão em `species`, e a tabela de efetividade pode ir para o config.
+- Ataques: liga com a Pokédex (seção 5.12). Dá para tirar da PokéAPI no seed (moves por nível), limitando a 2 por Pokémon (1 rápido e 1 carregado).
+
+**Restrição que não muda:** o resultado continua decidido no servidor, com a seed do encontro (seções 2 e 7). Ritmo de toque ou reflexo no cliente não pode decidir nada, porque o cliente pode mentir. Dois formatos compatíveis:
+1. **Simulação com replay.** O servidor simula a luta inteira, turno a turno, e devolve o log. O cliente anima o log. Não há entrada durante a luta, e a escolha está antes: time, ordem e tipos.
+2. **Decisões por turno.** O cliente manda só intenções ("usar o carregado", "trocar para o 2"). O servidor resolve cada turno e guarda o estado da batalha. É mais interativo, mas pede estado persistido de batalha em andamento, com expiração.
+
+Sugestão: começar pelo formato 1. Ele já dá o "juice" e cabe no modelo atual (uma requisição por batalha). O formato 2 pode vir depois, se fizer falta.
+
+**Juice no fluxo todo:** o Pokémon surgindo no mato, barras de HP, número de dano, piscada de acerto, animação da pokébola com chacoalhadas antes do resultado e comemoração ao capturar. Sons só com licença redistribuível (seção 4.3), creditados no `CREDITS.md`. Respeitar `prefers-reduced-motion`.
+
+**Pontos a decidir:**
+- Isso muda a visão da seção 1 ("não há batalhas manuais"). Atualizar o texto quando for adotado.
+- Como fica `winChance` (seção 5.5): vira resultado da simulação ou continua como base para equilibrar.
+- A ordem do PRNG (seção 7) passa a ter um número variável de rolagens na batalha. A captura teria que vir de um ponto fixo, por exemplo um segundo PRNG derivado da seed, para o replay continuar simples.
+
+### 5.14 Campo de encontro com escolha (ideia, ainda sem fase)
+Hoje, gastar 1 de energia dá exatamente um Pokémon. A ideia é gastar a energia e abrir um **mini gramado gerado na hora**, com 3 ou 4 Pokémon da região andando nele. O jogador toca no que interessa e esse vira o encontro. Exemplo: aparecem Pidgey e Rattata. Mesmo que o Pidgey seja mais raro ali, quem não gosta dele pode escolher o Rattata.
+
+- Os candidatos saem do mesmo sorteio da seção 5.3, um após o outro, com a seed do encontro. A raridade continua valendo: ela decide o que aparece no campo, não o que o jogador escolhe.
+- **Os candidatos são persistidos antes de aparecer**, como o encontro hoje. Recarregar a página mostra o mesmo campo, e não dá para rerolar.
+- O visual pode reaproveitar o chão isométrico e os sprites PMD do jardim (seção 4.5), em versão pequena.
+- Mobile: o campo cabe em retrato, cada Pokémon é um alvo de toque de 44px ou mais, e os detalhes abrem por toque.
+
+**Pontos a decidir:**
+- **Modelo de dados:** uma tabela de candidatos ligada ao encontro (`encounter_candidates`: espécie, nível, shiny, slot). `encounters.species_id` e `level` passam a ser preenchidos na escolha. Pede migração, e a regra de "um encontro pendente por vez" passa a valer para o campo.
+- **Ordem do PRNG (seção 7):** N × (slot, nível, shiny) para os candidatos, depois batalha e captura. Fixar N no config para o replay funcionar.
+- Os que não foram escolhidos somem ao escolher ou ficam disponíveis enquanto o campo não expira, com uma batalha por campo ou várias pagando mais energia.
+- Pokédex: todos os candidatos contam como vistos, ou só o escolhido.
+- Shiny no campo: aparece de cara, o que vira o grande momento do campo.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
