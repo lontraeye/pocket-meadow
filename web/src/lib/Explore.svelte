@@ -14,7 +14,7 @@
     type PendingEncounter,
     type RegionInfo,
   } from './api'
-  import { percent, previewWinChance } from './battle'
+  import { percent } from './battle'
   import BattleScene from './BattleScene.svelte'
   import Highlights from './Highlights.svelte'
   import { battleHighlightCards, prefersReducedMotion } from './highlights'
@@ -54,9 +54,6 @@
       .sort((a, b) => b.level - a.level || a.id - b.id),
   )
   const chosen = $derived(selected.flatMap((id) => roster.filter((mon) => mon.id === id)))
-  const chance = $derived(
-    encounter && chosen.length > 0 ? previewWinChance(chosen.map((mon) => mon.power), encounter.wildPower, game.battle) : null,
-  )
 
   onMount(() => {
     void loadRegions()
@@ -366,7 +363,7 @@
       </section>
     </div>
     <div class="dock">
-      <p class="odds">{chance === null ? 'Escolha de 1 a 3 Pokémon.' : `Chance de vitória ${percent(chance)}`}</p>
+      <p class="odds">{chosen.length === 0 ? 'Escolha de 1 a 3 Pokémon.' : `${chosen.length} no time`}</p>
       <button
         type="button"
         class="btn btn-primary"
@@ -423,7 +420,6 @@
           {:else}
             <p class="bad">Derrota. Seus Pokémon não se machucaram.</p>
           {/if}
-          <p class="hint">Chance de vitória {percent(result.battle.winChance)}</p>
           {#if result.battle.catchChance !== null}
             <p class="hint">Chance de captura {percent(result.battle.catchChance)}</p>
           {/if}

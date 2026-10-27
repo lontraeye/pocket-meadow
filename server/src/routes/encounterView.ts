@@ -12,6 +12,8 @@ export type EncounterView = {
   isShiny: boolean
   expiresAt: number
   wildPower: number
+  /** null = luta manual não iniciada; número = epoch ms do start (8.3). */
+  battleStartedAt: number | null
 }
 
 export function toEncounterView(input: {
@@ -24,6 +26,7 @@ export function toEncounterView(input: {
   isShiny: boolean
   expiresAt: number
   baseStatTotal: number
+  battleStartedAt?: number | null
 }): EncounterView {
   return {
     id: input.id,
@@ -36,5 +39,6 @@ export function toEncounterView(input: {
     isShiny: input.isShiny,
     expiresAt: input.expiresAt,
     wildPower: power(input.baseStatTotal, input.level),
+    battleStartedAt: input.battleStartedAt ?? null,
   }
 }

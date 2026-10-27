@@ -242,6 +242,10 @@ export const encounters = sqliteTable(
     caughtPokemonId: integer('caught_pokemon_id').references(() => pokemon.id, {
       onDelete: 'set null',
     }),
+    /** Início da luta manual (8.3); null na batalha automática da 8.2. */
+    battleStartedAt: integer('battle_started_at'),
+    /** Setup JSON congelado no start (finish refaz a luta com este snapshot). */
+    battleSetupJson: text('battle_setup_json'),
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     resolvedAt: integer('resolved_at'),

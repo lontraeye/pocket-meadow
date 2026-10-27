@@ -347,7 +347,7 @@
           {mon.nickname ?? mon.displayName}
           {#if mon.isShiny}<span class="shiny" title="Shiny">★</span>{/if}
         </h2>
-        <p class="lv">Nv {mon.level} · poder {Math.round(mon.power)}</p>
+        <p class="lv">Nv {mon.level}</p>
         <div class="xp">
           {#if mon.xpToNext === null}
             <span>XP no máximo</span>

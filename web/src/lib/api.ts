@@ -16,6 +16,7 @@ export type PendingEncounter = {
   isShiny: boolean
   expiresAt: number
   wildPower: number
+  battleStartedAt: number | null
 }
 
 export type RegionInfo = {
@@ -31,11 +32,12 @@ export type ItemCredit = { itemKey: string; quantity: number }
 
 export type BattleOutcome = {
   encounterId: number
-  winChance: number
+  winChance: number | null
   won: boolean
   catchChance: number | null
   caught: boolean
   status: 'lost' | 'caught' | 'escaped'
+  log?: unknown[]
   fighters: {
     pokemonId: number
     xpGained: number

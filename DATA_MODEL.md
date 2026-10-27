@@ -270,22 +270,25 @@ CREATE TABLE encounters (
   -- 'caught'  = venceu e capturou
   -- 'escaped' = venceu, mas a captura falhou
   -- 'fled'    = jogador fugiu ou o encontro expirou
-  win_chance         REAL,                           -- registrado para depuração/balanceamento
+  win_chance         REAL,                           -- legado; batalhas novas gravam NULL (simulação)
   catch_chance       REAL,
   caught_pokemon_id  INTEGER REFERENCES pokemon(id) ON DELETE SET NULL,
   created_at         INTEGER NOT NULL,
   expires_at         INTEGER NOT NULL,
-  resolved_at        INTEGER
+  resolved_at        INTEGER,
+  battle_started_at  INTEGER,                        -- início da luta manual (8.3); NULL = não iniciada
+  battle_setup_json  TEXT                            -- setup congelado no start; finish refaz com este JSON
 );
 
 CREATE INDEX idx_encounters_user_created ON encounters(user_id, created_at DESC);
 
 -- Quem lutou: o time tem de 1 a 3 Pokémon (PLANNING.md, seção 5.5).
+-- Gravados no auto-battle ou em POST .../battle/start.
 CREATE TABLE encounter_fighters (
   encounter_id  INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
   slot          INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
   pokemon_id    INTEGER REFERENCES pokemon(id) ON DELETE SET NULL,  -- NULL se foi solto depois
-  power         REAL    NOT NULL,                     -- poder na hora da batalha, para depuração/balanceamento
+  power         REAL    NOT NULL,                     -- soma dos atributos finais do lutador (depuração)
   PRIMARY KEY (encounter_id, slot)
 );
 
@@ -294,7 +297,7 @@ CREATE UNIQUE INDEX uq_encounters_one_pending
   ON encounters(user_id) WHERE status = 'pending';
 ```
 
-Os campos `win_chance` e `catch_chance` também permitem consultar depois se o balanceamento está como esperado.
+`rng_seed` do encontro deriva seeds separadas: combate (`battleRngSeed`), traços do selvagem **na luta e na captura** (`wildTraitsSeed` — o mesmo indivíduo), lançamentos (`throwRngSeed`). Traços de Pokémon já possuídos usam `traitsRngSeed` (id / outra origem). `catch_chance` continua sendo registrado para balanceamento. O `GET /state` expõe `battleStartedAt` no encontro pendente.
 
 ### `pokedex_entries`
 ```sql
@@ -371,7 +374,8 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Ação | Passos |
 |---|---|
 | Criar encontro | catch-up → validar região/energia/sem pendente → `energy -= 1` → consumir efeitos de encontro → inserir encontro → atualizar pokédex (visto) |
-| Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → (se venceu) XP dividido entre o time, XP do treinador, rolar captura e, se capturou, inserir Pokémon → atualizar status do encontro e pokédex |
+| Batalhar (auto) | catch-up → validar encontro pendente e time → simular luta (`server/src/game/sim`) com jogador automático → inserir `encounter_fighters` → (se venceu) XP, EVs (yield do selvagem nos que entraram), XP do treinador, captura com `throwRngSeed`, inserir Pokémon → atualizar status |
+| Batalhar (manual, 8.3) | `POST .../battle/start` grava `battle_started_at` + fighters e devolve setup/seed; `POST .../battle/finish` com `inputs` refaz a simulação no servidor e aplica o resultado (recusa inputs inválidos ou finish antecipado) |
 | Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
 | Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
 | Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` (traços ficam; `ability_slot` normaliza se a espécie nova não tiver 2ª/oculta) → pokédex (vista e capturada) → XP do treinador. Não custa doce |

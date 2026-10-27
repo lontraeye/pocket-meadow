@@ -1,6 +1,6 @@
 import { natures } from '../config/natures.js'
 import { traitsConfig } from '../config/traits.js'
-import type { Rng } from './rng.js'
+import type { Rng } from './mulberry32.js'
 import type { StatBlock } from './stats.js'
 
 export type AbilitySlot = '1' | '2' | 'hidden'

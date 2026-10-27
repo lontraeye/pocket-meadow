@@ -126,6 +126,7 @@ function readState(userId: number, now: number) {
       isShiny: encounters.isShiny,
       expiresAt: encounters.expiresAt,
       baseStatTotal: species.baseStatTotal,
+      battleStartedAt: encounters.battleStartedAt,
     })
     .from(encounters)
     .innerJoin(species, eq(encounters.speciesId, species.id))
