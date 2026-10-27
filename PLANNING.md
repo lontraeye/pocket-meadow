@@ -924,9 +924,22 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Sem rota nova e sem mudança de schema.
 
 *6.2 — Captura com suspense e destaques de progresso*
-- A pokébola chacoalha de 1 a 3 vezes antes do resultado, e há uma comemoração ao capturar. O resultado já veio do servidor, e a animação só encena. O número de chacoalhadas é derivado da chance de captura, só para a cena, sem rolagem nova.
-- Destaques (não só texto) para: subir de nível (Pokémon e treinador), "pode evoluir", evolução, região nova liberada, semente ganha e recompensas de nível.
-- `prefers-reduced-motion`: sem animação, resultado direto.
+- **A resposta da batalha chega inteira antes da cena.** A animação só encena um resultado já decidido. Nada de nova requisição nem rolagem no meio.
+- **Sequência da cena** (curta, no máximo ~3 s, e um toque pula para o fim):
+  1. **choque:** o selvagem e o time se aproximam, e o lado que perdeu treme (fallback de dano da seção 5.13);
+  2. **derrota:** o selvagem fica, o time recua, e mostra "Derrota". Sem pokébola;
+  3. **vitória:** a pokébola é lançada e o selvagem some nela;
+  4. **chacoalhadas**, só para a cena: capturou → 3 e um "clique" com comemoração (brilho e confete em CSS); escapou → 1 ou 2, mais quando a `catchChance` era alta (`1 + (catchChance >= 0,5 ? 1 : 0)`), e o selvagem sai da bola.
+- **Sprite da pokébola:** `items/poke-ball.png` do `PokeAPI/sprites`, baixado pelo mesmo script dos ícones das berries, com o mesmo status, creditado no `CREDITS.md`. Escala inteira com `image-rendering: pixelated`.
+- **Destaques depois da cena**, como cartões curtos em sequência, e não texto solto no meio:
+  - XP de cada lutador e "subiu para Nv X";
+  - **"pode evoluir"** quando um lutador passou do `minLevel` de alguma evolução (o front já tem `evolutions` no estado);
+  - nível de treinador;
+  - **região nova liberada**: as regiões com `minTrainerLevel` entre o nível antigo e o novo;
+  - semente ganha e recompensas de nível.
+- **Os mesmos destaques em outras ações:** evoluir (a animação de "pop" já existe), alimentar com level up e retirar do daycare com níveis ganhos. Um componente só para os destaques, usado por todas essas telas.
+- `prefers-reduced-motion`: sem a cena, direto aos destaques, que também aparecem sem animação.
+- Sem mudança no servidor. Se faltar algum dado na resposta para os destaques, acrescentar na resposta, sem mudar regra.
 
 *6.3 — Sons*
 - Sons curtos nos momentos da 6.2 e em ações (colher, soltar, botão principal). Botão de mudo lembrado no `localStorage`. No celular, o som só toca depois do primeiro toque, por regra do navegador.
