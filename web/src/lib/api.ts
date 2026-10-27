@@ -42,11 +42,29 @@ export type BattleOutcome = {
     level: number
     xp: number
     levelsGained: number
+    moveOffers?: LearnEntryView[]
   }[]
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
   seedDrop: { itemKey: string; berryKey: string } | null
   levelRewards: ItemCredit[]
+}
+
+export type MoveView = {
+  name: string
+  displayName: string
+  type: string
+  power: number
+  damageClass: 'physical' | 'special'
+}
+
+export type LearnEntryView = {
+  move: string
+  level: number
+  displayName?: string
+  power?: number
+  type?: string
+  damageClass?: 'physical' | 'special'
 }
 
 export type OwnedPokemon = {
@@ -55,6 +73,8 @@ export type OwnedPokemon = {
   name: string
   displayName: string
   evolutionChainId: number
+  type1: string
+  type2: string | null
   level: number
   xp: number
   xpToNext: number | null
@@ -65,6 +85,22 @@ export type OwnedPokemon = {
   caughtAt: number
   power: number
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
+  ivRating: { total: number; percent: number; stars: number }
+  nature: { key: string; displayName: string; up: string | null; down: string | null }
+  ability: { slot: '1' | '2' | 'hidden'; key: string; displayName: string; combat: boolean }
+  stats: {
+    hp: number
+    attack: number
+    defense: number
+    spAttack: number
+    spDefense: number
+    speed: number
+  }
+  fastMove: MoveView
+  chargedMove: MoveView | null
+  nextChargedMove: { move: string; level: number; displayName: string } | null
+  learnset: LearnEntryView[]
+  availableMoves: { fast: MoveView[]; charged: MoveView[] }
 }
 
 export type ProgressionRules = {
@@ -262,6 +298,14 @@ export function errorText(error: ApiError): string {
       return 'Esse item não existe.'
     case 'energy_full':
       return 'Energia já está cheia.'
+    case 'move_not_found':
+      return 'Esse golpe não existe.'
+    case 'move_wrong_slot':
+      return 'Esse golpe não cabe nesse slot.'
+    case 'move_not_learned':
+      return 'Esse Pokémon ainda não pode usar esse golpe.'
+    case 'traits_missing':
+      return 'Os traços desse Pokémon ainda não foram preenchidos.'
     default:
       return 'Algo deu errado.'
   }

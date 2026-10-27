@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { applyCatchUp } from '../game/catchUp.js'
+import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { getDb } from './client.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 
@@ -23,6 +24,9 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
       lastSettledAt: daycareSlots.lastSettledAt,
       level: pokemon.level,
       xp: pokemon.xp,
+      speciesId: pokemon.speciesId,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
     })
     .from(daycareSlots)
     .innerJoin(pokemon, eq(daycareSlots.pokemonId, pokemon.id))
@@ -66,10 +70,22 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
     .run()
 
   for (const slot of caughtUp.daycare) {
+    const before = daycare.find((row) => row.pokemonId === slot.pokemonId)
     db.update(pokemon)
       .set({ level: slot.level, xp: slot.xp })
       .where(and(eq(pokemon.id, slot.pokemonId), eq(pokemon.userId, userId)))
       .run()
+    if (before && before.fastMove && slot.level > before.level) {
+      applyLevelMovesToPokemon({
+        userId,
+        pokemonId: slot.pokemonId,
+        speciesId: before.speciesId,
+        fromLevel: before.level,
+        toLevel: slot.level,
+        fastMove: before.fastMove,
+        chargedMove: before.chargedMove,
+      })
+    }
     const current = db
       .select({ xpGained: daycareSlots.xpGained })
       .from(daycareSlots)

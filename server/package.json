@@ -12,6 +12,7 @@
     "sprites:download": "tsx scripts/download-sprites.ts",
     "sprites:pmd": "tsx scripts/pmd-sprites.ts",
     "sounds:cries": "tsx scripts/download-cries.ts",
+    "db:seed-moves": "tsx scripts/seed-moves.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "sounds:sfx": "tsx scripts/build-sfx.ts"

@@ -49,6 +49,13 @@ export type SpeciesRow = {
   evolutionStage: number
   isLegendary: boolean
   isMythical: boolean
+  /** EV yield da PokéAPI (stats[].effort). Default 0 até o seed-moves preencher. */
+  evHp: number
+  evAttack: number
+  evDefense: number
+  evSpAttack: number
+  evSpDefense: number
+  evSpeed: number
 }
 
 export type EvolutionRow = {
@@ -172,6 +179,12 @@ export function parseSpeciesSeed(
       evolutionStage: stageById.get(id)!,
       isLegendary: details.is_legendary,
       isMythical: details.is_mythical,
+      evHp: 0,
+      evAttack: 0,
+      evDefense: 0,
+      evSpAttack: 0,
+      evSpDefense: 0,
+      evSpeed: 0,
     })
   }
 

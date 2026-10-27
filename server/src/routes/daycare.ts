@@ -6,6 +6,7 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { daycareSlots, pokemon } from '../db/schema.js'
 import { levelsGainedFromStay } from '../game/daycare.js'
+import { offersForLevelRange, type MoveOfferView } from '../game/levelMoves.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
 
 type Ok<T> = { ok: true } & T
@@ -119,6 +120,7 @@ type WithdrawResult = {
   level: number
   xp: number
   hours: number
+  moveOffers: MoveOfferView[]
 }
 
 function withdraw(userId: number, slotIndex: number, now: number): Ok<{ withdrawn: WithdrawResult }> | Failure {
@@ -132,12 +134,28 @@ function withdraw(userId: number, slotIndex: number, now: number): Ok<{ withdraw
       xpGained: daycareSlots.xpGained,
       level: pokemon.level,
       xp: pokemon.xp,
+      speciesId: pokemon.speciesId,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
     })
     .from(daycareSlots)
     .innerJoin(pokemon, eq(daycareSlots.pokemonId, pokemon.id))
     .where(and(eq(daycareSlots.userId, userId), eq(daycareSlots.slotIndex, slotIndex)))
     .get()
   if (!row) return fail('pokemon_not_found', 404)
+
+  const levelsGained = levelsGainedFromStay(row.level, row.xp, row.xpGained)
+  const fromLevel = row.level - levelsGained
+  const moveOffers =
+    levelsGained > 0 && row.fastMove
+      ? offersForLevelRange({
+          speciesId: row.speciesId,
+          fromLevel,
+          toLevel: row.level,
+          fastMove: row.fastMove,
+          chargedMove: row.chargedMove,
+        })
+      : []
 
   db.delete(daycareSlots)
     .where(and(eq(daycareSlots.userId, userId), eq(daycareSlots.slotIndex, slotIndex)))
@@ -153,10 +171,11 @@ function withdraw(userId: number, slotIndex: number, now: number): Ok<{ withdraw
       slotIndex,
       pokemonId: row.pokemonId,
       xpGained: row.xpGained,
-      levelsGained: levelsGainedFromStay(row.level, row.xp, row.xpGained),
+      levelsGained,
       level: row.level,
       xp: row.xp,
       hours: Math.floor((row.lastSettledAt - row.enteredAt) / hourMs),
+      moveOffers,
     },
   }
 }

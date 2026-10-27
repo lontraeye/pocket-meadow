@@ -157,7 +157,7 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow" class:fit={screen !== 'meadow'}>
+  <main class="meadow fit">
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}

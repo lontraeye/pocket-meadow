@@ -1,0 +1,1260 @@
+{
+  "commit": "447bd5c378bf87da964bfe4dd7487a7bf1d97cbd",
+  "abilities": {
+    "1": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "chlorophyll"
+    },
+    "2": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "chlorophyll"
+    },
+    "3": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "chlorophyll"
+    },
+    "4": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "solar-power"
+    },
+    "5": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "solar-power"
+    },
+    "6": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "solar-power"
+    },
+    "7": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "rain-dish"
+    },
+    "8": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "rain-dish"
+    },
+    "9": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "rain-dish"
+    },
+    "10": {
+      "slot1": "shield-dust",
+      "slot2": null,
+      "hidden": "run-away"
+    },
+    "11": {
+      "slot1": "shed-skin",
+      "slot2": null,
+      "hidden": null
+    },
+    "12": {
+      "slot1": "compound-eyes",
+      "slot2": null,
+      "hidden": "tinted-lens"
+    },
+    "13": {
+      "slot1": "shield-dust",
+      "slot2": null,
+      "hidden": "run-away"
+    },
+    "14": {
+      "slot1": "shed-skin",
+      "slot2": null,
+      "hidden": null
+    },
+    "15": {
+      "slot1": "swarm",
+      "slot2": null,
+      "hidden": "sniper"
+    },
+    "16": {
+      "slot1": "keen-eye",
+      "slot2": "tangled-feet",
+      "hidden": "big-pecks"
+    },
+    "17": {
+      "slot1": "keen-eye",
+      "slot2": "tangled-feet",
+      "hidden": "big-pecks"
+    },
+    "18": {
+      "slot1": "keen-eye",
+      "slot2": "tangled-feet",
+      "hidden": "big-pecks"
+    },
+    "19": {
+      "slot1": "run-away",
+      "slot2": "guts",
+      "hidden": "hustle"
+    },
+    "20": {
+      "slot1": "run-away",
+      "slot2": "guts",
+      "hidden": "hustle"
+    },
+    "21": {
+      "slot1": "keen-eye",
+      "slot2": null,
+      "hidden": "sniper"
+    },
+    "22": {
+      "slot1": "keen-eye",
+      "slot2": null,
+      "hidden": "sniper"
+    },
+    "23": {
+      "slot1": "intimidate",
+      "slot2": "shed-skin",
+      "hidden": "unnerve"
+    },
+    "24": {
+      "slot1": "intimidate",
+      "slot2": "shed-skin",
+      "hidden": "unnerve"
+    },
+    "25": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "lightning-rod"
+    },
+    "26": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "lightning-rod"
+    },
+    "27": {
+      "slot1": "sand-veil",
+      "slot2": null,
+      "hidden": "sand-rush"
+    },
+    "28": {
+      "slot1": "sand-veil",
+      "slot2": null,
+      "hidden": "sand-rush"
+    },
+    "29": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "hustle"
+    },
+    "30": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "hustle"
+    },
+    "31": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "sheer-force"
+    },
+    "32": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "hustle"
+    },
+    "33": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "hustle"
+    },
+    "34": {
+      "slot1": "poison-point",
+      "slot2": "rivalry",
+      "hidden": "sheer-force"
+    },
+    "35": {
+      "slot1": "cute-charm",
+      "slot2": "magic-guard",
+      "hidden": "friend-guard"
+    },
+    "36": {
+      "slot1": "cute-charm",
+      "slot2": "magic-guard",
+      "hidden": "unaware"
+    },
+    "37": {
+      "slot1": "flash-fire",
+      "slot2": null,
+      "hidden": "drought"
+    },
+    "38": {
+      "slot1": "flash-fire",
+      "slot2": null,
+      "hidden": "drought"
+    },
+    "39": {
+      "slot1": "cute-charm",
+      "slot2": "competitive",
+      "hidden": "friend-guard"
+    },
+    "40": {
+      "slot1": "cute-charm",
+      "slot2": "competitive",
+      "hidden": "frisk"
+    },
+    "41": {
+      "slot1": "inner-focus",
+      "slot2": null,
+      "hidden": "infiltrator"
+    },
+    "42": {
+      "slot1": "inner-focus",
+      "slot2": null,
+      "hidden": "infiltrator"
+    },
+    "43": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "run-away"
+    },
+    "44": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "stench"
+    },
+    "45": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "effect-spore"
+    },
+    "46": {
+      "slot1": "effect-spore",
+      "slot2": "dry-skin",
+      "hidden": "damp"
+    },
+    "47": {
+      "slot1": "effect-spore",
+      "slot2": "dry-skin",
+      "hidden": "damp"
+    },
+    "48": {
+      "slot1": "compound-eyes",
+      "slot2": "tinted-lens",
+      "hidden": "run-away"
+    },
+    "49": {
+      "slot1": "shield-dust",
+      "slot2": "tinted-lens",
+      "hidden": "wonder-skin"
+    },
+    "50": {
+      "slot1": "sand-veil",
+      "slot2": "arena-trap",
+      "hidden": "sand-force"
+    },
+    "51": {
+      "slot1": "sand-veil",
+      "slot2": "arena-trap",
+      "hidden": "sand-force"
+    },
+    "52": {
+      "slot1": "pickup",
+      "slot2": "technician",
+      "hidden": "unnerve"
+    },
+    "53": {
+      "slot1": "limber",
+      "slot2": "technician",
+      "hidden": "unnerve"
+    },
+    "54": {
+      "slot1": "damp",
+      "slot2": "cloud-nine",
+      "hidden": "swift-swim"
+    },
+    "55": {
+      "slot1": "damp",
+      "slot2": "cloud-nine",
+      "hidden": "swift-swim"
+    },
+    "56": {
+      "slot1": "vital-spirit",
+      "slot2": "anger-point",
+      "hidden": "defiant"
+    },
+    "57": {
+      "slot1": "vital-spirit",
+      "slot2": "anger-point",
+      "hidden": "defiant"
+    },
+    "58": {
+      "slot1": "intimidate",
+      "slot2": "flash-fire",
+      "hidden": "justified"
+    },
+    "59": {
+      "slot1": "intimidate",
+      "slot2": "flash-fire",
+      "hidden": "justified"
+    },
+    "60": {
+      "slot1": "water-absorb",
+      "slot2": "damp",
+      "hidden": "swift-swim"
+    },
+    "61": {
+      "slot1": "water-absorb",
+      "slot2": "damp",
+      "hidden": "swift-swim"
+    },
+    "62": {
+      "slot1": "water-absorb",
+      "slot2": "damp",
+      "hidden": "swift-swim"
+    },
+    "63": {
+      "slot1": "synchronize",
+      "slot2": "inner-focus",
+      "hidden": "magic-guard"
+    },
+    "64": {
+      "slot1": "synchronize",
+      "slot2": "inner-focus",
+      "hidden": "magic-guard"
+    },
+    "65": {
+      "slot1": "synchronize",
+      "slot2": "inner-focus",
+      "hidden": "magic-guard"
+    },
+    "66": {
+      "slot1": "guts",
+      "slot2": "no-guard",
+      "hidden": "steadfast"
+    },
+    "67": {
+      "slot1": "guts",
+      "slot2": "no-guard",
+      "hidden": "steadfast"
+    },
+    "68": {
+      "slot1": "guts",
+      "slot2": "no-guard",
+      "hidden": "steadfast"
+    },
+    "69": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "gluttony"
+    },
+    "70": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "gluttony"
+    },
+    "71": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "gluttony"
+    },
+    "72": {
+      "slot1": "clear-body",
+      "slot2": "liquid-ooze",
+      "hidden": "rain-dish"
+    },
+    "73": {
+      "slot1": "clear-body",
+      "slot2": "liquid-ooze",
+      "hidden": "rain-dish"
+    },
+    "74": {
+      "slot1": "rock-head",
+      "slot2": "sturdy",
+      "hidden": "sand-veil"
+    },
+    "75": {
+      "slot1": "rock-head",
+      "slot2": "sturdy",
+      "hidden": "sand-veil"
+    },
+    "76": {
+      "slot1": "rock-head",
+      "slot2": "sturdy",
+      "hidden": "sand-veil"
+    },
+    "77": {
+      "slot1": "run-away",
+      "slot2": "flash-fire",
+      "hidden": "flame-body"
+    },
+    "78": {
+      "slot1": "run-away",
+      "slot2": "flash-fire",
+      "hidden": "flame-body"
+    },
+    "79": {
+      "slot1": "oblivious",
+      "slot2": "own-tempo",
+      "hidden": "regenerator"
+    },
+    "80": {
+      "slot1": "oblivious",
+      "slot2": "own-tempo",
+      "hidden": "regenerator"
+    },
+    "81": {
+      "slot1": "magnet-pull",
+      "slot2": "sturdy",
+      "hidden": "analytic"
+    },
+    "82": {
+      "slot1": "magnet-pull",
+      "slot2": "sturdy",
+      "hidden": "analytic"
+    },
+    "83": {
+      "slot1": "keen-eye",
+      "slot2": "inner-focus",
+      "hidden": "defiant"
+    },
+    "84": {
+      "slot1": "run-away",
+      "slot2": "early-bird",
+      "hidden": "tangled-feet"
+    },
+    "85": {
+      "slot1": "run-away",
+      "slot2": "early-bird",
+      "hidden": "tangled-feet"
+    },
+    "86": {
+      "slot1": "thick-fat",
+      "slot2": "hydration",
+      "hidden": "ice-body"
+    },
+    "87": {
+      "slot1": "thick-fat",
+      "slot2": "hydration",
+      "hidden": "ice-body"
+    },
+    "88": {
+      "slot1": "stench",
+      "slot2": "sticky-hold",
+      "hidden": "poison-touch"
+    },
+    "89": {
+      "slot1": "stench",
+      "slot2": "sticky-hold",
+      "hidden": "poison-touch"
+    },
+    "90": {
+      "slot1": "shell-armor",
+      "slot2": "skill-link",
+      "hidden": "overcoat"
+    },
+    "91": {
+      "slot1": "shell-armor",
+      "slot2": "skill-link",
+      "hidden": "overcoat"
+    },
+    "92": {
+      "slot1": "levitate",
+      "slot2": null,
+      "hidden": null
+    },
+    "93": {
+      "slot1": "levitate",
+      "slot2": null,
+      "hidden": null
+    },
+    "94": {
+      "slot1": "cursed-body",
+      "slot2": null,
+      "hidden": null
+    },
+    "95": {
+      "slot1": "rock-head",
+      "slot2": "sturdy",
+      "hidden": "weak-armor"
+    },
+    "96": {
+      "slot1": "insomnia",
+      "slot2": "forewarn",
+      "hidden": "inner-focus"
+    },
+    "97": {
+      "slot1": "insomnia",
+      "slot2": "forewarn",
+      "hidden": "inner-focus"
+    },
+    "98": {
+      "slot1": "hyper-cutter",
+      "slot2": "shell-armor",
+      "hidden": "sheer-force"
+    },
+    "99": {
+      "slot1": "hyper-cutter",
+      "slot2": "shell-armor",
+      "hidden": "sheer-force"
+    },
+    "100": {
+      "slot1": "soundproof",
+      "slot2": "static",
+      "hidden": "aftermath"
+    },
+    "101": {
+      "slot1": "soundproof",
+      "slot2": "static",
+      "hidden": "aftermath"
+    },
+    "102": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "harvest"
+    },
+    "103": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "harvest"
+    },
+    "104": {
+      "slot1": "rock-head",
+      "slot2": "lightning-rod",
+      "hidden": "battle-armor"
+    },
+    "105": {
+      "slot1": "rock-head",
+      "slot2": "lightning-rod",
+      "hidden": "battle-armor"
+    },
+    "106": {
+      "slot1": "limber",
+      "slot2": "reckless",
+      "hidden": "unburden"
+    },
+    "107": {
+      "slot1": "keen-eye",
+      "slot2": "iron-fist",
+      "hidden": "inner-focus"
+    },
+    "108": {
+      "slot1": "own-tempo",
+      "slot2": "oblivious",
+      "hidden": "cloud-nine"
+    },
+    "109": {
+      "slot1": "levitate",
+      "slot2": "neutralizing-gas",
+      "hidden": "stench"
+    },
+    "110": {
+      "slot1": "levitate",
+      "slot2": "neutralizing-gas",
+      "hidden": "stench"
+    },
+    "111": {
+      "slot1": "lightning-rod",
+      "slot2": "rock-head",
+      "hidden": "reckless"
+    },
+    "112": {
+      "slot1": "lightning-rod",
+      "slot2": "rock-head",
+      "hidden": "reckless"
+    },
+    "113": {
+      "slot1": "natural-cure",
+      "slot2": "serene-grace",
+      "hidden": "healer"
+    },
+    "114": {
+      "slot1": "chlorophyll",
+      "slot2": "leaf-guard",
+      "hidden": "regenerator"
+    },
+    "115": {
+      "slot1": "early-bird",
+      "slot2": "scrappy",
+      "hidden": "inner-focus"
+    },
+    "116": {
+      "slot1": "swift-swim",
+      "slot2": "sniper",
+      "hidden": "damp"
+    },
+    "117": {
+      "slot1": "poison-point",
+      "slot2": "sniper",
+      "hidden": "damp"
+    },
+    "118": {
+      "slot1": "swift-swim",
+      "slot2": "water-veil",
+      "hidden": "lightning-rod"
+    },
+    "119": {
+      "slot1": "swift-swim",
+      "slot2": "water-veil",
+      "hidden": "lightning-rod"
+    },
+    "120": {
+      "slot1": "illuminate",
+      "slot2": "natural-cure",
+      "hidden": "analytic"
+    },
+    "121": {
+      "slot1": "illuminate",
+      "slot2": "natural-cure",
+      "hidden": "analytic"
+    },
+    "122": {
+      "slot1": "soundproof",
+      "slot2": "filter",
+      "hidden": "technician"
+    },
+    "123": {
+      "slot1": "swarm",
+      "slot2": "technician",
+      "hidden": "steadfast"
+    },
+    "124": {
+      "slot1": "oblivious",
+      "slot2": "forewarn",
+      "hidden": "dry-skin"
+    },
+    "125": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "vital-spirit"
+    },
+    "126": {
+      "slot1": "flame-body",
+      "slot2": null,
+      "hidden": "vital-spirit"
+    },
+    "127": {
+      "slot1": "hyper-cutter",
+      "slot2": "mold-breaker",
+      "hidden": "moxie"
+    },
+    "128": {
+      "slot1": "intimidate",
+      "slot2": "anger-point",
+      "hidden": "sheer-force"
+    },
+    "129": {
+      "slot1": "swift-swim",
+      "slot2": null,
+      "hidden": "rattled"
+    },
+    "130": {
+      "slot1": "intimidate",
+      "slot2": null,
+      "hidden": "moxie"
+    },
+    "131": {
+      "slot1": "water-absorb",
+      "slot2": "shell-armor",
+      "hidden": "hydration"
+    },
+    "132": {
+      "slot1": "limber",
+      "slot2": null,
+      "hidden": "imposter"
+    },
+    "133": {
+      "slot1": "run-away",
+      "slot2": "adaptability",
+      "hidden": "anticipation"
+    },
+    "134": {
+      "slot1": "water-absorb",
+      "slot2": null,
+      "hidden": "hydration"
+    },
+    "135": {
+      "slot1": "volt-absorb",
+      "slot2": null,
+      "hidden": "quick-feet"
+    },
+    "136": {
+      "slot1": "flash-fire",
+      "slot2": null,
+      "hidden": "guts"
+    },
+    "137": {
+      "slot1": "trace",
+      "slot2": "download",
+      "hidden": "analytic"
+    },
+    "138": {
+      "slot1": "swift-swim",
+      "slot2": "shell-armor",
+      "hidden": "weak-armor"
+    },
+    "139": {
+      "slot1": "swift-swim",
+      "slot2": "shell-armor",
+      "hidden": "weak-armor"
+    },
+    "140": {
+      "slot1": "swift-swim",
+      "slot2": "battle-armor",
+      "hidden": "weak-armor"
+    },
+    "141": {
+      "slot1": "swift-swim",
+      "slot2": "battle-armor",
+      "hidden": "weak-armor"
+    },
+    "142": {
+      "slot1": "rock-head",
+      "slot2": "pressure",
+      "hidden": "unnerve"
+    },
+    "143": {
+      "slot1": "immunity",
+      "slot2": "thick-fat",
+      "hidden": "gluttony"
+    },
+    "144": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "snow-cloak"
+    },
+    "145": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "static"
+    },
+    "146": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "flame-body"
+    },
+    "147": {
+      "slot1": "shed-skin",
+      "slot2": null,
+      "hidden": "marvel-scale"
+    },
+    "148": {
+      "slot1": "shed-skin",
+      "slot2": null,
+      "hidden": "marvel-scale"
+    },
+    "149": {
+      "slot1": "inner-focus",
+      "slot2": null,
+      "hidden": "multiscale"
+    },
+    "150": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "unnerve"
+    },
+    "151": {
+      "slot1": "synchronize",
+      "slot2": null,
+      "hidden": null
+    },
+    "152": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "leaf-guard"
+    },
+    "153": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "leaf-guard"
+    },
+    "154": {
+      "slot1": "overgrow",
+      "slot2": null,
+      "hidden": "leaf-guard"
+    },
+    "155": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "flash-fire"
+    },
+    "156": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "flash-fire"
+    },
+    "157": {
+      "slot1": "blaze",
+      "slot2": null,
+      "hidden": "flash-fire"
+    },
+    "158": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "sheer-force"
+    },
+    "159": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "sheer-force"
+    },
+    "160": {
+      "slot1": "torrent",
+      "slot2": null,
+      "hidden": "sheer-force"
+    },
+    "161": {
+      "slot1": "run-away",
+      "slot2": "keen-eye",
+      "hidden": "frisk"
+    },
+    "162": {
+      "slot1": "run-away",
+      "slot2": "keen-eye",
+      "hidden": "frisk"
+    },
+    "163": {
+      "slot1": "insomnia",
+      "slot2": "keen-eye",
+      "hidden": "tinted-lens"
+    },
+    "164": {
+      "slot1": "insomnia",
+      "slot2": "keen-eye",
+      "hidden": "tinted-lens"
+    },
+    "165": {
+      "slot1": "swarm",
+      "slot2": "early-bird",
+      "hidden": "rattled"
+    },
+    "166": {
+      "slot1": "swarm",
+      "slot2": "early-bird",
+      "hidden": "iron-fist"
+    },
+    "167": {
+      "slot1": "swarm",
+      "slot2": "insomnia",
+      "hidden": "sniper"
+    },
+    "168": {
+      "slot1": "swarm",
+      "slot2": "insomnia",
+      "hidden": "sniper"
+    },
+    "169": {
+      "slot1": "inner-focus",
+      "slot2": null,
+      "hidden": "infiltrator"
+    },
+    "170": {
+      "slot1": "volt-absorb",
+      "slot2": "illuminate",
+      "hidden": "water-absorb"
+    },
+    "171": {
+      "slot1": "volt-absorb",
+      "slot2": "illuminate",
+      "hidden": "water-absorb"
+    },
+    "172": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "lightning-rod"
+    },
+    "173": {
+      "slot1": "cute-charm",
+      "slot2": "magic-guard",
+      "hidden": "friend-guard"
+    },
+    "174": {
+      "slot1": "cute-charm",
+      "slot2": "competitive",
+      "hidden": "friend-guard"
+    },
+    "175": {
+      "slot1": "hustle",
+      "slot2": "serene-grace",
+      "hidden": "super-luck"
+    },
+    "176": {
+      "slot1": "hustle",
+      "slot2": "serene-grace",
+      "hidden": "super-luck"
+    },
+    "177": {
+      "slot1": "synchronize",
+      "slot2": "early-bird",
+      "hidden": "magic-bounce"
+    },
+    "178": {
+      "slot1": "synchronize",
+      "slot2": "early-bird",
+      "hidden": "magic-bounce"
+    },
+    "179": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "plus"
+    },
+    "180": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "plus"
+    },
+    "181": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "plus"
+    },
+    "182": {
+      "slot1": "chlorophyll",
+      "slot2": null,
+      "hidden": "healer"
+    },
+    "183": {
+      "slot1": "thick-fat",
+      "slot2": "huge-power",
+      "hidden": "sap-sipper"
+    },
+    "184": {
+      "slot1": "thick-fat",
+      "slot2": "huge-power",
+      "hidden": "sap-sipper"
+    },
+    "185": {
+      "slot1": "sturdy",
+      "slot2": "rock-head",
+      "hidden": "rattled"
+    },
+    "186": {
+      "slot1": "water-absorb",
+      "slot2": "damp",
+      "hidden": "drizzle"
+    },
+    "187": {
+      "slot1": "chlorophyll",
+      "slot2": "leaf-guard",
+      "hidden": "infiltrator"
+    },
+    "188": {
+      "slot1": "chlorophyll",
+      "slot2": "leaf-guard",
+      "hidden": "infiltrator"
+    },
+    "189": {
+      "slot1": "chlorophyll",
+      "slot2": "leaf-guard",
+      "hidden": "infiltrator"
+    },
+    "190": {
+      "slot1": "run-away",
+      "slot2": "pickup",
+      "hidden": "skill-link"
+    },
+    "191": {
+      "slot1": "chlorophyll",
+      "slot2": "solar-power",
+      "hidden": "early-bird"
+    },
+    "192": {
+      "slot1": "chlorophyll",
+      "slot2": "solar-power",
+      "hidden": "early-bird"
+    },
+    "193": {
+      "slot1": "speed-boost",
+      "slot2": "compound-eyes",
+      "hidden": "frisk"
+    },
+    "194": {
+      "slot1": "damp",
+      "slot2": "water-absorb",
+      "hidden": "unaware"
+    },
+    "195": {
+      "slot1": "damp",
+      "slot2": "water-absorb",
+      "hidden": "unaware"
+    },
+    "196": {
+      "slot1": "synchronize",
+      "slot2": null,
+      "hidden": "magic-bounce"
+    },
+    "197": {
+      "slot1": "synchronize",
+      "slot2": null,
+      "hidden": "inner-focus"
+    },
+    "198": {
+      "slot1": "insomnia",
+      "slot2": "super-luck",
+      "hidden": "prankster"
+    },
+    "199": {
+      "slot1": "oblivious",
+      "slot2": "own-tempo",
+      "hidden": "regenerator"
+    },
+    "200": {
+      "slot1": "levitate",
+      "slot2": null,
+      "hidden": null
+    },
+    "201": {
+      "slot1": "levitate",
+      "slot2": null,
+      "hidden": null
+    },
+    "202": {
+      "slot1": "shadow-tag",
+      "slot2": null,
+      "hidden": "telepathy"
+    },
+    "203": {
+      "slot1": "inner-focus",
+      "slot2": "early-bird",
+      "hidden": "sap-sipper"
+    },
+    "204": {
+      "slot1": "sturdy",
+      "slot2": null,
+      "hidden": "overcoat"
+    },
+    "205": {
+      "slot1": "sturdy",
+      "slot2": null,
+      "hidden": "overcoat"
+    },
+    "206": {
+      "slot1": "serene-grace",
+      "slot2": "run-away",
+      "hidden": "rattled"
+    },
+    "207": {
+      "slot1": "hyper-cutter",
+      "slot2": "sand-veil",
+      "hidden": "immunity"
+    },
+    "208": {
+      "slot1": "rock-head",
+      "slot2": "sturdy",
+      "hidden": "sheer-force"
+    },
+    "209": {
+      "slot1": "intimidate",
+      "slot2": "run-away",
+      "hidden": "rattled"
+    },
+    "210": {
+      "slot1": "intimidate",
+      "slot2": "quick-feet",
+      "hidden": "rattled"
+    },
+    "211": {
+      "slot1": "poison-point",
+      "slot2": "swift-swim",
+      "hidden": "intimidate"
+    },
+    "212": {
+      "slot1": "swarm",
+      "slot2": "technician",
+      "hidden": "light-metal"
+    },
+    "213": {
+      "slot1": "sturdy",
+      "slot2": "gluttony",
+      "hidden": "contrary"
+    },
+    "214": {
+      "slot1": "swarm",
+      "slot2": "guts",
+      "hidden": "moxie"
+    },
+    "215": {
+      "slot1": "inner-focus",
+      "slot2": "keen-eye",
+      "hidden": "pickpocket"
+    },
+    "216": {
+      "slot1": "pickup",
+      "slot2": "quick-feet",
+      "hidden": "honey-gather"
+    },
+    "217": {
+      "slot1": "guts",
+      "slot2": "quick-feet",
+      "hidden": "unnerve"
+    },
+    "218": {
+      "slot1": "magma-armor",
+      "slot2": "flame-body",
+      "hidden": "weak-armor"
+    },
+    "219": {
+      "slot1": "magma-armor",
+      "slot2": "flame-body",
+      "hidden": "weak-armor"
+    },
+    "220": {
+      "slot1": "oblivious",
+      "slot2": "snow-cloak",
+      "hidden": "thick-fat"
+    },
+    "221": {
+      "slot1": "oblivious",
+      "slot2": "snow-cloak",
+      "hidden": "thick-fat"
+    },
+    "222": {
+      "slot1": "hustle",
+      "slot2": "natural-cure",
+      "hidden": "regenerator"
+    },
+    "223": {
+      "slot1": "hustle",
+      "slot2": "sniper",
+      "hidden": "moody"
+    },
+    "224": {
+      "slot1": "suction-cups",
+      "slot2": "sniper",
+      "hidden": "moody"
+    },
+    "225": {
+      "slot1": "vital-spirit",
+      "slot2": "hustle",
+      "hidden": "insomnia"
+    },
+    "226": {
+      "slot1": "swift-swim",
+      "slot2": "water-absorb",
+      "hidden": "water-veil"
+    },
+    "227": {
+      "slot1": "keen-eye",
+      "slot2": "sturdy",
+      "hidden": "weak-armor"
+    },
+    "228": {
+      "slot1": "early-bird",
+      "slot2": "flash-fire",
+      "hidden": "unnerve"
+    },
+    "229": {
+      "slot1": "early-bird",
+      "slot2": "flash-fire",
+      "hidden": "unnerve"
+    },
+    "230": {
+      "slot1": "swift-swim",
+      "slot2": "sniper",
+      "hidden": "damp"
+    },
+    "231": {
+      "slot1": "pickup",
+      "slot2": null,
+      "hidden": "sand-veil"
+    },
+    "232": {
+      "slot1": "sturdy",
+      "slot2": null,
+      "hidden": "sand-veil"
+    },
+    "233": {
+      "slot1": "trace",
+      "slot2": "download",
+      "hidden": "analytic"
+    },
+    "234": {
+      "slot1": "intimidate",
+      "slot2": "frisk",
+      "hidden": "sap-sipper"
+    },
+    "235": {
+      "slot1": "own-tempo",
+      "slot2": "technician",
+      "hidden": "moody"
+    },
+    "236": {
+      "slot1": "guts",
+      "slot2": "steadfast",
+      "hidden": "vital-spirit"
+    },
+    "237": {
+      "slot1": "intimidate",
+      "slot2": "technician",
+      "hidden": "steadfast"
+    },
+    "238": {
+      "slot1": "oblivious",
+      "slot2": "forewarn",
+      "hidden": "hydration"
+    },
+    "239": {
+      "slot1": "static",
+      "slot2": null,
+      "hidden": "vital-spirit"
+    },
+    "240": {
+      "slot1": "flame-body",
+      "slot2": null,
+      "hidden": "vital-spirit"
+    },
+    "241": {
+      "slot1": "thick-fat",
+      "slot2": "scrappy",
+      "hidden": "sap-sipper"
+    },
+    "242": {
+      "slot1": "natural-cure",
+      "slot2": "serene-grace",
+      "hidden": "healer"
+    },
+    "243": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "inner-focus"
+    },
+    "244": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "inner-focus"
+    },
+    "245": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "inner-focus"
+    },
+    "246": {
+      "slot1": "guts",
+      "slot2": null,
+      "hidden": "sand-veil"
+    },
+    "247": {
+      "slot1": "shed-skin",
+      "slot2": null,
+      "hidden": null
+    },
+    "248": {
+      "slot1": "sand-stream",
+      "slot2": null,
+      "hidden": "unnerve"
+    },
+    "249": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "multiscale"
+    },
+    "250": {
+      "slot1": "pressure",
+      "slot2": null,
+      "hidden": "regenerator"
+    },
+    "251": {
+      "slot1": "natural-cure",
+      "slot2": null,
+      "hidden": null
+    }
+  }
+}

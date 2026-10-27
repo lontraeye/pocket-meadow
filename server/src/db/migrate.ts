@@ -2,8 +2,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { applySpeciesSnapshot, readSpeciesSnapshot } from '../seed/apply.js'
+import { backfillPokemonTraits } from './backfillTraits.js'
 import { backupDatabase, isEmptyDatabase, pendingMigrations } from './backup.js'
 import { createDb, openDatabase } from './client.js'
+import fs from 'node:fs'
+import { movesSnapshotPath } from '../seed/traitsData.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -22,6 +25,10 @@ export function migrateDatabase(): void {
     const blank = sqlite.prepare('select id from species where base_experience = 0 limit 1').get() as { id: number } | undefined
     if (blank) {
       throw new Error(`species ${blank.id} has base_experience 0; run npm run db:seed`)
+    }
+    if (fs.existsSync(movesSnapshotPath)) {
+      const filled = backfillPokemonTraits(sqlite)
+      if (filled > 0) console.log(`backfilled traits for ${filled} pokemon`)
     }
   } finally {
     sqlite.close()

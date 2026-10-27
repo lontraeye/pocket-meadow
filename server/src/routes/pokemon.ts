@@ -8,8 +8,11 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { grantTrainerLevelRewards } from '../db/inventory.js'
 import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
+import { applyLevelMovesToPokemon, type MoveOfferView } from '../game/levelMoves.js'
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
+import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
+import { learnsetFor, movesByName } from '../seed/traitsData.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 
 type Ok<T> = { ok: true } & T
@@ -59,6 +62,21 @@ pokemonRoutes.post('/:id/evolve', requireUser, async (c) => {
   const result = immediate(() => evolveOne(c.get('userId'), id, toSpeciesId, Date.now()))
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json(result.evolution)
+})
+
+pokemonRoutes.post('/:id/moves', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  if (!body) return c.json({ error: 'invalid_body' }, 400)
+  const slot = body.slot
+  const move = body.move
+  if ((slot !== 'fast' && slot !== 'charged') || typeof move !== 'string') {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const result = immediate(() => changeMove(c.get('userId'), id, slot, move, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.moves)
 })
 
 pokemonRoutes.patch('/:id', requireUser, async (c) => {
@@ -180,9 +198,12 @@ function feedOne(
   const mon = db
     .select({
       id: pokemon.id,
+      speciesId: pokemon.speciesId,
       level: pokemon.level,
       xp: pokemon.xp,
       location: pokemon.location,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
       evolutionChainId: species.evolutionChainId,
     })
     .from(pokemon)
@@ -229,6 +250,19 @@ function feedOne(
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
 
+  let moveOffers: MoveOfferView[] = []
+  if (plan.levelsGained > 0 && mon.fastMove) {
+    moveOffers = applyLevelMovesToPokemon({
+      userId,
+      pokemonId: id,
+      speciesId: mon.speciesId,
+      fromLevel: mon.level,
+      toLevel: plan.level,
+      fastMove: mon.fastMove,
+      chargedMove: mon.chargedMove,
+    }).offers
+  }
+
   return {
     ok: true,
     feed: {
@@ -241,6 +275,7 @@ function feedOne(
       xpToNext: plan.level >= progressConfig.levelCap ? null : xpToNext(plan.level),
       useGeneric,
       balance,
+      moveOffers,
     },
   }
 }
@@ -255,6 +290,7 @@ type FeedResult = {
   xpToNext: number | null
   useGeneric: boolean
   balance: number
+  moveOffers: MoveOfferView[]
 }
 
 function evolveOne(
@@ -275,6 +311,8 @@ function evolveOne(
       isFavorite: pokemon.isFavorite,
       location: pokemon.location,
       speciesId: pokemon.speciesId,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
     })
     .from(pokemon)
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
@@ -304,11 +342,25 @@ function evolveOne(
     .get()
   if (!next) throw new Error(`species ${toSpeciesId} is not seeded`)
 
+  // Traços ficam (inclusive ability_slot); o nome resolve na leitura.
   db.update(pokemon)
     .set({ speciesId: next.id })
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
   markCaught(userId, next.id, mon.isShiny, now)
+
+  let moveOffers: MoveOfferView[] = []
+  if (mon.fastMove) {
+    moveOffers = applyLevelMovesToPokemon({
+      userId,
+      pokemonId: id,
+      speciesId: next.id,
+      fromLevel: 0,
+      toLevel: mon.level,
+      fastMove: mon.fastMove,
+      chargedMove: mon.chargedMove,
+    }).offers
+  }
 
   const trainerXpGained = evolveTrainerXp(next.evolutionStage)
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
@@ -340,6 +392,7 @@ function evolveOne(
         levelsGained: trainerNext.levelsGained,
       },
       levelRewards,
+      moveOffers,
       evolutions: evolutionsFrom(next.id),
     },
   }
@@ -358,7 +411,55 @@ type EvolutionResult = {
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
   levelRewards: { itemKey: string; quantity: number }[]
+  moveOffers: MoveOfferView[]
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
+}
+
+function changeMove(
+  userId: number,
+  id: number,
+  slot: 'fast' | 'charged',
+  move: string,
+  now: number,
+): Ok<{ moves: { fastMove: string; chargedMove: string | null } }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({
+      id: pokemon.id,
+      level: pokemon.level,
+      speciesId: pokemon.speciesId,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
+    })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (!mon.fastMove) return fail('traits_missing', 400)
+
+  const moves = movesByName()
+  const info = moves.get(move)
+  if (!info) return fail('move_not_found', 404)
+  if (!moveFitsSlot(info.power, slot)) return fail('move_wrong_slot', 400)
+  if (!canLearnMove(learnsetFor(mon.speciesId), mon.level, move, moves)) {
+    return fail('move_not_learned', 400)
+  }
+
+  const patch =
+    slot === 'fast' ? { fastMove: move } : { chargedMove: move }
+  db.update(pokemon)
+    .set(patch)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+
+  return {
+    ok: true,
+    moves: {
+      fastMove: slot === 'fast' ? move : mon.fastMove,
+      chargedMove: slot === 'charged' ? move : mon.chargedMove,
+    },
+  }
 }
 
 function patchOne(

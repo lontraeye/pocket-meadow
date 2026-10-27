@@ -1,0 +1,950 @@
+{
+  "commit": "447bd5c378bf87da964bfe4dd7487a7bf1d97cbd",
+  "moves": [
+    {
+      "name": "absorb",
+      "displayName": "Absorb",
+      "type": "grass",
+      "power": 20,
+      "damageClass": "special"
+    },
+    {
+      "name": "acid",
+      "displayName": "Acid",
+      "type": "poison",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "aeroblast",
+      "displayName": "Aeroblast",
+      "type": "flying",
+      "power": 100,
+      "damageClass": "special"
+    },
+    {
+      "name": "air-cutter",
+      "displayName": "Air Cutter",
+      "type": "flying",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "ancient-power",
+      "displayName": "Ancient Power",
+      "type": "rock",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "astonish",
+      "displayName": "Astonish",
+      "type": "ghost",
+      "power": 30,
+      "damageClass": "physical"
+    },
+    {
+      "name": "aurora-beam",
+      "displayName": "Aurora Beam",
+      "type": "ice",
+      "power": 65,
+      "damageClass": "special"
+    },
+    {
+      "name": "barrage",
+      "displayName": "Barrage",
+      "type": "normal",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bind",
+      "displayName": "Bind",
+      "type": "normal",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bite",
+      "displayName": "Bite",
+      "type": "dark",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "blizzard",
+      "displayName": "Blizzard",
+      "type": "ice",
+      "power": 110,
+      "damageClass": "special"
+    },
+    {
+      "name": "body-slam",
+      "displayName": "Body Slam",
+      "type": "normal",
+      "power": 85,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bone-club",
+      "displayName": "Bone Club",
+      "type": "ground",
+      "power": 65,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bone-rush",
+      "displayName": "Bone Rush",
+      "type": "ground",
+      "power": 25,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bonemerang",
+      "displayName": "Bonemerang",
+      "type": "ground",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "brick-break",
+      "displayName": "Brick Break",
+      "type": "fighting",
+      "power": 75,
+      "damageClass": "physical"
+    },
+    {
+      "name": "bubble",
+      "displayName": "Bubble",
+      "type": "water",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "bubble-beam",
+      "displayName": "Bubble Beam",
+      "type": "water",
+      "power": 65,
+      "damageClass": "special"
+    },
+    {
+      "name": "bullet-seed",
+      "displayName": "Bullet Seed",
+      "type": "grass",
+      "power": 25,
+      "damageClass": "physical"
+    },
+    {
+      "name": "clamp",
+      "displayName": "Clamp",
+      "type": "water",
+      "power": 35,
+      "damageClass": "physical"
+    },
+    {
+      "name": "comet-punch",
+      "displayName": "Comet Punch",
+      "type": "normal",
+      "power": 18,
+      "damageClass": "physical"
+    },
+    {
+      "name": "confusion",
+      "displayName": "Confusion",
+      "type": "psychic",
+      "power": 50,
+      "damageClass": "special"
+    },
+    {
+      "name": "constrict",
+      "displayName": "Constrict",
+      "type": "normal",
+      "power": 10,
+      "damageClass": "physical"
+    },
+    {
+      "name": "crabhammer",
+      "displayName": "Crabhammer",
+      "type": "water",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "cross-chop",
+      "displayName": "Cross Chop",
+      "type": "fighting",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "crunch",
+      "displayName": "Crunch",
+      "type": "dark",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "dig",
+      "displayName": "Dig",
+      "type": "ground",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "dizzy-punch",
+      "displayName": "Dizzy Punch",
+      "type": "normal",
+      "power": 70,
+      "damageClass": "physical"
+    },
+    {
+      "name": "double-edge",
+      "displayName": "Double-Edge",
+      "type": "normal",
+      "power": 120,
+      "damageClass": "physical"
+    },
+    {
+      "name": "double-kick",
+      "displayName": "Double Kick",
+      "type": "fighting",
+      "power": 30,
+      "damageClass": "physical"
+    },
+    {
+      "name": "double-slap",
+      "displayName": "Double Slap",
+      "type": "normal",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "dragon-breath",
+      "displayName": "Dragon Breath",
+      "type": "dragon",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "dream-eater",
+      "displayName": "Dream Eater",
+      "type": "psychic",
+      "power": 100,
+      "damageClass": "special"
+    },
+    {
+      "name": "drill-peck",
+      "displayName": "Drill Peck",
+      "type": "flying",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "earthquake",
+      "displayName": "Earthquake",
+      "type": "ground",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "egg-bomb",
+      "displayName": "Egg Bomb",
+      "type": "normal",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "ember",
+      "displayName": "Ember",
+      "type": "fire",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "extreme-speed",
+      "displayName": "Extreme Speed",
+      "type": "normal",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "false-swipe",
+      "displayName": "False Swipe",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "feint-attack",
+      "displayName": "Feint Attack",
+      "type": "dark",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "fire-blast",
+      "displayName": "Fire Blast",
+      "type": "fire",
+      "power": 110,
+      "damageClass": "special"
+    },
+    {
+      "name": "fire-punch",
+      "displayName": "Fire Punch",
+      "type": "fire",
+      "power": 75,
+      "damageClass": "physical"
+    },
+    {
+      "name": "fire-spin",
+      "displayName": "Fire Spin",
+      "type": "fire",
+      "power": 35,
+      "damageClass": "special"
+    },
+    {
+      "name": "flame-wheel",
+      "displayName": "Flame Wheel",
+      "type": "fire",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "flamethrower",
+      "displayName": "Flamethrower",
+      "type": "fire",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "fury-attack",
+      "displayName": "Fury Attack",
+      "type": "normal",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "fury-cutter",
+      "displayName": "Fury Cutter",
+      "type": "bug",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "fury-swipes",
+      "displayName": "Fury Swipes",
+      "type": "normal",
+      "power": 18,
+      "damageClass": "physical"
+    },
+    {
+      "name": "future-sight",
+      "displayName": "Future Sight",
+      "type": "psychic",
+      "power": 120,
+      "damageClass": "special"
+    },
+    {
+      "name": "giga-drain",
+      "displayName": "Giga Drain",
+      "type": "grass",
+      "power": 75,
+      "damageClass": "special"
+    },
+    {
+      "name": "gust",
+      "displayName": "Gust",
+      "type": "flying",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "headbutt",
+      "displayName": "Headbutt",
+      "type": "normal",
+      "power": 70,
+      "damageClass": "physical"
+    },
+    {
+      "name": "hidden-power",
+      "displayName": "Hidden Power",
+      "type": "normal",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "high-jump-kick",
+      "displayName": "High Jump Kick",
+      "type": "fighting",
+      "power": 130,
+      "damageClass": "physical"
+    },
+    {
+      "name": "horn-attack",
+      "displayName": "Horn Attack",
+      "type": "normal",
+      "power": 65,
+      "damageClass": "physical"
+    },
+    {
+      "name": "hydro-pump",
+      "displayName": "Hydro Pump",
+      "type": "water",
+      "power": 110,
+      "damageClass": "special"
+    },
+    {
+      "name": "hyper-beam",
+      "displayName": "Hyper Beam",
+      "type": "normal",
+      "power": 150,
+      "damageClass": "special"
+    },
+    {
+      "name": "hyper-fang",
+      "displayName": "Hyper Fang",
+      "type": "normal",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "ice-beam",
+      "displayName": "Ice Beam",
+      "type": "ice",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "ice-punch",
+      "displayName": "Ice Punch",
+      "type": "ice",
+      "power": 75,
+      "damageClass": "physical"
+    },
+    {
+      "name": "icy-wind",
+      "displayName": "Icy Wind",
+      "type": "ice",
+      "power": 55,
+      "damageClass": "special"
+    },
+    {
+      "name": "iron-tail",
+      "displayName": "Iron Tail",
+      "type": "steel",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "jump-kick",
+      "displayName": "Jump Kick",
+      "type": "fighting",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "karate-chop",
+      "displayName": "Karate Chop",
+      "type": "fighting",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "leech-life",
+      "displayName": "Leech Life",
+      "type": "bug",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "lick",
+      "displayName": "Lick",
+      "type": "ghost",
+      "power": 30,
+      "damageClass": "physical"
+    },
+    {
+      "name": "mach-punch",
+      "displayName": "Mach Punch",
+      "type": "fighting",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "magical-leaf",
+      "displayName": "Magical Leaf",
+      "type": "grass",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "mega-drain",
+      "displayName": "Mega Drain",
+      "type": "grass",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "mega-kick",
+      "displayName": "Mega Kick",
+      "type": "normal",
+      "power": 120,
+      "damageClass": "physical"
+    },
+    {
+      "name": "mega-punch",
+      "displayName": "Mega Punch",
+      "type": "normal",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "megahorn",
+      "displayName": "Megahorn",
+      "type": "bug",
+      "power": 120,
+      "damageClass": "physical"
+    },
+    {
+      "name": "metal-claw",
+      "displayName": "Metal Claw",
+      "type": "steel",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "mud-shot",
+      "displayName": "Mud Shot",
+      "type": "ground",
+      "power": 55,
+      "damageClass": "special"
+    },
+    {
+      "name": "octazooka",
+      "displayName": "Octazooka",
+      "type": "water",
+      "power": 65,
+      "damageClass": "special"
+    },
+    {
+      "name": "outrage",
+      "displayName": "Outrage",
+      "type": "dragon",
+      "power": 120,
+      "damageClass": "physical"
+    },
+    {
+      "name": "pay-day",
+      "displayName": "Pay Day",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "peck",
+      "displayName": "Peck",
+      "type": "flying",
+      "power": 35,
+      "damageClass": "physical"
+    },
+    {
+      "name": "petal-dance",
+      "displayName": "Petal Dance",
+      "type": "grass",
+      "power": 120,
+      "damageClass": "special"
+    },
+    {
+      "name": "pin-missile",
+      "displayName": "Pin Missile",
+      "type": "bug",
+      "power": 25,
+      "damageClass": "physical"
+    },
+    {
+      "name": "poison-fang",
+      "displayName": "Poison Fang",
+      "type": "poison",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "poison-sting",
+      "displayName": "Poison Sting",
+      "type": "poison",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "pound",
+      "displayName": "Pound",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "powder-snow",
+      "displayName": "Powder Snow",
+      "type": "ice",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "psybeam",
+      "displayName": "Psybeam",
+      "type": "psychic",
+      "power": 65,
+      "damageClass": "special"
+    },
+    {
+      "name": "psychic",
+      "displayName": "Psychic",
+      "type": "psychic",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "pursuit",
+      "displayName": "Pursuit",
+      "type": "dark",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "quick-attack",
+      "displayName": "Quick Attack",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rage",
+      "displayName": "Rage",
+      "type": "normal",
+      "power": 20,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rapid-spin",
+      "displayName": "Rapid Spin",
+      "type": "normal",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "razor-leaf",
+      "displayName": "Razor Leaf",
+      "type": "grass",
+      "power": 55,
+      "damageClass": "physical"
+    },
+    {
+      "name": "revenge",
+      "displayName": "Revenge",
+      "type": "fighting",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rock-blast",
+      "displayName": "Rock Blast",
+      "type": "rock",
+      "power": 25,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rock-slide",
+      "displayName": "Rock Slide",
+      "type": "rock",
+      "power": 75,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rock-throw",
+      "displayName": "Rock Throw",
+      "type": "rock",
+      "power": 50,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rolling-kick",
+      "displayName": "Rolling Kick",
+      "type": "fighting",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "rollout",
+      "displayName": "Rollout",
+      "type": "rock",
+      "power": 30,
+      "damageClass": "physical"
+    },
+    {
+      "name": "sacred-fire",
+      "displayName": "Sacred Fire",
+      "type": "fire",
+      "power": 100,
+      "damageClass": "physical"
+    },
+    {
+      "name": "scratch",
+      "displayName": "Scratch",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "skull-bash",
+      "displayName": "Skull Bash",
+      "type": "normal",
+      "power": 130,
+      "damageClass": "physical"
+    },
+    {
+      "name": "sky-attack",
+      "displayName": "Sky Attack",
+      "type": "flying",
+      "power": 140,
+      "damageClass": "physical"
+    },
+    {
+      "name": "slam",
+      "displayName": "Slam",
+      "type": "normal",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "slash",
+      "displayName": "Slash",
+      "type": "normal",
+      "power": 70,
+      "damageClass": "physical"
+    },
+    {
+      "name": "sludge",
+      "displayName": "Sludge",
+      "type": "poison",
+      "power": 65,
+      "damageClass": "special"
+    },
+    {
+      "name": "sludge-bomb",
+      "displayName": "Sludge Bomb",
+      "type": "poison",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "smog",
+      "displayName": "Smog",
+      "type": "poison",
+      "power": 30,
+      "damageClass": "special"
+    },
+    {
+      "name": "snore",
+      "displayName": "Snore",
+      "type": "normal",
+      "power": 50,
+      "damageClass": "special"
+    },
+    {
+      "name": "solar-beam",
+      "displayName": "Solar Beam",
+      "type": "grass",
+      "power": 120,
+      "damageClass": "special"
+    },
+    {
+      "name": "spark",
+      "displayName": "Spark",
+      "type": "electric",
+      "power": 65,
+      "damageClass": "physical"
+    },
+    {
+      "name": "spike-cannon",
+      "displayName": "Spike Cannon",
+      "type": "normal",
+      "power": 20,
+      "damageClass": "physical"
+    },
+    {
+      "name": "steel-wing",
+      "displayName": "Steel Wing",
+      "type": "steel",
+      "power": 70,
+      "damageClass": "physical"
+    },
+    {
+      "name": "stomp",
+      "displayName": "Stomp",
+      "type": "normal",
+      "power": 65,
+      "damageClass": "physical"
+    },
+    {
+      "name": "submission",
+      "displayName": "Submission",
+      "type": "fighting",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "swift",
+      "displayName": "Swift",
+      "type": "normal",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "tackle",
+      "displayName": "Tackle",
+      "type": "normal",
+      "power": 40,
+      "damageClass": "physical"
+    },
+    {
+      "name": "take-down",
+      "displayName": "Take Down",
+      "type": "normal",
+      "power": 90,
+      "damageClass": "physical"
+    },
+    {
+      "name": "thrash",
+      "displayName": "Thrash",
+      "type": "normal",
+      "power": 120,
+      "damageClass": "physical"
+    },
+    {
+      "name": "thunder",
+      "displayName": "Thunder",
+      "type": "electric",
+      "power": 110,
+      "damageClass": "special"
+    },
+    {
+      "name": "thunder-punch",
+      "displayName": "Thunder Punch",
+      "type": "electric",
+      "power": 75,
+      "damageClass": "physical"
+    },
+    {
+      "name": "thunder-shock",
+      "displayName": "Thunder Shock",
+      "type": "electric",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "thunderbolt",
+      "displayName": "Thunderbolt",
+      "type": "electric",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "tri-attack",
+      "displayName": "Tri Attack",
+      "type": "normal",
+      "power": 80,
+      "damageClass": "special"
+    },
+    {
+      "name": "triple-kick",
+      "displayName": "Triple Kick",
+      "type": "fighting",
+      "power": 10,
+      "damageClass": "physical"
+    },
+    {
+      "name": "twineedle",
+      "displayName": "Twineedle",
+      "type": "bug",
+      "power": 25,
+      "damageClass": "physical"
+    },
+    {
+      "name": "twister",
+      "displayName": "Twister",
+      "type": "dragon",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "uproar",
+      "displayName": "Uproar",
+      "type": "normal",
+      "power": 90,
+      "damageClass": "special"
+    },
+    {
+      "name": "vice-grip",
+      "displayName": "Vise Grip",
+      "type": "normal",
+      "power": 55,
+      "damageClass": "physical"
+    },
+    {
+      "name": "vine-whip",
+      "displayName": "Vine Whip",
+      "type": "grass",
+      "power": 45,
+      "damageClass": "physical"
+    },
+    {
+      "name": "vital-throw",
+      "displayName": "Vital Throw",
+      "type": "fighting",
+      "power": 70,
+      "damageClass": "physical"
+    },
+    {
+      "name": "water-gun",
+      "displayName": "Water Gun",
+      "type": "water",
+      "power": 40,
+      "damageClass": "special"
+    },
+    {
+      "name": "water-pulse",
+      "displayName": "Water Pulse",
+      "type": "water",
+      "power": 60,
+      "damageClass": "special"
+    },
+    {
+      "name": "waterfall",
+      "displayName": "Waterfall",
+      "type": "water",
+      "power": 80,
+      "damageClass": "physical"
+    },
+    {
+      "name": "wing-attack",
+      "displayName": "Wing Attack",
+      "type": "flying",
+      "power": 60,
+      "damageClass": "physical"
+    },
+    {
+      "name": "wrap",
+      "displayName": "Wrap",
+      "type": "normal",
+      "power": 15,
+      "damageClass": "physical"
+    },
+    {
+      "name": "zap-cannon",
+      "displayName": "Zap Cannon",
+      "type": "electric",
+      "power": 120,
+      "damageClass": "special"
+    }
+  ]
+}

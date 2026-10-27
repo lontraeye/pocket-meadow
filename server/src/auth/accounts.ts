@@ -7,6 +7,10 @@ import { authConfig } from '../config/auth.js'
 import { type StarterKey, trainerConfig } from '../config/trainer.js'
 import { getDb } from '../db/client.js'
 import { authEvents, inventory, pokedexEntries, pokemon, sessions, species, trainers, users } from '../db/schema.js'
+import { mulberry32, randomSeed } from '../game/rng.js'
+import { traitColumns } from '../game/traitValues.js'
+import { rollTraits, traitsRngSeed } from '../game/traits.js'
+import { abilitiesFor, learnsetFor, movesByName } from '../seed/traitsData.js'
 import { hashToken } from './session.js'
 
 export function newToken(): string {
@@ -35,6 +39,12 @@ export function createPlayer(input: {
   const starterSpecies = db.select({ id: species.id }).from(species).where(eq(species.id, starterId)).get()
   if (!starterSpecies) throw new Error(`starter species ${starterId} is not seeded`)
   const now = input.now
+  const traits = rollTraits(mulberry32(traitsRngSeed(randomSeed())), {
+    level: trainerConfig.starterLevel,
+    learnset: learnsetFor(starterSpecies.id),
+    abilities: abilitiesFor(starterSpecies.id),
+    moves: movesByName(),
+  })
 
   const user = db
     .insert(users)
@@ -53,6 +63,7 @@ export function createPlayer(input: {
       level: trainerConfig.starterLevel,
       caughtAt: now,
       originalSpeciesId: starterSpecies.id,
+      ...traitColumns(traits),
     })
     .run()
   db.insert(pokedexEntries)

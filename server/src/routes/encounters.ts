@@ -28,8 +28,12 @@ import {
   winChance,
 } from '../game/battle.js'
 import { rollBattleSeed } from '../game/berries.js'
+import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
+import { traitColumns } from '../game/traitValues.js'
+import { rollTraits, traitsRngSeed } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
+import { abilitiesFor, learnsetFor, movesByName } from '../seed/traitsData.js'
 import { toEncounterView } from './encounterView.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 
@@ -185,9 +189,12 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   const rows = db
     .select({
       id: pokemon.id,
+      speciesId: pokemon.speciesId,
       level: pokemon.level,
       xp: pokemon.xp,
       location: pokemon.location,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
       baseStatTotal: species.baseStatTotal,
     })
     .from(pokemon)
@@ -227,11 +234,23 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   const fighters = roster.map((mon) => {
     const share = won ? fighterXp(wild.baseExperience, encounter.level, mon.level, roster.length) : 0
     const granted = grantXp(mon.level, mon.xp, share)
+    let moveOffers: ReturnType<typeof applyLevelMovesToPokemon>['offers'] = []
     if (share > 0) {
       db.update(pokemon)
         .set({ level: granted.level, xp: granted.xp })
         .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
         .run()
+      if (granted.levelsGained > 0 && mon.fastMove) {
+        moveOffers = applyLevelMovesToPokemon({
+          userId,
+          pokemonId: mon.id,
+          speciesId: mon.speciesId,
+          fromLevel: mon.level,
+          toLevel: granted.level,
+          fastMove: mon.fastMove,
+          chargedMove: mon.chargedMove,
+        }).offers
+      }
     }
     return {
       pokemonId: mon.id,
@@ -239,6 +258,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
       level: granted.level,
       xp: granted.xp,
       levelsGained: granted.levelsGained,
+      moveOffers,
     }
   })
 
@@ -251,6 +271,12 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     catchOdds = catchChance(wild.captureRate, bonus)
     caught = rollChance(catchOdds, rng)
     if (caught) {
+      const traits = rollTraits(mulberry32(traitsRngSeed(encounter.rngSeed)), {
+        level: encounter.level,
+        learnset: learnsetFor(encounter.speciesId),
+        abilities: abilitiesFor(encounter.speciesId),
+        moves: movesByName(),
+      })
       const inserted = db
         .insert(pokemon)
         .values({
@@ -261,6 +287,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
           caughtAt: now,
           caughtRegion: encounter.regionSlug,
           originalSpeciesId: encounter.speciesId,
+          ...traitColumns(traits),
         })
         .returning({ id: pokemon.id })
         .get()

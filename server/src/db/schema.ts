@@ -38,6 +38,12 @@ export const species = sqliteTable(
     evolutionStage: integer('evolution_stage').notNull().default(1),
     isLegendary: integer('is_legendary', { mode: 'boolean' }).notNull().default(false),
     isMythical: integer('is_mythical', { mode: 'boolean' }).notNull().default(false),
+    evHp: integer('ev_hp').notNull().default(0),
+    evAttack: integer('ev_attack').notNull().default(0),
+    evDefense: integer('ev_defense').notNull().default(0),
+    evSpAttack: integer('ev_sp_attack').notNull().default(0),
+    evSpDefense: integer('ev_sp_defense').notNull().default(0),
+    evSpeed: integer('ev_speed').notNull().default(0),
   },
   (table) => [index('idx_species_chain').on(table.evolutionChainId)],
 )
@@ -150,11 +156,32 @@ export const pokemon = sqliteTable(
     originalSpeciesId: integer('original_species_id')
       .notNull()
       .references(() => species.id),
+    // Traços (5.18 / Fase 8.1). NULL só até o backfill; inserts novos sempre preenchem.
+    ivHp: integer('iv_hp'),
+    ivAttack: integer('iv_attack'),
+    ivDefense: integer('iv_defense'),
+    ivSpAttack: integer('iv_sp_attack'),
+    ivSpDefense: integer('iv_sp_defense'),
+    ivSpeed: integer('iv_speed'),
+    evHp: integer('ev_hp').notNull().default(0),
+    evAttack: integer('ev_attack').notNull().default(0),
+    evDefense: integer('ev_defense').notNull().default(0),
+    evSpAttack: integer('ev_sp_attack').notNull().default(0),
+    evSpDefense: integer('ev_sp_defense').notNull().default(0),
+    evSpeed: integer('ev_speed').notNull().default(0),
+    nature: text('nature'),
+    abilitySlot: text('ability_slot', { enum: ['1', '2', 'hidden'] }),
+    fastMove: text('fast_move'),
+    chargedMove: text('charged_move'),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),
     index('idx_pokemon_user_species').on(table.userId, table.speciesId),
     check('ck_pokemon_location', sql`${table.location} in ('garden', 'daycare')`),
+    check(
+      'ck_pokemon_ability_slot',
+      sql`${table.abilitySlot} is null or ${table.abilitySlot} in ('1', '2', 'hidden')`,
+    ),
   ],
 )
 

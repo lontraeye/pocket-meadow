@@ -38,7 +38,8 @@ export function applySpeciesSnapshot(sqlite: Database.Database, snapshot: Specie
   const ids = snapshot.species.map((row) => row.id)
 
   const write = sqlite.transaction(() => {
-    for (const row of snapshot.species) {
+    for (const raw of snapshot.species) {
+      const row = withEvDefaults(raw)
       db.insert(species)
         .values({ ...row, evolvesFromId: null })
         .onConflictDoUpdate({
@@ -48,7 +49,8 @@ export function applySpeciesSnapshot(sqlite: Database.Database, snapshot: Specie
         .run()
     }
 
-    for (const row of snapshot.species) {
+    for (const raw of snapshot.species) {
+      const row = withEvDefaults(raw)
       if (row.evolvesFromId === null) continue
       db.update(species).set({ evolvesFromId: row.evolvesFromId }).where(eq(species.id, row.id)).run()
     }
@@ -63,4 +65,16 @@ export function applySpeciesSnapshot(sqlite: Database.Database, snapshot: Specie
   })
 
   write.immediate()
+}
+
+function withEvDefaults(row: SpeciesRow): SpeciesRow {
+  return {
+    ...row,
+    evHp: row.evHp ?? 0,
+    evAttack: row.evAttack ?? 0,
+    evDefense: row.evDefense ?? 0,
+    evSpAttack: row.evSpAttack ?? 0,
+    evSpDefense: row.evSpDefense ?? 0,
+    evSpeed: row.evSpeed ?? 0,
+  }
 }

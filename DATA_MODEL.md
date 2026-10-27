@@ -56,7 +56,13 @@ CREATE TABLE species (
   evolves_from_id       INTEGER REFERENCES species(id),
   evolution_stage       INTEGER NOT NULL DEFAULT 1,    -- 1, 2 ou 3
   is_legendary          INTEGER NOT NULL DEFAULT 0,
-  is_mythical           INTEGER NOT NULL DEFAULT 0
+  is_mythical           INTEGER NOT NULL DEFAULT 0,
+  ev_hp                 INTEGER NOT NULL DEFAULT 0,    -- EV yield da espécie (PokéAPI stats[].effort)
+  ev_attack             INTEGER NOT NULL DEFAULT 0,
+  ev_defense            INTEGER NOT NULL DEFAULT 0,
+  ev_sp_attack          INTEGER NOT NULL DEFAULT 0,
+  ev_sp_defense         INTEGER NOT NULL DEFAULT 0,
+  ev_speed              INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_species_chain ON species(evolution_chain_id);
@@ -180,12 +186,32 @@ CREATE TABLE pokemon (
                     CHECK (location IN ('garden', 'daycare')),
   caught_at         INTEGER NOT NULL,
   caught_region     TEXT,                            -- region_slug do config; NULL para o inicial
-  original_species_id INTEGER NOT NULL REFERENCES species(id) -- espécie na captura (histórico)
+  original_species_id INTEGER NOT NULL REFERENCES species(id), -- espécie na captura (histórico)
+  -- Traços (PLANNING.md 5.18 / Fase 8.1). Novos inserts sempre preenchem;
+  -- Pokémon antigos recebem backfill determinístico (PRNG do id) se NULL.
+  iv_hp             INTEGER,
+  iv_attack         INTEGER,
+  iv_defense        INTEGER,
+  iv_sp_attack      INTEGER,
+  iv_sp_defense     INTEGER,
+  iv_speed          INTEGER,
+  ev_hp             INTEGER NOT NULL DEFAULT 0,      -- ainda não sobem na 8.1
+  ev_attack         INTEGER NOT NULL DEFAULT 0,
+  ev_defense        INTEGER NOT NULL DEFAULT 0,
+  ev_sp_attack      INTEGER NOT NULL DEFAULT 0,
+  ev_sp_defense     INTEGER NOT NULL DEFAULT 0,
+  ev_speed          INTEGER NOT NULL DEFAULT 0,
+  nature            TEXT,
+  ability_slot      TEXT CHECK (ability_slot IS NULL OR ability_slot IN ('1', '2', 'hidden')),
+  fast_move         TEXT,                            -- golpe rápido (poder ≤ 55)
+  charged_move      TEXT                             -- golpe carregado (poder > 55); NULL = ainda não aprendeu
 );
 
 CREATE INDEX idx_pokemon_user          ON pokemon(user_id);
 CREATE INDEX idx_pokemon_user_species  ON pokemon(user_id, species_id);
 ```
+
+Pools de golpes, detalhes e habilidades por espécie ficam em `server/snapshots/moves.json`, `learnsets.json` e `abilities.json` (não em tabelas). `ability_slot` é a posição na espécie atual: ao evoluir, o nome acompanha o slot.
 
 Soltar = `DELETE` da linha (em transação, creditando os doces). Se quiser histórico, adicionar `released_at` e filtrar por `released_at IS NULL`.
 
@@ -348,7 +374,8 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → (se venceu) XP dividido entre o time, XP do treinador, rolar captura e, se capturou, inserir Pokémon → atualizar status do encontro e pokédex |
 | Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
 | Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
-| Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` → pokédex (vista e capturada) → XP do treinador. Não custa doce |
+| Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` (traços ficam; `ability_slot` normaliza se a espécie nova não tiver 2ª/oculta) → pokédex (vista e capturada) → XP do treinador. Não custa doce |
+| Trocar golpe | `POST /pokemon/:id/moves` `{ slot: 'fast' \| 'charged', move }` — só pool da espécie até o nível, slot certo, ou especial padrão do tipo |
 | Colocar no daycare | catch-up → validar (slot desbloqueado e vazio, Pokémon do jogador e no jardim, sobra alguém no jardim) → inserir slot (`entered_at = last_settled_at = now`, `xp_gained = 0`) → `location = 'daycare'` |
 | Retirar / renovar | catch-up (liquida o XP) → apagar slot → `location = 'garden'`. Renovar insere de novo o mesmo Pokémon, na mesma transação |
 | Plantar | catch-up → validar (canteiro desbloqueado e vazio, `seed:<berry>` no inventário) → debitar semente → inserir canteiro com `ready_at` |

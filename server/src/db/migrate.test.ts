@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import Database from 'better-sqlite3'
 import { fileURLToPath } from 'node:url'
 import { applySpeciesSnapshot, readSpeciesSnapshot } from '../seed/apply.js'
+import { backfillPokemonTraits } from './backfillTraits.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const drizzleDir = path.resolve(here, '../..', 'drizzle')
@@ -91,6 +92,16 @@ test('a migração de via_trade preserva evoluções e o snapshot marca a troca'
   assert.equal(before.min_level, 36)
   assert.equal(before.via_trade, 0)
 
+  // Snapshot atual inclui EV yield (0008); aplica só depois das colunas existirem.
+  for (const fileName of [
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
   applySpeciesSnapshot(db, readSpeciesSnapshot())
   const after = db
     .prepare('select min_level, via_trade from evolutions where from_species_id = 93 and to_species_id = 94')
@@ -101,7 +112,6 @@ test('a migração de via_trade preserva evoluções e o snapshot marca a troca'
   db.close()
   fs.rmSync(file, { force: true })
 })
-
 test('a migração de xp_gained preserva slots de daycare que já existem', () => {
   const file = path.join(os.tmpdir(), `pocket-meadow-daycare-xp-${process.pid}.sqlite`)
   fs.rmSync(file, { force: true })
@@ -192,6 +202,213 @@ test('as migrações do login pelo Google preservam contas e o save', () => {
   db.prepare(`insert into users (username, created_at) values ('misty', 1)`).run()
   db.prepare(`insert into users (username, created_at) values ('erika', 1)`).run()
   assert.throws(() => db.prepare(`insert into users (username, google_sub, created_at) values ('x', 'g1', 1)`).run())
+  db.close()
+  fs.rmSync(file, { force: true })
+})
+
+test('a migração de traços preenche NULL sem alterar nível, XP, shiny, apelido nem favorito', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-traits-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, created_at) values ('oak', 1)`).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage
+    ) values (1, 'bulbasaur', 'Bulbasaur', 'grass', 45, 49, 49, 65, 65, 45, 318, 64, 45, 1, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, is_shiny, nickname, is_favorite, caught_at, original_species_id
+    ) values (1, 1, 17, 42, 1, 'Leafy', 1, 1, 1)`,
+  ).run()
+
+  const before = db
+    .prepare(
+      `select level, xp, is_shiny, nickname, is_favorite from pokemon where id = 1`,
+    )
+    .get() as {
+    level: number
+    xp: number
+    is_shiny: number
+    nickname: string
+    is_favorite: number
+  }
+
+  execMigration(db, '0008_pokemon_traits.sql')
+
+  const afterColumns = db
+    .prepare(
+      `select level, xp, is_shiny, nickname, is_favorite, nature, ability_slot, fast_move, charged_move, iv_hp
+       from pokemon where id = 1`,
+    )
+    .get() as {
+    level: number
+    xp: number
+    is_shiny: number
+    nickname: string
+    is_favorite: number
+    nature: string | null
+    ability_slot: string | null
+    fast_move: string | null
+    charged_move: string | null
+    iv_hp: number | null
+  }
+  assert.deepEqual(
+    {
+      level: afterColumns.level,
+      xp: afterColumns.xp,
+      is_shiny: afterColumns.is_shiny,
+      nickname: afterColumns.nickname,
+      is_favorite: afterColumns.is_favorite,
+    },
+    before,
+  )
+  assert.equal(afterColumns.nature, null)
+  assert.equal(afterColumns.iv_hp, null)
+
+  // Snapshot mínimo para o backfill (igual ao fluxo de migrate.ts).
+  const snapshots = path.resolve(here, '../..', 'snapshots')
+  const moves = JSON.parse(fs.readFileSync(path.join(snapshots, 'moves.json'), 'utf8')) as {
+    moves: { name: string; displayName: string; type: string; power: number; damageClass: string }[]
+  }
+  const learnsets = JSON.parse(fs.readFileSync(path.join(snapshots, 'learnsets.json'), 'utf8')) as {
+    learnsets: Record<string, { move: string; level: number }[]>
+  }
+  const abilities = JSON.parse(fs.readFileSync(path.join(snapshots, 'abilities.json'), 'utf8')) as {
+    abilities: Record<string, { slot1: string; slot2: string | null; hidden: string | null }>
+  }
+  assert.ok(learnsets.learnsets['1'])
+  assert.ok(abilities.abilities['1'])
+  assert.ok(moves.moves.length > 0)
+
+  const filled = backfillPokemonTraits(db)
+  assert.equal(filled, 1)
+
+  const after = db
+    .prepare(
+      `select level, xp, is_shiny, nickname, is_favorite, nature, ability_slot, fast_move, charged_move, iv_hp
+       from pokemon where id = 1`,
+    )
+    .get() as {
+    level: number
+    xp: number
+    is_shiny: number
+    nickname: string
+    is_favorite: number
+    nature: string
+    ability_slot: string
+    fast_move: string
+    charged_move: string
+    iv_hp: number
+  }
+  assert.deepEqual(
+    {
+      level: after.level,
+      xp: after.xp,
+      is_shiny: after.is_shiny,
+      nickname: after.nickname,
+      is_favorite: after.is_favorite,
+    },
+    before,
+  )
+  assert.ok(after.nature)
+  assert.ok(after.ability_slot)
+  assert.ok(after.fast_move)
+  assert.ok(Number.isInteger(after.iv_hp))
+  // Nv 17: Bulbasaur ainda não tem carregado no pool (Solar Beam no 46).
+  assert.equal(after.charged_move, null)
+
+  const filledAgain = backfillPokemonTraits(db)
+  assert.equal(filledAgain, 0)
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})
+
+test('backfill com EVs e só nature NULL mantém EVs e golpes', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-traits-ev-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, created_at) values ('oak', 1)`).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage
+    ) values (4, 'charmander', 'Charmander', 'fire', 39, 52, 43, 60, 50, 65, 309, 62, 45, 2, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, caught_at, original_species_id,
+      iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed,
+      nature, ability_slot, fast_move, charged_move
+    ) values (
+      1, 4, 20, 10, 1, 4,
+      10, 11, 12, 13, 14, 15,
+      4, 8, 0, 0, 0, 12,
+      null, '1', 'scratch', null
+    )`,
+  ).run()
+
+  const filled = backfillPokemonTraits(db)
+  assert.equal(filled, 1)
+
+  const row = db
+    .prepare(
+      `select nature, ability_slot, fast_move, charged_move,
+              ev_hp, ev_attack, ev_speed, iv_hp
+       from pokemon where id = 1`,
+    )
+    .get() as {
+    nature: string
+    ability_slot: string
+    fast_move: string
+    charged_move: string | null
+    ev_hp: number
+    ev_attack: number
+    ev_speed: number
+    iv_hp: number
+  }
+  assert.ok(row.nature)
+  assert.equal(row.ability_slot, '1')
+  assert.equal(row.fast_move, 'scratch')
+  assert.equal(row.charged_move, null)
+  assert.equal(row.iv_hp, 10)
+  assert.deepEqual(
+    { ev_hp: row.ev_hp, ev_attack: row.ev_attack, ev_speed: row.ev_speed },
+    { ev_hp: 4, ev_attack: 8, ev_speed: 12 },
+  )
+
   db.close()
   fs.rmSync(file, { force: true })
 })

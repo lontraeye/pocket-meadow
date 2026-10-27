@@ -17,19 +17,18 @@
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { play } from './sound'
   import { showdownSrc } from './sprites'
+  import { damageClassLabelPt, typeLabelPt } from './typesPt'
 
   let {
     game,
     mon,
     dev = null,
-    fill = false,
     onClose,
     onState,
   }: {
     game: GameState
     mon: OwnedPokemon
     dev?: { asleep: boolean; toggle: () => void } | null
-    fill?: boolean
     onClose: () => void
     onState: () => Promise<void>
   } = $props()
@@ -44,6 +43,7 @@
   let seenSpecies = $state(0)
   let highlightCards = $state<HighlightCard[]>([])
   let regionsCache = $state<RegionInfo[] | null>(null)
+  let swapping = $state<'fast' | 'charged' | null>(null)
 
   const rules = $derived(game.progression)
   const chainCandies = $derived(game.candies.find((row) => row.evolutionChainId === mon.evolutionChainId)?.amount ?? 0)
@@ -80,8 +80,12 @@
     nickname = mon.nickname ?? ''
     doses = 1
     confirmRelease = false
+    swapping = null
     void current
   })
+
+  const natureHint = $derived(formatNature(mon.nature))
+  const ivStars = $derived('★'.repeat(mon.ivRating.stars) + '☆'.repeat(5 - mon.ivRating.stars))
 
   $effect(() => {
     if (seenSpecies === 0) {
@@ -146,6 +150,7 @@
         xpGained?: number
         levelsGained?: number
         level?: number
+        moveOffers?: OwnedPokemon['learnset']
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -162,6 +167,8 @@
           levelsGained: levels,
           level,
           canEvolve: crossedEvolve(beforeLevel, level, evolutions),
+          moveOffers: payload.moveOffers,
+          learnset: mon.learnset,
         })
       } else {
         message = 'Alimentado.'
@@ -185,6 +192,7 @@
         trainerXpGained?: number
         trainer?: { level: number; levelsGained: number }
         levelRewards?: { itemKey: string; quantity: number }[]
+        moveOffers?: OwnedPokemon['learnset']
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -203,6 +211,7 @@
         levelRewards: payload.levelRewards ?? [],
         regions,
         berries: game.berries,
+        moveOffers: payload.moveOffers,
       })
     } catch {
       message = 'Sem conexão com o servidor.'
@@ -253,6 +262,7 @@
         xpGained?: number
         levelsGained?: number
         level?: number
+        moveOffers?: OwnedPokemon['learnset']
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -270,6 +280,8 @@
           levelsGained: levels,
           level,
           canEvolve: crossedEvolve(before, level, evolutions),
+          moveOffers: payload.moveOffers,
+          learnset: mon.learnset,
         })
       } else {
         message = `+${xpGained} XP`
@@ -280,9 +292,46 @@
       pending = false
     }
   }
+
+  async function setMove(slot: 'fast' | 'charged', move: string) {
+    const current = slot === 'fast' ? mon.fastMove.name : mon.chargedMove?.name
+    if (move === current) {
+      swapping = null
+      return
+    }
+    const ok = await send(`/api/pokemon/${mon.id}/moves`, { slot, move })
+    if (ok) {
+      message = 'Golpe trocado.'
+      swapping = null
+    }
+  }
+
+  function formatNature(nature: OwnedPokemon['nature']): string {
+    if (!nature.up || !nature.down) return 'Neutra'
+    return `+${statLabel(nature.up)} / −${statLabel(nature.down)}`
+  }
+
+  function statLabel(key: string): string {
+    switch (key) {
+      case 'attack':
+        return 'Atq'
+      case 'defense':
+        return 'Def'
+      case 'spAttack':
+        return 'AtqE'
+      case 'spDefense':
+        return 'DefE'
+      case 'speed':
+        return 'Vel'
+      default:
+        return key
+    }
+  }
 </script>
 
-<section class="panel sheet" class:fill aria-label="Detalhes">
+<div class="overlay" role="presentation">
+  <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
+  <section class="panel sheet" aria-label="Detalhes" role="dialog" aria-modal="true">
   <div class="scroll">
     {#if highlightCards.length > 0}
       <div class="highlights">
@@ -329,6 +378,96 @@
         {mon.isFavorite ? '★ Favorito' : 'Favorito'}
       </button>
     </form>
+
+    <div class="block traits">
+      <h3>Traços</h3>
+      <p class="hint">IVs {ivStars} · {mon.ivRating.percent}%</p>
+      <p class="hint">Natureza {mon.nature.displayName} ({natureHint})</p>
+      <p class="hint">
+        Habilidade {mon.ability.displayName}
+        {#if !mon.ability.combat}
+          <span class="muted"> · sem efeito em combate por enquanto</span>
+        {/if}
+      </p>
+      <ul class="stats">
+        <li><span>HP</span><strong>{mon.stats.hp}</strong></li>
+        <li><span>Atq</span><strong>{mon.stats.attack}</strong></li>
+        <li><span>Def</span><strong>{mon.stats.defense}</strong></li>
+        <li><span>AtqE</span><strong>{mon.stats.spAttack}</strong></li>
+        <li><span>DefE</span><strong>{mon.stats.spDefense}</strong></li>
+        <li><span>Vel</span><strong>{mon.stats.speed}</strong></li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h3>Golpes</h3>
+      <div class="move">
+        <div>
+          <p class="slot">Golpe rápido</p>
+          <strong>{mon.fastMove.displayName}</strong>
+          <p class="hint">
+            {typeLabelPt(mon.fastMove.type)} · {mon.fastMove.power} · {damageClassLabelPt(mon.fastMove.damageClass)}
+          </p>
+        </div>
+        <button type="button" class="btn" disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
+          Trocar
+        </button>
+      </div>
+      {#if swapping === 'fast'}
+        <div class="coins picks">
+          {#each mon.availableMoves.fast as move (move.name)}
+            <button
+              type="button"
+              class="btn"
+              class:btn-primary={move.name === mon.fastMove.name}
+              disabled={pending}
+              onclick={() => void setMove('fast', move.name)}
+            >
+              {move.displayName}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      <div class="move">
+        <div>
+          <p class="slot">Golpe carregado</p>
+          {#if mon.chargedMove}
+            <strong>{mon.chargedMove.displayName}</strong>
+            <p class="hint">
+              {typeLabelPt(mon.chargedMove.type)} · {mon.chargedMove.power} · {damageClassLabelPt(mon.chargedMove.damageClass)}
+            </p>
+          {:else}
+            <strong>Ainda não aprendeu um golpe carregado</strong>
+            {#if mon.nextChargedMove}
+              <p class="hint">Aprende {mon.nextChargedMove.displayName} no Nv {mon.nextChargedMove.level}</p>
+            {/if}
+          {/if}
+        </div>
+        <button
+          type="button"
+          class="btn"
+          disabled={pending || mon.availableMoves.charged.length === 0}
+          onclick={() => (swapping = swapping === 'charged' ? null : 'charged')}
+        >
+          Trocar
+        </button>
+      </div>
+      {#if swapping === 'charged'}
+        <div class="coins picks">
+          {#each mon.availableMoves.charged as move (move.name)}
+            <button
+              type="button"
+              class="btn"
+              class:btn-primary={move.name === mon.chargedMove?.name}
+              disabled={pending}
+              onclick={() => void setMove('charged', move.name)}
+            >
+              {move.displayName}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
 
     <div class="block">
       <h3>Alimentar</h3>
@@ -406,33 +545,65 @@
     {/if}
   </div>
 </section>
+</div>
 
 <style>
+  .overlay {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    display: grid;
+    place-items: stretch;
+    padding:
+      calc(env(safe-area-inset-top) + 0.5rem)
+      calc(env(safe-area-inset-right) + 0.5rem)
+      calc(env(safe-area-inset-bottom) + 0.5rem)
+      calc(env(safe-area-inset-left) + 0.5rem);
+    box-sizing: border-box;
+  }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #1a1208aa;
+    cursor: pointer;
+  }
+
   .highlights {
     margin-bottom: 0.5rem;
   }
 
   .sheet {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    width: min(100%, 28rem);
+    max-height: 100%;
     min-width: 0;
     min-height: 0;
-  }
-
-  .sheet.fill {
-    flex: 1;
-  }
-
-  .sheet.fill .scroll {
-    flex: 1;
+    margin: 0 auto;
+    overflow: hidden;
   }
 
   .scroll {
     display: grid;
     gap: 0.6rem;
+    flex: 1 1 auto;
     min-width: 0;
-    overflow: auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dock {
+    flex: none;
   }
 
   .head {
@@ -583,5 +754,48 @@
     margin: 0;
     color: var(--danger);
     font-weight: 700;
+  }
+
+  .muted {
+    font-weight: 600;
+    opacity: 0.75;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .stats li {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .stats span {
+    font-size: 14px;
+    font-weight: 700;
+    opacity: 0.8;
+  }
+
+  .move {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .slot {
+    font-size: 14px;
+    font-weight: 700;
+    opacity: 0.8;
+  }
+
+  .picks {
+    grid-template-columns: 1fr;
   }
 </style>

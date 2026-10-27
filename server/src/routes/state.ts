@@ -23,6 +23,8 @@ import {
 } from '../db/schema.js'
 import { power } from '../game/battle.js'
 import { energyFullAt, nextEnergyAt } from '../game/catchUp.js'
+import { availableMovesFor, buildTraitView, requireTraitFields } from '../game/traitView.js'
+import type { AbilitySlot } from '../game/traits.js'
 import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 
@@ -48,6 +50,14 @@ function readState(userId: number, now: number) {
       displayName: species.displayName,
       evolutionChainId: species.evolutionChainId,
       baseStatTotal: species.baseStatTotal,
+      type1: species.type1,
+      type2: species.type2,
+      hp: species.hp,
+      attack: species.attack,
+      defense: species.defense,
+      spAttack: species.spAttack,
+      spDefense: species.spDefense,
+      speed: species.speed,
       level: pokemon.level,
       xp: pokemon.xp,
       isShiny: pokemon.isShiny,
@@ -55,6 +65,22 @@ function readState(userId: number, now: number) {
       isFavorite: pokemon.isFavorite,
       location: pokemon.location,
       caughtAt: pokemon.caughtAt,
+      ivHp: pokemon.ivHp,
+      ivAttack: pokemon.ivAttack,
+      ivDefense: pokemon.ivDefense,
+      ivSpAttack: pokemon.ivSpAttack,
+      ivSpDefense: pokemon.ivSpDefense,
+      ivSpeed: pokemon.ivSpeed,
+      evHp: pokemon.evHp,
+      evAttack: pokemon.evAttack,
+      evDefense: pokemon.evDefense,
+      evSpAttack: pokemon.evSpAttack,
+      evSpDefense: pokemon.evSpDefense,
+      evSpeed: pokemon.evSpeed,
+      nature: pokemon.nature,
+      abilitySlot: pokemon.abilitySlot,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -175,23 +201,56 @@ function readState(userId: number, now: number) {
       energyFullAt: energyFullAt(trainer.energy, trainer.energyUpdatedAt),
       genericCandies: trainer.genericCandies,
     },
-    pokemon: owned.map((mon) => ({
-      id: mon.id,
-      speciesId: mon.speciesId,
-      name: mon.name,
-      displayName: mon.displayName,
-      evolutionChainId: mon.evolutionChainId,
-      level: mon.level,
-      xp: mon.xp,
-      xpToNext: mon.level >= progressConfig.levelCap ? null : xpToNext(mon.level),
-      isShiny: mon.isShiny,
-      nickname: mon.nickname,
-      isFavorite: mon.isFavorite,
-      location: mon.location,
-      caughtAt: mon.caughtAt,
-      power: power(mon.baseStatTotal, mon.level),
-      evolutions: evolutionsBySpecies.get(mon.speciesId) ?? [],
-    })),
+    pokemon: owned.map((mon) => {
+      const traits = requireTraitFields({
+        ...mon,
+        abilitySlot: mon.abilitySlot as AbilitySlot | null,
+      })
+      const view = buildTraitView({
+        speciesId: mon.speciesId,
+        level: mon.level,
+        bases: {
+          hp: mon.hp,
+          attack: mon.attack,
+          defense: mon.defense,
+          spAttack: mon.spAttack,
+          spDefense: mon.spDefense,
+          speed: mon.speed,
+          type1: mon.type1,
+          type2: mon.type2,
+        },
+        ...traits,
+      })
+      const available = availableMovesFor(mon.speciesId, mon.level)
+      return {
+        id: mon.id,
+        speciesId: mon.speciesId,
+        name: mon.name,
+        displayName: mon.displayName,
+        evolutionChainId: mon.evolutionChainId,
+        type1: mon.type1,
+        type2: mon.type2,
+        level: mon.level,
+        xp: mon.xp,
+        xpToNext: mon.level >= progressConfig.levelCap ? null : xpToNext(mon.level),
+        isShiny: mon.isShiny,
+        nickname: mon.nickname,
+        isFavorite: mon.isFavorite,
+        location: mon.location,
+        caughtAt: mon.caughtAt,
+        power: power(mon.baseStatTotal, mon.level),
+        evolutions: evolutionsBySpecies.get(mon.speciesId) ?? [],
+        ivRating: view.ivRating,
+        nature: view.nature,
+        ability: view.ability,
+        stats: view.stats,
+        fastMove: view.fastMove,
+        chargedMove: view.chargedMove,
+        nextChargedMove: view.nextChargedMove,
+        learnset: view.learnset,
+        availableMoves: available,
+      }
+    }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
     daycare,
     plots: db

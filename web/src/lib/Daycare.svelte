@@ -86,6 +86,8 @@
         levelsGained: levels,
         level,
         canEvolve: mon.evolutions.some((option) => before < option.minLevel && level >= option.minLevel),
+        moveOffers: Array.isArray(result.moveOffers) ? result.moveOffers : undefined,
+        learnset: mon.learnset,
       })
     } else {
       message = `+${xp} XP · +${levels} nível${levels === 1 ? '' : 's'}`
