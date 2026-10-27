@@ -19,6 +19,10 @@
   let pending = $state(false)
   let time = $state(0)
 
+  const groups = $derived([
+    { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
+    { id: 'johto', title: 'Johto', regions: regions.filter((region) => region.gameRegion === 'johto') },
+  ])
   const roster = $derived(
     game.pokemon
       .filter((mon) => mon.location === 'garden')
@@ -193,18 +197,23 @@
             Continuar encontro
           </button>
         {/if}
-        {#each regions as region (region.slug)}
-          <button
-            type="button"
-            class="btn choice"
-            class:btn-primary={region.unlocked && !game.encounter}
-            disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
-            onclick={() => search(region.slug)}
-          >
-            <span>{region.name}</span>
-            <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
-            {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
-          </button>
+        {#each groups as group (group.id)}
+          {#if group.regions.length > 0}
+            <h3>{group.title}</h3>
+            {#each group.regions as region (region.slug)}
+              <button
+                type="button"
+                class="btn choice"
+                class:btn-primary={region.unlocked && !game.encounter}
+                disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
+                onclick={() => search(region.slug)}
+              >
+                <span>{region.name}</span>
+                <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
+                {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
+              </button>
+            {/each}
+          {/if}
         {/each}
         {#if regions.length === 0 && !message}
           <p class="hint">Olhando o mapa…</p>
@@ -319,6 +328,11 @@
   h2 {
     margin: 0;
     font-size: 1.35rem;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 1.15rem;
   }
 
   .hint,

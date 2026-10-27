@@ -325,7 +325,7 @@ Grava **`server/snapshots/regions.json`**, versionado, ordenado por slug e por s
 Continua com 3 chamadas ao `rng()`, na ordem da seção 7: (1) slot por peso, (2) nível dentro da faixa do slot, (3) shiny. O nível passa a vir do slot sorteado, não de uma faixa única da região. `GET /regions` mostra `wildLevelRange` = menor e maior nível entre os slots, sem revelar a tabela.
 
 #### Raridade
-- **Raro** = slot com peso ≤ `RARE_WEIGHT_MAX` (inicial: 10, na escala normalizada para 100). O Razz (seção 5.10) multiplica só esses slots. Substitui a regra antiga "abaixo do maior peso", que na Rota 1 dobrava Caterpie e Weedle.
+- **Raro** = espécie cuja soma dos slots na região fica ≤ `RARE_WEIGHT_MAX` (inicial: 10, na escala normalizada para 100). O Razz (seção 5.10) multiplica todos os slots dessas espécies. A conta é por espécie, não por slot, porque os slots são por faixa de nível: o Pidgey Nv 7 da Rota 1 tem peso 1, mas o Pidgey soma 70. Substitui a regra antiga "abaixo do maior peso", que na Rota 1 dobrava Caterpie e Weedle.
 - Espécies que não aparecem no mato (iniciais, fósseis, lendários, presentes) ficam fora das regiões por enquanto. Ver questões em aberto.
 
 #### Regiões iniciais
@@ -344,7 +344,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 
 #### Pronto quando
 - `npm run seed:regions` gera o snapshot do zero e de novo sem diff.
-- Os testes cobrem: soma 100 por região, slots dentro da faixa de espécies, Razz mexendo só em slots raros, média dos períodos e o sorteio em 3 chamadas.
+- Os testes cobrem: soma 100 por região, slots dentro da faixa de espécies, Razz mexendo só em espécies raras, média dos períodos e o sorteio em 3 chamadas.
 - O replay pela seed (seção 7) continua batendo com o encontro salvo.
 
 - **Shiny**: chance `SHINY_RATE` (inicial: 1/512), possivelmente aumentada por berry.
@@ -427,7 +427,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 |---|---|---|
 | Oran | 30 min | +2 energia imediata |
 | Pinap | 2 h | Próxima captura com chance ×1.5 |
-| Razz | 4 h | Próximo encontro com pesos dos slots raros dobrados (seção 5.3) |
+| Razz | 4 h | Próximo encontro com pesos das espécies raras dobrados (seção 5.3) |
 | Nanab | 6 h | Daycare ×2 de XP por 2 h |
 | Lum | 12 h | Próximo encontro com chance de shiny ×4 |
 

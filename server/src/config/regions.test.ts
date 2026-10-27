@@ -1,32 +1,251 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { regionStatus, regions } from './regions.js'
+import { applyRareWeights, rollWild } from '../game/battle.js'
+import { slotsFromArea, type LocationArea, readRegionsSnapshot } from '../seed/regionTable.js'
+import { RARE_WEIGHT_MAX } from './battle.js'
+import { loadRegions, regionConfigs, regionStatus } from './regions.js'
+
+const morningOnly = (chance: number, min: number, max: number) => ({
+  min_level: min,
+  max_level: max,
+  chance,
+  method: { name: 'walk' },
+  condition_values: [{ name: 'time-morning' }],
+})
+
+const allDay = (chance: number, min: number, max: number) => ({
+  min_level: min,
+  max_level: max,
+  chance,
+  method: { name: 'walk' },
+  condition_values: [] as { name: string }[],
+})
+
+const sampleArea: LocationArea = {
+  pokemon_encounters: [
+    {
+      pokemon: { name: 'pidgey', url: 'https://pokeapi.co/api/v2/pokemon/16/' },
+      version_details: [
+        {
+          version: { name: 'crystal' },
+          encounter_details: [morningOnly(30, 2, 3), allDay(30, 7, 7)],
+        },
+        {
+          version: { name: 'gold' },
+          encounter_details: [allDay(90, 2, 2)],
+        },
+      ],
+    },
+    {
+      pokemon: { name: 'rattata', url: 'https://pokeapi.co/api/v2/pokemon/19/' },
+      version_details: [
+        {
+          version: { name: 'crystal' },
+          encounter_details: [allDay(30, 2, 3)],
+        },
+      ],
+    },
+    {
+      pokemon: { name: 'poliwag', url: 'https://pokeapi.co/api/v2/pokemon/60/' },
+      version_details: [
+        {
+          version: { name: 'crystal' },
+          encounter_details: [
+            {
+              min_level: 15,
+              max_level: 20,
+              chance: 100,
+              method: { name: 'surf' },
+              condition_values: [],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      pokemon: { name: 'meowth', url: 'https://pokeapi.co/api/v2/pokemon/52/' },
+      version_details: [
+        {
+          version: { name: 'crystal' },
+          encounter_details: [
+            {
+              min_level: 5,
+              max_level: 5,
+              chance: 100,
+              method: { name: 'walk' },
+              condition_values: [{ name: 'swarm' }],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      pokemon: { name: 'pikachu', url: 'https://pokeapi.co/api/v2/pokemon/25/' },
+      version_details: [
+        {
+          version: { name: 'gold' },
+          encounter_details: [allDay(50, 2, 2)],
+        },
+      ],
+    },
+  ],
+}
 
 describe('regiões', () => {
   test('o status público não leva a tabela de spawn', () => {
-    const route = regions.find((region) => region.slug === 'route-1')
+    const route = loadRegions().find((region) => region.slug === 'route-1')
     assert.ok(route)
     const status = regionStatus(route, 1)
-    assert.deepEqual(Object.keys(status).sort(), ['minTrainerLevel', 'name', 'slug', 'unlocked', 'wildLevelRange'])
+    assert.deepEqual(Object.keys(status).sort(), [
+      'gameRegion',
+      'minTrainerLevel',
+      'name',
+      'slug',
+      'unlocked',
+      'wildLevelRange',
+    ])
+    assert.equal(status.gameRegion, 'kanto')
     assert.equal(status.unlocked, true)
     assert.deepEqual(status.wildLevelRange, route.wildLevelRange)
+    assert.equal('slots' in status, false)
   })
 
-  test('nível 1 abre a Rota 1, nível 3 a floresta e nível 6 a Rota 30', () => {
+  test('nível 1 abre Rota 1 e Rota 29, nível 3 a floresta e a Rota 30, nível 6 Mt. Moon e Union Cave', () => {
     const open = (level: number) =>
-      regions.filter((region) => regionStatus(region, level).unlocked).map((region) => region.slug)
-    assert.deepEqual(open(1), ['route-1'])
-    assert.deepEqual(open(3), ['route-1', 'viridian-forest'])
-    assert.deepEqual(open(6), ['route-1', 'viridian-forest', 'route-30'])
+      loadRegions()
+        .filter((region) => regionStatus(region, level).unlocked)
+        .map((region) => region.slug)
+    assert.deepEqual(open(1), ['route-1', 'route-29'])
+    assert.deepEqual(open(2), ['route-1', 'route-29'])
+    assert.deepEqual(open(3), ['route-1', 'viridian-forest', 'route-29', 'route-30'])
+    assert.deepEqual(open(5), ['route-1', 'viridian-forest', 'route-29', 'route-30'])
+    assert.deepEqual(open(6), ['route-1', 'viridian-forest', 'mt-moon', 'route-29', 'route-30', 'union-cave'])
   })
 
-  test('só espécies da geração 1 e 2, com peso positivo', () => {
-    for (const region of regions) {
-      assert.ok(region.spawns.length > 0)
-      for (const spawn of region.spawns) {
-        assert.ok(spawn.speciesId >= 1 && spawn.speciesId <= 251)
-        assert.ok(spawn.weight > 0)
+  test('cada região do config está no snapshot, soma 100 e tem slots válidos', () => {
+    const snapshot = readRegionsSnapshot()
+    const regions = loadRegions()
+    assert.equal(regions.length, regionConfigs.length)
+    for (const config of regionConfigs) {
+      const entry = snapshot[config.slug]
+      assert.ok(entry, config.slug)
+      assert.equal(entry.area, config.source.area)
+      assert.equal(entry.version, config.source.version)
+      assert.ok(entry.slots.length > 0)
+      const tenths = Math.round(entry.slots.reduce((sum, slot) => sum + slot.weight, 0) * 10)
+      assert.equal(tenths, 1000, `${config.slug} soma ${tenths / 10}`)
+      for (const slot of entry.slots) {
+        assert.ok(slot.speciesId >= 1 && slot.speciesId <= 251)
+        assert.ok(slot.weight > 0)
+        assert.ok(slot.minLevel <= slot.maxLevel)
       }
+      const region = regions.find((item) => item.slug === config.slug)
+      assert.ok(region)
+      assert.deepEqual(region.wildLevelRange, [
+        Math.min(...entry.slots.map((slot) => slot.minLevel)),
+        Math.max(...entry.slots.map((slot) => slot.maxLevel)),
+      ])
+    }
+  })
+
+  test('o Razz só mexe em espécies raras', () => {
+    assert.equal(RARE_WEIGHT_MAX, 10)
+    const slots = [
+      { speciesId: 16, weight: 50, minLevel: 2, maxLevel: 3 },
+      { speciesId: 19, weight: RARE_WEIGHT_MAX + 0.1, minLevel: 2, maxLevel: 3 },
+      { speciesId: 25, weight: RARE_WEIGHT_MAX, minLevel: 4, maxLevel: 4 },
+    ]
+    const boosted = applyRareWeights(slots, 2)
+    assert.deepEqual(
+      boosted.map((slot) => slot.weight),
+      [50, RARE_WEIGHT_MAX + 0.1, RARE_WEIGHT_MAX * 2],
+    )
+    assert.equal(boosted[2]?.minLevel, 4)
+    assert.equal(boosted[0]?.maxLevel, 3)
+  })
+
+  test('raridade é pela soma da espécie, não pelo slot de nível', () => {
+    // Pidgey comum dividido em slots pequenos não conta como raro.
+    // Pikachu dividido em dois slots que somam 6 conta, nos dois slots.
+    const slots = [
+      { speciesId: 16, weight: 60, minLevel: 3, maxLevel: 3 },
+      { speciesId: 16, weight: 1, minLevel: 7, maxLevel: 7 },
+      { speciesId: 25, weight: 4, minLevel: 3, maxLevel: 3 },
+      { speciesId: 25, weight: 2, minLevel: 5, maxLevel: 5 },
+      { speciesId: 19, weight: 33, minLevel: 2, maxLevel: 4 },
+    ]
+    assert.deepEqual(
+      applyRareWeights(slots, 2).map((slot) => slot.weight),
+      [60, 1, 8, 4, 33],
+    )
+  })
+
+  test('no snapshot, o Razz da Rota 1 não dobra nada e o do Mt. Moon dobra Sandshrew e Clefairy', () => {
+    const boostedSpecies = (slug: string) => {
+      const region = loadRegions().find((item) => item.slug === slug)
+      assert.ok(region)
+      const boosted = applyRareWeights(region.slots, 2)
+      return [...new Set(region.slots.filter((slot, i) => boosted[i]?.weight !== slot.weight).map((slot) => slot.speciesId))]
+    }
+    assert.deepEqual(boostedSpecies('route-1'), [])
+    assert.deepEqual(boostedSpecies('mt-moon').sort((a, b) => a - b), [27, 35])
+  })
+
+  test('a média dos períodos divide o horário único por três e não junta faixas', () => {
+    // Pidgey 2–3 só de manhã, chance 30 → média 10.
+    // Pidgey 7–7 e Rattata 2–3 sem período, chance 30 → média 30 cada.
+    // Total 70. Em décimos: 143, 429 e 429. A sobra de 1 décimo sai do maior
+    // empate, o de menor speciesId (Pidgey nv 7): 14.3, 42.8, 42.9.
+    // Surf, enxame e a versão gold ficam de fora.
+    assert.deepEqual(slotsFromArea(sampleArea, { version: 'crystal', name: 'Exemplo' }), [
+      { speciesId: 16, minLevel: 2, maxLevel: 3, weight: 14.3 },
+      { speciesId: 16, minLevel: 7, maxLevel: 7, weight: 42.8 },
+      { speciesId: 19, minLevel: 2, maxLevel: 3, weight: 42.9 },
+    ])
+  })
+
+  test('exclude e levelOverride entram na tabela publicada', () => {
+    assert.deepEqual(
+      slotsFromArea(sampleArea, {
+        version: 'crystal',
+        name: 'Exemplo',
+        exclude: [19],
+        levelOverride: [4, 5],
+      }),
+      [{ speciesId: 16, minLevel: 4, maxLevel: 5, weight: 100 }],
+    )
+  })
+
+  test('área sem walk na versão falha com o nome da região', () => {
+    assert.throws(
+      () => slotsFromArea({ pokemon_encounters: [] }, { version: 'yellow', name: 'Rota 1' }),
+      /Rota 1/,
+    )
+  })
+
+  test('rollWild gasta 3 chamadas e o nível fica na faixa do slot sorteado', () => {
+    const slots = [
+      { speciesId: 16, weight: 70, minLevel: 2, maxLevel: 4 },
+      { speciesId: 19, weight: 30, minLevel: 7, maxLevel: 9 },
+    ]
+    const draws = [
+      [0, 0.99, 0],
+      [0.8, 0, 0.5],
+    ]
+    const expected = [
+      { speciesId: 16, level: 4, isShiny: false },
+      { speciesId: 19, level: 7, isShiny: true },
+    ]
+    for (const [index, draw] of draws.entries()) {
+      let calls = 0
+      const rng = () => {
+        const value = draw[calls] ?? 1
+        calls += 1
+        return value
+      }
+      const wild = rollWild(rng, { slots, shinyRate: index === 0 ? 0 : 1 })
+      assert.equal(calls, 3)
+      assert.deepEqual(wild, expected[index])
     }
   })
 })

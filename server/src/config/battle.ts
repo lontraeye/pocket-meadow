@@ -1,6 +1,9 @@
 // Constantes da seção 5.5 e 5.6 do PLANNING.md.
 // SHINY_RATE, ENCOUNTER_TTL_MS, BATTLE_K, BATTLE_MIN, BATTLE_MAX,
 // BATTLE_TEAM_WEIGHTS, BATTLE_XP = wildLevel * xpPerWildLevel, CATCH_MULT, CATCH_MIN.
+// Raro = peso até este valor na escala normalizada para 100 (seção 5.3).
+export const RARE_WEIGHT_MAX = 10
+
 export const battleConfig = {
   shinyRate: 1 / 512,
   encounterTtlMs: 30 * 60 * 1000,

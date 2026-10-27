@@ -21,6 +21,7 @@ export type PendingEncounter = {
 export type RegionInfo = {
   slug: string
   name: string
+  gameRegion: 'kanto' | 'johto'
   minTrainerLevel: number
   wildLevelRange: [number, number]
   unlocked: boolean

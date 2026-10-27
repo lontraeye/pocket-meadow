@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
 import { encounterRoutes } from './routes/encounters.js'
@@ -7,6 +8,7 @@ import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
 
 migrateDatabase()
+loadRegions()
 
 const port = Number(process.env.PORT ?? 3001)
 if (!Number.isInteger(port) || port <= 0) {

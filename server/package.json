@@ -8,6 +8,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx scripts/seed-species.ts",
+    "seed:regions": "tsx scripts/seed-regions.ts",
     "sprites:download": "tsx scripts/download-sprites.ts",
     "sprites:pmd": "tsx scripts/pmd-sprites.ts",
     "typecheck": "tsc --noEmit",

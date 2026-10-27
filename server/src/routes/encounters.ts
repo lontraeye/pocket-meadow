@@ -97,9 +97,7 @@ function createEncounter(userId: number, region: Region, now: number) {
   const rngSeed = randomSeed()
   const rng = mulberry32(rngSeed)
   const wild = rollWild(rng, {
-    spawns: region.spawns,
-    levelMin: region.wildLevelRange[0],
-    levelMax: region.wildLevelRange[1],
+    slots: region.slots,
     shinyRate: Math.min(1, battleConfig.shinyRate * shinyBonus),
     rareMultiplier: rareBonus,
   })

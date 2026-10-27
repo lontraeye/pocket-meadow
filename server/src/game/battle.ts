@@ -1,9 +1,14 @@
-import { battleConfig } from '../config/battle.js'
+import { RARE_WEIGHT_MAX, battleConfig } from '../config/battle.js'
 import type { Rng } from './rng.js'
 
 export type SpawnWeight = {
   speciesId: number
   weight: number
+}
+
+export type SpawnSlot = SpawnWeight & {
+  minLevel: number
+  maxLevel: number
 }
 
 export type WildRoll = {
@@ -12,8 +17,8 @@ export type WildRoll = {
   isShiny: boolean
 }
 
-// Espécie, nível e shiny gastam um rng() cada, nessa ordem. A batalha é a 4ª
-// chamada e a captura a 5ª (PLANNING.md, seção 7).
+// Slot, nível dentro da faixa do slot e shiny gastam um rng() cada, nessa
+// ordem. A batalha é a 4ª chamada e a captura a 5ª (PLANNING.md, seção 7).
 export const wildRollCount = 3
 
 export function power(baseStatTotal: number, level: number): number {
@@ -47,29 +52,32 @@ export function fighterXp(wildLevel: number, teamSize: number): number {
   return Math.floor(battleXp(wildLevel) / teamSize)
 }
 
-// Raro = peso estritamente abaixo do maior da região. O multiplicador vem do
-// efeito rare_boost (Razz, inicial ×2).
+// Raro = espécie cuja soma dos slots fica até RARE_WEIGHT_MAX. A soma é por
+// espécie porque os slots são por faixa de nível: o Pidgey Nv 7 da Rota 1 tem
+// peso 1, mas o Pidgey soma 70. O multiplicador vem do efeito rare_boost
+// (Razz, inicial ×2).
 export function applyRareWeights<T extends SpawnWeight>(spawns: readonly T[], multiplier: number): T[] {
-  const top = Math.max(...spawns.map((spawn) => spawn.weight))
-  return spawns.map((spawn) => (spawn.weight < top ? { ...spawn, weight: spawn.weight * multiplier } : { ...spawn }))
+  const totals = new Map<number, number>()
+  for (const spawn of spawns) totals.set(spawn.speciesId, (totals.get(spawn.speciesId) ?? 0) + spawn.weight)
+  return spawns.map((spawn) =>
+    (totals.get(spawn.speciesId) ?? 0) <= RARE_WEIGHT_MAX ? { ...spawn, weight: spawn.weight * multiplier } : { ...spawn },
+  )
 }
 
 export function rollWild(
   rng: Rng,
   input: {
-    spawns: readonly SpawnWeight[]
-    levelMin: number
-    levelMax: number
+    slots: readonly SpawnSlot[]
     shinyRate: number
     rareMultiplier?: number
   },
 ): WildRoll {
   const rare = input.rareMultiplier
-  const spawns = rare !== undefined && rare !== 1 ? applyRareWeights(input.spawns, rare) : input.spawns
-  const speciesId = rollWeighted(spawns, rng).speciesId
-  const level = rollLevel(input.levelMin, input.levelMax, rng)
+  const slots = rare !== undefined && rare !== 1 ? applyRareWeights(input.slots, rare) : input.slots
+  const slot = rollWeighted(slots, rng)
+  const level = rollLevel(slot.minLevel, slot.maxLevel, rng)
   const isShiny = rng() < input.shinyRate
-  return { speciesId, level, isShiny }
+  return { speciesId: slot.speciesId, level, isShiny }
 }
 
 export function skipWildRolls(rng: Rng): void {

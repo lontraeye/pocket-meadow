@@ -19,12 +19,10 @@ import { mulberry32 } from './rng.js'
 import { grantXp } from './xp.js'
 
 const demo = {
-  spawns: [
-    { speciesId: 16, weight: 40 },
-    { speciesId: 25, weight: 5 },
+  slots: [
+    { speciesId: 16, weight: 40, minLevel: 2, maxLevel: 6 },
+    { speciesId: 25, weight: 5, minLevel: 2, maxLevel: 6 },
   ],
-  levelMin: 2,
-  levelMax: 6,
   shinyRate: battleConfig.shinyRate,
 }
 
@@ -46,17 +44,15 @@ describe('rng', () => {
 })
 
 describe('rolagens do encontro', () => {
-  test('a ordem é espécie, nível, shiny, batalha, captura', () => {
+  test('a ordem é slot, nível, shiny, batalha, captura', () => {
     const draws = [0.5, 0, 0, 0.1, 0.1]
     let index = 0
     const rng = () => draws[index++] ?? 1
     const wild = rollWild(rng, {
-      spawns: [
-        { speciesId: 16, weight: 1 },
-        { speciesId: 25, weight: 1 },
+      slots: [
+        { speciesId: 16, weight: 1, minLevel: 2, maxLevel: 5 },
+        { speciesId: 25, weight: 1, minLevel: 2, maxLevel: 5 },
       ],
-      levelMin: 2,
-      levelMax: 5,
       shinyRate: 0.5,
     })
     assert.deepEqual(wild, { speciesId: 25, level: 2, isShiny: true })
@@ -90,8 +86,14 @@ describe('rolagens do encontro', () => {
     assert.equal(low.isShiny, false)
     assert.equal(high.isShiny, true)
 
-    const narrow = rollWild(mulberry32(seed), { ...demo, levelMin: 2, levelMax: 2 })
-    const wide = rollWild(mulberry32(seed), { ...demo, levelMin: 9, levelMax: 9 })
+    const narrow = rollWild(mulberry32(seed), {
+      slots: demo.slots.map((slot) => ({ ...slot, minLevel: 2, maxLevel: 2 })),
+      shinyRate: demo.shinyRate,
+    })
+    const wide = rollWild(mulberry32(seed), {
+      slots: demo.slots.map((slot) => ({ ...slot, minLevel: 9, maxLevel: 9 })),
+      shinyRate: demo.shinyRate,
+    })
     assert.equal(narrow.speciesId, wide.speciesId)
     assert.equal(narrow.level, 2)
     assert.equal(wide.level, 9)
@@ -103,18 +105,19 @@ describe('rolagens do encontro', () => {
     assert.equal(boosted(), skipped())
   })
 
-  test('o bônus de raro dobra só quem não está no peso máximo', () => {
+  test('o bônus de raro dobra só espécies com peso até RARE_WEIGHT_MAX', () => {
     const boosted = applyRareWeights(
       [
-        { speciesId: 16, weight: 40 },
-        { speciesId: 19, weight: 40 },
-        { speciesId: 25, weight: 5 },
+        { speciesId: 16, weight: 50 },
+        { speciesId: 19, weight: 20 },
+        { speciesId: 25, weight: 10 },
+        { speciesId: 10, weight: 5 },
       ],
       2,
     )
     assert.deepEqual(
       boosted.map((spawn) => spawn.weight),
-      [40, 40, 10],
+      [50, 20, 20, 10],
     )
   })
 })
