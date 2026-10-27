@@ -53,6 +53,7 @@ export const evolutions = sqliteTable(
       .references(() => species.id),
     minLevel: integer('min_level').notNull(),
     candyCost: integer('candy_cost').notNull(),
+    viaTrade: integer('via_trade', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.fromSpeciesId, table.toSpeciesId] })],
 )

@@ -25,7 +25,7 @@ export type EvolutionChainPayload = {
 
 export type EvolutionLink = {
   species: { url: string }
-  evolution_details: { min_level: number | null }[]
+  evolution_details: { min_level: number | null; trigger: { name: string } }[]
   evolves_to: EvolutionLink[]
 }
 
@@ -56,6 +56,7 @@ export type EvolutionRow = {
   toSpeciesId: number
   minLevel: number
   candyCost: number
+  viaTrade: boolean
 }
 
 export type ParsedSpeciesSeed = {
@@ -108,11 +109,13 @@ export function parseSpeciesSeed(
         const fromApi = child.evolution_details.find((detail) => detail.min_level !== null)?.min_level
         const minLevel = fromApi ?? minLevelForStage(childStage)
         if (fromApi === undefined) defaultMinLevelCount += 1
+        const viaTrade = child.evolution_details.some((detail) => detail.trigger.name === 'trade')
         evolutions.push({
           fromSpeciesId: id,
           toSpeciesId: childId,
           minLevel,
           candyCost: candyCostForStage(childStage),
+          viaTrade,
         })
       }
       walk(child, chainId, childStage, id)

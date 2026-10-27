@@ -90,7 +90,7 @@ A pasta `server/src/game/` deve conter **funções puras** (recebem estado + `no
 - De `/pokemon-species/{id}`: `capture_rate`, `is_legendary`, `is_mythical`, `evolution_chain.url` (extrair o ID), `evolves_from_species`.
 - De `/evolution-chain/{id}`: pares de evolução (de → para) e `min_level` quando houver.
 
-Evoluções por item, amizade etc. são **simplificadas**: viram "por nível". Isso inclui a **evolução por troca**: ela também evolui por nível. A missão de NPC (seção 5.15) é um caminho alternativo, para evoluir antes. Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
+Evoluções por item, amizade etc. são **simplificadas**: viram "por nível". Isso inclui a **evolução por troca**: ela também evolui por nível. O seed marca essas evoluções com `via_trade` (`trigger` = `trade` em `evolution_details`), só para as missões de NPC (seção 5.15) saberem quais têm atalho. A marca não bloqueia nada. Se a PokéAPI não fornecer `min_level`, usar um valor padrão do config (ex.: estágio 1→2 no nível 16, 2→3 no nível 36).
 
 Respeitar a PokéAPI: fazer as requisições em sequência com pequeno delay e cachear as respostas em disco durante o seed.
 

@@ -60,7 +60,7 @@ export type OwnedPokemon = {
   location: 'garden' | 'daycare'
   caughtAt: number
   power: number
-  evolutions: { toSpeciesId: number; displayName: string; minLevel: number }[]
+  evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
 }
 
 export type ProgressionRules = {

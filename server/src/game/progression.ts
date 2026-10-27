@@ -76,6 +76,7 @@ export function evolutionBlock(
   level: number,
   minLevel: number,
 ): { ok: true } | { ok: false; error: 'level_too_low'; min: number } {
+  // Evolução por troca também sai por nível; a missão de NPC é só atalho (PLANNING.md, seção 5.15).
   if (level < minLevel) return { ok: false, error: 'level_too_low', min: minLevel }
   return { ok: true }
 }

@@ -93,15 +93,24 @@ function readState(userId: number, now: number) {
       fromSpeciesId: evolutions.fromSpeciesId,
       toSpeciesId: evolutions.toSpeciesId,
       minLevel: evolutions.minLevel,
+      viaTrade: evolutions.viaTrade,
       displayName: species.displayName,
     })
     .from(evolutions)
     .innerJoin(species, eq(evolutions.toSpeciesId, species.id))
     .all()
-  const evolutionsBySpecies = new Map<number, { toSpeciesId: number; displayName: string; minLevel: number }[]>()
+  const evolutionsBySpecies = new Map<
+    number,
+    { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
+  >()
   for (const option of options) {
     const list = evolutionsBySpecies.get(option.fromSpeciesId) ?? []
-    list.push({ toSpeciesId: option.toSpeciesId, displayName: option.displayName, minLevel: option.minLevel })
+    list.push({
+      toSpeciesId: option.toSpeciesId,
+      displayName: option.displayName,
+      minLevel: option.minLevel,
+      viaTrade: option.viaTrade,
+    })
     evolutionsBySpecies.set(option.fromSpeciesId, list)
   }
   for (const list of evolutionsBySpecies.values()) list.sort((a, b) => a.toSpeciesId - b.toSpeciesId)

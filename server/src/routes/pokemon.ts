@@ -351,7 +351,7 @@ type EvolutionResult = {
   isFavorite: boolean
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
-  evolutions: { toSpeciesId: number; displayName: string; minLevel: number }[]
+  evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
 }
 
 function patchOne(
@@ -429,12 +429,15 @@ function markCaught(userId: number, speciesId: number, isShiny: boolean, now: nu
     .run()
 }
 
-function evolutionsFrom(speciesId: number): { toSpeciesId: number; displayName: string; minLevel: number }[] {
+function evolutionsFrom(
+  speciesId: number,
+): { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[] {
   return getDb()
     .select({
       toSpeciesId: evolutions.toSpeciesId,
       displayName: species.displayName,
       minLevel: evolutions.minLevel,
+      viaTrade: evolutions.viaTrade,
     })
     .from(evolutions)
     .innerJoin(species, eq(evolutions.toSpeciesId, species.id))

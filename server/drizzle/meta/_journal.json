@@ -29,6 +29,13 @@
       "when": 1793063434255,
       "tag": "0003_base_experience",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793065454180,
+      "tag": "0004_via_trade",
+      "breakpoints": true
     }
   ]
 }

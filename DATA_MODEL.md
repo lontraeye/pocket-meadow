@@ -73,6 +73,7 @@ CREATE TABLE evolutions (
   to_species_id    INTEGER NOT NULL REFERENCES species(id),
   min_level        INTEGER NOT NULL,                 -- da PokéAPI ou padrão do config
   candy_cost       INTEGER NOT NULL,                 -- sem uso: evolução é só por nível (PLANNING.md, seção 5.8)
+  via_trade        INTEGER NOT NULL DEFAULT 0,       -- 1 = era troca nos jogos; evolui por nível igual, a missão de NPC é atalho (PLANNING.md, seção 5.15)
   PRIMARY KEY (from_species_id, to_species_id)
 );
 ```

@@ -1,0 +1,1 @@
+ALTER TABLE `evolutions` ADD `via_trade` integer DEFAULT false NOT NULL;
