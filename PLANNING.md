@@ -601,6 +601,8 @@ Nos jogos, nenhuma Pokédex fecha sem outra pessoa: há evoluções por troca e 
 - **Servidor decide:** cumprir e resgatar é uma ação em transação. O servidor confere o objetivo e se a missão já foi feita, e quem escolhe o Pokémon entregue é o jogador. Resgates numa tabela (`user_id`, `quest_key`, `claimed_at`), que pode ser a mesma do álbum.
 - **Visual:** o NPC pode morar no jardim ou numa tela de região, com um diálogo curto. Arte só com licença redistribuível (seção 4.3).
 
+**Mapa das espécies sem rota (tarefa futura).** Antes de especificar as missões, gerar a lista das espécies da faixa do seed que não dá para obter **em nenhuma região do config**, nem por evolução por nível a partir de uma espécie obtenível. Decidir uma a uma: entra numa região nova, vira missão ou fica para evento. A lista sai das regiões (`snapshots/regions.json`) e da tabela `evolutions`, com `via_trade` contando como "precisa de missão". Pode ser um script de relatório, no mesmo estilo do relatório do `pmd-sprites`. Rodar de novo sempre que entrar uma região, porque a lista diminui.
+
 Pontos a decidir:
 - Missões únicas ou repetíveis. Uma troca de Haunter por missão, ou o NPC aceita outros Haunters depois.
 - Se o NPC também troca espécie por espécie (dar um Pokémon e receber outro), como as trocas com NPC dos jogos.
