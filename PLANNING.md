@@ -110,7 +110,7 @@ e salva em `web/public/sprites/showdown/`. Não fazer hotlink em produção. No 
 Não há arte original como padrão. O visual é um mix de pixel art pronta e interface web estilizada:
 
 - Pokémon no jardim: sprites do PMD Sprite Collab (seção 4.5). Em detalhes, encontros e onde faltar PMD: os GIFs do Showdown, acima.
-- Cenário, ícones e props (grama, canteiro, berry, presente): pixel art gratuita. O repositório é público, então a licença precisa permitir redistribuição (CC0, CC-BY, CC BY-NC, OFL). Licença "grátis, mas sem redistribuir" não serve. Todo asset entra no `CREDITS.md`. Escalar com `image-rendering: pixelated`.
+- Cenário, ícones e props (grama, canteiro, berry, presente): pixel art gratuita. O repositório é público, então a licença precisa permitir redistribuição (CC0, CC-BY, CC BY-NC, OFL). **CC-BY-SA** é aceita só no módulo do avatar (seção 5.17), com as regras de lá. Licença "grátis, mas sem redistribuir" não serve. Todo asset entra no `CREDITS.md`. Escalar com `image-rendering: pixelated`.
 - Painéis, botões e texto: HTML e CSS, no mesmo clima, sem imitar um jogo em canvas.
 
 Pixel art feita à mão só entra quando não houver peça pronta que sirva. Não desenhar um set inteiro por conta própria.
@@ -777,6 +777,13 @@ O jogador monta o visual do próprio treinador, e isso é o começo de um **perf
 
 - **Avatar em camadas:** corpo, cabelo, roupa de cima, de baixo, calçado e acessório. Cada camada é uma folha de sprite, e o avatar é a sobreposição delas. O jogador escolhe por toque, com prévia, em mobile primeiro.
 - **Base pronta + peças próprias:** começar com um pacote pronto e, depois, o usuário desenha peças exclusivas. As peças próprias entram no `CREDITS.md` com a licença escolhida.
+- **Decidido: CC-BY-SA aceita só no avatar** (para poder usar a base LPC). Regras:
+  - arte CC-BY-SA numa pasta própria (ex.: `web/public/sprites/avatar/lpc/`) com arquivo de créditos próprio, como o `CREDITS-PMD.md`, listando autor, licença e link de cada peça e dizendo quando foi modificada;
+  - de peças com licença dupla CC-BY-SA ou GPL, usar sempre a CC-BY-SA;
+  - **peça derivada de uma peça LPC** (editada, recolorida, com pixels copiados) sai como CC-BY-SA;
+  - **peça própria desenhada do zero** (ex.: um boné exclusivo) fica com a licença que o usuário escolher, mesmo encaixando na base LPC. Para isso: desenhar numa camada própria, usar a base só como referência de tamanho e posição, sem copiar pixels dela, e exportar só a própria camada. Guardar numa pasta separada (ex.: `web/public/sprites/avatar/custom/`) com a licença indicada. O histórico do git serve de registro;
+  - no jogo, as camadas ficam em arquivos separados e são sobrepostas na hora. Nunca publicar uma imagem única que funda peças CC-BY-SA com arte CC BY-NC (PMD) ou com peças próprias de outra licença;
+  - o código do jogo não é afetado: carregar e desenhar a imagem não torna o código derivado.
 - **Candidatos a base** (conferir a licença de cada peça antes de usar, seção 4.3):
   - **LPC (Liberated Pixel Cup) e o gerador de personagens:** o mais completo, com centenas de peças. Mas a licença é misturada, com muitas peças CC-BY-SA ou GPL. CC-BY-SA não está na lista aceita hoje: ou se usa só as peças CC0 e CC-BY, ou se decide aceitar CC-BY-SA no projeto;
   - **Kenney, "Roguelike Characters":** CC0, pixel pequeno com partes trocáveis. É mais simples, sem problema de licença;
