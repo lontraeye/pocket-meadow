@@ -44,6 +44,8 @@
   let highlightCards = $state<HighlightCard[]>([])
   let regionsCache = $state<RegionInfo[] | null>(null)
   let swapping = $state<'fast' | 'charged' | null>(null)
+  /** Troca livre de golpe: só no `npm run dev` (a rota também exige DEV_TOOLS). */
+  const canSwapMoves = import.meta.env.DEV
 
   type SheetTab = 'perfil' | 'golpes' | 'treino'
   const sheetTabs: { key: SheetTab; label: string }[] = [
@@ -439,11 +441,13 @@
             <p class="hint effect">{mon.fastMove.effectText}</p>
           {/if}
         </div>
-        <button type="button" class="btn" disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
-          Trocar
-        </button>
+        {#if canSwapMoves}
+          <button type="button" class="btn" disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
+            Trocar
+          </button>
+        {/if}
       </div>
-      {#if swapping === 'fast'}
+      {#if canSwapMoves && swapping === 'fast'}
         <div class="coins picks">
           {#each mon.availableMoves.fast as move (move.name)}
             <button
@@ -476,16 +480,18 @@
             {/if}
           {/if}
         </div>
-        <button
-          type="button"
-          class="btn"
-          disabled={pending || mon.availableMoves.charged.length === 0}
-          onclick={() => (swapping = swapping === 'charged' ? null : 'charged')}
-        >
-          Trocar
-        </button>
+        {#if canSwapMoves}
+          <button
+            type="button"
+            class="btn"
+            disabled={pending || mon.availableMoves.charged.length === 0}
+            onclick={() => (swapping = swapping === 'charged' ? null : 'charged')}
+          >
+            Trocar
+          </button>
+        {/if}
       </div>
-      {#if swapping === 'charged'}
+      {#if canSwapMoves && swapping === 'charged'}
         <div class="coins picks">
           {#each mon.availableMoves.charged as move (move.name)}
             <button

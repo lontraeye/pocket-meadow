@@ -14,6 +14,7 @@ import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
 import { learnsetFor, movesByName } from '../seed/traitsData.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
+import { devToolsEnabled } from './dev.js'
 
 type Ok<T> = { ok: true } & T
 
@@ -64,7 +65,10 @@ pokemonRoutes.post('/:id/evolve', requireUser, async (c) => {
   return c.json(result.evolution)
 })
 
+// Troca livre na ficha: só em teste (DEV_TOOLS). Em produção o golpe muda
+// só pelos offers ao subir de nível / evoluir.
 pokemonRoutes.post('/:id/moves', requireUser, async (c) => {
+  if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
   const id = parseId(c.req.param('id'))
   if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
   const body = await readObject(c)
