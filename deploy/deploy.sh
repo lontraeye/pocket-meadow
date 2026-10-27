@@ -44,7 +44,9 @@ ssh_vm "bash -s" <<REMOTE
 set -euo pipefail
 base=/opt/pocket-meadow
 cd \$base/releases/$release/server
-sudo npm ci --omit=dev --no-audit --no-fund --loglevel=error
+# --ignore-scripts: o better-sqlite3 já traz o binário de Linux pronto, mas por
+# ter binding.gyp o npm tentaria compilar, e a VM não tem compilador.
+sudo npm ci --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error
 previous=\$(readlink \$base/current || true)
 sudo ln -sfn \$base/releases/$release \$base/current.new
 sudo mv -T \$base/current.new \$base/current
