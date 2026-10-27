@@ -64,6 +64,7 @@ O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta
 │  │  └─ index.ts
 │  └─ scripts/
 │     ├─ seed-species.ts    # puxa dados da PokéAPI e popula `species`/`evolutions`
+│     ├─ seed-regions.ts    # tabelas de encontro da PokéAPI → `snapshots/regions.json` (seção 5.3)
 │     ├─ download-sprites.ts
 │     └─ pmd-sprites.ts     # sprites do jardim (seção 4.5)
 ├─ web/
@@ -273,26 +274,78 @@ CC BY-NC 4.0 (os mais antigos usam `PMDCollab_1`/`PMDCollab_2`, também com cré
 - Calculada por timestamp (ver seção 6).
 
 ### 5.3 Regiões e spawn
-Definidas em config. Cada região tem:
-- `slug`, `name`, `minTrainerLevel`
-- `wildLevelRange` (ex.: 3–8)
-- `spawns`: lista de `{ speciesId, weight }`
+Cada região é uma área real dos jogos. A raridade e os níveis vêm das tabelas de encontro oficiais, pela PokéAPI, em vez de pesos inventados. Quem escolhe as áreas, a versão e o `minTrainerLevel` somos nós, no config. O script só traduz a área em pesos e níveis.
 
-Sorteio por peso. Exemplo:
+Nos nomes: **região**, no código e na API (`regions`, `region_slug`), é uma área jogável (rota, floresta, caverna). Kanto e Johto são a **região do jogo**, no campo `gameRegion`.
 
+#### Config (escrito à mão)
 ```ts
+// server/src/config/regions.ts
 {
-  slug: "route-1",
-  name: "Rota 1",
-  minTrainerLevel: 1,
-  wildLevelRange: [2, 6],
-  spawns: [
-    { speciesId: 16, weight: 40 },  // Pidgey
-    { speciesId: 19, weight: 40 },  // Rattata
-    { speciesId: 25, weight: 5 },   // Pikachu
-  ],
+  slug: 'viridian-forest',
+  name: 'Floresta Verde',
+  gameRegion: 'kanto',        // 'kanto' | 'johto'
+  minTrainerLevel: 3,
+  source: { area: 'viridian-forest-area', version: 'red' },
+  levelOverride: undefined,   // opcional: [min, max], quando a PokéAPI trouxer faixa estranha
+  exclude: [],                // opcional: speciesIds para tirar da tabela
 }
 ```
+
+- **A versão é escolhida por região, não por geração.** Exemplo: a Floresta Verde do Yellow não tem Pikachu, e a do Red tem 5%. Padrão: Yellow para Kanto e Crystal para Johto. Trocar só quando houver motivo, com um comentário no config dizendo qual.
+- Só o método `walk` (mato e caverna). Vara, surf e headbutt ficam para regiões próprias depois (ex.: um lago).
+- Espécies fora da faixa de `speciesSeed` são descartadas.
+- `gameRegion` sai no `GET /regions`, e a tela de exploração agrupa as regiões por ele. Por enquanto todas as regiões aparecem para todo jogador. A escolha de região inicial, que vai filtrar por `gameRegion` e definir o inicial, entra depois, com regras ainda a decidir.
+
+#### Script `server/scripts/seed-regions.ts` (`npm run seed:regions`)
+Usa o mesmo cache em disco e o mesmo delay do `seed-species.ts`. Para cada região:
+1. Lê `/location-area/{area}` e filtra `version_details` pela versão e `encounter_details` pelo método `walk`.
+2. **Slots:** cada `encounter_detail` é um slot `{ speciesId, minLevel, maxLevel, chance }`. Slots da mesma espécie com a mesma faixa somam a chance. Não juntar faixas diferentes: no Yellow, o Pidgey Nv 3 da Rota 1 sai 40% das vezes, e o Nv 7 sai 1%.
+3. **Período do dia** (Crystal): as condições `time-morning`, `time-day` e `time-night` formam três tabelas. Um slot sem condição de período entra nas três. O peso final é a média das três. (Usar o relógio do servidor para trocar a tabela fica para depois e exige um fuso fixo no config.)
+4. Normaliza os pesos para somar 100, com 1 casa decimal. Algumas tabelas da PokéAPI não somam 100.
+5. Aplica `exclude` e `levelOverride`. O override vale para todos os slots da região.
+6. Se a área não tiver nenhum slot `walk` na versão, o script falha com o nome da região. Nada de região vazia.
+
+Grava **`server/snapshots/regions.json`**, versionado, ordenado por slug e por slot. Rodar duas vezes não pode gerar diff. O servidor importa o JSON (sem banco) e junta com o config. Uma região do config sem entrada no snapshot é erro no boot.
+
+```json
+{
+  "viridian-forest": {
+    "area": "viridian-forest-area",
+    "version": "red",
+    "slots": [
+      { "speciesId": 13, "minLevel": 3, "maxLevel": 5, "weight": 45 },
+      { "speciesId": 25, "minLevel": 3, "maxLevel": 5, "weight": 5 }
+    ]
+  }
+}
+```
+
+#### Sorteio
+Continua com 3 chamadas ao `rng()`, na ordem da seção 7: (1) slot por peso, (2) nível dentro da faixa do slot, (3) shiny. O nível passa a vir do slot sorteado, não de uma faixa única da região. `GET /regions` mostra `wildLevelRange` = menor e maior nível entre os slots, sem revelar a tabela.
+
+#### Raridade
+- **Raro** = slot com peso ≤ `RARE_WEIGHT_MAX` (inicial: 10, na escala normalizada para 100). O Razz (seção 5.10) multiplica só esses slots. Substitui a regra antiga "abaixo do maior peso", que na Rota 1 dobrava Caterpie e Weedle.
+- Espécies que não aparecem no mato (iniciais, fósseis, lendários, presentes) ficam fora das regiões por enquanto. Ver questões em aberto.
+
+#### Regiões iniciais
+Três por região do jogo, com a mesma escada de nível. Substituem as três atuais. A Rota 30 do config atual não bate com o jogo: Sentret e Mareep não aparecem lá no Crystal.
+
+| Região | `gameRegion` | Área / versão | `minTrainerLevel` | O que sai (aprox.) |
+|---|---|---|---|---|
+| Rota 1 | kanto | `kanto-route-1-area` / yellow | 1 | Pidgey 70, Rattata 30 · Nv 2–7 |
+| Floresta Verde | kanto | `viridian-forest-area` / red | 3 | Weedle 45, Kakuna 40, Caterpie 5, Metapod 5, Pikachu 5 · Nv 3–6 |
+| Mt. Moon | kanto | `mt-moon-1f` / yellow | 6 | Zubat 75, Geodude 20, Sandshrew 4, Clefairy 1 · Nv 6–12 |
+| Rota 29 | johto | `johto-route-29-area` / crystal | 1 | Pidgey 33, Sentret 27, Rattata 18, Hoothoot 18, Hoppip 3 · Nv 2–3 |
+| Rota 30 | johto | `johto-route-30-area` / crystal | 3 | Caterpie 33, Pidgey 17, Hoothoot 15, Ledyba 10, Spinarak 10, Poliwag 7, Weedle 3, Hoppip 3, Zubat 2 · Nv 3–4 |
+| Union Cave | johto | `union-cave-1f` / crystal | 6 | Geodude 30, Rattata 20, Sandshrew 20, Zubat 18, Wooper 7, Onix 5 · Nv 4–7 |
+
+Os pesos do Crystal já são a média dos três períodos. Próximas candidatas, já conferidas na PokéAPI: Rota 22 (Nidoran ♀/♂, Mankey), Rota 24/25 (Oddish, Bellsprout), Rota 31 e Rota 32 (Crystal).
+
+#### Pronto quando
+- `npm run seed:regions` gera o snapshot do zero e de novo sem diff.
+- Os testes cobrem: soma 100 por região, slots dentro da faixa de espécies, Razz mexendo só em slots raros, média dos períodos e o sorteio em 3 chamadas.
+- O replay pela seed (seção 7) continua batendo com o encontro salvo.
 
 - **Shiny**: chance `SHINY_RATE` (inicial: 1/512), possivelmente aumentada por berry.
 
@@ -374,7 +427,7 @@ Sorteio por peso. Exemplo:
 |---|---|---|
 | Oran | 30 min | +2 energia imediata |
 | Pinap | 2 h | Próxima captura com chance ×1.5 |
-| Razz | 4 h | Próximo encontro com pesos de raros dobrados |
+| Razz | 4 h | Próximo encontro com pesos dos slots raros dobrados (seção 5.3) |
 | Nanab | 6 h | Daycare ×2 de XP por 2 h |
 | Lum | 12 h | Próximo encontro com chance de shiny ×4 |
 
@@ -489,5 +542,5 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 ## 10. Questões em aberto
 - Mais de uma tentativa de captura por encontro (gastando algo)?
 - Pokémon com IVs/natures ou só nível?
-- Encontros de lendários: só em regiões especiais ou eventos?
+- Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
