@@ -398,8 +398,11 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   candies = RELEASE_BASE + floor(level / RELEASE_LEVEL_DIV)   // inicial: 3 + floor(level / 5)
   ```
   Shiny dá multiplicador (inicial ×3).
-- Também concede **doce genérico** (`RELEASE_GENERIC`, inicial: 1), usável em qualquer Pokémon a uma taxa pior (ex.: 3 genéricos = 1 doce específico).
-- Não é possível soltar um Pokémon que está no daycare. Confirmar no frontend antes de soltar shiny ou favorito.
+- Também concede **doce genérico** (`RELEASE_GENERIC`, inicial: 1, sem multiplicador de shiny), usável em qualquer Pokémon a uma taxa pior: `GENERIC_PER_CANDY` genéricos (inicial: 3) valem 1 doce específico.
+- Não é possível soltar um Pokémon que está no daycare, nem o último Pokémon do jogador. Confirmar no frontend antes de soltar shiny ou favorito.
+- **Soltar vários de uma vez.** Duplicata é o recurso principal, e soltar 20 Pidgeys um por um no celular é inviável. `POST /pokemon/release` recebe `{ pokemonIds }` (1 a `RELEASE_MAX_PER_REQUEST`, inicial: 50, distintos). É tudo ou nada, numa transação: se um id não puder ser solto, nada é solto, e a resposta diz qual id e por quê. A regra "não ficar com zero" vale para o lote inteiro.
+- Soltar incrementa `trainers.total_releases`. Os encontros que citam o Pokémon (`caught_pokemon_id`, `encounter_fighters.pokemon_id`) ficam com NULL pelo `ON DELETE SET NULL` que já existe.
+- A resposta traz, por linha evolutiva, os doces creditados e o saldo novo, e também o genérico creditado e o saldo novo.
 
 ### 5.8 Nível, XP e evolução
 - Nível máximo: `LEVEL_CAP` (inicial: 100).
@@ -409,6 +412,50 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   ```
 - Fontes de XP do Pokémon: vencer batalha (`BATTLE_XP = wildLevel * 5`), daycare, e **usar doces** (cada doce = `CANDY_XP` XP, inicial: 25).
 - **Evolução**: requer `level >= minLevel` da evolução **e** custo em doces da linha (inicial: estágio 1→2 custa 25, 2→3 custa 100). Mantém nível, XP, shiny e apelido.
+
+#### Alimentar (`POST /pokemon/:id/feed`)
+- Corpo: `{ candies, useGeneric? }`. `candies` é a quantidade de **doses**, de 1 a `FEED_MAX_PER_REQUEST` (inicial: 999). Cada dose dá `CANDY_XP`.
+- `useGeneric: false` (padrão): cada dose debita 1 doce da linha. `useGeneric: true`: cada dose debita `GENERIC_PER_CANDY` genéricos. Não mistura as duas moedas na mesma chamada.
+- **Sem desperdício:** o servidor consome no máximo as doses necessárias para chegar ao `LEVEL_CAP` e devolve quantas consumiu de fato. Pokémon no nível máximo responde erro `level_cap`.
+- Saldo insuficiente para o pedido responde `not_enough_candies`, sem consumir nada. O front limita o seletor ao saldo, mas quem valida é o servidor.
+- Pokémon no daycare não pode ser alimentado (o daycare já dá XP; evita conta dupla no catch-up).
+- A resposta traz as doses consumidas, os doces debitados, o XP ganho, os níveis subidos, o nível e XP novos e o saldo novo.
+
+#### Evoluir (`POST /pokemon/:id/evolve`)
+- Corpo: `{ toSpeciesId }`. Precisa existir a linha em `evolutions` saindo da espécie atual para `toSpeciesId`, o que cobre as ramificações, como Eevee e Gloom.
+- Valida que o Pokémon é do jogador, está no jardim, tem `level >= minLevel` e que há `candyCost` doces **da linha**. Genérico não paga evolução.
+- Troca `species_id` e mantém nível, XP, shiny, apelido e favorito. `original_species_id` não muda.
+- Pokédex: a nova espécie conta como vista e capturada (cria a entrada, se não existir, com `seen_count` e `caught_count` +1, `first_seen_at` e `first_caught_at` se ainda forem nulos, e `shiny_caught` se for shiny).
+- XP de treinador: `EVOLVE_XP_BY_STAGE` (inicial: 30 para chegar ao estágio 2, 60 para o 3), pelo estágio da espécie nova. Pode subir o nível de treinador e abrir regiões.
+- Erros: `evolution_not_found`, `level_too_low` (com o nível pedido), `not_enough_candies` (com o custo) e `in_daycare`.
+- **O estado precisa mostrar as opções.** `GET /state` passa a trazer, em cada Pokémon, `evolutions: [{ toSpeciesId, displayName, minLevel, candyCost }]`. O front mostra o que falta (nível ou doces), mas só o servidor decide.
+
+#### Ritmo (para revisar depois de jogar)
+Com os valores iniciais, o doce custa caro nos níveis altos, porque `CANDY_XP` é fixo e `xpToNext` cresce:
+
+| Trecho | XP | Doces | Solturas de Pokémon Nv 3 (3 doces) |
+|---|---|---|---|
+| Nv 5 → 16 (1ª evolução) | ~3.600 | ~145 | ~49 |
+| Nv 16 → 36 (2ª evolução) | ~26.000 | ~1.050 | ~350 |
+
+A primeira evolução sai em cerca de um dia de jogo. A segunda leva uma semana só de doce, sem contar batalha e daycare. Não mexer agora. Rever com a Fase 3 rodando, mexendo em `CANDY_XP`, nos doces por soltura ou nos níveis mínimos de evolução, que ficam todos em config.
+
+#### Apelido e favorito (`PATCH /pokemon/:id`)
+- `{ nickname?, isFavorite? }`. Apelido: texto aparado, de 1 a 12 caracteres, sem caracteres de controle. `null` ou vazio volta ao nome da espécie. Vale também para Pokémon no daycare.
+
+#### Coleção e detalhes (front)
+O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê e mexe em todos.
+
+- **Entrada:** botão **Coleção** no dock de baixo, ao lado de **Explorar**.
+- **Lista:** grade de cartões, com 3 colunas em 360px. Cada cartão tem sprite, nome ou apelido, nível e marcas de shiny e favorito. Os sprites usam `loading="lazy"`, porque a coleção pode ter centenas de GIFs.
+- **Busca e filtros:** busca por nome ou apelido. Filtros em chips: Todos, Favoritos, Shiny, Repetidos (espécies com mais de um) e No daycare. Ordenação: recentes (`caughtAt`), nível, número da Pokédex e nome. O filtro e a ordenação ficam no `localStorage`, com try/catch.
+- **Detalhes:** tocar no cartão abre o mesmo sheet do jardim. Ele vira um componente único (ex.: `PokemonSheet.svelte`), usado pelo jardim e pela coleção. O sheet mostra:
+  - sprite, apelido editável, favorito, nível, barra de XP, poder, doces da linha e genéricos;
+  - **Alimentar:** seletor de doses com − e +, alvos de 44px, limitado pelo saldo e pelo nível máximo. Mostra antes "+X XP → Nv Y" e permite escolher entre doce da linha e genérico;
+  - **Evoluir:** uma opção por destino, com o requisito que falta quando não dá. Ao evoluir, troca o sprite e mostra uma pequena animação, respeitando `prefers-reduced-motion`;
+  - **Soltar:** mostra quantos doces vai render. Pede confirmação para shiny ou favorito. Fica desativado, com o motivo, para o último Pokémon e para quem está no daycare.
+- **Soltar vários:** um modo "Selecionar" na coleção. Tocar marca os cartões. Uma barra fixa embaixo mostra "Soltar N · +X doces". Se o lote tiver shiny ou favorito, a confirmação lista quais são. O filtro Repetidos combinado com "selecionar todos menos o de maior nível" é o atalho principal.
+- Nada depende de hover. Ações principais embaixo, ao alcance do polegar (seção 4.4).
 
 ### 5.9 Daycare
 - Slots limitados: começa com 1, +1 nos níveis de treinador definidos em config (ex.: 5, 15, 30).
@@ -557,9 +604,10 @@ Todas as rotas exigem sessão, exceto auth. Todas aplicam catch-up antes.
 | POST | `/encounters/:id/battle` | `{ pokemonIds }` (1 a 3, distintos) → resolve batalha e, se vencer, captura |
 | POST | `/encounters/:id/flee` | Encerra encontro |
 | POST | `/pokemon/:id/release` | Solta e credita doces |
-| POST | `/pokemon/:id/feed` | `{ candies, useGeneric? }` → aplica XP |
-| POST | `/pokemon/:id/evolve` | `{ toSpeciesId }` |
-| PATCH | `/pokemon/:id` | Apelido, favorito |
+| POST | `/pokemon/release` | `{ pokemonIds }` (1 a 50) → solta vários, tudo ou nada |
+| POST | `/pokemon/:id/feed` | `{ candies, useGeneric? }` → aplica XP (seção 5.8) |
+| POST | `/pokemon/:id/evolve` | `{ toSpeciesId }` (seção 5.8) |
+| PATCH | `/pokemon/:id` | `{ nickname?, isFavorite? }` |
 | POST | `/daycare/:slot` | `{ pokemonId }` → coloca |
 | DELETE | `/daycare/:slot` | Retira e aplica XP |
 | POST | `/plots/:index/plant` | `{ berryKey }` |
@@ -590,8 +638,13 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Encontro, batalha, captura, XP de treinador e desbloqueio de regiões.
 
 **Fase 3 — Progressão**
-- Soltar, doces, alimentar, evoluir.
-- Tela de coleção (lista/filtro) e tela de detalhes.
+- Soltar (um ou vários), doces, alimentar, evoluir, apelido e favorito (seções 5.7 e 5.8).
+- Tela de coleção (lista, busca, filtros e seleção múltipla) e sheet de detalhes compartilhado com o jardim.
+- Pronto quando:
+  - o ciclo "capturar repetido → soltar → alimentar → evoluir" funciona inteiro em 360px;
+  - as transações da seção 7 do `DATA_MODEL.md` estão cobertas;
+  - as funções puras de doces, alimentação e evolução em `game/` têm teste;
+  - nenhuma ação deixa o jogador com zero Pokémon nem com saldo negativo.
 
 **Fase 4 — Daycare**
 

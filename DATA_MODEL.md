@@ -327,9 +327,9 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 |---|---|
 | Criar encontro | catch-up → validar região/energia/sem pendente → `energy -= 1` → consumir efeitos de encontro → inserir encontro → atualizar pokédex (visto) |
 | Batalhar | catch-up → validar encontro pendente e time (1 a 3, distintos, no jardim, do jogador) → rolar vitória → inserir `encounter_fighters` → (se venceu) XP dividido entre o time, XP do treinador, rolar captura e, se capturou, inserir Pokémon → atualizar status do encontro e pokédex |
-| Soltar | validar (não está no daycare, não é o último Pokémon) → apagar → creditar `candies` + `generic_candies` |
-| Alimentar | validar saldo → debitar doces → aplicar XP e level ups |
-| Evoluir | validar `min_level` e doces → debitar → trocar `species_id` → pokédex |
+| Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
+| Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
+| Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`, doces da linha) → debitar → trocar `species_id` → pokédex (vista e capturada) → XP do treinador |
 | Colher | validar `ready_at <= now` → apagar canteiro → creditar berries/sementes |
 
 Regra de segurança: o jogador **nunca** pode ficar com zero Pokémon (bloquear soltar o último).
