@@ -414,6 +414,7 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
 Anotado para depois. Precisa de especificação própria.
 - Tipos de bola com multiplicador na captura (ex.: Poké Ball ×1, Great Ball ×1,5, Ultra Ball ×2), todos em config. O multiplicador entra na fórmula acima, ao lado do `berryBonus`.
 - As bolas são itens do `inventory` (`ball:poke`, `ball:great`…), sem tabela nova.
+- **Sprites:** cada bola com o seu ícone do `PokeAPI/sprites` (`items/poke-ball.png`, `great-ball.png`, `ultra-ball.png`…), baixados pelo mesmo script e com o mesmo crédito da Poké Ball da parte 6.2. A cena de captura da 6.2 deve receber a bola como parâmetro, para trocar o sprite sem mexer na animação.
 - Responde a questão em aberto "mais de uma tentativa de captura por encontro": cada tentativa gasta uma bola, e o jogador escolhe qual usar. Cada tentativa é uma rolagem a mais no PRNG (seção 7), na ordem em que foram feitas.
 - A decidir:
   - de onde vêm as bolas (inicial, recompensa de nível de treinador, álbum da seção 5.12, colheita);
@@ -681,6 +682,35 @@ Anotado depois do teste da Fase 2. Hoje o encontro é seco: abre a rota, aparece
 
 Sugestão: começar pelo formato 1. Ele já dá o "juice" e cabe no modelo atual (uma requisição por batalha). O formato 2 pode vir depois, se fizer falta.
 
+**Decidido: lutar e capturar viram dois passos** (pedido do usuário, 2026-10-27). Nem toda luta precisa terminar em captura. Com as pokébolas craftadas (seções 5.6 e 5.16), gastar bola tem custo, e às vezes o jogador só quer o XP.
+1. **Luta em turnos:** "eu bato, ele bate", até um lado cair. O servidor decide a luta inteira com a seed do encontro e devolve o log de turnos. O front anima o log (formato 1 acima). A vitória dá o XP como hoje.
+2. **Depois de vencer, o jogador decide:** vê a **chance de captura** com cada bola que tem e escolhe **lançar** (qual bola) ou **deixar ir**. Só ao lançar a bola é gasta e a captura é rolada.
+
+O que isso muda no modelo atual:
+- **Encontro com estado intermediário:** depois da vitória, o encontro fica esperando a decisão (ex.: status `won`) até o jogador lançar, deixar ir ou o encontro expirar. Hoje a batalha já resolve a captura na mesma requisição. Mudar o `CHECK` de `status` no SQLite pede reconstruir a tabela (migração, testada num banco com dados).
+- **Rotas:** `POST /encounters/:id/battle` só luta. Rotas novas: `POST /encounters/:id/throw` (`{ ball }`) e `POST /encounters/:id/release`, este último para deixar ir.
+- **PRNG (seção 7):** a ordem continua fixa, mas a captura passa a ser rolada só quando o jogador lança. Com várias tentativas (uma por bola), cada uma é a próxima rolagem da sequência. A semente da batalha (seção 5.10) continua logo depois da vitória.
+- **`winChance` e o log:** a luta em turnos pode continuar com a chance da seção 5.5 como base, decidindo quem vence e gerando um log coerente com isso, ou virar uma simulação de verdade com HP e dano. Decidir junto com os tipos e os ataques.
+- **A cena da parte 6.2** passa a ser só a parte da captura. A luta ganha a sua própria animação, com os golpes do PMD e os fallbacks genéricos.
+- **Até existirem pokébolas como item,** a Poké Ball é infinita, mas a escolha de lançar ou deixar ir já existe.
+
+**Decidido: golpes e atributos individuais** (2026-10-27). O combate fica bem mais simples que o dos jogos principais, mas com algum nível de complexidade:
+- **Dois golpes por Pokémon:** um **golpe rápido** (dano pequeno, carrega energia) e um **golpe carregado**, a "ult" (dano alto, gasta a energia acumulada). É a mesma ideia de ritmo dos jogos mobile: bater, carregar, soltar a ult.
+- **IVs e EVs** por Pokémon, para dois do mesmo nível não serem iguais:
+  - **IVs** sorteados na captura, com o PRNG do encontro (entram na ordem da seção 7, depois da captura). O inicial também ganha IVs;
+  - **EVs** ganhos ao vencer batalhas, pelo `effort` que a PokéAPI informa por espécie (o "EV yield"), com teto por atributo e no total;
+  - **atributos finais** (HP, Ataque, Defesa…) calculados de base + IV + EV + nível por uma fórmula no config, e usados no dano. Substituem o `power` atual (`BST × (1 + nível/10)`) na luta.
+- **Tipos contam:** tabela de efetividade e bônus de mesmo tipo (STAB) no config.
+
+Pontos a decidir antes de especificar:
+- **De onde vêm os golpes.** A PokéAPI tem os golpes que cada espécie aprende e o poder e o tipo de cada um, mas não tem os números de golpe rápido e carregado (energia, duração). Caminhos: uma tabela própria de golpes no config, com um golpe padrão por tipo para cobrir as 251 espécies rápido, mais ajustes por espécie onde fizer diferença; ou montar a partir da PokéAPI com regras (ex.: golpe físico fraco vira rápido, especial forte vira carregado). Os números são nossos, não copiados de outro jogo.
+- **Os golpes são fixos por espécie ou variam por Pokémon** (sorteados na captura, trocáveis com algum item ou doce).
+- **Faixa dos IVs:** 0–15 (mais simples de mostrar) ou 0–31. E se entram natures. Hoje: IVs e EVs, sem natures.
+- **Pokémon que já existem** quando os IVs entrarem: sortear IVs na migração ou usar um valor médio fixo.
+- **A luta:** simulação de verdade turno a turno (HP, dano, energia, quando soltar a ult) no lugar da `winChance`, ou a `winChance` decide e a simulação só gera um log coerente. Com IVs, EVs e tipos, a simulação de verdade faz mais sentido. O balanceamento vai precisar de testes.
+- **Mostrar ao jogador:** uma avaliação dos IVs no sheet (ex.: estrelas), os dois golpes e a efetividade contra o selvagem antes de lutar.
+- **Escopo:** é um bloco grande (dados de golpes, migração de IVs e EVs, simulação, animação). Vale dividir em partes como a Fase 6.
+
 **Sprites da batalha: PMD em vez do Showdown.** O pack do PMD Sprite Collab (seção 4.5), que já usamos no jardim, tem animações de golpe por Pokémon, nas 8 direções. Conferido no commit fixado em `config/pmd.ts`:
 - Comuns a todos os conferidos: `Attack`, `Strike`, `Shoot`, `Charge`, `Hurt`, `Swing`, `Hop` e `Rotate`.
 - Golpes próprios em alguns: `Shock` (Pikachu), `Lick` (Gengar), `Stomp` (Snorlax), `Rumble` (Gyarados).
@@ -758,6 +788,15 @@ O jogador constrói o próprio jardim: transforma terrenos em biomas, coloca má
 - **Biomas dão bônus e atraem Pokémon.** Cada bioma (grama, água, pedra, areia, caverna…) dá bônus a certos tipos e **atrai visitantes**: espécies que aparecem no jardim e podem ser encontradas ali. É o segundo jeito de obter espécies, ao lado das rotas, e resolve parte do mapa das espécies sem rota (5.15).
 - **Modo de edição** para construir. Escolher um bloco e o que colocar, por toque, sem arrastar com precisão. Mobile primeiro (seção 4.4).
 - **Arte:** o usuário faz a pixel art (tiles de bioma, máquinas, itens que faltarem), mesmo que simples. Antes, mapear a lista de peças necessárias. Arte própria entra no `CREDITS.md` com a licença escolhida para ela. Peças de terceiros seguem a seção 4.3.
+
+**Crafting com Pokémon trabalhando (ideia, junto desta seção):** um sistema de receitas com **árvore de ingredientes**, em que Pokémon trabalham nas estações para produzir. A referência de gênero é Pokémon trabalhando numa base (Palworld, Pokopia), com regras próprias.
+- **Receitas em config:** entradas (itens e quantidades), saída, tempo, estação e requisito de trabalhador (tipo, espécie e, depois, habilidade). Receita nova entra só no config.
+- **Árvore:** os ingredientes básicos vêm do que já existe (berries, sementes, doces genéricos, drops de batalha). Os intermediários são feitos em estações e viram entrada de outras receitas, até chegar nos itens finais: itens de evolução (pedras), itens de bioma, peças de máquina, pokébolas (seção 5.6) e roupas do avatar (5.17). Cada item final tem pelo menos um caminho de craft além dos outros jeitos de conseguir.
+- **Trabalhadores:** o mesmo modelo dos operadores de máquina. O Pokémon fica alocado, sai do jardim e não batalha, e o jardim nunca fica vazio. O nível ou a espécie certa podem acelerar ou render mais.
+- **Produção por horário, sem loop no servidor** (seção 2): cada trabalho guarda início e fim (`ready_at`), e o servidor entrega ao coletar. Uma fila por estação é possível, sempre calculada sob demanda.
+- **Debitar as entradas ao iniciar**, numa transação. Cancelar devolve todas as entradas, ou só parte delas (decidir).
+- Pede tabelas novas (ex.: `craft_jobs`: estação, receita, trabalhador, `started_at`, `ready_at`) e migração. Os itens continuam no `inventory`.
+- Liga com o aviso de "pronto" da Fase 6.1 (trabalho pronto entra na mesma lista).
 
 **Pontos a decidir quando for especificar:**
 - **Modelo de dados:** blocos do jardim (`garden_tiles`: posição, bioma, objeto), máquinas (`machines`: tipo, posição, operador, `ready_at`) e quais biomas e máquinas estão liberados. Tudo pede migração. Desbloqueios derivados do nível ficam fora do banco (`DATA_MODEL.md`, seção 3). Desbloqueios conquistados ficam no banco.
@@ -924,9 +963,22 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 - Sem rota nova e sem mudança de schema.
 
 *6.2 — Captura com suspense e destaques de progresso*
-- A pokébola chacoalha de 1 a 3 vezes antes do resultado, e há uma comemoração ao capturar. O resultado já veio do servidor, e a animação só encena. O número de chacoalhadas é derivado da chance de captura, só para a cena, sem rolagem nova.
-- Destaques (não só texto) para: subir de nível (Pokémon e treinador), "pode evoluir", evolução, região nova liberada, semente ganha e recompensas de nível.
-- `prefers-reduced-motion`: sem animação, resultado direto.
+- **A resposta da batalha chega inteira antes da cena.** A animação só encena um resultado já decidido. Nada de nova requisição nem rolagem no meio.
+- **Sequência da cena** (curta, no máximo ~3 s, e um toque pula para o fim):
+  1. **choque:** o selvagem e o time se aproximam, e o lado que perdeu treme (fallback de dano da seção 5.13);
+  2. **derrota:** o selvagem fica, o time recua, e mostra "Derrota". Sem pokébola;
+  3. **vitória:** a pokébola é lançada e o selvagem some nela;
+  4. **chacoalhadas**, só para a cena: capturou → 3 e um "clique" com comemoração (brilho e confete em CSS); escapou → 1 ou 2, mais quando a `catchChance` era alta (`1 + (catchChance >= 0,5 ? 1 : 0)`), e o selvagem sai da bola.
+- **Sprite da pokébola:** `items/poke-ball.png` do `PokeAPI/sprites`, baixado pelo mesmo script dos ícones das berries, com o mesmo status, creditado no `CREDITS.md`. Escala inteira com `image-rendering: pixelated`.
+- **Destaques depois da cena**, como cartões curtos em sequência, e não texto solto no meio:
+  - XP de cada lutador e "subiu para Nv X";
+  - **"pode evoluir"** quando um lutador passou do `minLevel` de alguma evolução (o front já tem `evolutions` no estado);
+  - nível de treinador;
+  - **região nova liberada**: as regiões com `minTrainerLevel` entre o nível antigo e o novo;
+  - semente ganha e recompensas de nível.
+- **Os mesmos destaques em outras ações:** evoluir (a animação de "pop" já existe), alimentar com level up e retirar do daycare com níveis ganhos. Um componente só para os destaques, usado por todas essas telas.
+- `prefers-reduced-motion`: sem a cena, direto aos destaques, que também aparecem sem animação.
+- Sem mudança no servidor. Se faltar algum dado na resposta para os destaques, acrescentar na resposta, sem mudar regra.
 
 *6.3 — Sons*
 - Sons curtos nos momentos da 6.2 e em ações (colher, soltar, botão principal). Botão de mudo lembrado no `localStorage`. No celular, o som só toca depois do primeiro toque, por regra do navegador.
@@ -948,7 +1000,7 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 
 ## 10. Questões em aberto
 - Mais de uma tentativa de captura por encontro (gastando algo)?
-- Pokémon com IVs/natures ou só nível?
+- ~~Pokémon com IVs/natures ou só nível?~~ Decidido: IVs e EVs, sem natures por enquanto (seção 5.13).
 - Lendários e espécies que não aparecem no mato (iniciais, fósseis, presentes): regiões especiais, eventos ou peso derivado do `capture_rate`?
 - Ranking entre jogadores? A visita ao jardim de outra pessoa já está decidida; o ranking, não.
 

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { api, errorText, type ApiError, type DaycareSlot, type GameState, type OwnedPokemon } from './api'
+  import Highlights from './Highlights.svelte'
+  import { xpHighlightCards, type HighlightCard } from './highlights'
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
@@ -9,6 +11,7 @@
   let pickingSlot = $state<number | null>(null)
   let message = $state('')
   let pending = $state(false)
+  let highlightCards = $state<HighlightCard[]>([])
 
   const byId = $derived(new Map(game.pokemon.map((mon) => [mon.id, mon])))
   const occupied = $derived(new Map(game.daycare.slots.map((slot) => [slot.slotIndex, slot])))
@@ -67,11 +70,25 @@
   }
 
   async function withdraw(slotIndex: number) {
+    const card = cards.find((row) => row.kind === 'filled' && row.slotIndex === slotIndex)
+    const mon = card && card.kind === 'filled' ? card.mon : null
     const result = await run(`/api/daycare/${slotIndex}`, undefined, 'DELETE')
     if (!result) return
     const xp = Number(result.xpGained ?? 0)
     const levels = Number(result.levelsGained ?? 0)
-    message = `+${xp} XP · +${levels} nível${levels === 1 ? '' : 's'}`
+    const level = Number(result.level ?? mon?.level ?? 0)
+    const before = level - levels
+    if (levels > 0 && mon) {
+      highlightCards = xpHighlightCards({
+        name: mon.nickname ?? mon.displayName,
+        xpGained: xp,
+        levelsGained: levels,
+        level,
+        canEvolve: mon.evolutions.some((option) => before < option.minLevel && level >= option.minLevel),
+      })
+    } else {
+      message = `+${xp} XP · +${levels} nível${levels === 1 ? '' : 's'}`
+    }
   }
 
   async function advance(hours: number) {
@@ -90,6 +107,11 @@
 
 <div class="daycare">
   <div class="scroll">
+    {#if highlightCards.length > 0}
+      <section class="panel">
+        <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
+      </section>
+    {/if}
     {#if message}<p class="alert" role="status">{message}</p>{/if}
     <p class="hint">Slots {game.daycare.slotsUnlocked} · o XP para quando o tempo enche.</p>
 

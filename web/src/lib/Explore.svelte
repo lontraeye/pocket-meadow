@@ -4,24 +4,26 @@
   import { onMount, untrack } from 'svelte'
   import {
     api,
-    berryIconSrc,
     effectLabel,
     errorText,
-    itemLabel,
     type ApiError,
     type BattleOutcome,
     type GameState,
+    type OwnedPokemon,
     type PendingEncounter,
     type RegionInfo,
   } from './api'
   import { percent, previewWinChance } from './battle'
+  import BattleScene from './BattleScene.svelte'
+  import Highlights from './Highlights.svelte'
+  import { battleHighlightCards, prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Step = 'regions' | 'encounter' | 'result'
-  type Result = { kind: 'fled' } | { kind: 'battle'; battle: BattleOutcome }
+  type Step = 'regions' | 'encounter' | 'scene' | 'highlights' | 'result'
+  type Result = { kind: 'fled' } | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[] }
 
   let step = $state<Step>(untrack(() => (game.encounter ? 'encounter' : 'regions')))
   let encounter = $state<PendingEncounter | null>(untrack(() => game.encounter))
@@ -31,6 +33,7 @@
   let message = $state('')
   let pending = $state(false)
   let time = $state(0)
+  let battleCards = $state<ReturnType<typeof battleHighlightCards>>([])
 
   const clock = serverClock(() => game.now)
 
@@ -118,6 +121,7 @@
     if (!encounter || chosen.length === 0) return
     pending = true
     message = ''
+    const teamSnapshot = [...chosen]
     try {
       const response = await api(`/api/encounters/${encounter.id}/battle`, { pokemonIds: chosen.map((mon) => mon.id) })
       if (!response.ok) {
@@ -129,14 +133,30 @@
         await onState()
         return
       }
-      result = { kind: 'battle', battle: (await response.json()) as BattleOutcome }
-      step = 'result'
+      const battle = (await response.json()) as BattleOutcome
+      result = { kind: 'battle', battle, team: teamSnapshot }
+      battleCards = battleHighlightCards({
+        battle,
+        nameOf,
+        canEvolve: readyToEvolve,
+        regions,
+        berries: game.berries,
+      })
       await onState()
+      step = prefersReducedMotion() ? 'highlights' : 'scene'
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
       pending = false
     }
+  }
+
+  function afterScene() {
+    step = 'highlights'
+  }
+
+  function afterHighlights() {
+    step = 'result'
   }
 
   async function flee() {
@@ -311,6 +331,31 @@
       <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
       <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
     </div>
+  {:else if step === 'scene' && result?.kind === 'battle' && encounter}
+    <div class="scroll">
+      <section class="panel sheet">
+        <BattleScene
+          {encounter}
+          battle={result.battle}
+          team={result.team}
+          {time}
+          onDone={afterScene}
+        />
+      </section>
+    </div>
+    <div class="dock">
+      <button type="button" class="btn" onclick={afterScene}>Pular cena</button>
+    </div>
+  {:else if step === 'highlights' && result?.kind === 'battle'}
+    <div class="scroll">
+      <section class="panel sheet">
+        <h2>Resultado</h2>
+        <Highlights cards={battleCards} onDone={afterHighlights} />
+      </section>
+    </div>
+    <div class="dock">
+      <button type="button" class="btn" onclick={afterHighlights}>Continuar</button>
+    </div>
   {:else if step === 'result' && result}
     <div class="scroll">
       <section class="panel sheet wild">
@@ -330,37 +375,6 @@
           {#if result.battle.catchChance !== null}
             <p class="hint">Chance de captura {percent(result.battle.catchChance)}</p>
           {/if}
-          <ul class="gains">
-            {#each result.battle.fighters as fighter (fighter.pokemonId)}
-              <li class:ready={readyToEvolve(fighter)}>
-                {nameOf(fighter.pokemonId)} +{fighter.xpGained} XP
-                {#if fighter.levelsGained > 0}<strong> · nível {fighter.level}</strong>{/if}
-                {#if readyToEvolve(fighter)}<strong> · pode evoluir</strong>{/if}
-              </li>
-            {/each}
-            {#if result.battle.trainerXpGained > 0}
-              <li>
-                Você +{result.battle.trainerXpGained} XP
-                {#if result.battle.trainer.levelsGained > 0}
-                  <strong> · treinador nível {result.battle.trainer.level}</strong>
-                {/if}
-              </li>
-            {/if}
-            {#if result.battle.seedDrop}
-              <li class="loot">
-                <img src={berryIconSrc(result.battle.seedDrop.berryKey)} alt="" width="24" height="24" />
-                Semente {itemLabel(result.battle.seedDrop.itemKey, game.berries)}
-              </li>
-            {/if}
-            {#each result.battle.levelRewards ?? [] as reward (reward.itemKey)}
-              <li class="loot">
-                {#if reward.itemKey.startsWith('seed:')}
-                  <img src={berryIconSrc(reward.itemKey.slice(5))} alt="" width="24" height="24" />
-                {/if}
-                Nível: {itemLabel(reward.itemKey, game.berries)} ×{reward.quantity}
-              </li>
-            {/each}
-          </ul>
         {/if}
       </section>
     </div>
@@ -525,34 +539,6 @@
 
   .dock .btn-link {
     justify-self: center;
-  }
-
-  .gains {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-weight: 600;
-  }
-
-  .gains li {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    text-align: center;
-  }
-
-  .gains li.ready {
-    color: var(--grass-side);
-  }
-
-  .gains li.loot {
-    gap: 0.35rem;
-  }
-
-  .gains li.loot img {
-    image-rendering: pixelated;
   }
 
   .chips {
