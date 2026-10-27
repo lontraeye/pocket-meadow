@@ -931,7 +931,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - O servidor registra o início da luta e recusa uma lista de toques que termine antes do tempo real possível. O máximo que alguém consegue trapaceando é "jogar perfeito", nunca tocar mais rápido que o cooldown ou causar dano que não existe.
 
 **Modo automático (para jogar idle)**
-- **Batalha automática:** o mesmo módulo de simulação, com um jogador automático no lugar dos toques: rápido sempre que libera, carregado quando a energia enche, troca quando o ativo cai. O servidor roda a luta sozinho e devolve o log; a tela pode animar ou pular direto para o resultado.
+- **Batalha automática:** a luta **acontece na tela do mesmo jeito**; a única diferença é que o jogador não toca: o jogador automático do módulo de simulação toca por ele, ao vivo (rápido sempre que libera, carregado quando a energia enche, troca quando o ativo cai). Manual e automática usam as mesmas rotas (`battle/start` e `battle/finish`) e a mesma validação do servidor (decidido em 2026-10-27). É um interruptor "Auto" na própria tela de luta.
 - **Depois de vencer:** "perguntar" (padrão), "capturar sempre" (lança até capturar ou ele fugir) ou "deixar ir sempre".
 - As duas opções ficam no servidor, como preferência do treinador (vale em qualquer aparelho), e são marcadas na tela de exploração.
 - O automático joga direito, mas sem esperteza (não segura o carregado, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
@@ -1131,9 +1131,10 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - O módulo fica em `server/src/game/sim/`, sem importar nada do Node nem do banco; o front importa por alias do Vite. Um teste garante isso.
   - Fator de Velocidade: `1 + 0,4 × (média − velocidade) / média`, limitado a 0,8–1,2, onde a média é a Velocidade de um Pokémon base 80, IV 15, sem EV, nature neutra, no mesmo nível. No Nv 50, um Rattata mediano fica perto de 1,0 e um Snorlax bate no teto de 1,2.
   - EVs passam a valer aqui: cada lutador que entrou na luta ganha o EV yield do selvagem ao vencer, com os tetos da 5.18.
-- *8.3 — Tela de combate:* botões de golpe rápido e carregado com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD (`Attack`, `Hurt`, `Faint`) com os fallbacks em CSS (seção 5.13), sons e tempo limite. Funciona em 360px.
+- *8.3 — Tela de combate:* botões de golpe rápido e carregado com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD com os fallbacks em CSS (seção 5.13), sons, tempo limite e o interruptor "Auto" (a luta acontece igual, sem tocar). Funciona em 360px.
+  - Cobertura do PMD nas 251 (medida em 2026-10-27): `Attack`, `Hurt`, `Charge` e `Swing` em todas; `Shoot` em 246; `Strike` em 193; **`Faint` só em 61**, então o desmaio usa o fallback em CSS na maioria.
 - *8.4 — Captura em passos:* status `won`, lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
-- *8.5 — Modo automático:* jogador automático na simulação, rota que roda a luta inteira no servidor, preferências do treinador (batalha automática; depois de vencer: perguntar, capturar sempre ou deixar ir) e os interruptores na tela de exploração.
+- *8.5 — Modo automático:* o interruptor "Auto" (que já existe na 8.3) vira preferência do treinador no servidor, junto com "depois de vencer: perguntar, capturar sempre ou deixar ir", e os interruptores na tela de exploração.
 - Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
