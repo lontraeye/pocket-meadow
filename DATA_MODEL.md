@@ -161,11 +161,12 @@ CREATE TABLE trainers (
   total_encounters    INTEGER NOT NULL DEFAULT 0,    -- estatísticas
   total_catches       INTEGER NOT NULL DEFAULT 0,
   total_releases      INTEGER NOT NULL DEFAULT 0,
+  battle_auto         INTEGER NOT NULL DEFAULT 0,    -- preferência: luta automática (8.5)
   updated_at          INTEGER NOT NULL
 );
 ```
 
-Desbloqueios (regiões, slots de daycare, canteiros) são **derivados de `level`** via config. Não guardar flags de desbloqueio.
+Desbloqueios (regiões, slots de daycare, canteiros) são **derivados de `level`** via config. Não guardar flags de desbloqueio. `battle_auto` é preferência do treinador (qualquer aparelho); não muda a validação da luta no servidor.
 
 ---
 
@@ -382,6 +383,7 @@ Cada item abaixo deve ser uma única transação (`BEGIN IMMEDIATE` no SQLite):
 | Batalhar (auto) | catch-up → validar encontro pendente e time → simular luta → inserir `encounter_fighters` → (se venceu) XP/EVs/semente + `won_at` (continua `pending`); (se perdeu) `lost` |
 | Batalhar (manual, 8.3) | `POST .../battle/start` grava `battle_started_at` + fighters; `POST .../battle/finish` com `inputs` refaz a simulação e aplica o mesmo desfecho (sem capturar) |
 | Lançar / deixar ir (8.4) | `POST .../throw`: só com `won_at`; rolagem `throwRngSeed` na ordem de `throw_count` → `caught` / continua `pending` / `escaped`. `POST .../release` → `escaped`. Catch-up: pendente com `won_at` expirado → `escaped` (sem vitória → `fled`) |
+| Preferência Auto (8.5) | `PUT /trainer/prefs` `{ battleAuto: boolean }` → atualiza `trainers.battle_auto`. O `/state` devolve `trainer.battleAuto`. Não altera a luta: o servidor continua validando pelos `inputs` |
 | Soltar (um ou vários) | catch-up → validar todos (do jogador, nenhum no daycare, sobra pelo menos 1 Pokémon) → apagar → creditar `candies` por linha + `generic_candies` → `total_releases += n`. Se um falhar, nada é solto |
 | Alimentar | catch-up → validar (no jardim, abaixo do nível máximo, saldo da moeda escolhida) → limitar as doses ao necessário para o nível máximo → debitar → aplicar XP e level ups |
 | Evoluir | catch-up → validar (no jardim, linha em `evolutions`, `min_level`) → trocar `species_id` (traços ficam; `ability_slot` normaliza se a espécie nova não tiver 2ª/oculta) → pokédex (vista e capturada) → XP do treinador. Não custa doce |

@@ -934,8 +934,8 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 **Modo automático (para jogar idle)**
 - **Batalha automática:** a luta **acontece na tela do mesmo jeito**; a única diferença é que o jogador não toca: o jogador automático do módulo de simulação toca por ele, ao vivo (rápido sempre que libera, carregado quando a energia enche, troca quando o ativo cai). Manual e automática usam as mesmas rotas (`battle/start` e `battle/finish`) e a mesma validação do servidor (decidido em 2026-10-27). É um interruptor "Auto" na própria tela de luta.
   - **Tempo de reação:** depois que o cooldown libera, o automático espera um atraso pequeno e aleatório antes de tocar (config, inicial 150–450 ms), de uma sequência com seed derivada da seed da luta, para dar o mesmo resultado no celular e no servidor. Junto com a falta de esperteza, isso faz lutar na mão render mais nas lutas importantes.
-- **Depois de vencer:** "perguntar" (padrão), "capturar sempre" (lança até capturar ou ele fugir) ou "deixar ir sempre".
-- As duas opções ficam no servidor, como preferência do treinador (vale em qualquer aparelho), e são marcadas na tela de exploração.
+- **Depois de vencer, o jogador sempre decide** (lançar ou deixar ir), mesmo no Auto. A ideia de "capturar sempre" ou "deixar ir sempre" foi descartada em 2026-10-27: a decisão da captura é parte boa do jogo.
+- O interruptor "Auto" fica no servidor, como preferência do treinador (vale em qualquer aparelho), e é marcado na tela de exploração.
 - O automático joga direito, mas sem esperteza (não segura o carregado, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
 
 **Captura depois da vitória**
@@ -1137,7 +1137,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - *8.3 — Tela de combate:* botões de golpe rápido e carregado com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD com os fallbacks em CSS (seção 5.13), sons, tempo limite e o interruptor "Auto" (a luta acontece igual, sem tocar). Funciona em 360px.
   - Cobertura do PMD nas 251 (medida em 2026-10-27): `Attack`, `Hurt`, `Charge` e `Swing` em todas; `Shoot` em 246; `Strike` em 193; **`Faint` só em 61**, então o desmaio usa o fallback em CSS na maioria.
 - *8.4 — Captura em passos:* encontro vencido (`won_at`, sem status novo), lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
-- *8.5 — Modo automático:* o interruptor "Auto" (que já existe na 8.3) vira preferência do treinador no servidor, junto com "depois de vencer: perguntar, capturar sempre ou deixar ir", e os interruptores na tela de exploração.
+- *8.5 — Modo automático:* o interruptor "Auto" (que já existe na 8.3) vira preferência do treinador no servidor, com o interruptor também na tela de exploração. A captura continua sempre sendo decisão do jogador.
 - Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
 - *Juice do combate (anotado em 2026-10-27, depois da 8.5):*
   - **Efeitos por golpe:** pegar efeitos visuais (partículas, rajadas, folhas, chamas, raios…) e mapear para os golpes que os Pokémon podem ter. O mapa sai por tipo e categoria do golpe (físico ou especial, rápido ou carregado), com exceções por golpe quando valer a pena; golpe sem efeito usa o do tipo. Fica num lugar só, como o `gardenSprite`. Só assets com licença redistribuível (seção 4.3), creditados no `CREDITS.md`.

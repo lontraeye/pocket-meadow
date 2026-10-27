@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { api, type BattleOutcome, type BattleStart, type OwnedPokemon, type PendingEncounter } from './api'
-  import { clearSavedBattle, loadBattleAuto, saveBattleAuto, saveBattleProgress } from './battlePersist'
+  import { clearSavedBattle, saveBattleProgress } from './battlePersist'
   import { prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import {
@@ -32,8 +32,10 @@
     start,
     encounter,
     team,
+    battleAuto = false,
     initialInputs = [],
     resumeElapsedMs = 0,
+    onBattleAuto,
     onFinished,
     onError,
   }: {
@@ -41,9 +43,12 @@
     encounter: PendingEncounter
     /** Pokémon do time (para nome, apelido e shiny); a ordem não importa. */
     team: OwnedPokemon[]
+    /** Preferência do treinador (servidor); a tela só espelha e pede troca. */
+    battleAuto?: boolean
     initialInputs?: BattleInput[]
     /** Tempo de relógio que já passou ao retomar uma luta interrompida. */
     resumeElapsedMs?: number
+    onBattleAuto: (on: boolean) => void
     onFinished: (outcome: BattleOutcome, team: OwnedPokemon[]) => void
     onError: (message: string) => void
   } = $props()
@@ -65,7 +70,6 @@
   const startedWall = Date.now() - untrack(() => resumeElapsedMs)
   let inputs: BattleInput[] = untrack(() => [...initialInputs])
 
-  let auto = $state(loadBattleAuto())
   let status = $state<Status>('live')
   let clock = $state(performance.now())
   let floaters = $state.raw<Floater[]>([])
@@ -121,7 +125,13 @@
   const waitMs = $derived(Math.max(0, active.readyAt - elapsed, snap.switchReadyAt - elapsed))
   const waitTotal = $derived(Math.max(1, active.readyAt - cdFrom, snap.switchReadyAt - cdFrom))
   const cdFill = $derived(waitMs <= 0 ? 1 : Math.max(0, Math.min(1, 1 - waitMs / waitTotal)))
-  const canAct = $derived(status === 'live' && !auto && !active.fainted && !snap.wild.fainted && waitMs <= 0)
+  const canAct = $derived(status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0)
+
+  // Ao ligar/desligar o Auto, zera o atraso de reação pendente.
+  $effect(() => {
+    void battleAuto
+    autoAt = null
+  })
   const canCharged = $derived(
     canAct && chargedCost !== null && active.energy >= chargedCost && activeFighter.chargedMove !== null,
   )
@@ -226,9 +236,7 @@
   function toggleAuto() {
     if (status !== 'live') return
     play('tap')
-    auto = !auto
-    autoAt = null
-    saveBattleAuto(auto)
+    onBattleAuto(!battleAuto)
     persist()
   }
 
@@ -236,7 +244,7 @@
   // mesma escolha da simulação (carregado se a energia basta, senão rápido).
   // Gera inputs de verdade, então o servidor valida a luta como qualquer outra.
   function autoStep(e: number) {
-    if (!auto) return
+    if (!battleAuto) return
     const state = sim.snapshot
     const side = state.team[state.activeSlot]
     if (!side || side.fainted || state.wild.fainted || state.result !== null) {
@@ -262,7 +270,7 @@
       seed,
       setup,
       inputs,
-      auto,
+      auto: battleAuto,
       timeLimitMs: timeLimit,
     })
   }
@@ -490,8 +498,8 @@
 <div class="live">
   <div class="top">
     <span class="timer" class:late={remaining < 10_000} aria-label="Tempo restante">{formatCountdown(remaining)}</span>
-    <button type="button" class="btn auto" class:on={auto} aria-pressed={auto} disabled={status !== 'live'} onclick={toggleAuto}>
-      Auto{auto ? ': ligado' : ''}
+    <button type="button" class="btn auto" class:on={battleAuto} aria-pressed={battleAuto} disabled={status !== 'live'} onclick={toggleAuto}>
+      Auto{battleAuto ? ': ligado' : ''}
     </button>
   </div>
 

@@ -85,6 +85,13 @@
       "when": 1793123454200,
       "tag": "0011_won_at",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793125000000,
+      "tag": "0012_battle_auto",
+      "breakpoints": true
     }
   ]
 }

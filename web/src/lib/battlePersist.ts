@@ -7,6 +7,7 @@ export type SavedBattle = {
   seed: number
   setup: BattleSetup
   inputs: BattleInput[]
+  /** Espelho local do Auto no momento do save (a preferência vale no servidor). */
   auto: boolean
   timeLimitMs: number
 }
@@ -15,19 +16,19 @@ function battleKey(encounterId: number): string {
   return `pm-battle-${encounterId}`
 }
 
-export function loadBattleAuto(): boolean {
+/**
+ * Lê a chave antiga `pm-battle-auto` uma vez e apaga. Se estava ligada, o
+ * chamador pode gravar no servidor quando a preferência ainda estiver off.
+ */
+export function takeLegacyBattleAuto(): boolean {
   try {
-    return localStorage.getItem(AUTO_KEY) === '1'
+    const raw = localStorage.getItem(AUTO_KEY)
+    if (raw === null) return false
+    const on = raw === '1'
+    localStorage.removeItem(AUTO_KEY)
+    return on
   } catch {
     return false
-  }
-}
-
-export function saveBattleAuto(on: boolean): void {
-  try {
-    localStorage.setItem(AUTO_KEY, on ? '1' : '0')
-  } catch {
-    /* ignore */
   }
 }
 

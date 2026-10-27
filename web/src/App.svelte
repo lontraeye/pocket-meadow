@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { api, type GameState } from './lib/api'
+  import { takeLegacyBattleAuto } from './lib/battlePersist'
   import AuthForm from './lib/AuthForm.svelte'
   import Bag from './lib/Bag.svelte'
   import Collection from './lib/Collection.svelte'
@@ -76,8 +77,21 @@
       phase = 'loading'
       await warmUp([...baseTasks(), ...gameTasks(next)], onProgress)
     }
-    game = next
+    game = await adoptLegacyBattleAuto(next)
     phase = 'play'
+  }
+
+  /** Uma vez: se o aparelho tinha Auto ligado e o servidor não, grava e esquece a chave. */
+  async function adoptLegacyBattleAuto(state: GameState): Promise<GameState> {
+    const legacyOn = takeLegacyBattleAuto()
+    if (!legacyOn || state.trainer.battleAuto) return state
+    try {
+      const response = await api('/api/trainer/prefs', { battleAuto: true }, 'PUT')
+      if (!response.ok) return state
+      return { ...state, trainer: { ...state.trainer, battleAuto: true } }
+    } catch {
+      return state
+    }
   }
 
   function onProgress(done: number, total: number) {

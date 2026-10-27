@@ -61,8 +61,15 @@
   let throwing = $state(false)
   let notice = $state('')
   let appliedThrow = $state<number | null>(null)
+  let battleAuto = $state(untrack(() => game.trainer.battleAuto))
+  let prefsBusy = false
 
   const clock = serverClock(() => game.now)
+
+  $effect(() => {
+    const server = game.trainer.battleAuto
+    if (!prefsBusy) battleAuto = server
+  })
 
   const groups = $derived([
     { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
@@ -175,6 +182,27 @@
     fightInputs = inputs
     fightResumeMs = Math.min(start.timeLimitMs, Math.max(0, Math.floor(elapsedMs)))
     step = 'fight'
+  }
+
+  async function setBattleAuto(on: boolean) {
+    if (on === battleAuto) return
+    const prev = battleAuto
+    battleAuto = on
+    prefsBusy = true
+    try {
+      const response = await api('/api/trainer/prefs', { battleAuto: on }, 'PUT')
+      if (!response.ok) {
+        battleAuto = prev
+        message = errorText(await readError(response))
+        return
+      }
+      void onState().catch(() => undefined)
+    } catch {
+      battleAuto = prev
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      prefsBusy = false
+    }
   }
   function applyBattleResult(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
     result = { kind: 'battle', battle, team: teamSnapshot, left: false }
@@ -654,6 +682,20 @@
       <p class="odds">{chosen.length === 0 ? 'Escolha de 1 a 3 Pokémon.' : `${chosen.length} no time`}</p>
       <button
         type="button"
+        class="btn auto-pref"
+        class:on={battleAuto}
+        aria-pressed={battleAuto}
+        disabled={pending}
+        onclick={() => {
+          play('tap')
+          void setBattleAuto(!battleAuto)
+        }}
+      >
+        <strong>Luta automática: {battleAuto ? 'ligada' : 'desligada'}</strong>
+        <small>{battleAuto ? 'Seus Pokémon lutam sozinhos.' : 'Você toca os golpes.'}</small>
+      </button>
+      <button
+        type="button"
         class="btn btn-primary"
         aria-busy={fighting}
         disabled={pending || chosen.length === 0 || encounter.battleStartedAt !== null || encounter.wonAt !== null}
@@ -675,8 +717,10 @@
           start={fightStart}
           {encounter}
           team={fightTeam}
+          {battleAuto}
           initialInputs={fightInputs}
           resumeElapsedMs={fightResumeMs}
+          onBattleAuto={(on) => void setBattleAuto(on)}
           onFinished={onFightFinished}
           onError={onFightError}
         />
@@ -925,6 +969,23 @@
 
   .dock .btn-link {
     justify-self: center;
+  }
+
+  .auto-pref {
+    flex-direction: column;
+    gap: 0.1rem;
+    min-height: 52px;
+  }
+
+  .auto-pref small {
+    font-weight: 600;
+    opacity: 0.85;
+  }
+
+  .auto-pref.on {
+    border-image-source: url('/ui/button-primary.png');
+    color: #f3ffe8;
+    text-shadow: 0 var(--px) 0 #3f7a2a;
   }
 
   /* Poké Ball quicando dentro do botão enquanto espera (sprite-wait, app.css). */

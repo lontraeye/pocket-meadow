@@ -205,6 +205,8 @@ export type GameState = {
     energyNextAt: number | null
     energyFullAt: number | null
     genericCandies: number
+    /** Preferência: luta com o jogador automático (8.5). */
+    battleAuto: boolean
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
@@ -217,7 +219,11 @@ export type GameState = {
 
 export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number; readyAt?: number }
 
-export async function api(path: string, body?: unknown, method?: 'POST' | 'PATCH' | 'DELETE'): Promise<Response> {
+export async function api(
+  path: string,
+  body?: unknown,
+  method?: 'POST' | 'PATCH' | 'DELETE' | 'PUT',
+): Promise<Response> {
   const verb = method ?? (body === undefined ? 'GET' : 'POST')
   const hasBody = body !== undefined
   return fetch(path, {

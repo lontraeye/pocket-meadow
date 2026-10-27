@@ -130,6 +130,8 @@ export const trainers = sqliteTable('trainers', {
   totalEncounters: integer('total_encounters').notNull().default(0),
   totalCatches: integer('total_catches').notNull().default(0),
   totalReleases: integer('total_releases').notNull().default(0),
+  /** Preferência do treinador: luta com o jogador automático (8.5). */
+  battleAuto: integer('battle_auto', { mode: 'boolean' }).notNull().default(false),
   updatedAt: integer('updated_at').notNull(),
 })
 

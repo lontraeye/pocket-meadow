@@ -11,6 +11,7 @@ import { plotRoutes } from './routes/plots.js'
 import { pokemonRoutes } from './routes/pokemon.js'
 import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
+import { trainerRoutes } from './routes/trainer.js'
 
 migrateDatabase()
 loadRegions()
@@ -47,6 +48,7 @@ app.use('*', async (c, next) => {
 
 app.route('/auth', authRoutes)
 app.route('/state', stateRoutes)
+app.route('/trainer', trainerRoutes)
 app.route('/regions', regionRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/pokemon', pokemonRoutes)

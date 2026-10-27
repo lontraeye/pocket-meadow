@@ -204,6 +204,7 @@ function readState(userId: number, now: number) {
       energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),
       energyFullAt: energyFullAt(trainer.energy, trainer.energyUpdatedAt),
       genericCandies: trainer.genericCandies,
+      battleAuto: trainer.battleAuto,
     },
     pokemon: owned.map((mon) => {
       const traits = requireTraitFields({
