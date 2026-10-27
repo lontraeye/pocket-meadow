@@ -932,6 +932,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 
 **Modo automático (para jogar idle)**
 - **Batalha automática:** a luta **acontece na tela do mesmo jeito**; a única diferença é que o jogador não toca: o jogador automático do módulo de simulação toca por ele, ao vivo (rápido sempre que libera, carregado quando a energia enche, troca quando o ativo cai). Manual e automática usam as mesmas rotas (`battle/start` e `battle/finish`) e a mesma validação do servidor (decidido em 2026-10-27). É um interruptor "Auto" na própria tela de luta.
+  - **Tempo de reação:** depois que o cooldown libera, o automático espera um atraso pequeno e aleatório antes de tocar (config, inicial 150–450 ms), de uma sequência com seed derivada da seed da luta, para dar o mesmo resultado no celular e no servidor. Junto com a falta de esperteza, isso faz lutar na mão render mais nas lutas importantes.
 - **Depois de vencer:** "perguntar" (padrão), "capturar sempre" (lança até capturar ou ele fugir) ou "deixar ir sempre".
 - As duas opções ficam no servidor, como preferência do treinador (vale em qualquer aparelho), e são marcadas na tela de exploração.
 - O automático joga direito, mas sem esperteza (não segura o carregado, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
