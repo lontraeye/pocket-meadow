@@ -260,6 +260,7 @@ Desde 2026-10-27 o jogo tem save de verdade em produção. Até ali, as contas e
 **Regras**
 1. **Migrações só avançam.** Nunca editar uma migração que já rodou. Mudança que apaga ou transforma coluna leva junto o passo que converte os dados existentes (ex.: trocar senha por Google liga a conta que já existe ao `google_sub`, em vez de apagá-la). Zerar o banco para simplificar não é opção.
 2. **Testar a migração numa cópia.** Antes do deploy, rodar a migração numa cópia do banco de produção (um backup diário serve) e conferir os dados. Migração nova ganha teste em `db/migrate.test.ts`, no estilo dos que já existem.
+   - **Nunca refazer uma tabela que outra referencia com `ON DELETE CASCADE`** (hoje: `encounters`, por `encounter_fighters`; `users` e `pokemon`, por várias). O Drizzle roda cada migração dentro de uma transação, e lá dentro o `PRAGMA foreign_keys=OFF` é ignorado: o `DROP TABLE` da reconstrução apaga em cascata as linhas que apontam para ela. Testado em 2026-10-27 numa cópia de produção: refazer `encounters` apagou todos os `encounter_fighters`. O `drizzle-kit` gera esse tipo de reconstrução sozinho quando muda um `CHECK` ou tira uma coluna com restrição: prefira coluna nova a mudar `CHECK`, e confira o SQL gerado antes de aceitar.
 3. **Regra que muda o sentido de dados salvos é anotada aqui**, junto com o que acontece com os saves. Exemplo: mudar `xpToNext` muda o que o `xp` guardado significa. Ajuste de chance, taxa ou peso, que só vale dali para frente, não precisa.
 4. **Desenvolvimento nunca toca o banco de produção.** As rotas `/dev` só existem com `DEV_TOOLS=1` e fora de `NODE_ENV=production`.
 
@@ -938,7 +939,8 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - O automático joga direito, mas sem esperteza (não segura o carregado, não escolhe a hora de trocar). Lutar na mão continua podendo render mais.
 
 **Captura depois da vitória**
-- O encontro fica com status `won` esperando a decisão (migração: refazer a tabela para o `CHECK` novo, testada num banco com dados).
+- O encontro vencido **continua `pending`** e ganha `won_at` (coluna nova): "venceu, esperando a decisão". Sem status novo e sem refazer a tabela (ver o aviso na seção 4.6). A regra de um encontro aberto por jogador continua valendo, porque o índice já é sobre `pending`. Ao vencer, o prazo do encontro vira pelo menos o prazo da decisão (config).
+- Desfechos com os status que já existem: capturou → `caught`; errou e ele fugiu, deixou ir, ou o prazo da decisão acabou → `escaped` ("venceu, mas não ficou com ele").
 - O jogador lança a bola: a chance é a `catchChance` da seção 5.6. Errou: o selvagem pode fugir (config, chance por erro). Dá para lançar de novo até capturar, ele fugir, o jogador deixar ir ou o encontro expirar. A Poké Ball é infinita até as pokébolas virarem item.
 
 **PRNG (seção 7)**
