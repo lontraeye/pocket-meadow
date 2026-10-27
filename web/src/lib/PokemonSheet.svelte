@@ -22,14 +22,12 @@
     game,
     mon,
     dev = null,
-    fill = false,
     onClose,
     onState,
   }: {
     game: GameState
     mon: OwnedPokemon
     dev?: { asleep: boolean; toggle: () => void } | null
-    fill?: boolean
     onClose: () => void
     onState: () => Promise<void>
   } = $props()
@@ -282,7 +280,9 @@
   }
 </script>
 
-<section class="panel sheet" class:fill aria-label="Detalhes">
+<div class="overlay" role="presentation">
+  <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
+  <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
   <div class="scroll">
     {#if highlightCards.length > 0}
       <div class="highlights">
@@ -405,34 +405,66 @@
       </button>
     {/if}
   </div>
-</section>
+</div>
+</div>
 
 <style>
+  .overlay {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding:
+      calc(env(safe-area-inset-top) + 0.5rem)
+      calc(env(safe-area-inset-right) + 0.5rem)
+      calc(env(safe-area-inset-bottom) + 0.5rem)
+      calc(env(safe-area-inset-left) + 0.5rem);
+    box-sizing: border-box;
+  }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #1a1208aa;
+    cursor: pointer;
+  }
+
   .highlights {
     margin-bottom: 0.5rem;
   }
 
   .sheet {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    width: min(100%, 28rem);
+    height: fit-content;
+    max-height: 100%;
     min-width: 0;
-    min-height: 0;
-  }
-
-  .sheet.fill {
-    flex: 1;
-  }
-
-  .sheet.fill .scroll {
-    flex: 1;
+    margin: 0;
+    overflow: hidden;
   }
 
   .scroll {
     display: grid;
     gap: 0.6rem;
+    flex: 0 1 auto;
     min-width: 0;
-    overflow: auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dock {
+    flex: none;
   }
 
   .head {

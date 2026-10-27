@@ -157,7 +157,7 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow" class:fit={screen !== 'meadow'}>
+  <main class="meadow fit">
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -190,27 +190,32 @@
       </button>
       <button type="button" class="btn" onclick={logout}>Sair</button>
     </header>
-    {#if screen === 'explore'}
-      <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-    {:else if screen === 'collection'}
-      <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-    {:else if screen === 'daycare'}
-      <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-    {:else if screen === 'bag'}
-      <Bag {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-    {:else}
-      {#if showReadyBanner && ready?.summary}
-        <div class="ready-banner" role="status">
-          <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
-          <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
-        </div>
+    <!-- Mundo: área fixa. HUD flutuante (banner) não entra no fluxo e não empurra. -->
+    <div class="world">
+      {#if screen === 'explore'}
+        <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+      {:else if screen === 'collection'}
+        <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+      {:else if screen === 'daycare'}
+        <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+      {:else if screen === 'bag'}
+        <Bag {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+      {:else}
+        <Garden
+          {game}
+          onState={loadState}
+          openPlotIndex={focusPlot}
+          onPlotOpened={() => (focusPlot = null)}
+        />
+        {#if showReadyBanner && ready?.summary}
+          <div class="ready-banner panel" role="status">
+            <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
+            <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
+          </div>
+        {/if}
       {/if}
-      <Garden
-        {game}
-        onState={loadState}
-        openPlotIndex={focusPlot}
-        onPlotOpened={() => (focusPlot = null)}
-      />
+    </div>
+    {#if screen === 'meadow'}
       <div class="docks">
         <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
         <button type="button" class="btn badge-host" onclick={() => (screen = 'daycare')}>
@@ -426,12 +431,27 @@
     }
   }
 
+  .world {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .ready-banner {
+    position: absolute;
+    z-index: 8;
+    top: 0.35rem;
+    left: 0.35rem;
+    right: 0.35rem;
     display: flex;
     align-items: stretch;
     gap: 0.25rem;
-    flex: none;
     min-width: 0;
+    pointer-events: auto;
   }
 
   .ready-go {
@@ -500,8 +520,10 @@
     box-shadow: inset 0 calc(var(--px) * -1) 0 #00000044;
   }
 
-  /* Telas cheias: o meio rola e os botões ficam embaixo. */
+  /* Altura travada: o mundo preenche o meio; scroll só dentro de painéis. */
   .meadow.fit {
+    display: flex;
+    flex-direction: column;
     height: var(--screen-h);
     max-height: var(--screen-h);
     overflow: hidden;
