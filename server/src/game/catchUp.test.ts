@@ -310,7 +310,7 @@ describe('efeitos e encontros', () => {
     assert.deepEqual(result.deleteEffectIds, [1])
   })
 
-  test('marca como fugidos só os encontros pendentes vencidos', () => {
+  test('marca como fugidos só os encontros pendentes expirados (sem vitória)', () => {
     const result = applyCatchUp(
       state({
         encounters: [
@@ -322,6 +322,21 @@ describe('efeitos e encontros', () => {
       now,
     )
     assert.deepEqual(result.fleeEncounterIds, [1])
+    assert.deepEqual(result.escapeWonEncounterIds, [])
+  })
+
+  test('encontro pendente com won_at expirado vira escaped, não fled', () => {
+    const result = applyCatchUp(
+      state({
+        encounters: [
+          { id: 1, status: 'pending', expiresAt: now, wonAt: now - hour },
+          { id: 2, status: 'pending', expiresAt: now },
+        ],
+      }),
+      now,
+    )
+    assert.deepEqual(result.escapeWonEncounterIds, [1])
+    assert.deepEqual(result.fleeEncounterIds, [2])
   })
 })
 

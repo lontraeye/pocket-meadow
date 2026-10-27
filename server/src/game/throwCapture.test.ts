@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { battleConfig } from '../config/battle.js'
+import { catchChance } from './battle.js'
+import { rollThrow, throwRngAt } from './throwCapture.js'
+
+test('mesma seed + mesmo número de lançamentos → mesmos resultados', () => {
+  const seed = 42
+  const rate = 45
+  const first = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: rate })
+  const again = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: rate })
+  assert.deepEqual(again, first)
+
+  const second = rollThrow({ encounterSeed: seed, throwIndex: 1, captureRate: rate })
+  const secondAgain = rollThrow({ encounterSeed: seed, throwIndex: 1, captureRate: rate })
+  assert.deepEqual(secondAgain, second)
+})
+
+test('errar sem fugir permite lançar de novo; fugir fecha a sequência', () => {
+  // Varre seeds até achar: 1º erro sem fuga, 2º fuga (ou captura).
+  let foundMissStay = false
+  let foundMissFlee = false
+  for (let seed = 1; seed < 5000; seed += 1) {
+    const roll = rollThrow({
+      encounterSeed: seed,
+      throwIndex: 0,
+      captureRate: 3,
+      fleeChance: 0.5,
+    })
+    if (!roll.caught && !roll.fled) foundMissStay = true
+    if (!roll.caught && roll.fled) foundMissFlee = true
+    if (foundMissStay && foundMissFlee) break
+  }
+  assert.ok(foundMissStay, 'deveria existir erro sem fuga')
+  assert.ok(foundMissFlee, 'deveria existir erro com fuga')
+
+  // Depois de um miss-stay, o índice 1 é uma rolagem distinta.
+  let seed = 0
+  for (let s = 1; s < 5000; s += 1) {
+    const first = rollThrow({ encounterSeed: s, throwIndex: 0, captureRate: 3, fleeChance: 0 })
+    if (!first.caught && !first.fled) {
+      seed = s
+      break
+    }
+  }
+  assert.ok(seed > 0)
+  const first = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: 3, fleeChance: 0 })
+  const second = rollThrow({ encounterSeed: seed, throwIndex: 1, captureRate: 3, fleeChance: 0 })
+  assert.equal(first.caught, false)
+  assert.equal(first.fled, false)
+  // A 2ª rolagem não precisa divergir sempre, mas a sequência avança (duas rng() no 1º).
+  const rng0 = throwRngAt(seed, 0)
+  rng0()
+  rng0()
+  const rng1 = throwRngAt(seed, 1)
+  // Mesmo estado inicial após pular o 1º lançamento.
+  assert.equal(rng1(), rng0())
+  void second
+})
+
+test('catchChance da tentativa bate com a fórmula da 5.6', () => {
+  const roll = rollThrow({ encounterSeed: 1, throwIndex: 0, captureRate: 45, berryBonus: 1.5 })
+  assert.equal(roll.catchChance, catchChance(45, 1.5))
+  assert.ok(roll.catchChance >= battleConfig.catchMin)
+  assert.ok(roll.catchChance <= 1)
+})

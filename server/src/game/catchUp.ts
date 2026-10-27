@@ -19,7 +19,7 @@ export type CatchUpState = {
     createdAt: number
     expiresAt: number | null
   }[]
-  encounters: { id: number; status: string; expiresAt: number }[]
+  encounters: { id: number; status: string; expiresAt: number; wonAt?: number | null }[]
 }
 
 export type CatchUpResult = {
@@ -27,7 +27,10 @@ export type CatchUpResult = {
   energyNextAt: number | null
   daycare: { pokemonId: number; level: number; xp: number; lastSettledAt: number; xpGained: number }[]
   deleteEffectIds: number[]
+  /** Pendente sem vitória: expirou → `fled`. */
   fleeEncounterIds: number[]
+  /** Pendente já vencido (`won_at`): expirou → `escaped`. */
+  escapeWonEncounterIds: number[]
 }
 
 const hourMs = 60 * 60 * 1000
@@ -53,8 +56,14 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
     .filter((effect) => effect.expiresAt !== null && effect.expiresAt <= now)
     .filter((effect) => effect.effectKey !== 'daycare_boost' || daycareDone(effect.expiresAt as number))
     .map((effect) => effect.id)
-  const fleeEncounterIds = state.encounters
-    .filter((encounter) => encounter.status === 'pending' && encounter.expiresAt <= now)
+  const expired = state.encounters.filter(
+    (encounter) => encounter.status === 'pending' && encounter.expiresAt <= now,
+  )
+  const fleeEncounterIds = expired
+    .filter((encounter) => encounter.wonAt == null)
+    .map((encounter) => encounter.id)
+  const escapeWonEncounterIds = expired
+    .filter((encounter) => encounter.wonAt != null)
     .map((encounter) => encounter.id)
 
   return {
@@ -63,6 +72,7 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
     daycare,
     deleteEffectIds,
     fleeEncounterIds,
+    escapeWonEncounterIds,
   }
 }
 

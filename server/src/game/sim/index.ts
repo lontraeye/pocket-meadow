@@ -4,6 +4,7 @@ export { mulberry32 } from '../mulberry32.js'
 export {
   battleRngSeed,
   throwRngSeed,
+  seedDropRngSeed,
   wildTraitsSeed,
   wildFightTraitsSeed,
   autoReactionSeed,

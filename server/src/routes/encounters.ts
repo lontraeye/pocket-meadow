@@ -17,7 +17,7 @@ import {
   trainers,
 } from '../db/schema.js'
 import { creditItems, grantTrainerLevelRewards } from '../db/inventory.js'
-import { catchChance, fighterXp, rollChance, rollWild } from '../game/battle.js'
+import { catchChance, fighterXp, rollWild } from '../game/battle.js'
 import { rollBattleSeed } from '../game/berries.js'
 import {
   applyEvYield,
@@ -31,9 +31,10 @@ import {
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { isFinishTooEarly, simConfig } from '../game/sim/config.js'
-import { battleRngSeed, throwRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
+import { battleRngSeed, seedDropRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
 import { parseBattleSetup, serializeBattleSetup } from '../game/sim/setupJson.js'
 import type { BattleEvent, BattleInput, BattleResult, BattleSetup } from '../game/sim/types.js'
+import { rollThrow } from '../game/throwCapture.js'
 import { traitColumns } from '../game/traitValues.js'
 import { rollTraits, type AbilitySlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
@@ -127,7 +128,27 @@ encounterRoutes.post('/:id/flee', requireUser, (c) => {
   const now = Date.now()
   const result = immediate(() => fleeEncounter(userId, encounterId, now))
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ status: 'fled' as const, encounterId })
+  return c.json({ status: result.status, encounterId })
+})
+
+encounterRoutes.post('/:id/throw', requireUser, (c) => {
+  const encounterId = parseId(c.req.param('id'))
+  if (encounterId === null) return c.json({ error: 'encounter_not_found' }, 404)
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => throwBall(userId, encounterId, now))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json(result.throw)
+})
+
+encounterRoutes.post('/:id/release', requireUser, (c) => {
+  const encounterId = parseId(c.req.param('id'))
+  if (encounterId === null) return c.json({ error: 'encounter_not_found' }, 404)
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => releaseWild(userId, encounterId, now))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ status: 'escaped' as const, encounterId })
 })
 
 function createEncounter(userId: number, region: Region, now: number) {
@@ -226,6 +247,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   const clock = persistCatchUp(userId, now)
   const encounter = loadPendingEncounter(userId, encounterId)
   if (!encounter.ok) return encounter
+  if (encounter.row.wonAt != null) return fail('battle_already_won', 409)
   if (encounter.row.battleStartedAt !== null) return fail('battle_already_started', 409)
 
   const team = loadBattleTeam(userId, pokemonIds)
@@ -260,6 +282,7 @@ function startBattle(userId: number, encounterId: number, pokemonIds: number[], 
   persistCatchUp(userId, now)
   const encounter = loadPendingEncounter(userId, encounterId)
   if (!encounter.ok) return encounter
+  if (encounter.row.wonAt != null) return fail('battle_already_won', 409)
   if (encounter.row.battleStartedAt !== null) return fail('battle_already_started', 409)
 
   const team = loadBattleTeam(userId, pokemonIds)
@@ -298,6 +321,7 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
   const clock = persistCatchUp(userId, now)
   const encounter = loadPendingEncounter(userId, encounterId)
   if (!encounter.ok) return encounter
+  if (encounter.row.wonAt != null) return fail('battle_already_won', 409)
   if (encounter.row.battleStartedAt === null) return fail('battle_not_started', 400)
   if (!encounter.row.battleSetupJson) return fail('battle_not_started', 400)
 
@@ -443,53 +467,16 @@ function applyBattleOutcome(input: {
   })
 
   let catchOdds: number | null = null
-  let caught = false
-  let caughtPokemonId: number | null = null
   let seedDrop: { itemKey: string; berryKey: string } | null = null
   if (won) {
-    const rng = mulberry32(throwRngSeed(encounter.rngSeed))
-    const bonus = takeBonus(userId, 'catch_boost')
-    catchOdds = catchChance(wild.captureRate, bonus)
-    caught = rollChance(catchOdds, rng)
-    if (caught) {
-      const traits = rollTraits(mulberry32(wildTraitsSeed(encounter.rngSeed)), {
-        level: encounter.level,
-        learnset: learnsetFor(encounter.speciesId),
-        abilities: abilitiesFor(encounter.speciesId),
-        moves: movesByName(),
-      })
-      const inserted = db
-        .insert(pokemon)
-        .values({
-          userId,
-          speciesId: encounter.speciesId,
-          level: encounter.level,
-          isShiny: encounter.isShiny,
-          caughtAt: now,
-          caughtRegion: encounter.regionSlug,
-          originalSpeciesId: encounter.speciesId,
-          ...traitColumns(traits),
-        })
-        .returning({ id: pokemon.id })
-        .get()
-      if (!inserted) throw new Error('failed to catch pokemon')
-      caughtPokemonId = inserted.id
-      const pokedex = db
-        .update(pokedexEntries)
-        .set({
-          caughtCount: sql`${pokedexEntries.caughtCount} + 1`,
-          firstCaughtAt: sql`coalesce(${pokedexEntries.firstCaughtAt}, ${now})`,
-          shinyCaught: sql`(${pokedexEntries.shinyCaught} or ${encounter.isShiny ? 1 : 0})`,
-        })
-        .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, encounter.speciesId)))
-        .run()
-      if (pokedex.changes !== 1) throw new Error(`pokedex missing for species ${encounter.speciesId}`)
-    }
-    seedDrop = rollBattleSeed(rng)
+    // Chance só para a tela; o Pinap só gasta no 1º lançamento (throw).
+    catchOdds = catchChance(wild.captureRate, peekBonus(userId, 'catch_boost'))
+    seedDrop = rollBattleSeed(mulberry32(seedDropRngSeed(encounter.rngSeed)))
     if (seedDrop) creditItems(userId, [{ itemKey: seedDrop.itemKey, quantity: 1 }])
   }
 
-  const trainerXpGained = won ? trainerWinXp(encounter.level) + (caught ? trainerCatchXp(encounter.level) : 0) : 0
+  // XP de captura fica no throw; aqui só o da vitória.
+  const trainerXpGained = won ? trainerWinXp(encounter.level) : 0
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
   const levelRewards =
     won && trainerNext.levelsGained > 0
@@ -500,24 +487,35 @@ function applyBattleOutcome(input: {
       .set({
         level: trainerNext.level,
         xp: trainerNext.xp,
-        ...(caught ? { totalCatches: sql`${trainers.totalCatches} + 1` } : {}),
         updatedAt: now,
       })
       .where(eq(trainers.userId, userId))
       .run()
   }
 
-  const status = won ? (caught ? 'caught' : 'escaped') : 'lost'
-  db.update(encounters)
-    .set({
-      status,
-      winChance: null,
-      catchChance: catchOdds,
-      caughtPokemonId,
-      resolvedAt: now,
-    })
-    .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
-    .run()
+  if (won) {
+    const decisionUntil = now + battleConfig.decisionTtlMs
+    db.update(encounters)
+      .set({
+        wonAt: now,
+        throwCount: 0,
+        winChance: null,
+        catchChance: catchOdds,
+        expiresAt: Math.max(encounter.expiresAt, decisionUntil),
+      })
+      .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+  } else {
+    db.update(encounters)
+      .set({
+        status: 'lost',
+        winChance: null,
+        catchChance: null,
+        resolvedAt: now,
+      })
+      .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+  }
 
   return {
     ok: true as const,
@@ -526,8 +524,8 @@ function applyBattleOutcome(input: {
       winChance: null,
       won,
       catchChance: catchOdds,
-      caught,
-      status,
+      caught: false,
+      status: won ? ('pending' as const) : ('lost' as const),
       fighters,
       trainerXpGained,
       trainer: {
@@ -708,15 +706,196 @@ function insertFighters(encounterId: number, team: TeamBattleRow[], powers: numb
     .run()
 }
 
-function fleeEncounter(userId: number, encounterId: number, now: number): { ok: true } | Failure {
+function fleeEncounter(
+  userId: number,
+  encounterId: number,
+  now: number,
+): { ok: true; status: 'fled' | 'escaped' } | Failure {
   persistCatchUp(userId, now)
-  const updated = getDb()
+  const row = getDb()
+    .select({ id: encounters.id, wonAt: encounters.wonAt })
+    .from(encounters)
+    .where(and(eq(encounters.id, encounterId), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .get()
+  if (!row) return fail('encounter_not_found', 404)
+  // Já venceu: fugir = deixar ir (escaped). Antes da luta: fled.
+  const status = row.wonAt != null ? ('escaped' as const) : ('fled' as const)
+  getDb()
     .update(encounters)
-    .set({ status: 'fled', resolvedAt: now })
+    .set({ status, resolvedAt: now })
     .where(and(eq(encounters.id, encounterId), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .run()
-  if (updated.changes !== 1) return fail('encounter_not_found', 404)
+  return { ok: true, status }
+}
+
+function releaseWild(userId: number, encounterId: number, now: number): { ok: true } | Failure {
+  persistCatchUp(userId, now)
+  const row = getDb()
+    .select({ id: encounters.id, wonAt: encounters.wonAt })
+    .from(encounters)
+    .where(and(eq(encounters.id, encounterId), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .get()
+  if (!row) return fail('encounter_not_found', 404)
+  if (row.wonAt == null) return fail('battle_not_won', 400)
+  getDb()
+    .update(encounters)
+    .set({ status: 'escaped', resolvedAt: now })
+    .where(and(eq(encounters.id, encounterId), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .run()
   return { ok: true }
+}
+
+function throwBall(userId: number, encounterId: number, now: number) {
+  const clock = persistCatchUp(userId, now)
+  const loaded = loadPendingEncounter(userId, encounterId)
+  if (!loaded.ok) return loaded
+  const encounter = loaded.row
+  if (encounter.wonAt == null) return fail('battle_not_won', 400)
+
+  const wild = loadWildSpecies(encounter.speciesId)
+  const throwIndex = encounter.throwCount
+  const berryBonus = takeBonus(userId, 'catch_boost')
+  const roll = rollThrow({
+    encounterSeed: encounter.rngSeed,
+    throwIndex,
+    captureRate: wild.captureRate,
+    berryBonus,
+  })
+
+  const db = getDb()
+  const throwNumber = throwIndex + 1
+
+  if (roll.caught) {
+    const traits = rollTraits(mulberry32(wildTraitsSeed(encounter.rngSeed)), {
+      level: encounter.level,
+      learnset: learnsetFor(encounter.speciesId),
+      abilities: abilitiesFor(encounter.speciesId),
+      moves: movesByName(),
+    })
+    const inserted = db
+      .insert(pokemon)
+      .values({
+        userId,
+        speciesId: encounter.speciesId,
+        level: encounter.level,
+        isShiny: encounter.isShiny,
+        caughtAt: now,
+        caughtRegion: encounter.regionSlug,
+        originalSpeciesId: encounter.speciesId,
+        ...traitColumns(traits),
+      })
+      .returning({ id: pokemon.id })
+      .get()
+    if (!inserted) throw new Error('failed to catch pokemon')
+
+    const pokedex = db
+      .update(pokedexEntries)
+      .set({
+        caughtCount: sql`${pokedexEntries.caughtCount} + 1`,
+        firstCaughtAt: sql`coalesce(${pokedexEntries.firstCaughtAt}, ${now})`,
+        shinyCaught: sql`(${pokedexEntries.shinyCaught} or ${encounter.isShiny ? 1 : 0})`,
+      })
+      .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, encounter.speciesId)))
+      .run()
+    if (pokedex.changes !== 1) throw new Error(`pokedex missing for species ${encounter.speciesId}`)
+
+    const catchXp = trainerCatchXp(encounter.level)
+    const trainerNext = grantXp(clock.level, clock.xp, catchXp, trainerXpToNext)
+    const levelRewards =
+      trainerNext.levelsGained > 0 ? grantTrainerLevelRewards(userId, clock.level, trainerNext.level) : []
+    db.update(trainers)
+      .set({
+        level: trainerNext.level,
+        xp: trainerNext.xp,
+        totalCatches: sql`${trainers.totalCatches} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(trainers.userId, userId))
+      .run()
+
+    db.update(encounters)
+      .set({
+        status: 'caught',
+        throwCount: throwNumber,
+        catchChance: roll.catchChance,
+        caughtPokemonId: inserted.id,
+        resolvedAt: now,
+      })
+      .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+
+    return {
+      ok: true as const,
+      throw: {
+        caught: true,
+        fled: false,
+        catchChance: roll.catchChance,
+        throwNumber,
+        status: 'caught' as const,
+        pokemonId: inserted.id,
+        trainerXpGained: catchXp,
+        trainer: {
+          level: trainerNext.level,
+          xp: trainerNext.xp,
+          levelsGained: trainerNext.levelsGained,
+        },
+        levelRewards,
+      },
+    }
+  }
+
+  if (roll.fled) {
+    db.update(encounters)
+      .set({
+        status: 'escaped',
+        throwCount: throwNumber,
+        catchChance: roll.catchChance,
+        resolvedAt: now,
+      })
+      .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+    return {
+      ok: true as const,
+      throw: {
+        caught: false,
+        fled: true,
+        catchChance: roll.catchChance,
+        throwNumber,
+        status: 'escaped' as const,
+      },
+    }
+  }
+
+  db.update(encounters)
+    .set({
+      throwCount: throwNumber,
+      catchChance: roll.catchChance,
+    })
+    .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .run()
+
+  return {
+    ok: true as const,
+    throw: {
+      caught: false,
+      fled: false,
+      catchChance: roll.catchChance,
+      throwNumber,
+      status: 'pending' as const,
+    },
+  }
+}
+
+/** Lê o multiplicador sem consumir cargas (tela de decisão). */
+function peekBonus(userId: number, effectKey: string): number {
+  const rows = getDb()
+    .select()
+    .from(activeEffects)
+    .where(and(eq(activeEffects.userId, userId), eq(activeEffects.effectKey, effectKey)))
+    .all()
+    .sort((a, b) => a.id - b.id)
+  const chosen = rows.find((row) => row.charges !== null) ?? rows[0]
+  return chosen?.multiplier ?? 1
 }
 
 // Efeito por uso: consome o mais antigo. Efeito só por tempo aplica o

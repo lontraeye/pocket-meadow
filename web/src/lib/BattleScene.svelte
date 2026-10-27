@@ -9,27 +9,40 @@
   let {
     encounter,
     battle,
-    team,
+    throwResult,
+    team = [],
     time = 0,
     ballSrc = pokeBallSrc(),
+    mode = 'throw',
     onDone,
   }: {
     encounter: PendingEncounter
-    battle: BattleOutcome
-    team: OwnedPokemon[]
+    battle?: BattleOutcome
+    /** Resultado do lançamento (8.4). Se faltar, usa `battle`. */
+    throwResult?: { caught: boolean; catchChance: number | null }
+    team?: OwnedPokemon[]
     time?: number
     /** Sprite da bola usada. Hoje só a Poké Ball; os outros tipos vêm com a seção 5.6. */
     ballSrc?: string
+    /** `throw` (padrão): só lançamento. `full` mantém o choque da 6.2. */
+    mode?: 'full' | 'throw'
     onDone: () => void
   } = $props()
 
   type Phase = 'clash' | 'outcome' | 'throw' | 'shake' | 'celebrate' | 'escape' | 'done'
 
   const reduced = prefersReducedMotion()
-  const shakeTotal = $derived(battle.won ? catchShakes(battle.caught, battle.catchChance) : 0)
+  const catchInfo = $derived(
+    throwResult ??
+      (battle
+        ? { caught: battle.caught, catchChance: battle.catchChance }
+        : { caught: false, catchChance: null }),
+  )
+  const won = $derived(mode === 'throw' || (battle?.won ?? true))
+  const shakeTotal = $derived(won ? catchShakes(catchInfo.caught, catchInfo.catchChance) : 0)
   const lead = $derived(team[0] ?? null)
 
-  let phase = $state<Phase>(reduced ? 'done' : 'clash')
+  let phase = $state<Phase>(reduced ? 'done' : 'throw')
   let shakeIndex = $state(0)
   let finished = $state(false)
 
@@ -41,39 +54,27 @@
       finish()
       return
     }
+    const caught = catchInfo.caught
+    const total = shakeTotal
+    const speciesId = encounter.speciesId
+    const throwOnly = mode === 'throw'
+    const didWin = won
     const timers: number[] = []
     const wait = (ms: number, fn: () => void) => {
       timers.push(window.setTimeout(fn, ms))
     }
 
-    // Timeline ~3s no máximo, avançando por timer (não por animationend).
-    wait(550, () => {
-      if (finished) return
-      if (!battle.won) {
-        phase = 'outcome'
-        wait(700, finish)
-        return
-      }
-      phase = 'throw'
-      wait(450, () => {
-        if (finished) return
-        phase = 'shake'
-        shakeIndex = 0
-        runShakes(0)
-      })
-    })
-
     function runShakes(index: number) {
       if (finished) return
       shakeIndex = index
       play('shake')
-      if (index + 1 >= shakeTotal) {
+      if (index + 1 >= total) {
         wait(380, () => {
           if (finished) return
-          if (battle.caught) {
+          if (caught) {
             phase = 'celebrate'
             play('catch')
-            playCry(encounter.speciesId)
+            playCry(speciesId)
             wait(650, finish)
           } else {
             phase = 'escape'
@@ -84,6 +85,32 @@
         return
       }
       wait(380, () => runShakes(index + 1))
+    }
+
+    function startThrow() {
+      wait(450, () => {
+        if (finished) return
+        phase = 'shake'
+        shakeIndex = 0
+        runShakes(0)
+      })
+    }
+
+    if (throwOnly) {
+      startThrow()
+    } else {
+      phase = 'clash'
+      // Timeline ~3s no máximo, avançando por timer (não por animationend).
+      wait(550, () => {
+        if (finished) return
+        if (!didWin) {
+          phase = 'outcome'
+          wait(700, finish)
+          return
+        }
+        phase = 'throw'
+        startThrow()
+      })
     }
 
     return () => {
@@ -109,14 +136,14 @@
   camadas: .side cuida da posição (aproximar, recuar, sumir) e .body da reação
   (tremer ao levar dano), para uma animação não sobrescrever a outra.
 -->
-<button type="button" class="scene" class:clash={phase === 'clash'} onclick={skip} aria-label="Cena de batalha. Toque para pular">
+<button type="button" class="scene" class:clash={phase === 'clash'} onclick={skip} aria-label={mode === 'throw' ? 'Cena de captura. Toque para pular' : 'Cena de batalha. Toque para pular'}>
   <div class="field">
     <div
       class="side wild"
       class:out={phase === 'throw' || phase === 'shake' || phase === 'celebrate'}
       class:back={phase === 'escape'}
     >
-      <div class="body" class:hurt={battle.won && phase === 'clash'}>
+      <div class="body" class:hurt={won && phase === 'clash'}>
         {#if wildLook.kind === 'pmd' && pmdAnim(encounter.speciesId, wildLook.shinySheet, 'Idle')}
           <div class="anchor">
             <PmdSprite
@@ -135,27 +162,29 @@
       </div>
     </div>
 
-    <div class="side ally" class:retreat={phase === 'outcome' && !battle.won}>
-      <div class="body" class:hurt={!battle.won && phase === 'clash'}>
-        {#if lead && allyLook}
-          {#if allyLook.kind === 'pmd' && pmdAnim(lead.speciesId, allyLook.shinySheet, 'Idle')}
-            <div class="anchor">
-              <PmdSprite
-                speciesId={lead.speciesId}
-                shiny={allyLook.shinySheet}
-                anim="Idle"
-                dir={3}
-                scale={2}
-                {time}
-                shadow={allyLook.shadow}
-              />
-            </div>
-          {:else}
-            <img class="gif flip" use:spriteLoading={showdownSrc(lead.speciesId, lead.isShiny)} src={showdownSrc(lead.speciesId, lead.isShiny)} alt="" />
+    {#if mode !== 'throw'}
+      <div class="side ally" class:retreat={phase === 'outcome' && !won}>
+        <div class="body" class:hurt={!won && phase === 'clash'}>
+          {#if lead && allyLook}
+            {#if allyLook.kind === 'pmd' && pmdAnim(lead.speciesId, allyLook.shinySheet, 'Idle')}
+              <div class="anchor">
+                <PmdSprite
+                  speciesId={lead.speciesId}
+                  shiny={allyLook.shinySheet}
+                  anim="Idle"
+                  dir={3}
+                  scale={2}
+                  {time}
+                  shadow={allyLook.shadow}
+                />
+              </div>
+            {:else}
+              <img class="gif flip" use:spriteLoading={showdownSrc(lead.speciesId, lead.isShiny)} src={showdownSrc(lead.speciesId, lead.isShiny)} alt="" />
+            {/if}
           {/if}
-        {/if}
+        </div>
       </div>
-    </div>
+    {/if}
 
     {#if phase === 'throw' || phase === 'shake' || phase === 'celebrate'}
       <div class="ball">
@@ -182,7 +211,7 @@
     {/if}
   </div>
 
-  {#if phase === 'outcome' && !battle.won}
+  {#if phase === 'outcome' && !won}
     <p class="banner bad">Derrota</p>
   {:else if phase === 'celebrate'}
     <p class="banner good">Capturado!</p>

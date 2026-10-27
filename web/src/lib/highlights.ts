@@ -3,6 +3,7 @@ import {
   itemLabel,
   type BattleOutcome,
   type BerryInfo,
+  type ItemCredit,
   type LearnEntryView,
   type RegionInfo,
 } from './api'
@@ -41,11 +42,11 @@ export function battleHighlightCards(input: {
   const cards: HighlightCard[] = []
 
   if (!battle.won) {
-    cards.push({ id: 'lost', title: 'Derrota', detail: 'Seus Pokémon não se machucaram.', tone: 'bad' })
+    cards.push(captureHighlightCard('lost'))
   } else if (battle.caught) {
-    cards.push({ id: 'caught', title: 'Capturado!', detail: 'Entrou no jardim.', tone: 'good' })
-  } else {
-    cards.push({ id: 'escaped', title: 'Escapou', detail: 'Você venceu, mas ele fugiu.', tone: 'neutral' })
+    cards.push(captureHighlightCard('caught'))
+  } else if (battle.status !== 'pending') {
+    cards.push(captureHighlightCard('escaped'))
   }
 
   for (const fighter of battle.fighters) {
@@ -94,6 +95,48 @@ export function battleHighlightCards(input: {
   cards.push(...rewardCards(battle.levelRewards ?? [], berries))
 
   return cards
+}
+
+export type CaptureOutcomeKind = 'lost' | 'caught' | 'escaped' | 'left'
+
+/** Cartão do desfecho: derrota, captura, fuga da bola ou deixar ir. */
+export function captureHighlightCard(kind: CaptureOutcomeKind): HighlightCard {
+  switch (kind) {
+    case 'lost':
+      return { id: 'lost', title: 'Derrota', detail: 'Seus Pokémon não se machucaram.', tone: 'bad' }
+    case 'caught':
+      return { id: 'caught', title: 'Capturado!', detail: 'Entrou no jardim.', tone: 'good' }
+    case 'escaped':
+      return { id: 'escaped', title: 'Escapou', detail: 'Você venceu, mas ele fugiu.', tone: 'neutral' }
+    case 'left':
+      return { id: 'left', title: 'Deixou ir', detail: 'Você venceu e deixou ele ir.', tone: 'neutral' }
+  }
+}
+
+const outcomeCardIds = new Set(['lost', 'caught', 'escaped', 'left'])
+
+/** Coloca o cartão de captura na frente e acrescenta XP extra do lançamento. */
+export function mergeCaptureOutcome(
+  cards: HighlightCard[],
+  kind: Exclude<CaptureOutcomeKind, 'lost'>,
+  extra: HighlightCard[] = [],
+): HighlightCard[] {
+  const rest = cards.filter((card) => !outcomeCardIds.has(card.id))
+  return [captureHighlightCard(kind), ...rest, ...extra]
+}
+
+/** XP e recompensas só do POST /throw (além do que a vitória já deu). */
+export function throwRewardCards(input: {
+  trainerXpGained?: number
+  trainer?: { level: number; xp: number; levelsGained: number }
+  levelRewards?: ItemCredit[]
+  regions: RegionInfo[]
+  berries: BerryInfo[]
+}): HighlightCard[] {
+  const cards: HighlightCard[] = []
+  if (input.trainer) cards.push(...trainerCards(input.trainer, input.trainerXpGained ?? 0, input.regions))
+  cards.push(...rewardCards(input.levelRewards ?? [], input.berries))
+  return cards.map((card) => ({ ...card, id: `catch-${card.id}` }))
 }
 
 /** Nível ou XP do treinador e as regiões que o novo nível liberou. */

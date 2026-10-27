@@ -45,7 +45,12 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
     .where(eq(activeEffects.userId, userId))
     .all()
   const pending = db
-    .select({ id: encounters.id, status: encounters.status, expiresAt: encounters.expiresAt })
+    .select({
+      id: encounters.id,
+      status: encounters.status,
+      expiresAt: encounters.expiresAt,
+      wonAt: encounters.wonAt,
+    })
     .from(encounters)
     .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .all()
@@ -109,6 +114,13 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   for (const id of caughtUp.fleeEncounterIds) {
     db.update(encounters)
       .set({ status: 'fled', resolvedAt: now })
+      .where(and(eq(encounters.id, id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+  }
+
+  for (const id of caughtUp.escapeWonEncounterIds) {
+    db.update(encounters)
+      .set({ status: 'escaped', resolvedAt: now })
       .where(and(eq(encounters.id, id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
       .run()
   }

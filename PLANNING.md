@@ -1136,9 +1136,14 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - EVs passam a valer aqui: cada lutador que entrou na luta ganha o EV yield do selvagem ao vencer, com os tetos da 5.18.
 - *8.3 — Tela de combate:* botões de golpe rápido e carregado com cooldown e energia visíveis, barras de HP, número de dano, animações do PMD com os fallbacks em CSS (seção 5.13), sons, tempo limite e o interruptor "Auto" (a luta acontece igual, sem tocar). Funciona em 360px.
   - Cobertura do PMD nas 251 (medida em 2026-10-27): `Attack`, `Hurt`, `Charge` e `Swing` em todas; `Shoot` em 246; `Strike` em 193; **`Faint` só em 61**, então o desmaio usa o fallback em CSS na maioria.
-- *8.4 — Captura em passos:* status `won`, lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
+- *8.4 — Captura em passos:* encontro vencido (`won_at`, sem status novo), lançar ou deixar ir, chance de fuga por erro. A cena da 6.2 vira só a parte do lançamento.
 - *8.5 — Modo automático:* o interruptor "Auto" (que já existe na 8.3) vira preferência do treinador no servidor, junto com "depois de vencer: perguntar, capturar sempre ou deixar ir", e os interruptores na tela de exploração.
 - Pronto quando: uma luta completa roda no celular sem travar, o resultado do servidor bate com o do front nos testes, e o save existente continua jogável depois da migração.
+- *Juice do combate (anotado em 2026-10-27, depois da 8.5):*
+  - **Efeitos por golpe:** pegar efeitos visuais (partículas, rajadas, folhas, chamas, raios…) e mapear para os golpes que os Pokémon podem ter. O mapa sai por tipo e categoria do golpe (físico ou especial, rápido ou carregado), com exceções por golpe quando valer a pena; golpe sem efeito usa o do tipo. Fica num lugar só, como o `gardenSprite`. Só assets com licença redistribuível (seção 4.3), creditados no `CREDITS.md`.
+  - **Animações da luta mais vivas:** impacto com tremida de tela curta, flash no acerto, destaque no supereficaz e no crítico, e uma entrada mais marcada do golpe carregado.
+  - **Pokébola mais bonita e mais dramática:** arco do lançamento, a bola abrindo e puxando o Pokémon num brilho, pausas maiores entre as chacoalhadas (a última mais demorada), e no fim estrelinhas na captura ou a bola estourando na fuga.
+  - Tudo respeitando `prefers-reduced-motion` e leve no celular.
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17).
 

@@ -19,6 +19,10 @@ export type PendingEncounter = {
   expiresAt: number
   wildPower: number
   battleStartedAt: number | null
+  /** null = luta ainda não vencida; epoch ms da vitória (8.4, aguardando captura). */
+  wonAt: number | null
+  /** Chance atual de captura; null se ainda não venceu. */
+  catchChance: number | null
 }
 
 export type RegionInfo = {
@@ -46,7 +50,7 @@ export type BattleOutcome = {
   won: boolean
   catchChance: number | null
   caught: boolean
-  status: 'lost' | 'caught' | 'escaped'
+  status: 'lost' | 'caught' | 'escaped' | 'pending'
   log?: unknown[]
   fighters: {
     pokemonId: number
@@ -60,6 +64,19 @@ export type BattleOutcome = {
   trainer: { level: number; xp: number; levelsGained: number }
   seedDrop: { itemKey: string; berryKey: string } | null
   levelRewards: ItemCredit[]
+}
+
+/** Resposta de POST /encounters/:id/throw. */
+export type ThrowOutcome = {
+  caught: boolean
+  fled: boolean
+  catchChance: number
+  throwNumber: number
+  status: 'caught' | 'escaped' | 'pending'
+  pokemonId?: number
+  trainerXpGained?: number
+  trainer?: { level: number; xp: number; levelsGained: number }
+  levelRewards?: ItemCredit[]
 }
 
 export type MoveView = {
@@ -268,8 +285,12 @@ export function errorText(error: ApiError): string {
       return 'Esse encontro não está mais valendo.'
     case 'battle_already_started':
       return 'A luta desse encontro já começou.'
+    case 'battle_already_won':
+      return 'Essa luta já acabou. É hora de capturar.'
     case 'battle_not_started':
       return 'A luta ainda não começou.'
+    case 'battle_not_won':
+      return 'Vença a luta antes de lançar a bola.'
     case 'finish_too_early':
       return 'Espere a luta terminar.'
     case 'invalid_team':

@@ -246,6 +246,13 @@ export const encounters = sqliteTable(
     battleStartedAt: integer('battle_started_at'),
     /** Setup JSON congelado no start (finish refaz a luta com este snapshot). */
     battleSetupJson: text('battle_setup_json'),
+    /**
+     * Vitória aguardando decisão de captura (8.4). Continua `pending`;
+     * null = ainda não venceu (ou já resolveu).
+     */
+    wonAt: integer('won_at'),
+    /** Quantos lançamentos já foram feitos neste encontro vencido. */
+    throwCount: integer('throw_count').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     resolvedAt: integer('resolved_at'),

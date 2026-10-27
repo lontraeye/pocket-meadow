@@ -14,6 +14,10 @@ export type EncounterView = {
   wildPower: number
   /** null = luta manual não iniciada; número = epoch ms do start (8.3). */
   battleStartedAt: number | null
+  /** null = ainda não venceu; número = epoch ms da vitória (8.4, aguardando captura). */
+  wonAt: number | null
+  /** Chance atual de captura (com catch_boost se ativo); null se ainda não venceu. */
+  catchChance: number | null
 }
 
 export function toEncounterView(input: {
@@ -27,6 +31,8 @@ export function toEncounterView(input: {
   expiresAt: number
   baseStatTotal: number
   battleStartedAt?: number | null
+  wonAt?: number | null
+  catchChance?: number | null
 }): EncounterView {
   return {
     id: input.id,
@@ -40,5 +46,7 @@ export function toEncounterView(input: {
     expiresAt: input.expiresAt,
     wildPower: power(input.baseStatTotal, input.level),
     battleStartedAt: input.battleStartedAt ?? null,
+    wonAt: input.wonAt ?? null,
+    catchChance: input.catchChance ?? null,
   }
 }

@@ -9,6 +9,10 @@ export const BATTLE_XP_LEVEL_EXP = 2.5
 export const battleConfig = {
   shinyRate: 1 / 512,
   encounterTtlMs: 30 * 60 * 1000,
+  /** Prazo para decidir a captura depois da vitória (8.4). */
+  decisionTtlMs: 10 * 60 * 1000,
+  /** Chance do selvagem fugir após um lançamento falho. */
+  throwFleeChance: 0.25,
   k: 4,
   minChance: 0.05,
   maxChance: 0.95,

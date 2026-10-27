@@ -16,9 +16,14 @@ export function wildTraitsSeed(source: number): number {
 /** @deprecated use wildTraitsSeed */
 export const wildFightTraitsSeed = wildTraitsSeed
 
-/** Lançamentos / chance de captura automática (8.4 usará a mesma família). */
+/** Lançamentos da captura em passos (8.4): 1ª rolagem = 1º lançamento, etc. */
 export function throwRngSeed(source: number): number {
   return (source ^ 0x54485257) >>> 0 // "THRW"
+}
+
+/** Semente de berry na vitória (separada dos lançamentos). */
+export function seedDropRngSeed(source: number): number {
+  return (source ^ 0x53444544) >>> 0 // "SDED"
 }
 
 /**

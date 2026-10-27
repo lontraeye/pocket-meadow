@@ -21,7 +21,7 @@ import {
   species,
   trainers,
 } from '../db/schema.js'
-import { power } from '../game/battle.js'
+import { catchChance, power } from '../game/battle.js'
 import { energyFullAt, nextEnergyAt } from '../game/catchUp.js'
 import { availableMovesFor, buildTraitView, requireTraitFields } from '../game/traitView.js'
 import type { AbilitySlot } from '../game/traits.js'
@@ -127,6 +127,9 @@ function readState(userId: number, now: number) {
       expiresAt: encounters.expiresAt,
       baseStatTotal: species.baseStatTotal,
       battleStartedAt: encounters.battleStartedAt,
+      wonAt: encounters.wonAt,
+      catchChance: encounters.catchChance,
+      captureRate: species.captureRate,
     })
     .from(encounters)
     .innerJoin(species, eq(encounters.speciesId, species.id))
@@ -275,6 +278,25 @@ function readState(userId: number, now: number) {
       expiresAt: effect.expiresAt,
       createdAt: effect.createdAt,
     })),
-    encounter: pending ? toEncounterView(pending) : null,
+    encounter: pending
+      ? toEncounterView({
+          ...pending,
+          catchChance:
+            pending.wonAt != null
+              ? catchChance(pending.captureRate, peekCatchBonus(userId, effects))
+              : null,
+        })
+      : null,
   }
+}
+
+function peekCatchBonus(
+  userId: number,
+  effects: { userId?: number; effectKey: string; multiplier: number; charges: number | null; id: number }[],
+): number {
+  const rows = effects
+    .filter((effect) => effect.effectKey === 'catch_boost')
+    .sort((a, b) => a.id - b.id)
+  const chosen = rows.find((row) => row.charges !== null) ?? rows[0]
+  return chosen?.multiplier ?? 1
 }

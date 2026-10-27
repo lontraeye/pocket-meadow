@@ -503,3 +503,93 @@ test('a migração battle_started_at preserva encontros e Pokémon existentes', 
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração won_at preserva encounters e encounter_fighters', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-won-at-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+    '0009_battle_started.sql',
+    '0010_battle_setup_json.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, created_at) values ('ash', 1)`).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values (16, 'pidgey', 'Pidgey', 'normal', 40, 45, 40, 35, 35, 56, 251, 50, 255, 10, 1, 0, 0, 0, 0, 0, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, caught_at, original_species_id,
+      nature, ability_slot, fast_move, charged_move,
+      iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values (
+      1, 16, 5, 0, 1, 16,
+      'hardy', '1', 'tackle', 'gust',
+      15, 15, 15, 15, 15, 15,
+      0, 0, 0, 0, 0, 0
+    )`,
+  ).run()
+  db.prepare(
+    `insert into encounters (
+      user_id, region_slug, species_id, level, is_shiny, rng_seed, status, created_at, expires_at
+    ) values (1, 'kanto-route-1', 16, 3, 0, 42, 'pending', 100, 200)`,
+  ).run()
+  db.prepare(
+    `insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (1, 0, 1, 12.5)`,
+  ).run()
+  db.prepare(
+    `insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (1, 1, null, 9)`,
+  ).run()
+
+  const fightersBefore = db
+    .prepare(`select encounter_id, slot, pokemon_id, power from encounter_fighters order by slot`)
+    .all() as { encounter_id: number; slot: number; pokemon_id: number | null; power: number }[]
+  assert.equal(fightersBefore.length, 2)
+
+  execMigration(db, '0011_won_at.sql')
+
+  const fightersAfter = db
+    .prepare(`select encounter_id, slot, pokemon_id, power from encounter_fighters order by slot`)
+    .all() as { encounter_id: number; slot: number; pokemon_id: number | null; power: number }[]
+  assert.deepEqual(fightersAfter, fightersBefore)
+
+  const row = db
+    .prepare(`select won_at, throw_count, status from encounters where id = 1`)
+    .get() as { won_at: number | null; throw_count: number; status: string }
+  assert.equal(row.won_at, null)
+  assert.equal(row.throw_count, 0)
+  assert.equal(row.status, 'pending')
+
+  db.prepare(`update encounters set won_at = 150, throw_count = 2 where id = 1`).run()
+  const updated = db
+    .prepare(`select won_at, throw_count from encounters where id = 1`)
+    .get() as { won_at: number; throw_count: number }
+  assert.equal(updated.won_at, 150)
+  assert.equal(updated.throw_count, 2)
+  assert.equal(
+    (
+      db.prepare(`select count(*) as n from encounter_fighters`).get() as { n: number }
+    ).n,
+    2,
+  )
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})

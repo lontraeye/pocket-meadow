@@ -14,6 +14,7 @@
     type OwnedPokemon,
     type PendingEncounter,
     type RegionInfo,
+    type ThrowOutcome,
   } from './api'
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
@@ -23,19 +24,23 @@
     loadSavedBattle,
   } from './battlePersist'
   import Highlights from './Highlights.svelte'
-  import { battleHighlightCards, prefersReducedMotion } from './highlights'
+  import { battleHighlightCards, mergeCaptureOutcome, prefersReducedMotion, throwRewardCards } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import { battleSpritesReady, spriteReady } from './preload'
   import { play, playCry, warmCries } from './sound'
-  import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
+  import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
   import { simConfig, type BattleInput } from './sim'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Step = 'regions' | 'encounter' | 'fight' | 'scene' | 'highlights' | 'result'
-  type Result = { kind: 'fled' } | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[] }
+  type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'throw' | 'highlights' | 'result'
+  type Result =
+    | { kind: 'fled' }
+    | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[]; left?: boolean }
 
-  let step = $state<Step>(untrack(() => (game.encounter ? 'encounter' : 'regions')))
+  let step = $state<Step>(
+    untrack(() => (game.encounter?.wonAt ? 'decide' : game.encounter ? 'encounter' : 'regions')),
+  )
   let encounter = $state<PendingEncounter | null>(untrack(() => game.encounter))
   let regions = $state<RegionInfo[]>([])
   let selected = $state<number[]>([])
@@ -52,6 +57,10 @@
   let fightTeam = $state<OwnedPokemon[]>([])
   let fightInputs = $state<BattleInput[]>([])
   let fightResumeMs = $state(0)
+  let lastThrow = $state<ThrowOutcome | null>(null)
+  let throwing = $state(false)
+  let notice = $state('')
+  let appliedThrow = $state<number | null>(null)
 
   const clock = serverClock(() => game.now)
 
@@ -90,10 +99,21 @@
   // Retomar luta interrompida (o app fechou ou recarregou no meio).
   let resumedFor: number | null = null
   $effect(() => {
-    if (step !== 'encounter' || !encounter?.battleStartedAt || pending || fightStart) return
+    if (step !== 'encounter' || !encounter?.battleStartedAt || encounter.wonAt || pending || fightStart) return
     if (resumedFor === encounter.id) return
     resumedFor = encounter.id
     void resumeInterrupted(encounter)
+  })
+
+  // Vitória aguardando captura: reabre na decisão (encontro novo ou reload).
+  $effect(() => {
+    const found = game.encounter
+    if (!found?.wonAt) return
+    if (step === 'throw' || step === 'fight' || step === 'highlights' || step === 'result') return
+    encounter = found
+    if (step !== 'decide') step = 'decide'
+    const look = gardenSprite(found.speciesId, found.isShiny)
+    if (look.kind === 'pmd') void loadPmdBattle(found.speciesId, look.shinySheet)
   })
 
   /**
@@ -121,7 +141,7 @@
         if (!response.ok) {
           const error = await readError(response)
           if (error.error === 'encounter_not_found') clearSavedBattle(found.id)
-          message = errorText(error)
+          if (error.error !== 'battle_already_won') message = errorText(error)
           await onState()
           return
         }
@@ -157,8 +177,23 @@
     step = 'fight'
   }
   function applyBattleResult(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
-    result = { kind: 'battle', battle, team: teamSnapshot }
-    battleCards = battleHighlightCards({
+    result = { kind: 'battle', battle, team: teamSnapshot, left: false }
+    battleCards = cardsForBattle(battle, teamSnapshot)
+    if (!battle.won) {
+      step = 'highlights'
+    } else {
+      if (encounter) {
+        encounter = { ...encounter, wonAt: Date.now(), catchChance: battle.catchChance }
+        const look = gardenSprite(encounter.speciesId, encounter.isShiny)
+        if (look.kind === 'pmd') void loadPmdBattle(encounter.speciesId, look.shinySheet)
+      }
+      step = 'decide'
+    }
+    void onState().catch(() => undefined)
+  }
+
+  function cardsForBattle(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
+    return battleHighlightCards({
       battle,
       nameOf,
       canEvolve: readyToEvolve,
@@ -166,9 +201,45 @@
       regions,
       berries: game.berries,
     })
-    if (prefersReducedMotion() || !battle.won) step = 'highlights'
-    else step = 'scene'
-    void onState().catch(() => undefined)
+  }
+
+  function ensureBattleResult(): Extract<Result, { kind: 'battle' }> {
+    if (result?.kind === 'battle') return result
+    const pendingEncounter = encounter
+    const created = {
+      kind: 'battle' as const,
+      battle: {
+        encounterId: pendingEncounter?.id ?? 0,
+        winChance: null,
+        won: true,
+        catchChance: pendingEncounter?.catchChance ?? null,
+        caught: false,
+        status: 'pending' as const,
+        fighters: [],
+        trainerXpGained: 0,
+        trainer: { level: game.trainer.level, xp: game.trainer.xp, levelsGained: 0 },
+        seedDrop: null,
+        levelRewards: [],
+      },
+      team: [] as OwnedPokemon[],
+      left: false,
+    }
+    result = created
+    return created
+  }
+
+  function applyCaptureCards(kind: 'caught' | 'escaped' | 'left', extra?: ThrowOutcome) {
+    const bonus =
+      extra?.caught
+        ? throwRewardCards({
+            trainerXpGained: extra.trainerXpGained,
+            trainer: extra.trainer,
+            levelRewards: extra.levelRewards,
+            regions,
+            berries: game.berries,
+          })
+        : []
+    battleCards = mergeCaptureOutcome(battleCards, kind, bonus)
   }
 
   async function loadRegions() {
@@ -186,6 +257,7 @@
     pending = true
     searching = slug
     message = ''
+    notice = ''
     try {
       const response = await api('/api/encounters', { regionSlug: slug })
       if (!response.ok) {
@@ -240,6 +312,7 @@
     pending = true
     fighting = true
     message = ''
+    notice = ''
     const teamSnapshot = [...chosen]
     const wild = encounter
     try {
@@ -297,18 +370,115 @@
     void onState().catch(() => undefined)
   }
 
-  function afterScene() {
-    step = 'highlights'
-  }
-
   function afterHighlights() {
     step = 'result'
+  }
+
+  async function throwBall() {
+    if (!encounter) return
+    play('tap')
+    pending = true
+    throwing = true
+    message = ''
+    notice = ''
+    try {
+      const response = await api(`/api/encounters/${encounter.id}/throw`, {})
+      if (!response.ok) {
+        const error = await readError(response)
+        message = errorText(error)
+        if (response.status === 404) {
+          encounter = null
+          step = 'regions'
+        }
+        await onState()
+        return
+      }
+      const outcome = (await response.json()) as ThrowOutcome
+      lastThrow = outcome
+      encounter = { ...encounter, catchChance: outcome.catchChance }
+      if (prefersReducedMotion()) afterThrow()
+      else step = 'throw'
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+      throwing = false
+    }
+  }
+
+  function afterThrow() {
+    const outcome = lastThrow
+    if (!outcome) {
+      step = 'decide'
+      return
+    }
+    if (appliedThrow === outcome.throwNumber) return
+    appliedThrow = outcome.throwNumber
+    if (outcome.status === 'pending') {
+      notice = 'Escapou da bola! Tentar de novo?'
+      const current = ensureBattleResult()
+      result = { ...current, battle: { ...current.battle, catchChance: outcome.catchChance } }
+      step = 'decide'
+      void onState().catch(() => undefined)
+      return
+    }
+    notice = ''
+    const current = ensureBattleResult()
+    result = {
+      ...current,
+      left: false,
+      battle: {
+        ...current.battle,
+        caught: outcome.caught,
+        catchChance: outcome.catchChance,
+        status: outcome.status,
+      },
+    }
+    applyCaptureCards(outcome.caught ? 'caught' : 'escaped', outcome)
+    step = 'highlights'
+    void onState().catch(() => undefined)
+  }
+
+  async function leaveWild() {
+    if (!encounter) return
+    play('tap')
+    pending = true
+    message = ''
+    notice = ''
+    try {
+      const response = await api(`/api/encounters/${encounter.id}/release`, {})
+      if (!response.ok) {
+        const error = await readError(response)
+        message = errorText(error)
+        if (response.status === 404) {
+          encounter = null
+          step = 'regions'
+        }
+        await onState()
+        return
+      }
+      play('release')
+      const current = ensureBattleResult()
+      result = {
+        ...current,
+        left: true,
+        battle: { ...current.battle, caught: false, status: 'escaped' },
+      }
+      applyCaptureCards('left')
+      step = 'highlights'
+      void onState().catch(() => undefined)
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
   }
 
   async function flee() {
     if (!encounter) return
     pending = true
     message = ''
+    notice = ''
     try {
       const response = await api(`/api/encounters/${encounter.id}/flee`, {})
       if (!response.ok) {
@@ -347,16 +517,17 @@
   }
 </script>
 
-{#snippet wild(mon: PendingEncounter)}
+{#snippet wild(mon: PendingEncounter, pose: 'Idle' | 'Hurt' = 'Idle')}
   {@const look = gardenSprite(mon.speciesId, mon.isShiny)}
-  {@const idle = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, 'Idle') : null}
+  {@const anim = look.kind === 'pmd' && pose === 'Hurt' && pmdAnim(mon.speciesId, look.shinySheet, 'Hurt') ? 'Hurt' : 'Idle'}
+  {@const sheet = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, anim) : null}
   <div class="stage">
-    {#if look.kind === 'pmd' && idle}
+    {#if look.kind === 'pmd' && sheet}
       <div class="anchor">
         <PmdSprite
           speciesId={mon.speciesId}
           shiny={look.shinySheet}
-          anim="Idle"
+          {anim}
           dir={0}
           scale={3}
           {time}
@@ -377,6 +548,9 @@
 <div class="flow">
   {#if message}
     <p class="alert" role="alert">{message}</p>
+  {/if}
+  {#if notice}
+    <p class="hint" role="status">{notice}</p>
   {/if}
 
   {#if step === 'regions'}
@@ -410,7 +584,7 @@
             class="btn btn-primary choice"
             onclick={() => {
               encounter = game.encounter
-              step = 'encounter'
+              step = game.encounter?.wonAt ? 'decide' : 'encounter'
             }}
           >
             Continuar encontro
@@ -482,7 +656,7 @@
         type="button"
         class="btn btn-primary"
         aria-busy={fighting}
-        disabled={pending || chosen.length === 0 || encounter.battleStartedAt !== null}
+        disabled={pending || chosen.length === 0 || encounter.battleStartedAt !== null || encounter.wonAt !== null}
         onclick={battle}
       >
         {#if fighting}
@@ -508,20 +682,48 @@
         />
       </section>
     </div>
-  {:else if step === 'scene' && result?.kind === 'battle' && encounter}
+  {:else if step === 'decide' && encounter}
     <div class="scroll">
-      <section class="panel sheet">
-        <BattleScene
-          {encounter}
-          battle={result.battle}
-          team={result.team}
-          {time}
-          onDone={afterScene}
-        />
+      <section class="panel sheet wild">
+        {@render wild(encounter, 'Hurt')}
+        {#if encounter.catchChance !== null}
+          <p class="odds">Chance de captura {percent(encounter.catchChance)}</p>
+        {/if}
       </section>
     </div>
     <div class="dock">
-      <button type="button" class="btn" onclick={afterScene}>Pular cena</button>
+      <button
+        type="button"
+        class="btn btn-primary big"
+        aria-busy={throwing}
+        disabled={pending}
+        onclick={() => void throwBall()}
+      >
+        {#if throwing}
+          <span class="ball sprite-wait" aria-hidden="true"></span>Lançando…
+        {:else}
+          Lançar Poké Ball
+        {/if}
+      </button>
+      <button type="button" class="btn big" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
+      <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
+    </div>
+  {:else if step === 'throw' && encounter && lastThrow}
+    <div class="scroll">
+      <section class="panel sheet">
+        {#key lastThrow.throwNumber}
+          <BattleScene
+            mode="throw"
+            {encounter}
+            throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
+            {time}
+            onDone={afterThrow}
+          />
+        {/key}
+      </section>
+    </div>
+    <div class="dock">
+      <button type="button" class="btn" onclick={afterThrow}>Pular cena</button>
     </div>
   {:else if step === 'highlights' && result?.kind === 'battle'}
     <div class="scroll">
@@ -543,6 +745,8 @@
           {@render wild(encounter)}
           {#if result.battle.caught}
             <p class="good">Capturado! Entrou no jardim.</p>
+          {:else if result.left}
+            <p>Você venceu e deixou ele ir.</p>
           {:else if result.battle.won}
             <p>Você venceu, mas ele fugiu.</p>
           {:else}
@@ -629,6 +833,12 @@
   .choice,
   .dock .btn {
     width: 100%;
+  }
+
+  .big {
+    min-height: 64px;
+    font-size: 1.15rem;
+    touch-action: manipulation;
   }
 
   .choice {

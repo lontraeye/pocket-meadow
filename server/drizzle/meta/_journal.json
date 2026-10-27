@@ -78,6 +78,13 @@
       "when": 1793121000000,
       "tag": "0010_battle_setup_json",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793123454200,
+      "tag": "0011_won_at",
+      "breakpoints": true
     }
   ]
 }
