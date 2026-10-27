@@ -1,0 +1,3 @@
+# Scripts e units vão para o Linux da VM: CRLF quebra o bash e o systemd.
+*.sh text eol=lf
+deploy/** text eol=lf
