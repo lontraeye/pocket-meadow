@@ -3,6 +3,7 @@ import { candyCostForStage, minLevelForStage } from '../config/evolution.js'
 export type PokemonPayload = {
   id: number
   name: string
+  base_experience: number
   types: { slot: number; type: { name: string } }[]
   stats: { base_stat: number; stat: { name: string } }[]
 }
@@ -41,6 +42,7 @@ export type SpeciesRow = {
   spDefense: number
   speed: number
   baseStatTotal: number
+  baseExperience: number
   captureRate: number
   evolutionChainId: number
   evolvesFromId: number | null
@@ -142,6 +144,11 @@ export function parseSpeciesSeed(
       number
     >
 
+    const baseExperience = monster.base_experience
+    if (!Number.isInteger(baseExperience) || baseExperience <= 0) {
+      throw new Error(`species ${id} has invalid base_experience`)
+    }
+
     species.push({
       id,
       name: monster.name,
@@ -155,6 +162,7 @@ export function parseSpeciesSeed(
       spDefense: stats['special-defense'],
       speed: stats.speed,
       baseStatTotal: statNames.reduce((sum, name) => sum + stats[name], 0),
+      baseExperience,
       captureRate: details.capture_rate,
       evolutionChainId: chainById.get(id)!,
       evolvesFromId: evolvesFromChain,

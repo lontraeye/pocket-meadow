@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { battleConfig } from '../config/battle.js'
+import { BATTLE_XP_DIV, BATTLE_XP_LEVEL_EXP, battleConfig } from '../config/battle.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import {
@@ -150,7 +150,8 @@ describe('batalha', () => {
     assert.equal(battleConfig.shinyRate, 1 / 512)
     assert.equal(battleConfig.encounterTtlMs, 30 * 60 * 1000)
     assert.deepEqual(battleConfig.teamWeights, [1, 0.6, 0.4])
-    assert.equal(battleXp(4), 20)
+    assert.equal(battleConfig.xpDiv, BATTLE_XP_DIV)
+    assert.equal(battleConfig.xpLevelExp, BATTLE_XP_LEVEL_EXP)
     assert.equal(catchChance(255), 1)
     assert.equal(catchChance(3), battleConfig.catchMin)
     assert.equal(catchChance(45), (45 / 255) * battleConfig.catchMult)
@@ -160,10 +161,18 @@ describe('batalha', () => {
 })
 
 describe('xp', () => {
-  test('o XP da batalha é dividido com floor', () => {
-    assert.equal(fighterXp(7, 3), 11)
-    assert.equal(fighterXp(2, 3), 3)
-    assert.equal(fighterXp(4, 1), 20)
+  test('o XP de batalha segue os exemplos da seção 5.5 e divide pelo time', () => {
+    assert.equal(battleXp(50, 3, 5), 23)
+    assert.equal(battleXp(50, 3, 30), 3)
+    assert.equal(battleXp(112, 4, 5), 79)
+    assert.equal(battleXp(49, 8, 6), 96)
+    assert.equal(battleXp(395, 10, 10), 791)
+    assert.equal(fighterXp(50, 3, 5, 1), 23)
+    assert.equal(fighterXp(50, 3, 5, 2), 11)
+    assert.equal(xpToNext(5), 111)
+    assert.equal(xpToNext(30), 1643)
+    assert.equal(xpToNext(6), 146)
+    assert.equal(xpToNext(10), 316)
   })
 
   test('level up reaproveita xpToNext e pode subir mais de um nível', () => {

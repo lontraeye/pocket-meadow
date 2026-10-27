@@ -2,9 +2,10 @@
   import { untrack } from 'svelte'
   import type { GameState } from './api'
   import PmdSprite from './PmdSprite.svelte'
+  import PokemonSheet from './PokemonSheet.svelte'
   import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
 
-  let { game }: { game: GameState } = $props()
+  let { game, onState }: { game: GameState; onState: () => Promise<void> } = $props()
 
   const columns = 6
   const gridRows = 6
@@ -68,11 +69,6 @@
 
   const selected = $derived(game.pokemon.find((mon) => mon.id === selectedId) ?? null)
   const selectedAsleep = $derived(walkers.find((walker) => walker.id === selectedId)?.anim === 'Sleep')
-  const selectedCandies = $derived(
-    selected === null
-      ? 0
-      : (game.candies.find((row) => row.evolutionChainId === selected.evolutionChainId)?.amount ?? 0),
-  )
 
   // Quanto os sprites passam do ponto do chão, em px na escala 1. Depende só de
   // quem está no jardim, não da animação atual: senão o palco muda de tamanho
@@ -382,42 +378,24 @@
   </div>
 
   {#if selected}
-    <section class="panel sheet" aria-label="Detalhes">
-      <div class="portrait">
-        <img
-          src={showdownSrc(selected.speciesId, selected.isShiny)}
-          alt=""
-        />
-      </div>
-      <div class="info">
-        <h2>
-          {selected.nickname ?? selected.displayName}
-          {#if selected.isShiny}<span class="shiny" title="Shiny">★</span>{/if}
-        </h2>
-        <p class="lv">Nv {selected.level}</p>
-        <div class="xp">
-          {#if selected.xpToNext === null}
-            <span>XP no máximo</span>
-          {:else}
-            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={selected.xpToNext} aria-valuenow={selected.xp}>
-              <span style:width="{Math.min(100, (selected.xp / selected.xpToNext) * 100)}%"></span>
-            </div>
-            <small>XP {selected.xp}/{selected.xpToNext}</small>
-          {/if}
-        </div>
-        <p class="candy">Doces da linha: <strong>{selectedCandies}</strong></p>
-      </div>
-      <button type="button" class="btn close" aria-label="Fechar" onclick={() => (selectedId = null)}>✕</button>
-      {#if devTools}
-        <button
-          type="button"
-          class="btn dev"
-          onclick={() => selected && (selectedAsleep ? devCommands?.wake(selected.id) : devCommands?.sleep(selected.id))}
-        >
-          {selectedAsleep ? 'Acordar (teste)' : 'Dormir (teste)'}
-        </button>
-      {/if}
-    </section>
+    <div class="details">
+      <PokemonSheet
+        {game}
+        mon={selected}
+        dev={devTools
+          ? {
+              asleep: selectedAsleep,
+              toggle: () => {
+                if (!selected) return
+                if (selectedAsleep) devCommands?.wake(selected.id)
+                else devCommands?.sleep(selected.id)
+              },
+            }
+          : null}
+        onClose={() => (selectedId = null)}
+        {onState}
+      />
+    </div>
   {:else}
     <p class="hint">Toque em um Pokémon para ver os detalhes.</p>
   {/if}
@@ -565,91 +543,6 @@
     filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff);
   }
 
-  .sheet {
-    position: relative;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: center;
-    padding-right: 3.25rem;
-  }
-
-  .portrait {
-    display: grid;
-    place-items: center;
-    width: 88px;
-    height: 88px;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-  }
-
-  .portrait img {
-    max-width: 96px;
-    max-height: 96px;
-  }
-
-  .info {
-    display: grid;
-    gap: 0.2rem;
-    min-width: 0;
-  }
-
-  h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .shiny {
-    color: #e0a800;
-  }
-
-  p {
-    margin: 0;
-  }
-
-  .lv {
-    font-weight: 600;
-    color: var(--ink-soft);
-  }
-
-  .xp {
-    display: grid;
-    gap: 0.1rem;
-  }
-
-  .bar {
-    height: 10px;
-    background: #00000025;
-    box-shadow: inset 0 0 0 var(--px) var(--ink);
-  }
-
-  .bar span {
-    display: block;
-    height: 100%;
-    background: #4aa3e0;
-    box-shadow: inset 0 calc(var(--px) * -2) 0 #2f7bb0, inset 0 0 0 var(--px) var(--ink);
-  }
-
-  .xp small,
-  .candy {
-    font-size: 15px;
-  }
-
-  .dev {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  .close {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 0;
-  }
-
   .hint {
     display: flex;
     align-items: center;
@@ -667,9 +560,10 @@
       align-items: start;
     }
 
-    .sheet {
+    .details {
       position: sticky;
       top: 1rem;
+      min-width: 0;
     }
   }
 </style>

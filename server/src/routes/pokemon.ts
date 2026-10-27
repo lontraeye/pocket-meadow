@@ -1,0 +1,444 @@
+import { and, eq, inArray, sql } from 'drizzle-orm'
+import { Hono } from 'hono'
+import { type AuthEnv, requireUser } from '../auth/session.js'
+import { progressConfig, xpToNext } from '../config/progress.js'
+import { GENERIC_PER_CANDY, evolveTrainerXp } from '../config/progression.js'
+import { trainerXpToNext } from '../config/trainer.js'
+import { persistCatchUp } from '../db/catchUp.js'
+import { getDb, immediate } from '../db/client.js'
+import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
+import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
+import { grantXp } from '../game/xp.js'
+import { type Failure, fail, parseId, readObject } from './http.js'
+
+type Ok<T> = { ok: true } & T
+
+export const pokemonRoutes = new Hono<AuthEnv>()
+
+pokemonRoutes.post('/release', requireUser, async (c) => {
+  const body = await readObject(c)
+  if (!body || !Array.isArray(body.pokemonIds)) return c.json({ error: 'invalid_body' }, 400)
+  const ids = parseIds(body.pokemonIds)
+  if (!ids) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => releaseMany(c.get('userId'), ids, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.release)
+})
+
+pokemonRoutes.post('/:id/release', requireUser, (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const result = immediate(() => releaseMany(c.get('userId'), [id], Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.release)
+})
+
+pokemonRoutes.post('/:id/feed', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  if (!body) return c.json({ error: 'invalid_body' }, 400)
+  const doses = body.candies
+  if (typeof doses !== 'number') return c.json({ error: 'invalid_body' }, 400)
+  if (body.useGeneric !== undefined && typeof body.useGeneric !== 'boolean') return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => feedOne(c.get('userId'), id, doses, body.useGeneric === true, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.feed)
+})
+
+pokemonRoutes.post('/:id/evolve', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  if (!body) return c.json({ error: 'invalid_body' }, 400)
+  const toSpeciesId = body.toSpeciesId
+  if (typeof toSpeciesId !== 'number' || !Number.isInteger(toSpeciesId)) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const result = immediate(() => evolveOne(c.get('userId'), id, toSpeciesId, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.evolution)
+})
+
+pokemonRoutes.patch('/:id', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  if (!body) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => patchOne(c.get('userId'), id, body, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.pokemon)
+})
+
+function errorBody(result: Failure): { error: string; pokemonId?: number; min?: number } {
+  return {
+    error: result.error,
+    ...(result.pokemonId !== undefined ? { pokemonId: result.pokemonId } : {}),
+    ...(result.min !== undefined ? { min: result.min } : {}),
+  }
+}
+
+function parseIds(value: unknown[]): number[] | null {
+  const ids: number[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'number' || !Number.isInteger(entry) || entry <= 0) return null
+    ids.push(entry)
+  }
+  return ids
+}
+
+function releaseMany(userId: number, ids: number[], now: number): Ok<{ release: ReleaseResult }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const owned = db
+    .select({
+      id: pokemon.id,
+      location: pokemon.location,
+      level: pokemon.level,
+      isShiny: pokemon.isShiny,
+      evolutionChainId: species.evolutionChainId,
+    })
+    .from(pokemon)
+    .innerJoin(species, eq(pokemon.speciesId, species.id))
+    .where(eq(pokemon.userId, userId))
+    .all()
+
+  const plan = planRelease(ids, owned)
+  if (!plan.ok) {
+    const status = plan.error === 'pokemon_not_found' ? 404 : 400
+    return fail(plan.error, status, plan.pokemonId !== undefined ? { pokemonId: plan.pokemonId } : undefined)
+  }
+
+  db.delete(pokemon)
+    .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, ids)))
+    .run()
+
+  const gainedByChain = new Map<number, number>()
+  let genericGained = 0
+  for (const row of plan.releases) {
+    gainedByChain.set(row.evolutionChainId, (gainedByChain.get(row.evolutionChainId) ?? 0) + row.chain)
+    genericGained += row.generic
+  }
+
+  const lines = [...gainedByChain.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([evolutionChainId, gained]) => {
+      const current = db
+        .select({ amount: candies.amount })
+        .from(candies)
+        .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, evolutionChainId)))
+        .get()
+      const amount = (current?.amount ?? 0) + gained
+      if (current) {
+        db.update(candies)
+          .set({ amount })
+          .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, evolutionChainId)))
+          .run()
+      } else {
+        db.insert(candies).values({ userId, evolutionChainId, amount: gained }).run()
+      }
+      return { evolutionChainId, gained, amount }
+    })
+
+  const trainer = db
+    .select({ genericCandies: trainers.genericCandies, totalReleases: trainers.totalReleases })
+    .from(trainers)
+    .where(eq(trainers.userId, userId))
+    .get()
+  if (!trainer) throw new Error(`trainer missing for user ${userId}`)
+  const genericCandies = trainer.genericCandies + genericGained
+  const totalReleases = trainer.totalReleases + ids.length
+  db.update(trainers)
+    .set({ genericCandies, totalReleases, updatedAt: now })
+    .where(eq(trainers.userId, userId))
+    .run()
+
+  return {
+    ok: true,
+    release: { pokemonIds: ids, lines, genericGained, genericCandies, totalReleases },
+  }
+}
+
+type ReleaseResult = {
+  pokemonIds: number[]
+  lines: { evolutionChainId: number; gained: number; amount: number }[]
+  genericGained: number
+  genericCandies: number
+  totalReleases: number
+}
+
+function feedOne(
+  userId: number,
+  id: number,
+  doses: number,
+  useGeneric: boolean,
+  now: number,
+): Ok<{ feed: FeedResult }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({
+      id: pokemon.id,
+      level: pokemon.level,
+      xp: pokemon.xp,
+      location: pokemon.location,
+      evolutionChainId: species.evolutionChainId,
+    })
+    .from(pokemon)
+    .innerJoin(species, eq(pokemon.speciesId, species.id))
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (mon.location === 'daycare') return fail('in_daycare', 400)
+
+  const plan = planFeed(mon.level, mon.xp, doses)
+  if (!plan.ok) return fail(plan.error, 400)
+
+  const trainer = db
+    .select({ genericCandies: trainers.genericCandies })
+    .from(trainers)
+    .where(eq(trainers.userId, userId))
+    .get()
+  if (!trainer) throw new Error(`trainer missing for user ${userId}`)
+
+  let spent: number
+  let balance: number
+  if (useGeneric) {
+    if (trainer.genericCandies < doses * GENERIC_PER_CANDY) return fail('not_enough_candies', 400)
+    spent = plan.doses * GENERIC_PER_CANDY
+    balance = trainer.genericCandies - spent
+    db.update(trainers).set({ genericCandies: balance, updatedAt: now }).where(eq(trainers.userId, userId)).run()
+  } else {
+    const row = db
+      .select({ amount: candies.amount })
+      .from(candies)
+      .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, mon.evolutionChainId)))
+      .get()
+    if (!row || row.amount < doses) return fail('not_enough_candies', 400)
+    spent = plan.doses
+    balance = row.amount - spent
+    db.update(candies)
+      .set({ amount: balance })
+      .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, mon.evolutionChainId)))
+      .run()
+  }
+
+  db.update(pokemon)
+    .set({ level: plan.level, xp: plan.xp })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+
+  return {
+    ok: true,
+    feed: {
+      doses: plan.doses,
+      spent,
+      xpGained: plan.xpGained,
+      levelsGained: plan.levelsGained,
+      level: plan.level,
+      xp: plan.xp,
+      xpToNext: plan.level >= progressConfig.levelCap ? null : xpToNext(plan.level),
+      useGeneric,
+      balance,
+    },
+  }
+}
+
+type FeedResult = {
+  doses: number
+  spent: number
+  xpGained: number
+  levelsGained: number
+  level: number
+  xp: number
+  xpToNext: number | null
+  useGeneric: boolean
+  balance: number
+}
+
+function evolveOne(
+  userId: number,
+  id: number,
+  toSpeciesId: number,
+  now: number,
+): Ok<{ evolution: EvolutionResult }> | Failure {
+  const clock = persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({
+      id: pokemon.id,
+      level: pokemon.level,
+      xp: pokemon.xp,
+      isShiny: pokemon.isShiny,
+      nickname: pokemon.nickname,
+      isFavorite: pokemon.isFavorite,
+      location: pokemon.location,
+      speciesId: pokemon.speciesId,
+    })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (mon.location !== 'garden') return fail('in_daycare', 400)
+
+  const row = db
+    .select({ minLevel: evolutions.minLevel })
+    .from(evolutions)
+    .where(and(eq(evolutions.fromSpeciesId, mon.speciesId), eq(evolutions.toSpeciesId, toSpeciesId)))
+    .get()
+  if (!row) return fail('evolution_not_found', 404)
+
+  const block = evolutionBlock(mon.level, row.minLevel)
+  if (!block.ok) return fail(block.error, 400, { min: block.min })
+
+  const next = db
+    .select({
+      id: species.id,
+      name: species.name,
+      displayName: species.displayName,
+      evolutionStage: species.evolutionStage,
+    })
+    .from(species)
+    .where(eq(species.id, toSpeciesId))
+    .get()
+  if (!next) throw new Error(`species ${toSpeciesId} is not seeded`)
+
+  db.update(pokemon)
+    .set({ speciesId: next.id })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  markCaught(userId, next.id, mon.isShiny, now)
+
+  const trainerXpGained = evolveTrainerXp(next.evolutionStage)
+  const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
+  db.update(trainers)
+    .set({ level: trainerNext.level, xp: trainerNext.xp, updatedAt: now })
+    .where(eq(trainers.userId, userId))
+    .run()
+
+  return {
+    ok: true,
+    evolution: {
+      pokemonId: id,
+      speciesId: next.id,
+      name: next.name,
+      displayName: next.displayName,
+      level: mon.level,
+      xp: mon.xp,
+      isShiny: mon.isShiny,
+      nickname: mon.nickname,
+      isFavorite: mon.isFavorite,
+      trainerXpGained,
+      trainer: {
+        level: trainerNext.level,
+        xp: trainerNext.xp,
+        levelsGained: trainerNext.levelsGained,
+      },
+      evolutions: evolutionsFrom(next.id),
+    },
+  }
+}
+
+type EvolutionResult = {
+  pokemonId: number
+  speciesId: number
+  name: string
+  displayName: string
+  level: number
+  xp: number
+  isShiny: boolean
+  nickname: string | null
+  isFavorite: boolean
+  trainerXpGained: number
+  trainer: { level: number; xp: number; levelsGained: number }
+  evolutions: { toSpeciesId: number; displayName: string; minLevel: number }[]
+}
+
+function patchOne(
+  userId: number,
+  id: number,
+  body: Record<string, unknown>,
+  now: number,
+): Ok<{ pokemon: { id: number; nickname: string | null; isFavorite: boolean } }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({ id: pokemon.id, nickname: pokemon.nickname, isFavorite: pokemon.isFavorite })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+
+  const patch: { nickname?: string | null; isFavorite?: boolean } = {}
+  if ('nickname' in body) {
+    const parsed = parseNickname(body.nickname)
+    if (!parsed.ok) return fail(parsed.error, 400)
+    patch.nickname = parsed.nickname
+  }
+  if ('isFavorite' in body) {
+    if (typeof body.isFavorite !== 'boolean') return fail('invalid_body', 400)
+    patch.isFavorite = body.isFavorite
+  }
+  if (patch.nickname === undefined && patch.isFavorite === undefined) return fail('invalid_body', 400)
+
+  db.update(pokemon)
+    .set(patch)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+
+  return {
+    ok: true,
+    pokemon: {
+      id,
+      nickname: patch.nickname !== undefined ? patch.nickname : mon.nickname,
+      isFavorite: patch.isFavorite !== undefined ? patch.isFavorite : mon.isFavorite,
+    },
+  }
+}
+
+function markCaught(userId: number, speciesId: number, isShiny: boolean, now: number): void {
+  const db = getDb()
+  const existing = db
+    .select({ speciesId: pokedexEntries.speciesId })
+    .from(pokedexEntries)
+    .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, speciesId)))
+    .get()
+  if (!existing) {
+    db.insert(pokedexEntries)
+      .values({
+        userId,
+        speciesId,
+        seenCount: 1,
+        caughtCount: 1,
+        firstSeenAt: now,
+        firstCaughtAt: now,
+        shinyCaught: isShiny,
+      })
+      .run()
+    return
+  }
+  db.update(pokedexEntries)
+    .set({
+      seenCount: sql`${pokedexEntries.seenCount} + 1`,
+      caughtCount: sql`${pokedexEntries.caughtCount} + 1`,
+      firstSeenAt: sql`coalesce(${pokedexEntries.firstSeenAt}, ${now})`,
+      firstCaughtAt: sql`coalesce(${pokedexEntries.firstCaughtAt}, ${now})`,
+      shinyCaught: sql`(${pokedexEntries.shinyCaught} or ${isShiny ? 1 : 0})`,
+    })
+    .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, speciesId)))
+    .run()
+}
+
+function evolutionsFrom(speciesId: number): { toSpeciesId: number; displayName: string; minLevel: number }[] {
+  return getDb()
+    .select({
+      toSpeciesId: evolutions.toSpeciesId,
+      displayName: species.displayName,
+      minLevel: evolutions.minLevel,
+    })
+    .from(evolutions)
+    .innerJoin(species, eq(evolutions.toSpeciesId, species.id))
+    .where(eq(evolutions.fromSpeciesId, speciesId))
+    .all()
+    .sort((a, b) => a.toSpeciesId - b.toSpeciesId)
+}

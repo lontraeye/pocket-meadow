@@ -140,6 +140,13 @@
     return mon ? (mon.nickname ?? mon.displayName) : 'Pokémon'
   }
 
+  function readyToEvolve(fighter: BattleOutcome['fighters'][number]): boolean {
+    const mon = game.pokemon.find((entry) => entry.id === fighter.pokemonId)
+    if (!mon) return false
+    const before = fighter.level - fighter.levelsGained
+    return mon.evolutions.some((option) => before < option.minLevel && fighter.level >= option.minLevel)
+  }
+
   async function readError(response: Response): Promise<ApiError> {
     return (await response.json().catch(() => ({ error: 'internal' }))) as ApiError
   }
@@ -279,9 +286,10 @@
           {/if}
           <ul class="gains">
             {#each result.battle.fighters as fighter (fighter.pokemonId)}
-              <li>
+              <li class:ready={readyToEvolve(fighter)}>
                 {nameOf(fighter.pokemonId)} +{fighter.xpGained} XP
                 {#if fighter.levelsGained > 0}<strong> · nível {fighter.level}</strong>{/if}
+                {#if readyToEvolve(fighter)}<strong> · pode evoluir</strong>{/if}
               </li>
             {/each}
             {#if result.battle.trainerXpGained > 0}
@@ -471,5 +479,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
+    text-align: center;
+  }
+
+  .gains li.ready {
+    color: var(--grass-side);
   }
 </style>

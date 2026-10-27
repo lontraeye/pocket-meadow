@@ -43,13 +43,17 @@ export function catchChance(captureRate: number, berryBonus = 1): number {
   return clamp(raw, battleConfig.catchMin, 1)
 }
 
-export function battleXp(wildLevel: number): number {
-  return wildLevel * battleConfig.xpPerWildLevel
+// Fórmula da Geração 5 (PLANNING.md, seção 5.5). O +1 fica fora do floor.
+export function battleXp(baseExperience: number, wildLevel: number, fighterLevel: number): number {
+  if (!(baseExperience > 0)) throw new Error('base experience must be positive')
+  const ratio = (2 * wildLevel + 10) / (wildLevel + fighterLevel + 10)
+  const raw = (baseExperience * wildLevel / battleConfig.xpDiv) * ratio ** battleConfig.xpLevelExp
+  return Math.floor(raw) + 1
 }
 
-export function fighterXp(wildLevel: number, teamSize: number): number {
+export function fighterXp(baseExperience: number, wildLevel: number, fighterLevel: number, teamSize: number): number {
   if (teamSize < 1) throw new Error('team size must be >= 1')
-  return Math.floor(battleXp(wildLevel) / teamSize)
+  return Math.floor(battleXp(baseExperience, wildLevel, fighterLevel) / teamSize)
 }
 
 // Raro = espécie cuja soma dos slots fica até RARE_WEIGHT_MAX. A soma é por

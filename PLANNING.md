@@ -431,7 +431,7 @@ O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com e
   ```
   Shiny dá multiplicador (inicial ×3).
 - Também concede **doce genérico** (`RELEASE_GENERIC`, inicial: 1, sem multiplicador de shiny), usável em qualquer Pokémon a uma taxa pior: `GENERIC_PER_CANDY` genéricos (inicial: 3) valem 1 doce específico.
-- Não é possível soltar um Pokémon que está no daycare, nem o último Pokémon do jogador. Confirmar no frontend antes de soltar shiny ou favorito.
+- Não é possível soltar um Pokémon que está no daycare, nem o último Pokémon do jogador. Soltar sempre pede confirmação no frontend, e a confirmação avisa quando é shiny ou favorito.
 - **Soltar vários de uma vez.** Duplicata é o recurso principal, e soltar 20 Pidgeys um por um no celular é inviável. `POST /pokemon/release` recebe `{ pokemonIds }` (1 a `RELEASE_MAX_PER_REQUEST`, inicial: 50, distintos). É tudo ou nada, numa transação: se um id não puder ser solto, nada é solto, e a resposta diz qual id e por quê. A regra "não ficar com zero" vale para o lote inteiro.
 - Soltar incrementa `trainers.total_releases`. Os encontros que citam o Pokémon (`caught_pokemon_id`, `encounter_fighters.pokemon_id`) ficam com NULL pelo `ON DELETE SET NULL` que já existe.
 - A resposta traz, por linha evolutiva, os doces creditados e o saldo novo, e também o genérico creditado e o saldo novo.
@@ -487,7 +487,7 @@ O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê
   - sprite, apelido editável, favorito, nível, barra de XP, poder, doces da linha e genéricos;
   - **Alimentar:** seletor de doses com − e +, alvos de 44px, limitado pelo saldo e pelo nível máximo. Mostra antes "+X XP → Nv Y" e permite escolher entre doce da linha e genérico;
   - **Evoluir:** uma opção por destino. Aparece habilitada a partir do nível mínimo e, antes disso, mostra "Evolui no Nv X". Ao evoluir, troca o sprite e mostra uma pequena animação, respeitando `prefers-reduced-motion`;
-  - **Soltar:** mostra quantos doces vai render. Pede confirmação para shiny ou favorito. Fica desativado, com o motivo, para o último Pokémon e para quem está no daycare.
+  - **Soltar:** mostra quantos doces vai render. Sempre pede confirmação (o botão fica no dock, onde o polegar passa) e avisa se é shiny ou favorito. Fica desativado, com o motivo, para o último Pokémon e para quem está no daycare.
 - **Soltar vários:** um modo "Selecionar" na coleção. Tocar marca os cartões. Uma barra fixa embaixo mostra "Soltar N · +X doces". Se o lote tiver shiny ou favorito, a confirmação lista quais são. O filtro Repetidos combinado com "selecionar todos menos o de maior nível" é o atalho principal.
 - Nada depende de hover. Ações principais embaixo, ao alcance do polegar (seção 4.4).
 
@@ -691,7 +691,6 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
 
 **Fase 3 — Progressão**
 - XP de batalha pela fórmula da seção 5.5: coluna `base_experience` em `species` (migração e seed de novo).
-- Evolução por troca marcada com `evolutions.via_trade` (mesma migração). O botão Evoluir recusa essas evoluções com `needs_quest`, e as missões ficam para a seção 5.15.
 - Soltar (um ou vários), doces, alimentar, evoluir, apelido e favorito (seções 5.7 e 5.8).
 - Tela de coleção (lista, busca, filtros e seleção múltipla) e sheet de detalhes compartilhado com o jardim.
 - Pronto quando:
@@ -699,6 +698,10 @@ Ao registrar: escolher 1 inicial entre Bulbasaur, Charmander e Squirtle, nível 
   - as transações da seção 7 do `DATA_MODEL.md` estão cobertas;
   - as funções puras de doces, alimentação e evolução em `game/` têm teste;
   - nenhuma ação deixa o jogador com zero Pokémon nem com saldo negativo.
+
+**Evolução por troca bloqueada (feature curta, antes das missões)**
+- `evolutions.via_trade` numa migração própria, marcado no seed pelo `trigger` `trade`. O botão Evoluir recusa essas evoluções com `needs_quest`, e o sheet mostra "Evolui por troca (missão)". As missões ficam para a seção 5.15.
+- Até isso entrar, as 10 evoluções por troca da Gen 1–2 continuam saindo por nível.
 
 **Fase 4 — Daycare**
 

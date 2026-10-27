@@ -31,6 +31,7 @@ export const species = sqliteTable(
     spDefense: integer('sp_defense').notNull(),
     speed: integer('speed').notNull(),
     baseStatTotal: integer('base_stat_total').notNull(),
+    baseExperience: integer('base_experience').notNull().default(0),
     captureRate: integer('capture_rate').notNull(),
     evolutionChainId: integer('evolution_chain_id').notNull(),
     evolvesFromId: integer('evolves_from_id').references((): AnySQLiteColumn => species.id),

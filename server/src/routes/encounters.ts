@@ -1,6 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { SqliteError } from 'better-sqlite3'
-import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { battleConfig } from '../config/battle.js'
@@ -30,8 +29,7 @@ import {
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { grantXp } from '../game/xp.js'
 import { toEncounterView } from './encounterView.js'
-
-type Failure = { ok: false; error: string; status: 400 | 404 | 409 }
+import { type Failure, fail, parseId, readObject } from './http.js'
 
 export const encounterRoutes = new Hono<AuthEnv>()
 
@@ -204,7 +202,11 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   }
 
   const wild = db
-    .select({ baseStatTotal: species.baseStatTotal, captureRate: species.captureRate })
+    .select({
+      baseStatTotal: species.baseStatTotal,
+      baseExperience: species.baseExperience,
+      captureRate: species.captureRate,
+    })
     .from(species)
     .where(eq(species.id, encounter.speciesId))
     .get()
@@ -220,8 +222,8 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     .values(roster.map((mon, slot) => ({ encounterId: encounter.id, slot, pokemonId: mon.id, power: mon.power })))
     .run()
 
-  const share = won ? fighterXp(encounter.level, roster.length) : 0
   const fighters = roster.map((mon) => {
+    const share = won ? fighterXp(wild.baseExperience, encounter.level, mon.level, roster.length) : 0
     const granted = grantXp(mon.level, mon.xp, share)
     if (share > 0) {
       db.update(pokemon)
@@ -356,16 +358,6 @@ function takeBonus(userId: number, effectKey: string): number {
   return chosen.multiplier
 }
 
-function fail(error: string, status: Failure['status']): Failure {
-  return { ok: false, error, status }
-}
-
-function parseId(value: string): number | null {
-  if (!/^[1-9]\d*$/.test(value)) return null
-  const id = Number(value)
-  return Number.isSafeInteger(id) ? id : null
-}
-
 function parseTeam(value: unknown[]): number[] | null {
   if (value.length < 1 || value.length > 3) return null
   const ids: number[] = []
@@ -375,14 +367,4 @@ function parseTeam(value: unknown[]): number[] | null {
   }
   if (new Set(ids).size !== ids.length) return null
   return ids
-}
-
-async function readObject(c: Context): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await c.req.json()
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) return null
-    return body as Record<string, unknown>
-  } catch {
-    return null
-  }
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `species` ADD `base_experience` integer DEFAULT 0 NOT NULL;

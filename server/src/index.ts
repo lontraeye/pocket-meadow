@@ -4,6 +4,7 @@ import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
 import { encounterRoutes } from './routes/encounters.js'
+import { pokemonRoutes } from './routes/pokemon.js'
 import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
 
@@ -29,6 +30,7 @@ app.route('/auth', authRoutes)
 app.route('/state', stateRoutes)
 app.route('/regions', regionRoutes)
 app.route('/encounters', encounterRoutes)
+app.route('/pokemon', pokemonRoutes)
 
 app.get('/health', (c) => {
   return c.json({ ok: true, service: 'pocket-meadow' })

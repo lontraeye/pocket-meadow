@@ -2,11 +2,12 @@
   import { onMount } from 'svelte'
   import { api, type GameState } from './lib/api'
   import AuthForm from './lib/AuthForm.svelte'
+  import Collection from './lib/Collection.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
-  let screen = $state<'meadow' | 'explore'>('meadow')
+  let screen = $state<'meadow' | 'explore' | 'collection'>('meadow')
   let game = $state<GameState | null>(null)
 
   async function loadState() {
@@ -42,7 +43,7 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow" class:fit={screen === 'explore'}>
+  <main class="meadow" class:fit={screen !== 'meadow'}>
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -59,11 +60,16 @@
     </header>
     {#if screen === 'explore'}
       <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+    {:else if screen === 'collection'}
+      <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
     {:else}
-      <Garden {game} />
-      <button type="button" class="btn btn-primary dock" onclick={() => (screen = 'explore')}>
-        {game.encounter ? 'Ver encontro' : 'Explorar'}
-      </button>
+      <Garden {game} onState={loadState} />
+      <div class="docks">
+        <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
+        <button type="button" class="btn btn-primary" onclick={() => (screen = 'explore')}>
+          {game.encounter ? 'Ver encontro' : 'Explorar'}
+        </button>
+      </div>
     {/if}
   </main>
 {/if}
@@ -149,8 +155,10 @@
       inset 0 var(--px) 0 #fff3a0;
   }
 
-  .dock {
-    width: 100%;
+  .docks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
     flex: none;
   }
 

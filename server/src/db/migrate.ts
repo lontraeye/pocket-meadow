@@ -12,6 +12,10 @@ export function migrateDatabase(): void {
     migrationsFolder: path.resolve(here, '../..', 'drizzle'),
   })
   applySpeciesSnapshot(sqlite, readSpeciesSnapshot())
+  const blank = sqlite.prepare('select id from species where base_experience = 0 limit 1').get() as { id: number } | undefined
+  if (blank) {
+    throw new Error(`species ${blank.id} has base_experience 0; run npm run db:seed`)
+  }
   sqlite.close()
 }
 

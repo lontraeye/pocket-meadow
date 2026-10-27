@@ -5,8 +5,10 @@ export const progressConfig = {
   levelCap: 100,
   gardenMaxVisible: 15,
   basePlotSlots: 2,
+  xpBase: 10,
+  xpExponent: 1.5,
 } as const
 
 export function xpToNext(level: number): number {
-  return Math.floor(10 * level ** 1.5)
+  return Math.floor(progressConfig.xpBase * level ** progressConfig.xpExponent)
 }

@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { battleConfig } from '../config/battle.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
+import { progressionConfig } from '../config/progression.js'
 import { trainerConfig } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -12,6 +13,7 @@ import {
   candies,
   daycareSlots,
   encounters,
+  evolutions,
   inventory,
   pokemon,
   species,
@@ -49,6 +51,7 @@ function readState(userId: number, now: number) {
       nickname: pokemon.nickname,
       isFavorite: pokemon.isFavorite,
       location: pokemon.location,
+      caughtAt: pokemon.caughtAt,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -84,6 +87,24 @@ function readState(userId: number, now: number) {
     .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .get()
 
+  const options = db
+    .select({
+      fromSpeciesId: evolutions.fromSpeciesId,
+      toSpeciesId: evolutions.toSpeciesId,
+      minLevel: evolutions.minLevel,
+      displayName: species.displayName,
+    })
+    .from(evolutions)
+    .innerJoin(species, eq(evolutions.toSpeciesId, species.id))
+    .all()
+  const evolutionsBySpecies = new Map<number, { toSpeciesId: number; displayName: string; minLevel: number }[]>()
+  for (const option of options) {
+    const list = evolutionsBySpecies.get(option.fromSpeciesId) ?? []
+    list.push({ toSpeciesId: option.toSpeciesId, displayName: option.displayName, minLevel: option.minLevel })
+    evolutionsBySpecies.set(option.fromSpeciesId, list)
+  }
+  for (const list of evolutionsBySpecies.values()) list.sort((a, b) => a.toSpeciesId - b.toSpeciesId)
+
   return {
     now,
     gardenMaxVisible: progressConfig.gardenMaxVisible,
@@ -93,6 +114,19 @@ function readState(userId: number, now: number) {
       minChance: battleConfig.minChance,
       maxChance: battleConfig.maxChance,
       teamWeights: battleConfig.teamWeights,
+    },
+    progression: {
+      levelCap: progressConfig.levelCap,
+      candyXp: progressionConfig.candyXp,
+      genericPerCandy: progressionConfig.genericPerCandy,
+      releaseBase: progressionConfig.releaseBase,
+      releaseLevelDiv: progressionConfig.releaseLevelDiv,
+      releaseShinyMult: progressionConfig.releaseShinyMult,
+      releaseGeneric: progressionConfig.releaseGeneric,
+      feedMax: progressionConfig.feedMaxPerRequest,
+      releaseMax: progressionConfig.releaseMaxPerRequest,
+      xpBase: progressConfig.xpBase,
+      xpExponent: progressConfig.xpExponent,
     },
     trainer: {
       level: trainer.level,
@@ -115,7 +149,9 @@ function readState(userId: number, now: number) {
       nickname: mon.nickname,
       isFavorite: mon.isFavorite,
       location: mon.location,
+      caughtAt: mon.caughtAt,
       power: power(mon.baseStatTotal, mon.level),
+      evolutions: evolutionsBySpecies.get(mon.speciesId) ?? [],
     })),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
     daycare,

@@ -45,11 +45,43 @@ export type BattleOutcome = {
   trainer: { level: number; xp: number; levelsGained: number }
 }
 
+export type OwnedPokemon = {
+  id: number
+  speciesId: number
+  name: string
+  displayName: string
+  evolutionChainId: number
+  level: number
+  xp: number
+  xpToNext: number | null
+  isShiny: boolean
+  nickname: string | null
+  isFavorite: boolean
+  location: 'garden' | 'daycare'
+  caughtAt: number
+  power: number
+  evolutions: { toSpeciesId: number; displayName: string; minLevel: number }[]
+}
+
+export type ProgressionRules = {
+  levelCap: number
+  candyXp: number
+  genericPerCandy: number
+  releaseBase: number
+  releaseLevelDiv: number
+  releaseShinyMult: number
+  releaseGeneric: number
+  feedMax: number
+  releaseMax: number
+  xpBase: number
+  xpExponent: number
+}
 export type GameState = {
   now: number
   gardenMaxVisible: number
   plotSlots: number
   battle: BattleRules
+  progression: ProgressionRules
   trainer: {
     level: number
     xp: number
@@ -58,31 +90,17 @@ export type GameState = {
     energyNextAt: number | null
     genericCandies: number
   }
-  pokemon: {
-    id: number
-    speciesId: number
-    name: string
-    displayName: string
-    evolutionChainId: number
-    level: number
-    xp: number
-    xpToNext: number | null
-    isShiny: boolean
-    nickname: string | null
-    isFavorite: boolean
-    location: 'garden' | 'daycare'
-    power: number
-  }[]
+  pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
   plots: { plotIndex: number; berryKey: string; readyAt: number }[]
   encounter: PendingEncounter | null
 }
 
-export type ApiError = { error: string; min?: number; max?: number }
+export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number }
 
-export async function api(path: string, body?: unknown): Promise<Response> {
+export async function api(path: string, body?: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<Response> {
   return fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: body === undefined ? 'GET' : method,
     credentials: 'include',
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -117,6 +135,22 @@ export function errorText(error: ApiError): string {
       return 'Esse encontro não está mais valendo.'
     case 'invalid_team':
       return 'Escolha de 1 a 3 Pokémon seus, no jardim, sem repetir.'
+    case 'pokemon_not_found':
+      return 'Esse Pokémon não está mais com você.'
+    case 'in_daycare':
+      return 'Ele está no daycare.'
+    case 'last_pokemon':
+      return 'Você precisa ficar com pelo menos um Pokémon.'
+    case 'level_cap':
+      return 'Já está no nível máximo.'
+    case 'not_enough_candies':
+      return 'Doces insuficientes.'
+    case 'level_too_low':
+      return `Evolui no nível ${error.min ?? ''}`.trim()
+    case 'evolution_not_found':
+      return 'Essa evolução não existe.'
+    case 'invalid_nickname':
+      return 'O apelido precisa ter de 1 a 12 caracteres, sem quebra de linha.'
     default:
       return 'Algo deu errado.'
   }
