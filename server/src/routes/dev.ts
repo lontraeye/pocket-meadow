@@ -18,6 +18,10 @@ export const devRoutes = new Hono<AuthEnv>()
 
 // Entra sem Google, para testar local e tirar prints. Cria a conta se não existir
 // (sem google_sub), com o inicial pedido ou o Bulbasaur.
+// Sem sessão: a tela de login pergunta se mostra a entrada de teste. Como todo
+// /dev, só existe com DEV_TOOLS=1 e fora de produção; lá responde 404.
+devRoutes.get('/status', (c) => c.json({ devTools: true }))
+
 devRoutes.post('/login', async (c) => {
   const body = (await readObject(c)) ?? {}
   const username = asUsername(body.username)

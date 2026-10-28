@@ -237,7 +237,7 @@
   let walkers = $state<Walker[]>([])
   // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
   let devCommands: { sleep: (id: number) => void; wake: (id: number) => void } | null = null
-  const devTools = import.meta.env.DEV
+  const devTools = $derived(game.devTools)
 
   type Step = { col: number; row: number; dir: number }
 

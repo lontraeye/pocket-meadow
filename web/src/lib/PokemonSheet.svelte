@@ -47,8 +47,8 @@
   let highlightCards = $state<HighlightCard[]>([])
   let regionsCache = $state<RegionInfo[] | null>(null)
   let swapping = $state<'fast' | 'charged' | null>(null)
-  /** Troca livre de golpe: só no `npm run dev` (a rota também exige DEV_TOOLS). */
-  const canSwapMoves = import.meta.env.DEV
+  /** Troca livre de golpe: só com o servidor em DEV_TOOLS (a rota também exige). */
+  const canSwapMoves = $derived(game.devTools)
 
   type SheetTab = 'perfil' | 'golpes' | 'treino'
   const sheetTabs: { key: SheetTab; label: string }[] = [

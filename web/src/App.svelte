@@ -13,8 +13,11 @@
   import { formatClockTime, formatCountdown } from './lib/time'
   import { serverClock } from './lib/serverClock.svelte'
   import { bindAudioUnlock, getVolume, isMuted, play, setVolume, toggleMute, warmCries } from './lib/sound'
+  import { registerServiceWorker } from './lib/pwa'
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
+  let updateAvailable = $state(false)
+  let applyUpdate = $state<() => void>(() => undefined)
   let muted = $state(isMuted())
   let volumeLevel = $state(getVolume())
   let volumeOpen = $state(false)
@@ -142,6 +145,12 @@
     bindAudioUnlock()
     muted = isMuted()
     void loadState()
+    return registerServiceWorker({
+      onChange: (handle) => {
+        updateAvailable = handle.available
+        applyUpdate = handle.apply
+      },
+    })
   })
 
   // Gritos do jardim prontos antes de tocar num Pokémon (só baixa os novos).
@@ -197,6 +206,12 @@
           onPlotOpened={() => (focusPlot = null)}
         />
       </div>
+    {/if}
+
+    {#if updateAvailable}
+      <button type="button" class="update-banner" onclick={() => applyUpdate()}>
+        Versão nova disponível · Atualizar
+      </button>
     {/if}
 
     <header class="panel hud">
@@ -398,6 +413,36 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .update-banner {
+    flex: none;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 0.45rem 0.75rem;
+    border: 0;
+    background: var(--ink);
+    color: var(--accent);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    z-index: 6;
+  }
+
+  /* Acima do HUD; no jardim o HUD desce um pouco se o aviso estiver aberto. */
+  .meadow.immersive .update-banner {
+    position: absolute;
+    top: env(safe-area-inset-top);
+    left: 0;
+    right: 0;
+  }
+
+  .meadow.immersive:has(.update-banner) .hud {
+    top: calc(2.75rem + env(safe-area-inset-top));
   }
 
   /* Jardim = fundo da janela; HUD/docks flutuam por cima (fora do fluxo). */

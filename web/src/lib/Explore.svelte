@@ -18,6 +18,7 @@
   } from './api'
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
+  import { setLiveFight } from './liveFight'
   import BattleScene from './BattleScene.svelte'
   import {
     clearSavedBattle,
@@ -69,6 +70,12 @@
   $effect(() => {
     const server = game.trainer.battleAuto
     if (!prefsBusy) battleAuto = server
+  })
+
+  // Avisa o PWA: não recarregar no meio da luta ao vivo.
+  $effect(() => {
+    setLiveFight(step === 'fight')
+    return () => setLiveFight(false)
   })
 
   const groups = $derived([
