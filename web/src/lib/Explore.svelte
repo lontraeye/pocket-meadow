@@ -289,14 +289,14 @@
     regions = body.regions
   }
 
-  async function search(slug: string) {
+  async function search(slug: string, request = () => api('/api/encounters', { regionSlug: slug })) {
     play('tap')
     pending = true
     searching = slug
     message = ''
     notice = ''
     try {
-      const response = await api('/api/encounters', { regionSlug: slug })
+      const response = await request()
       if (!response.ok) {
         message = errorText(await readError(response))
         await onState()
@@ -318,6 +318,16 @@
       pending = false
       searching = null
     }
+  }
+
+  // Só em teste: encontro com espécie (nome ou nº) e nível escolhidos.
+  let devSpecies = $state('')
+  let devLevel = $state(20)
+
+  function devEncounter() {
+    const species = devSpecies.trim()
+    if (!species) return
+    void search('dev', () => api('/api/dev/encounter', { species, level: devLevel }))
   }
 
   async function refillEnergy() {
@@ -633,6 +643,30 @@
         {/if}
         {#if game.devTools}
           <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+          <form
+            class="dev-encounter"
+            onsubmit={(event) => {
+              event.preventDefault()
+              devEncounter()
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Espécie (nome ou nº)"
+              aria-label="Espécie do encontro de teste"
+              bind:value={devSpecies}
+              autocomplete="off"
+            />
+            <input type="number" min="1" max="100" aria-label="Nível" bind:value={devLevel} />
+            <button
+              type="submit"
+              class="btn"
+              aria-busy={searching === 'dev'}
+              disabled={pending || !devSpecies.trim() || game.trainer.energy < 1 || game.encounter !== null}
+            >
+              Encontro de teste
+            </button>
+          </form>
         {/if}
         {#if game.encounter}
           <button
@@ -911,6 +945,28 @@
     min-height: 64px;
     font-size: 1.15rem;
     touch-action: manipulation;
+  }
+
+  /* Só em teste: a espécie numa linha; o nível e o botão embaixo. */
+  .dev-encounter {
+    display: grid;
+    grid-template-columns: 5rem 1fr;
+    gap: 0.35rem;
+    margin: 0;
+  }
+
+  .dev-encounter input[type='text'] {
+    grid-column: 1 / -1;
+  }
+
+  .dev-encounter input {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 0.5rem;
+    border: var(--px) solid var(--ink-soft);
+    background: #fffaf0;
+    color: var(--ink);
+    font: inherit;
   }
 
   .choice {

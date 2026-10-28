@@ -288,6 +288,8 @@ export function errorText(error: ApiError): string {
       return 'Essa região ainda está bloqueada.'
     case 'region_not_found':
       return 'Essa região não existe.'
+    case 'species_not_found':
+      return 'Espécie não encontrada (use o nome em inglês ou o número).'
     case 'encounter_pending':
       return 'Termine o encontro atual antes.'
     case 'encounter_not_found':

@@ -151,7 +151,10 @@ encounterRoutes.post('/:id/release', requireUser, (c) => {
   return c.json({ status: 'escaped' as const, encounterId })
 })
 
-function createEncounter(userId: number, region: Region, now: number) {
+/** Só para a rota de teste (/dev/encounter): fixa espécie, nível e shiny no lugar do sorteio. */
+export type ForcedWild = { speciesId: number; level: number; isShiny: boolean }
+
+export function createEncounter(userId: number, region: Region, now: number, forced?: ForcedWild) {
   const clock = persistCatchUp(userId, now)
   if (clock.level < region.minTrainerLevel) return fail('region_locked', 400)
   const db = getDb()
@@ -167,11 +170,13 @@ function createEncounter(userId: number, region: Region, now: number) {
   const rareBonus = takeBonus(userId, 'rare_boost')
   const rngSeed = randomSeed()
   const rng = mulberry32(rngSeed)
-  const wild = rollWild(rng, {
-    slots: region.slots,
-    shinyRate: Math.min(1, battleConfig.shinyRate * shinyBonus),
-    rareMultiplier: rareBonus,
-  })
+  const wild =
+    forced ??
+    rollWild(rng, {
+      slots: region.slots,
+      shinyRate: Math.min(1, battleConfig.shinyRate * shinyBonus),
+      rareMultiplier: rareBonus,
+    })
 
   const spec = db
     .select({

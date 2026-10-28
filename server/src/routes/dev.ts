@@ -2,10 +2,13 @@ import { and, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { asUsername, createPlayer, isStarter, openSession, setSessionCookie } from '../auth/accounts.js'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { progressConfig } from '../config/progress.js'
+import { loadRegions } from '../config/regions.js'
 import { trainerConfig } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
-import { berryPlots, daycareSlots, trainers, users } from '../db/schema.js'
+import { berryPlots, daycareSlots, species, trainers, users } from '../db/schema.js'
+import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
 
 // Ferramentas de teste. Só existem com DEV_TOOLS=1 e fora de produção;
@@ -37,6 +40,46 @@ devRoutes.post('/login', async (c) => {
   })
   setSessionCookie(c, token)
   return c.json({ username })
+})
+
+// Encontro com espécie e nível escolhidos, para testar golpes, habilidades e
+// status contra Pokémon que as rotas não dão. Gasta energia e segue as regras
+// de um encontro normal (um pendente por vez); só a espécie e o nível mudam.
+devRoutes.post('/encounter', requireUser, async (c) => {
+  const body = (await readObject(c)) ?? {}
+  // `species`: número da pokédex ou nome em inglês ("lapras", "mr-mime").
+  const wanted = body.species
+  const level = body.level
+  if (
+    (typeof wanted !== 'number' && typeof wanted !== 'string') ||
+    typeof level !== 'number' ||
+    !Number.isInteger(level) ||
+    level < 1 ||
+    level > progressConfig.levelCap
+  ) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const byName = typeof wanted === 'string' && !/^\d+$/.test(wanted.trim())
+  const known = getDb()
+    .select({ id: species.id })
+    .from(species)
+    .where(
+      byName
+        ? eq(species.name, String(wanted).trim().toLowerCase().replace(/\s+/g, '-'))
+        : eq(species.id, Number(wanted)),
+    )
+    .get()
+  if (!known) return c.json({ error: 'species_not_found' }, 404)
+  const speciesId = known.id
+  const region = loadRegions()[0]
+  if (!region) return c.json({ error: 'region_not_found' }, 404)
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() =>
+    createEncounter(userId, region, now, { speciesId, level, isShiny: body.shiny === true }),
+  )
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json(result.encounter, 201)
 })
 
 devRoutes.post('/energy', requireUser, (c) => {
