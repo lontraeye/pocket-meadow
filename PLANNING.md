@@ -638,7 +638,7 @@ O jardim mostra no máximo 15 Pokémon, então a coleção é onde o jogador vê
 - **Detalhes:** tocar no cartão abre o mesmo sheet do jardim. Ele vira um componente único (ex.: `PokemonSheet.svelte`), usado pelo jardim e pela coleção. O sheet mostra:
   - sprite, apelido editável, favorito, nível, barra de XP, poder, doces da linha e genéricos;
   - **Alimentar:** seletor de doses com − e +, alvos de 44px, limitado pelo saldo e pelo nível máximo. Mostra antes "+X XP → Nv Y" e permite escolher entre doce da linha e genérico;
-  - **Evoluir:** uma opção por destino. Aparece habilitada a partir do nível mínimo e, antes disso, mostra "Evolui no Nv X". Ao evoluir, troca o sprite e mostra uma pequena animação, respeitando `prefers-reduced-motion`;
+  - **Evoluir:** uma opção por destino. Aparece habilitada a partir do nível mínimo e, antes disso, mostra "Evolui no Nv X". Ao evoluir, troca o sprite. **Pendente (anotado em 2026-10-28): animação de evolução** — hoje só há um "pop"/troca seca; falta uma cena própria (estilo clássico ou GO), respeitando `prefers-reduced-motion`;
   - **Soltar:** mostra quantos doces vai render. Sempre pede confirmação (o botão fica no dock, onde o polegar passa) e avisa se é shiny ou favorito. Fica desativado, com o motivo, para o último Pokémon e para quem está no daycare.
 - **Soltar vários:** um modo "Selecionar" na coleção. Tocar marca os cartões. Uma barra fixa embaixo mostra "Soltar N · +X doces". Se o lote tiver shiny ou favorito, a confirmação lista quais são. O filtro Repetidos combinado com "selecionar todos menos o de maior nível" é o atalho principal.
 - Nada depende de hover. Ações principais embaixo, ao alcance do polegar (seção 4.4).
@@ -1232,7 +1232,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - nível de treinador;
   - **região nova liberada**: as regiões com `minTrainerLevel` entre o nível antigo e o novo;
   - semente ganha e recompensas de nível.
-- **Os mesmos destaques em outras ações:** evoluir (a animação de "pop" já existe), alimentar com level up e retirar do daycare com níveis ganhos. Um componente só para os destaques, usado por todas essas telas.
+- **Os mesmos destaques em outras ações:** evoluir (hoje só "pop"; **precisa de animação de evolução** — ver 5.8), alimentar com level up e retirar do daycare com níveis ganhos. Um componente só para os destaques, usado por todas essas telas.
 - `prefers-reduced-motion`: sem a cena, direto aos destaques, que também aparecem sem animação.
 - Sem mudança no servidor. Se faltar algum dado na resposta para os destaques, acrescentar na resposta, sem mudar regra.
 
@@ -1313,7 +1313,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
-**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
+**Depois (ideias anotadas, ainda sem fase):** **animação de evolução** (5.8 / coleção — anotado em 2026-10-28); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 
