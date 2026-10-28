@@ -160,16 +160,22 @@ devRoutes.post('/plots/advance', requireUser, async (c) => {
   return c.json({ plotIndex })
 })
 
-/** Dá algumas de cada pokébola (Master: 3) para testes de captura. */
+/** Dá algumas de cada pokébola (Master: 3) e das berries novas de captura. */
 devRoutes.post('/balls', requireUser, (c) => {
   const userId = c.get('userId')
   const now = Date.now()
   const granted = immediate(() => {
     persistCatchUp(userId, now)
-    const items = ballList.map((ball) => ({
-      itemKey: ballItemKey(ball.key),
-      quantity: ball.key === 'master' ? ballsConfig.devGrantMaster : ballsConfig.devGrantEach,
-    }))
+    const items = [
+      ...ballList.map((ball) => ({
+        itemKey: ballItemKey(ball.key),
+        quantity: ball.key === 'master' ? ballsConfig.devGrantMaster : ballsConfig.devGrantEach,
+      })),
+      { itemKey: 'berry:golden-razz', quantity: 5 },
+      { itemKey: 'berry:silver-pinap', quantity: 5 },
+      { itemKey: 'seed:golden-razz', quantity: 3 },
+      { itemKey: 'seed:silver-pinap', quantity: 3 },
+    ]
     creditItems(userId, items)
     return items
   })

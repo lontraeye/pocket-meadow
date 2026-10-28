@@ -6,7 +6,9 @@ import { gardenSprite, loadPmd, loadPmdBattle, showdownSrc } from './sprites'
 const uiArt: string[] = []
 // Os ícones das berries também saem de game.berries; esta lista cobre a tela
 // de login, que ainda não tem o estado.
-const itemArt = ['oran', 'pinap', 'razz', 'nanab', 'lum'].map((key) => `/sprites/items/${key}-berry.png`)
+const itemArt = ['oran', 'pinap', 'razz', 'nanab', 'lum', 'golden-razz', 'silver-pinap'].map(
+  (key) => `/sprites/items/${key}-berry.png`,
+)
 const fonts = ['400 16px "Pixelify Sans"', '600 16px "Pixelify Sans"', '700 16px "Pixelify Sans"']
 
 const loaded = new Map<string, Promise<void>>()

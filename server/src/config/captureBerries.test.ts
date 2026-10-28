@@ -12,6 +12,12 @@ test('cada berry de captura tem o efeito esperado', () => {
   assert.equal(berries.oran.capture?.calm, 1)
   assert.equal(berries.nanab.capture?.calm, 2)
   assert.equal(berries.lum.capture?.calm, 'all')
+  assert.equal(berries['golden-razz'].capture?.catchMult, 2.5)
+  assert.equal(berries['golden-razz'].capture?.calm, 1)
+  assert.equal('effect' in berries['golden-razz'], false)
+  assert.equal(berries['silver-pinap'].capture?.catchMult, 1.8)
+  assert.equal(berries['silver-pinap'].capture?.candyOnCatch, 5)
+  assert.equal('effect' in berries['silver-pinap'], false)
 })
 
 test('acalmar vale antes do incremento de agitação no erro', () => {

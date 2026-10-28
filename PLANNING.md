@@ -1262,11 +1262,11 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - **Futuro: animação própria por golpe** (anotado em 2026-10-28). Hoje o efeito sai por tipo (PVFX Foundry, `web/src/lib/fx.ts`) e os golpes especiais soltam uma bola na cor do tipo. Nos jogos, cada golpe tem a sua (o Will-O-Wisp faz um arco antes de bater, por exemplo). O Pokémon Showdown faz isso com uma animação escrita à mão por golpe, montada com poucas peças: imagem que voa de um ponto a outro com curva, movimento do atacante e do alvo e flash no fundo. Dá para seguir o mesmo modelo com as nossas peças, começando pelos golpes mais usados. O código e as imagens do Showdown não podem ser usados (AGPL e imagens sem licença livre).
   - Do pacote, o Warm Explosion (Fogo) e o Ember Jet (pulso da queimadura) desenham só a metade da frente do anel no chão, que fica aberto quando a fumaça some. Se incomodar, a troca sugerida é Fogo → Solar Shrapnel e a queimadura numa chaminha em código.
 
-**Fase 9 — Pokébolas** (seção 5.6, "Pokébolas"; em partes, cada uma testada antes da próxima)
-- *9.1 — Bolas como item:* config das bolas, sprites, migração (`caught_ball`, `agitation` e estoque inicial para quem já joga), lançamento com `{ ball }` gastando a bola, escolha da bola na tela com a chance de cada uma, bola na cena e na ficha, recompensas de nível e do álbum, botão de teste.
-- *9.2 — Fuga crescente e berries na captura:* agitação, fórmula de fuga por degrau, "Dar berry" antes do lançamento com os efeitos de captura, Pinap fora da Mochila.
-- *9.3 — Berries novas:* Golden Razz e Silver Pinap nos canteiros, na queda de sementes e nas recompensas.
-- Pronto quando: sem bola não dá para capturar; cada lançamento gasta a bola certa; a chance mostrada bate com a do servidor; quem já jogava recebeu o estoque e os Pokémon antigos aparecem com Poké Ball; a fuga sobe a cada erro e as berries a baixam.
+**Fase 9 — Pokébolas** (seção 5.6, "Pokébolas") — feito em 2026-10-28
+- ~~*9.1 — Bolas como item:* config das bolas, sprites, migração (`caught_ball`, `agitation` e estoque inicial), lançamento com `{ ball }`, escolha na tela, bola na cena e na ficha, recompensas, botão de teste.~~
+- ~~*9.2 — Fuga crescente e berries na captura:* agitação, fuga por degrau, "Dar berry", Pinap só na captura (cargas antigas de `catch_boost` continuam até gastar).~~
+- ~~*9.3 — Berries novas:* Golden Razz e Silver Pinap (só captura), plantio lento, pesos baixos na queda de sementes, recompensas de nível 15/20 e bloco de jogo completo do álbum; o botão de teste também dá sementes/berries delas.~~
+- Decisões na implementação: `BerryDef.effect` opcional (berries só de captura); bônus de captura = `catch_boost` ativo × `capture.catchMult` da berry do lançamento; fuga usa `fleeBase`/`fleeStep`/`fleeMax` no `battleConfig` (não mais o `throwFleeChance` fixo no throw).
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 

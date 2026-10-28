@@ -6,11 +6,13 @@ export const UPROOT_SEED_RETURN_CHANCE = 0.5
 export const PLOT_SLOT_LEVELS = [1, 1, 8, 20] as const
 
 export const SEED_DROP_WEIGHTS = [
-  { berryKey: 'oran', weight: 50 },
+  { berryKey: 'oran', weight: 46 },
   { berryKey: 'pinap', weight: 25 },
   { berryKey: 'razz', weight: 15 },
   { berryKey: 'nanab', weight: 7 },
   { berryKey: 'lum', weight: 3 },
+  { berryKey: 'golden-razz', weight: 2 },
+  { berryKey: 'silver-pinap', weight: 2 },
 ] as const
 
 export type BerryEffect =
@@ -85,6 +87,30 @@ export const berries = {
     effectDescription: 'Próximo encontro com shiny ×4',
     capture: { calm: 'all', description: 'Acalma totalmente' },
   },
+  'golden-razz': {
+    key: 'golden-razz',
+    name: 'Golden Razz',
+    growMs: 24 * 60 * 60 * 1000,
+    yield: [1, 1],
+    effectDescription: 'Só na captura: chance ×2,5 e acalma (−1)',
+    capture: {
+      catchMult: 2.5,
+      calm: 1,
+      description: 'Chance ×2,5 e acalma (−1)',
+    },
+  },
+  'silver-pinap': {
+    key: 'silver-pinap',
+    name: 'Silver Pinap',
+    growMs: 18 * 60 * 60 * 1000,
+    yield: [1, 1],
+    effectDescription: 'Só na captura: chance ×1,8 e +5 doces se capturar',
+    capture: {
+      catchMult: 1.8,
+      candyOnCatch: 5,
+      description: 'Chance ×1,8; se capturar, +5 doces da linha',
+    },
+  },
 } as const satisfies Record<string, BerryDef>
 
 export type BerryKey = keyof typeof berries
@@ -104,6 +130,8 @@ export function trainerLevelRewards(level: number): LevelRewardSpec[] {
   if (level === 3) rewards.push({ itemKey: 'seed:razz', quantity: 1 })
   if (level === 5) rewards.push({ itemKey: 'seed:nanab', quantity: 1 })
   if (level === 8) rewards.push({ itemKey: 'seed:lum', quantity: 1 })
+  if (level === 15) rewards.push({ itemKey: 'seed:silver-pinap', quantity: 1 })
+  if (level === 20) rewards.push({ itemKey: 'seed:golden-razz', quantity: 1 })
   if (level % 5 === 0) rewards.push({ itemKey: 'ball:great', quantity: 3 })
   if (level % 10 === 0) rewards.push({ itemKey: 'ball:ultra', quantity: 2 })
   if (level >= 10 && level % 5 === 0) rewards.push({ kind: 'random_seed' })

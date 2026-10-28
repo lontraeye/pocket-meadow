@@ -44,6 +44,8 @@ export const pokedexConfig = {
       items: [
         { itemKey: 'seed:oran', quantity: 5 },
         { itemKey: 'seed:pinap', quantity: 2 },
+        { itemKey: 'seed:golden-razz', quantity: 1 },
+        { itemKey: 'seed:silver-pinap', quantity: 1 },
         { itemKey: 'ball:ultra', quantity: 5 },
         { itemKey: 'ball:master', quantity: 1 },
       ],
