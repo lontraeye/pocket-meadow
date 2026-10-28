@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
+import { berryItemKey, getBerry } from '../config/berries.js'
 import { type Region, regionBySlug } from '../config/regions.js'
 import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
@@ -17,7 +18,7 @@ import {
   species,
   trainers,
 } from '../db/schema.js'
-import { creditItems, debitItem, grantTrainerLevelRewards } from '../db/inventory.js'
+import { creditChainCandies, creditItems, debitItem, grantTrainerLevelRewards } from '../db/inventory.js'
 import { catchChance, fighterXp, rollWild } from '../game/battle.js'
 import { rollBattleSeed } from '../game/berries.js'
 import {
@@ -36,6 +37,7 @@ import { isFinishTooEarly, simConfig } from '../game/sim/config.js'
 import { battleRngSeed, seedDropRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
 import { parseBattleSetup, serializeBattleSetup } from '../game/sim/setupJson.js'
 import type { BattleEvent, BattleInput, BattleResult, BattleSetup } from '../game/sim/types.js'
+import { calmAgitation, fleeChanceAt } from '../game/flee.js'
 import { rollThrow } from '../game/throwCapture.js'
 import { traitColumns } from '../game/traitValues.js'
 import { rollTraits, type AbilitySlot } from '../game/traits.js'
@@ -54,6 +56,7 @@ type TeamBattleRow = TeamMonRow & {
 type WildBattleRow = WildSpeciesRow & {
   baseExperience: number
   captureRate: number
+  evolutionChainId: number
 }
 
 type EncounterRow = typeof encounters.$inferSelect
@@ -139,9 +142,16 @@ encounterRoutes.post('/:id/throw', requireUser, async (c) => {
   const body = (await readObject(c)) ?? {}
   const ball = body.ball
   if (typeof ball !== 'string') return c.json({ error: 'invalid_body' }, 400)
+  const berry =
+    body.berry === undefined || body.berry === null
+      ? null
+      : typeof body.berry === 'string'
+        ? body.berry
+        : undefined
+  if (berry === undefined) return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
-  const result = immediate(() => throwBall(userId, encounterId, now, ball))
+  const result = immediate(() => throwBall(userId, encounterId, now, ball, berry))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.throw)
 })
@@ -712,6 +722,7 @@ function loadWildSpecies(speciesId: number): WildBattleRow {
       evSpeed: species.evSpeed,
       baseExperience: species.baseExperience,
       captureRate: species.captureRate,
+      evolutionChainId: species.evolutionChainId,
     })
     .from(species)
     .where(eq(species.id, speciesId))
@@ -766,7 +777,13 @@ function releaseWild(userId: number, encounterId: number, now: number): { ok: tr
   return { ok: true }
 }
 
-function throwBall(userId: number, encounterId: number, now: number, ballKey: string) {
+function throwBall(
+  userId: number,
+  encounterId: number,
+  now: number,
+  ballKey: string,
+  berryKey: string | null,
+) {
   const clock = persistCatchUp(userId, now)
   const loaded = loadPendingEncounter(userId, encounterId)
   if (!loaded.ok) return loaded
@@ -775,11 +792,25 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
 
   const ball = getBall(ballKey)
   if (!ball) return fail('unknown_ball', 400)
-  if (!debitItem(userId, ballItemKey(ball.key), 1)) return fail('no_ball', 400)
+
+  const captureBerry = berryKey ? getBerry(berryKey) : null
+  if (berryKey) {
+    if (!captureBerry?.capture) return fail('berry_not_usable', 400)
+  }
+
+  if (captureBerry && !debitItem(userId, berryItemKey(captureBerry.key), 1)) {
+    return fail('no_item', 400)
+  }
+  if (!debitItem(userId, ballItemKey(ball.key), 1)) {
+    if (captureBerry) creditItems(userId, [{ itemKey: berryItemKey(captureBerry.key), quantity: 1 }])
+    return fail('no_ball', 400)
+  }
 
   const wild = loadWildSpecies(encounter.speciesId)
   const throwIndex = encounter.throwCount
-  const berryBonus = takeBonus(userId, 'catch_boost')
+  const bagCatchBoost = takeBonus(userId, 'catch_boost')
+  const berryCatchMult = captureBerry?.capture?.catchMult ?? 1
+  const berryBonus = bagCatchBoost * berryCatchMult
   const types = [wild.type1, wild.type2].filter((t): t is string => Boolean(t))
   const ballMult = ballMultiplier({
     key: ball.key,
@@ -787,6 +818,8 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
     wildLevel: encounter.level,
     types,
   })
+  const calmed = calmAgitation(encounter.agitation, captureBerry?.capture?.calm)
+  const agitationIfMiss = calmed + 1
   const roll = rollThrow({
     encounterSeed: hiddenSeed(encounter),
     throwIndex,
@@ -794,12 +827,17 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
     berryBonus,
     ballMult,
     guaranteed: isMasterBall(ball.key),
+    fleeChance: fleeChanceAt(agitationIfMiss),
   })
 
   const db = getDb()
   const throwNumber = throwIndex + 1
 
   if (roll.caught) {
+    const candyBonus = captureBerry?.capture?.candyOnCatch ?? 0
+    const candiesGained =
+      candyBonus > 0 ? creditChainCandies(userId, wild.evolutionChainId, candyBonus) : 0
+
     const traits = rollTraits(mulberry32(wildTraitsSeed(encounter.rngSeed)), {
       level: encounter.level,
       learnset: learnsetFor(encounter.speciesId),
@@ -854,6 +892,7 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
         status: 'caught',
         throwCount: throwNumber,
         catchChance: roll.catchChance,
+        agitation: calmed,
         caughtPokemonId: inserted.id,
         resolvedAt: now,
       })
@@ -867,8 +906,10 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
         fled: false,
         catchChance: roll.catchChance,
         throwNumber,
+        agitation: calmed,
         status: 'caught' as const,
         pokemonId: inserted.id,
+        candyBonus: candiesGained,
         trainerXpGained: catchXp,
         trainer: {
           level: trainerNext.level,
@@ -886,6 +927,7 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
         status: 'escaped',
         throwCount: throwNumber,
         catchChance: roll.catchChance,
+        agitation: agitationIfMiss,
         resolvedAt: now,
       })
       .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
@@ -897,6 +939,7 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
         fled: true,
         catchChance: roll.catchChance,
         throwNumber,
+        agitation: agitationIfMiss,
         status: 'escaped' as const,
       },
     }
@@ -906,6 +949,7 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
     .set({
       throwCount: throwNumber,
       catchChance: roll.catchChance,
+      agitation: agitationIfMiss,
     })
     .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .run()
@@ -917,6 +961,7 @@ function throwBall(userId: number, encounterId: number, now: number, ballKey: st
       fled: false,
       catchChance: roll.catchChance,
       throwNumber,
+      agitation: agitationIfMiss,
       status: 'pending' as const,
     },
   }

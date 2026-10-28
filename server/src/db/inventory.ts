@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { getDb } from './client.js'
-import { inventory } from './schema.js'
+import { candies, inventory } from './schema.js'
 import type { ItemCredit } from '../game/berries.js'
 import { pickSeedByWeight, rewardsForLevelsGained } from '../game/berries.js'
 import { unitRoll } from '../game/rng.js'
@@ -52,6 +52,27 @@ export function itemQty(userId: number, itemKey: string): number {
     .where(and(eq(inventory.userId, userId), eq(inventory.itemKey, itemKey)))
     .get()
   return row?.quantity ?? 0
+}
+
+/** Soma doces da linha evolutiva (ex.: Pinap na captura). */
+export function creditChainCandies(userId: number, evolutionChainId: number, gained: number): number {
+  if (gained <= 0) return 0
+  const db = getDb()
+  const current = db
+    .select({ amount: candies.amount })
+    .from(candies)
+    .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, evolutionChainId)))
+    .get()
+  const amount = (current?.amount ?? 0) + gained
+  if (current) {
+    db.update(candies)
+      .set({ amount })
+      .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, evolutionChainId)))
+      .run()
+  } else {
+    db.insert(candies).values({ userId, evolutionChainId, amount: gained }).run()
+  }
+  return gained
 }
 
 /** Recompensas de nível de treinador: credita e devolve a lista. */

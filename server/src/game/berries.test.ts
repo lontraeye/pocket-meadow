@@ -54,13 +54,17 @@ describe('usar berry', () => {
 
   test('efeito por cargas ou tempo renova o mesmo effect_key', () => {
     const pinap = planBerryUse(berries.pinap, { energy: 5, energyUpdatedAt: 1, hasSameEffect: true }, 50)
-    assert.equal(pinap.ok, true)
-    if (pinap.ok) {
-      assert.equal(pinap.apply.kind, 'replace_effect')
-      if (pinap.apply.kind === 'replace_effect') {
-        assert.equal(pinap.apply.effectKey, 'catch_boost')
-        assert.equal(pinap.apply.renewed, true)
-        assert.equal(pinap.apply.charges, 1)
+    assert.equal(pinap.ok, false)
+    if (!pinap.ok) assert.equal(pinap.error, 'berry_not_usable')
+
+    const razz = planBerryUse(berries.razz, { energy: 5, energyUpdatedAt: 1, hasSameEffect: true }, 50)
+    assert.equal(razz.ok, true)
+    if (razz.ok) {
+      assert.equal(razz.apply.kind, 'replace_effect')
+      if (razz.apply.kind === 'replace_effect') {
+        assert.equal(razz.apply.effectKey, 'rare_boost')
+        assert.equal(razz.apply.renewed, true)
+        assert.equal(razz.apply.charges, 1)
       }
     }
     const nanab = planBerryUse(berries.nanab, { energy: 5, energyUpdatedAt: 1, hasSameEffect: false }, 1_000)

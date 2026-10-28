@@ -183,7 +183,17 @@ function readState(userId: number, now: number) {
       name: berry.name,
       growMs: berry.growMs,
       effectDescription: berry.effectDescription,
-      effectKey: berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
+      effectKey:
+        !berry.effect || berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
+      bagUsable: berry.effect !== undefined,
+      capture: berry.capture
+        ? {
+            catchMult: berry.capture.catchMult ?? null,
+            calm: berry.capture.calm ?? null,
+            candyOnCatch: berry.capture.candyOnCatch ?? null,
+            description: berry.capture.description,
+          }
+        : null,
     })),
     balls: {
       startingPokeBalls: ballsConfig.startingPokeBalls,
@@ -201,6 +211,9 @@ function readState(userId: number, now: number) {
       minChance: battleConfig.minChance,
       maxChance: battleConfig.maxChance,
       teamWeights: battleConfig.teamWeights,
+      fleeBase: battleConfig.fleeBase,
+      fleeStep: battleConfig.fleeStep,
+      fleeMax: battleConfig.fleeMax,
     },
     progression: {
       levelCap: progressConfig.levelCap,

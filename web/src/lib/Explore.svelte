@@ -6,6 +6,7 @@
   import { onMount, untrack } from 'svelte'
   import {
     api,
+    berryIconSrc,
     effectLabel,
     errorText,
     type ApiError,
@@ -80,6 +81,8 @@
       }
     }),
   )
+  let selectedBerry = $state<string | null>(null)
+  let berryPickerOpen = $state(false)
 
   const clock = serverClock(() => game.now)
 
@@ -95,11 +98,26 @@
   const activeBall = $derived(
     ownedBalls.find((ball) => ball.key === selectedBall) ?? ownedBalls[0] ?? null,
   )
+  const captureBerries = $derived(
+    game.berries
+      .filter((berry) => berry.capture)
+      .map((berry) => {
+        const quantity =
+          game.inventory.find((row) => row.itemKey === `berry:${berry.key}`)?.quantity ?? 0
+        return { ...berry, quantity, capture: berry.capture! }
+      })
+      .filter((berry) => berry.quantity > 0),
+  )
+  const activeCaptureBerry = $derived(
+    selectedBerry ? captureBerries.find((berry) => berry.key === selectedBerry) ?? null : null,
+  )
   const catchBerryBonus = $derived(
     (() => {
       const rows = game.effects.filter((e) => e.effectKey === 'catch_boost').sort((a, b) => a.id - b.id)
       const chosen = rows.find((row) => row.charges !== null) ?? rows[0]
-      return chosen?.multiplier ?? 1
+      const bag = chosen?.multiplier ?? 1
+      const thrown = activeCaptureBerry?.capture.catchMult ?? 1
+      return bag * thrown
     })(),
   )
 
@@ -116,6 +134,11 @@
       types,
       berryBonus: catchBerryBonus,
     })
+  }
+
+  function pickCaptureBerry(key: string | null) {
+    selectedBerry = key
+    berryPickerOpen = false
   }
 
   function pickBall(key: string) {
@@ -510,8 +533,12 @@
     message = ''
     notice = ''
     const ballKey = activeBall.key
+    const berryKey = selectedBerry
     try {
-      const response = await api(`/api/encounters/${encounter.id}/throw`, { ball: ballKey })
+      const response = await api(`/api/encounters/${encounter.id}/throw`, {
+        ball: ballKey,
+        ...(berryKey ? { berry: berryKey } : {}),
+      })
       if (!response.ok) {
         const error = await readError(response)
         message = errorText(error)
@@ -525,7 +552,14 @@
       const outcome = (await response.json()) as ThrowOutcome
       lastThrow = outcome
       thrownBallSprite = activeBall?.sprite ?? game.balls.list.find((b) => b.key === ballKey)?.sprite ?? 'poke'
-      encounter = { ...encounter, catchChance: outcome.catchChance, throwCount: outcome.throwNumber }
+      selectedBerry = null
+      berryPickerOpen = false
+      encounter = {
+        ...encounter,
+        catchChance: outcome.catchChance,
+        throwCount: outcome.throwNumber,
+        agitation: outcome.agitation,
+      }
       if (prefersReducedMotion()) afterThrow()
       else step = 'throw'
     } catch {
@@ -671,9 +705,10 @@
   {@const sheet = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, 'Idle') : null}
   {@const scale = variant === 'compact' ? 2 : 3}
   {@const head = sheet ? Math.round((sheet.ground[1] ?? sheet.h) * scale * 0.85) : 84}
+  {@const unrest = Math.min(6, Math.max(0, mon.agitation))}
   <div class="wild-card" class:compact={variant === 'compact'}>
     <div class="stage">
-      <div class="anchor" class:dizzy={variant === 'dizzy'}>
+      <div class="anchor" class:dizzy={variant === 'dizzy'} class:restless={unrest > 0 && variant === 'dizzy'}>
         {#if look.kind === 'pmd' && sheet}
           <PmdSprite
             speciesId={mon.speciesId}
@@ -704,6 +739,13 @@
         {#if mon.isShiny}<span class="star" title="Shiny">★</span>{/if}
       </h2>
       <p class="lv">Nv {mon.level} · {mon.regionName}</p>
+      {#if variant === 'dizzy' && unrest > 0}
+        <div class="agitation" aria-label="Inquieto" title="Inquieto">
+          {#each Array(unrest) as _, i (i)}
+            <span class="pip" aria-hidden="true"></span>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 {/snippet}
@@ -896,6 +938,11 @@
         {#if activeBall}
           <p class="odds">Chance com {activeBall.displayName}: {percent(chanceForBall(activeBall.key))}</p>
         {/if}
+        {#if activeCaptureBerry}
+          <p class="hint berry-on">
+            Com {activeCaptureBerry.name}: {activeCaptureBerry.capture.description}
+          </p>
+        {/if}
         {#if hasBalls}
           <div class="ball-row" role="listbox" aria-label="Pokébolas">
             {#each ownedBalls as ball (ball.key)}
@@ -918,9 +965,57 @@
         {:else}
           <p class="hint">Sem pokébolas.</p>
         {/if}
+        {#if berryPickerOpen}
+          <div class="berry-picker" role="listbox" aria-label="Berries na captura">
+            <button
+              type="button"
+              class="ball-pick"
+              class:on={selectedBerry === null}
+              role="option"
+              aria-selected={selectedBerry === null}
+              disabled={pending}
+              onclick={() => pickCaptureBerry(null)}
+            >
+              <span class="ball-name">Nenhuma</span>
+            </button>
+            {#each captureBerries as berry (berry.key)}
+              <button
+                type="button"
+                class="ball-pick"
+                class:on={selectedBerry === berry.key}
+                role="option"
+                aria-selected={selectedBerry === berry.key}
+                disabled={pending}
+                onclick={() => pickCaptureBerry(berry.key)}
+              >
+                <img src={berryIconSrc(berry.key)} alt="" width="28" height="28" />
+                <span class="ball-name">{berry.name}</span>
+                <strong>×{berry.quantity}</strong>
+                <small>{berry.capture.description}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </section>
     </div>
     <div class="dock">
+      {#if captureBerries.length > 0}
+        <button
+          type="button"
+          class="btn big"
+          disabled={pending}
+          onclick={() => {
+            play('tap')
+            berryPickerOpen = !berryPickerOpen
+          }}
+        >
+          {#if activeCaptureBerry}
+            Berry: {activeCaptureBerry.name}
+          {:else}
+            Dar berry
+          {/if}
+        </button>
+      {/if}
       <button
         type="button"
         class="btn btn-primary big"
@@ -1086,6 +1181,65 @@
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .berry-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .berry-picker .ball-pick small {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .berry-on {
+    margin: 0;
+    color: var(--grass-side);
+    font-weight: 700;
+  }
+
+  .agitation {
+    display: flex;
+    justify-content: center;
+    gap: 0.2rem;
+    margin-top: 0.2rem;
+  }
+
+  .agitation .pip {
+    width: 0.55rem;
+    height: 0.55rem;
+    border: 2px solid var(--danger);
+    background: color-mix(in srgb, var(--danger) 55%, transparent);
+    transform: rotate(45deg);
+  }
+
+  .anchor.restless {
+    animation: restless 0.55s ease-in-out infinite alternate;
+  }
+
+  @keyframes restless {
+    from {
+      transform: translateX(-1px);
+    }
+    to {
+      transform: translateX(1px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anchor.restless {
+      animation: none;
+    }
   }
 
   .alert {

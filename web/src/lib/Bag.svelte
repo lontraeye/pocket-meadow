@@ -153,6 +153,7 @@
           {#each berries as row (row.itemKey)}
             {@const berry = berryOf(row.itemKey)}
             {@const disabled = oranDisabled(row.itemKey)}
+            {@const bagUsable = berry?.bagUsable === true}
             <li>
               <img src={berryIconSrc(row.itemKey.slice(6))} alt="" width="30" height="30" />
               <div class="meta">
@@ -160,14 +161,18 @@
                 <small>{berry?.effectDescription ?? ''}</small>
                 {#if disabled}<small class="warn">{disabled}</small>{/if}
               </div>
-              <button
-                type="button"
-                class="btn btn-primary"
-                disabled={pending || disabled !== ''}
-                onclick={() => void useBerry(row.itemKey)}
-              >
-                Usar
-              </button>
+              {#if bagUsable}
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  disabled={pending || disabled !== ''}
+                  onclick={() => void useBerry(row.itemKey)}
+                >
+                  Usar
+                </button>
+              {:else}
+                <small class="warn">Só na captura</small>
+              {/if}
             </li>
           {/each}
         </ul>

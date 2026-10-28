@@ -7,6 +7,9 @@ export type BattleRules = {
   minChance: number
   maxChance: number
   teamWeights: number[]
+  fleeBase: number
+  fleeStep: number
+  fleeMax: number
 }
 
 export type PendingEncounter = {
@@ -94,8 +97,10 @@ export type ThrowOutcome = {
   fled: boolean
   catchChance: number
   throwNumber: number
+  agitation: number
   status: 'caught' | 'escaped' | 'pending'
   pokemonId?: number
+  candyBonus?: number
   trainerXpGained?: number
   trainer?: { level: number; xp: number; levelsGained: number }
   levelRewards?: ItemCredit[]
@@ -187,12 +192,22 @@ export type DaycareState = {
   slots: DaycareSlot[]
 }
 
+export type CaptureBerryInfo = {
+  catchMult: number | null
+  calm: number | 'all' | null
+  candyOnCatch: number | null
+  description: string
+}
+
 export type BerryInfo = {
   key: string
   name: string
   growMs: number
   effectDescription: string
   effectKey: string | null
+  /** false = só captura (ex.: Pinap). */
+  bagUsable: boolean
+  capture: CaptureBerryInfo | null
 }
 
 export type PlotState = {

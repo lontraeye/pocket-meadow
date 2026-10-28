@@ -11,8 +11,15 @@ export const battleConfig = {
   encounterTtlMs: 30 * 60 * 1000,
   /** Prazo para decidir a captura depois da vitória (8.4). */
   decisionTtlMs: 10 * 60 * 1000,
-  /** Chance do selvagem fugir após um lançamento falho. */
+  /**
+   * Fuga crescente (Fase 9.2): depois do erro, agitação já somou 1.
+   * chance = min(fleeMax, fleeBase + fleeStep × (agitation − 1)).
+   * `throwFleeChance` fica só como fallback legado em testes antigos.
+   */
   throwFleeChance: 0.25,
+  fleeBase: 0.1,
+  fleeStep: 0.15,
+  fleeMax: 0.9,
   k: 4,
   minChance: 0.05,
   maxChance: 0.95,

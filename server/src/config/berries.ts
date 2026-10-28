@@ -18,13 +18,26 @@ export type BerryEffect =
   | { kind: 'charges'; effectKey: string; multiplier: number; charges: number }
   | { kind: 'timed'; effectKey: string; multiplier: number; durationMs: number }
 
+/** Efeito só na captura (Fase 9.2+). Sem isto a berry não aparece em "Dar berry". */
+export type CaptureEffect = {
+  /** Multiplicador na chance (ex.: 1.5). */
+  catchMult?: number
+  /** Reduz agitação antes do lançamento; `'all'` zera. */
+  calm?: number | 'all'
+  /** Doces da linha se capturar. */
+  candyOnCatch?: number
+  description: string
+}
+
 export type BerryDef = {
   key: string
   name: string
   growMs: number
   yield: readonly [number, number]
-  effect: BerryEffect
+  /** Ausente = só captura (ou sem uso pela Mochila). */
+  effect?: BerryEffect
   effectDescription: string
+  capture?: CaptureEffect
 }
 
 export const berries = {
@@ -35,14 +48,15 @@ export const berries = {
     yield: [2, 3],
     effect: { kind: 'energy', amount: 2 },
     effectDescription: '+2 de energia',
+    capture: { calm: 1, description: 'Acalma um pouco (−1 agitação)' },
   },
   pinap: {
     key: 'pinap',
     name: 'Pinap',
     growMs: 2 * 60 * 60 * 1000,
     yield: [1, 2],
-    effect: { kind: 'charges', effectKey: 'catch_boost', multiplier: 1.5, charges: 1 },
-    effectDescription: 'Próxima captura com chance ×1,5',
+    effectDescription: 'Só na captura: +3 doces da linha se capturar',
+    capture: { candyOnCatch: 3, description: 'Se capturar, +3 doces da linha' },
   },
   razz: {
     key: 'razz',
@@ -51,6 +65,7 @@ export const berries = {
     yield: [1, 2],
     effect: { kind: 'charges', effectKey: 'rare_boost', multiplier: 2, charges: 1 },
     effectDescription: 'Próximo encontro com raros dobrados',
+    capture: { catchMult: 1.5, description: 'Chance de captura ×1,5' },
   },
   nanab: {
     key: 'nanab',
@@ -59,6 +74,7 @@ export const berries = {
     yield: [1, 2],
     effect: { kind: 'timed', effectKey: 'daycare_boost', multiplier: 2, durationMs: 2 * 60 * 60 * 1000 },
     effectDescription: 'Daycare ×2 de XP por 2 h',
+    capture: { calm: 2, description: 'Acalma (−2 agitação)' },
   },
   lum: {
     key: 'lum',
@@ -67,6 +83,7 @@ export const berries = {
     yield: [1, 1],
     effect: { kind: 'charges', effectKey: 'shiny_boost', multiplier: 4, charges: 1 },
     effectDescription: 'Próximo encontro com shiny ×4',
+    capture: { calm: 'all', description: 'Acalma totalmente' },
   },
 } as const satisfies Record<string, BerryDef>
 

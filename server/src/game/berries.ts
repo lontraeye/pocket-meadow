@@ -85,8 +85,9 @@ export function planBerryUse(
   berry: BerryDef,
   state: { energy: number; energyUpdatedAt: number; hasSameEffect: boolean },
   now: number,
-): { ok: false; error: 'energy_full' } | { ok: true; apply: EffectApply } {
+): { ok: false; error: 'energy_full' | 'berry_not_usable' } | { ok: true; apply: EffectApply } {
   const effect = berry.effect
+  if (!effect) return { ok: false, error: 'berry_not_usable' }
   if (effect.kind === 'energy') {
     const result = applyEnergyBerry(state.energy, state.energyUpdatedAt, effect.amount, now)
     if (!result.ok) return result

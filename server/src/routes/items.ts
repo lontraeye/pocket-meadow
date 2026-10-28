@@ -44,6 +44,7 @@ function useItem(
   if (!berryKey) return fail('unknown_item', 400)
   const berry = getBerry(berryKey)
   if (!berry) return fail('unknown_item', 400)
+  if (!berry.effect) return fail('berry_not_usable', 400)
 
   const db = getDb()
   const effectKey = berry.effect.kind === 'energy' ? null : berry.effect.effectKey
