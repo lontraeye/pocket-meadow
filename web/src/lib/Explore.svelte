@@ -1344,13 +1344,13 @@
     margin-top: 0.5rem;
   }
 
-  /* Captura: Mochila · bola/berry · Bolas — três quadrados iguais. */
+  /* Captura: laterais menores, meio maior — quadrados, base alinhada. */
   .throw-row {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
-    align-items: center;
+    align-items: end;
     justify-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
   }
 
   .tool {
@@ -1358,14 +1358,14 @@
     display: grid;
     justify-items: center;
     align-content: center;
-    gap: 0.15rem;
-    width: 5.75rem;
-    height: 5.75rem;
-    min-width: 5.75rem;
-    max-width: 5.75rem;
-    min-height: 5.75rem;
-    max-height: 5.75rem;
-    padding: 0.25rem 0.2rem;
+    gap: 0.12rem;
+    width: 4.5rem;
+    height: 4.5rem;
+    min-width: 4.5rem;
+    max-width: 4.5rem;
+    min-height: 4.5rem;
+    max-height: 4.5rem;
+    padding: 0.2rem 0.15rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow: inset 0 -2px 0 var(--panel-shade);
@@ -1385,7 +1385,7 @@
   .tool small {
     overflow: hidden;
     max-width: 100%;
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;

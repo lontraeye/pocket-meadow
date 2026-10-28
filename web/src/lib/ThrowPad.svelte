@@ -470,8 +470,8 @@
     <img
       src={spriteSrc}
       alt=""
-      width="48"
-      height="48"
+      width="56"
+      height="56"
       draggable="false"
       style:transform={holdAngle !== 0 ? `rotate(${holdAngle}rad)` : undefined}
     />
@@ -568,15 +568,15 @@
     justify-items: center;
     align-content: center;
     gap: 0.1rem;
-    /* Mesmo quadrado dos botões laterais (Mochila / Bolas). */
-    width: 5.75rem;
-    min-width: 5.75rem;
-    max-width: 5.75rem;
-    height: 5.75rem;
-    min-height: 5.75rem;
-    max-height: 5.75rem;
+    /* Quadrado maior que Mochila/Bolas — destaque do lançar. */
+    width: 6.25rem;
+    min-width: 6.25rem;
+    max-width: 6.25rem;
+    height: 6.25rem;
+    min-height: 6.25rem;
+    max-height: 6.25rem;
     margin: 0;
-    padding: 0.2rem 0.2rem 0.25rem;
+    padding: 0.25rem 0.2rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow:
@@ -604,8 +604,8 @@
 
   .throw-btn img,
   .ghost {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     image-rendering: pixelated;
   }
 
