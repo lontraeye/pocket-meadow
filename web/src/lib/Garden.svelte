@@ -7,6 +7,7 @@
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
   import { play, playCry } from './sound'
+  import { spriteOpaqueAt, spritesAt, warmSpriteMasks } from './spriteHit'
   import {
     gardenExtent,
     gardenSprite,
@@ -354,6 +355,26 @@
     }
   })
 
+  // O click cai no quadro do sprite da frente, que tem muita folga transparente.
+  // Escolhe o primeiro sprite (da frente para trás) com pixel visível sob o
+  // ponto. Sem pixel em nenhum, ou máscara ainda carregando, fica quem recebeu
+  // o click, como antes. Teclado (detail 0) não tem ponto: fica o botão focado.
+  function pickMon(event: MouseEvent, clicked: Walker) {
+    let picked = clicked
+    if (event.detail > 0) {
+      for (const el of spritesAt(event.clientX, event.clientY)) {
+        const hit = spriteOpaqueAt(el, event.clientX, event.clientY)
+        if (hit === null) break
+        if (!hit) continue
+        const id = Number(el.closest<HTMLElement>('.mon')?.dataset.walker)
+        picked = walkers.find((walker) => walker.id === id) ?? clicked
+        break
+      }
+    }
+    selectedId = picked.id
+    playCry(picked.speciesId)
+  }
+
   function place(col: number, row: number): { x: number; y: number } {
     return {
       x: originX + (col - row) * halfW,
@@ -541,6 +562,8 @@
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.pointerType === 'mouse') return
+      // Prepara as máscaras dos sprites sob o dedo para o click (pickMon).
+      warmSpriteMasks(event.clientX, event.clientY)
       if (event.pointerType === 'touch') {
         touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
         if (touches.size === 2) {
@@ -1032,10 +1055,8 @@
           style:--size="{showdownSize * scale}px"
           style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
           aria-label={walker.displayName}
-          onclick={() => {
-            selectedId = walker.id
-            playCry(walker.speciesId)
-          }}
+          data-walker={walker.id}
+          onclick={(event) => pickMon(event, walker)}
         >
           {#if look.kind === 'pmd'}
             <PmdSprite
