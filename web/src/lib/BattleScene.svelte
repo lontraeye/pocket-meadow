@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { spriteLoading } from './spriteLoading'
   import type { PendingEncounter } from './api'
   import { pokeBallSrc, prefersReducedMotion } from './highlights'
@@ -25,14 +26,20 @@
     throwResult,
     time = 0,
     ballSrc = pokeBallSrc(),
+    skipThrow = false,
     onDone,
   }: {
     encounter: PendingEncounter
     /** Resultado do lançamento, já decidido pelo servidor (8.4). */
     throwResult: { caught: boolean; catchChance: number | null }
     time?: number
-    /** Sprite da bola usada. Hoje só a Poké Ball; os outros tipos vêm com a seção 5.6. */
+    /** Sprite da bola usada (seção 5.6). */
     ballSrc?: string
+    /**
+     * A bola já chegou no selvagem pelo arremesso do jogador (9.4): a cena começa
+     * na batida, sem o próprio arco (seriam duas curvas seguidas).
+     */
+    skipThrow?: boolean
     onDone: () => void
   } = $props()
 
@@ -40,7 +47,7 @@
 
   const reduced = prefersReducedMotion()
 
-  let phase = $state<Phase>(reduced ? 'done' : 'throw')
+  let phase = $state<Phase>(reduced ? 'done' : untrack(() => skipThrow) ? 'hit' : 'throw')
   let shakeIndex = $state(0)
   let finished = false
 
@@ -85,10 +92,11 @@
       })
     }
 
-    play('fast')
-    then(THROW_MS, () => {
+    const fromHit = untrack(() => skipThrow)
+    if (!fromHit) play('fast')
+    then(fromHit ? 0 : THROW_MS, () => {
       phase = 'hit'
-      play('hit')
+      if (!fromHit) play('hit')
       then(HIT_MS, () => {
         phase = 'absorb'
         then(ABSORB_MS, () => {

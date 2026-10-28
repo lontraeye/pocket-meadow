@@ -558,10 +558,21 @@ O jogador arremessa a bola com o dedo, no estilo do Pokémon GO: segura a bola, 
 - **Erro:** `POST /encounters/:id/miss` com `{ ball }`: só debita a bola, numa transação. **Não rola nada, não conta como lançamento e não muda a agitação nem a fuga** (como no GO, errar não faz ele fugir). Assim o `throwRngAt` e o `throw_count` continuam iguais: só os lançamentos que acertaram consomem rolagens.
 - O servidor aceita a qualidade que o front manda (só valida os valores). É um jogo para uma pessoa e não há como conferir o gesto; fica registrado aqui como exceção consciente à seção 2. Se um dia houver ranking entre jogadores, rever.
 
-**Feito em 2026-10-28 (números iniciais, revisar no celular):**
-- Multiplicadores no `battleConfig`: `normal ×1`, `nice ×1,15`, `great ×1,4`, `excellent ×1,8`, `curve ×1,3`.
-- Física em `web/src/lib/throwPhysics.ts` (`THROW_PHYSICS`): velocidade mínima ~420 px/s para cima; voo 620–880 ms; gravidade 1600 px/s²; curva 900 px/s²; anel ciclo 1,2 s; faixas do anel 0,28 / 0,55 / 1; alvo ~30% do stage.
-- Anel por dificuldade da espécie (verde/amarelo/vermelho): ainda não; só visual futuro.
+**Feito em 2026-10-28.** A primeira versão seguiu os itens de gesto e voo acima (parábola com gravidade, giro em volta do centro da bola, velocidade média dos últimos 80 ms). Jogando, ficou quase impossível acertar e não dava para girar, então o modelo mudou na revisão do mesmo dia. **Vale o que está aqui** (números em `THROW_PHYSICS`, `web/src/lib/throwPhysics.ts`, comentados):
+- **Força do gesto:** o trecho mais rápido para cima nos últimos 160 ms antes de soltar (o dedo desacelera antes de sair da tela). Mínimo de 420 px/s para lançar; abaixo disso a bola volta para a mão.
+- **Ponto de chegada direto do gesto** (não de uma parábola): a força decide a altura (força ideal 1300 px/s, folga de ±45%; fora dela, 110 px por unidade de força a mais ou a menos), o lado vem da velocidade horizontal (×0,22 s) e, com giro, da curva (40 px por volta, até 3 voltas).
+- **Auxílio de mira:** chegando a até 200 px do centro do alvo, a bola é puxada 80% do caminho até ele. Fica bem difícil errar (decidido: o jogador gosta assim); só muito forte (≈4×) ou muito torto erra. Bola fraca demais nem é lançada.
+- **Voo:** um arco só (Bézier quadrática): sai na direção do gesto, sobe 60 px acima da chegada e desce nela; com giro, abre para o lado oposto e volta. Dura de 0,3 a 0,62 s, para a bola sair da mão na velocidade do dedo. A bola encolhe com a profundidade.
+- **Giro:** soma de quanto a direção do dedo vira (um círculo em qualquer lugar da tela = uma volta). Tem inércia: parado, a bola segue girando e perde metade da velocidade a cada 0,9 s; desistiu do arremesso, ela termina de girar no botão. A curva (e as estrelinhas de "pronta") só vale com pelo menos 4 rad/s.
+- **Estrelinhas:** com a bola pronta para a curva, cinco estrelinhas piscam em volta dela (não giram junto) e acompanham o voo.
+- **Alvo:** o meio do corpo do selvagem (pela altura do palco), raio proporcional ao sprite. O selvagem agitado anda pelo mesmo `agitationOffset` que o acerto usa: o alvo que se vê é o alvo testado.
+- **Anel:** ciclo de 1,2 s; faixas 0,28 / 0,55 / 1 do raio (Excellent / Great / Nice). Só aparece enquanto segura e no voo.
+- **Toque simples, teclado e movimento reduzido:** sempre acertam, qualidade `normal`, sem curva (decidido em 2026-10-28: fica assim). Com movimento reduzido, nem há voo.
+- **Cena da captura** (`BattleScene`, `skipThrow`): começa na batida da bola no selvagem, sem o próprio arco (seriam dois arremessos seguidos).
+- **Textos:** "Nice!", "Great!", "Excellent!", "Curva!" (juntos num texto só) e "Errou!", em cima do alvo, no estilo do número de dano da luta.
+- **Multiplicadores** no `battleConfig`: `normal ×1`, `nice ×1,15`, `great ×1,4`, `excellent ×1,8`, `curve ×1,3`. Com o auxílio a curva ficou fácil; decidido manter assim por enquanto.
+
+**Anel colorido pela chance** — feito em 2026-10-28: como no GO, a cor do anel diz quão difícil está a captura com a bola e a berry (chance da UI, qualidade `normal`, sem curva). Faixas em `THROW_PHYSICS` / `ringColorFor`: **verde** `#3ecf5a` (≥60%), **amarelo** `#e8c547` (≥35%), **laranja** `#ef7a2e` (≥15%), **vermelho** `#e05a4a` (abaixo). Só visual.
 
 ### 5.7 Doces (pontos ao soltar)
 O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com ele. Ele não é requisito para evoluir (seção 5.8).
@@ -1299,7 +1310,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - ~~*9.2 — Fuga crescente e berries na captura:* agitação, fuga por degrau, "Dar berry", Pinap só na captura (cargas antigas de `catch_boost` continuam até gastar).~~
 - ~~*9.3 — Berries novas:* Golden Razz e Silver Pinap (só captura), plantio lento, pesos baixos na queda de sementes, recompensas de nível 15/20 e bloco de jogo completo do álbum; o botão de teste também dá sementes/berries delas.~~
 - ~~*9.4 — Arremesso com física:* gesto segurar/girar/soltar; voo 2,5D; anel Nice/Great/Excellent; `POST /miss` gasta bola sem RNG; berry arremessada sem giro; a11y (toque simples / teclado / reduced-motion) sempre acerta `normal`.~~
-- Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo).
+- Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
+- ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 

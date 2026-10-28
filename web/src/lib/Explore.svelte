@@ -24,7 +24,7 @@
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
   import ThrowPad from './ThrowPad.svelte'
-  import { throwAimMult } from './throwPhysics'
+  import { agitationOffset, throwAimMult } from './throwPhysics'
   import { setLiveFight } from './liveFight'
   import BattleScene from './BattleScene.svelte'
   import {
@@ -173,12 +173,12 @@
       : (encounter?.agitation ?? 0),
   )
 
-  function chanceForBall(ballKey: string): number {
+  function chanceForBall(ballKey: string, curve = aimSpinning): number {
     if (!encounter || encounter.wonAt == null) return 0
     const types = [encounter.type1, encounter.type2].filter((t): t is string => Boolean(t))
     const throwMult = throwAimMult(
       'normal',
-      aimSpinning,
+      curve,
       game.balls.throwQualityMult,
       game.balls.throwCurveMult,
     )
@@ -194,6 +194,9 @@
       throwMult,
     })
   }
+
+  /** Chance do anel: bola+berry, qualidade normal, sem curva. */
+  const ringCatchChance = $derived(activeBall ? chanceForBall(activeBall.key, false) : 0)
 
   const throwMode = $derived(
     selectedBerry && !berryDelivered ? ('berry' as const) : ('ball' as const),
@@ -824,7 +827,9 @@
 <!--
   `compact`: sprite menor ao lado do nome, para sobrar tela para o time.
   `dizzy`: derrotado esperando a captura; balança tonto, com estrelas girando
-  em cima da cabeça (a altura vem do ponto do chão no quadro da folha).
+  em cima da cabeça (a altura vem do ponto do chão no quadro da folha). Agitado,
+  anda com o `agitationOffset` (throwPhysics.ts), o mesmo que o ThrowPad usa no
+  acerto: o alvo que se vê é o alvo testado.
 -->
 {#snippet wild(mon: PendingEncounter, variant: 'full' | 'compact' | 'dizzy' = 'full')}
   {@const look = gardenSprite(mon.speciesId, mon.isShiny)}
@@ -832,6 +837,7 @@
   {@const scale = variant === 'compact' ? 2 : 3}
   {@const head = sheet ? Math.round((sheet.ground[1] ?? sheet.h) * scale * 0.85) : 84}
   {@const unrest = Math.min(6, Math.max(0, mon.agitation))}
+  {@const sway = variant === 'dizzy' && unrest > 0 ? agitationOffset(mon.agitation, time) : null}
   <div class="wild-card" class:compact={variant === 'compact'}>
     <!-- Na captura o palco tem a altura do sprite (+ estrelas): sem vazio acima da cabeça. -->
     <div
@@ -849,8 +855,7 @@
       <div
         class="anchor"
         class:dizzy={variant === 'dizzy'}
-        class:restless={unrest > 0 && variant === 'dizzy'}
-        style:--unrest={unrest}
+        style:translate={sway ? `${sway.x}px ${sway.y}px` : undefined}
       >
         {#if look.kind === 'pmd' && sheet}
           <PmdSprite
@@ -1179,6 +1184,7 @@
           disabled={pending || (throwMode === 'ball' && !hasBalls) || (throwMode === 'berry' && !activeCaptureBerry)}
           busy={throwing}
           agitation={decideAgitation}
+          catchChance={ringCatchChance}
           stageEl={wildStageEl}
           onBallHit={(quality, curve) => {
             aimSpinning = false
@@ -1218,6 +1224,7 @@
             {encounter}
             throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
             ballSrc={ballIconSrc(thrownBallSprite)}
+            skipThrow
             {time}
             onDone={afterThrow}
           />
@@ -1526,35 +1533,6 @@
     border: 2px solid var(--danger);
     background: color-mix(in srgb, var(--danger) 55%, transparent);
     transform: rotate(45deg);
-  }
-
-  .anchor.restless {
-    --amp: calc(var(--unrest, 1) * 1px);
-    animation: restless calc(0.7s / (0.55 + var(--unrest, 1) * 0.12)) ease-in-out infinite;
-  }
-
-  @keyframes restless {
-    0% {
-      transform: translate(calc(var(--amp) * -3), 0);
-    }
-    25% {
-      transform: translate(calc(var(--amp) * 2), calc(var(--amp) * -2));
-    }
-    50% {
-      transform: translate(calc(var(--amp) * 3), 0);
-    }
-    75% {
-      transform: translate(calc(var(--amp) * -2), calc(var(--amp) * -1.5));
-    }
-    100% {
-      transform: translate(calc(var(--amp) * -3), 0);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .anchor.restless {
-      animation: none;
-    }
   }
 
   .alert {
