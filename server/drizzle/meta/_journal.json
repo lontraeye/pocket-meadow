@@ -99,6 +99,13 @@
       "when": 1793144202194,
       "tag": "0013_encounter_secret_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793192999295,
+      "tag": "0014_pokedex_album",
+      "breakpoints": true
     }
   ]
 }

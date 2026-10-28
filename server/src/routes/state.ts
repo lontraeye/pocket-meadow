@@ -9,6 +9,7 @@ import { progressionConfig } from '../config/progression.js'
 import { trainerConfig } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
+import { countClaimableBlocks } from '../game/pokedex.js'
 import {
   activeEffects,
   berryPlots,
@@ -288,6 +289,9 @@ function readState(userId: number, now: number) {
               : null,
         })
       : null,
+    pokedex: {
+      claimable: countClaimableBlocks(userId),
+    },
   }
 }
 

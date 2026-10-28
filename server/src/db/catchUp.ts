@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { applyCatchUp } from '../game/catchUp.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
+import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { getDb } from './client.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 
@@ -80,15 +81,18 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
       .set({ level: slot.level, xp: slot.xp })
       .where(and(eq(pokemon.id, slot.pokemonId), eq(pokemon.userId, userId)))
       .run()
-    if (before && before.fastMove && slot.level > before.level) {
-      applyLevelMovesToPokemon({
-        userId,
-        pokemonId: slot.pokemonId,
-        speciesId: before.speciesId,
-        fromLevel: before.level,
-        toLevel: slot.level,
-        chargedMove: before.chargedMove,
-      })
+    if (before) {
+      bumpMaxLevelReached(userId, before.speciesId, slot.level)
+      if (before.fastMove && slot.level > before.level) {
+        applyLevelMovesToPokemon({
+          userId,
+          pokemonId: slot.pokemonId,
+          speciesId: before.speciesId,
+          fromLevel: before.level,
+          toLevel: slot.level,
+          chargedMove: before.chargedMove,
+        })
+      }
     }
     const current = db
       .select({ xpGained: daycareSlots.xpGained })

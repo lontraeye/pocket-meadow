@@ -156,6 +156,53 @@ function rewardCards(levelRewards: { itemKey: string; quantity: number }[], berr
   }))
 }
 
+/** Destaques ao resgatar um bloco do álbum da Pokédex. */
+export function albumClaimCards(input: {
+  title: string
+  reward: {
+    items: { itemKey: string; quantity: number }[]
+    genericCandies: number
+    energy: number
+  }
+  berries: BerryInfo[]
+}): HighlightCard[] {
+  const cards: HighlightCard[] = [
+    {
+      id: `album-${input.title}`,
+      title: 'Álbum completo!',
+      detail: input.title,
+      tone: 'good',
+      sound: 'level',
+    },
+  ]
+  for (const item of input.reward.items) {
+    cards.push({
+      id: `album-item-${item.itemKey}`,
+      title: 'Recompensa do álbum',
+      detail: `${itemLabel(item.itemKey, input.berries)} ×${item.quantity}`,
+      iconSrc: item.itemKey.startsWith('seed:') ? berryIconSrc(item.itemKey.slice(5)) : undefined,
+      tone: 'good',
+    })
+  }
+  if (input.reward.genericCandies > 0) {
+    cards.push({
+      id: 'album-generic',
+      title: 'Doces genéricos',
+      detail: `+${input.reward.genericCandies}`,
+      tone: 'good',
+    })
+  }
+  if (input.reward.energy > 0) {
+    cards.push({
+      id: 'album-energy',
+      title: 'Energia',
+      detail: `+${input.reward.energy}`,
+      tone: 'good',
+    })
+  }
+  return cards
+}
+
 export function unlockedRegions(regions: RegionInfo[], fromLevel: number, toLevel: number): RegionInfo[] {
   if (toLevel <= fromLevel) return []
   return regions

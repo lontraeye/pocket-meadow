@@ -218,6 +218,8 @@ export type GameState = {
   inventory: InventoryRow[]
   effects: ActiveEffect[]
   encounter: PendingEncounter | null
+  /** Blocos do álbum completos e ainda não resgatados (badge do HUD). */
+  pokedex: { claimable: number }
 }
 
 export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number; readyAt?: number }
@@ -356,6 +358,12 @@ export function errorText(error: ApiError): string {
       return 'Esse Pokémon ainda não pode usar esse golpe.'
     case 'traits_missing':
       return 'Os traços desse Pokémon ainda não foram preenchidos.'
+    case 'block_not_found':
+      return 'Esse bloco do álbum não existe.'
+    case 'block_incomplete':
+      return 'Ainda falta alguém nesse bloco.'
+    case 'block_claimed':
+      return 'Você já resgatou esse bloco.'
     default:
       return 'Algo deu errado.'
   }

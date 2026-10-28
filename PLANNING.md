@@ -677,33 +677,30 @@ Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só vis
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
 - Canteiros de berry ocupam um bloco da grade.
 
-### 5.12 Pokédex e guia do jogo (ideia, ainda sem fase)
-Anotado para depois. Precisa de especificação própria antes de virar tarefa.
+### 5.12 Pokédex e guia do jogo (Fase 7)
+A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela. Feito em 2026-10-28 (Fase 7).
 
-A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela.
-
-- **Informação por progresso.** Cada espécie tem camadas que abrem por marcos do jogador. Exemplo de escada:
-  - visto: sprite e nome;
-  - capturado: tipos e linha evolutiva;
-  - nível X: regiões onde aparece e faixa de nível;
-  - nível Y: ataques e poder especial.
-
-  Os marcos e o que cada um abre ficam em config.
-- **Onde encontrar** usa os dados de `snapshots/regions.json` (seção 5.3). Mostrar a raridade em faixas (comum, incomum, raro), não o peso exato, para não entregar a tabela.
-- **Guia do jogo** na mesma tela: tutoriais e explicação das mecânicas (energia, batalha em time, doces, daycare, berries). É conteúdo estático do front, sem API.
-- **Álbum por blocos.** A Pokédex também se organiza em blocos, como um álbum de figurinhas. Completar um bloco dá uma recompensa.
-  - O bloco principal é a **região**: todas as espécies que podem sair nela, tiradas de `snapshots/regions.json`. Os raros de 1% (Clefairy no Mt. Moon, Pidgeotto na Floresta Verde) é que fazem o bloco valer a pena.
-  - Outros blocos possíveis, também derivados de dados que já existem: linha evolutiva completa, tipo, região do jogo inteira (Kanto, Johto) e shiny.
-  - "Completo" = cada espécie do bloco com `caught_count > 0` em `pokedex_entries`. Isso sobrevive a soltar o Pokémon e a evoluir, porque evoluir já conta a nova espécie como capturada.
-  - As recompensas ficam em config, por bloco: sementes, doces genéricos, energia e, depois, cosméticos para o jardim.
-  - O jogador resgata a recompensa com uma ação, que roda em transação no servidor. O servidor confere se o bloco está completo e se a recompensa ainda não foi resgatada. O cliente nunca informa que completou.
-- Mobile primeiro (seção 4.4): lista com busca e filtro, detalhes num sheet por toque.
-
-Pontos a decidir antes de especificar:
-- **Resgate do álbum:** precisa de uma tabela de resgates (`user_id`, `block_key`, `claimed_at`), com migração. Se um bloco ganhar espécies novas, porque a tabela da região mudou num re-seed, decidir se ele reabre com uma recompensa nova ou se o resgate antigo vale para sempre. Sugestão: o resgate antigo vale, e a mudança de tabela vira um bloco novo com outra chave.
-- **Marco de "upar":** precisa sobreviver a soltar o Pokémon. A sugestão é guardar `max_level_reached` em `pokedex_entries`, em vez de olhar a coleção atual. Isso pede migração. Ver `DATA_MODEL.md`, seção 5.
-- **Ataques e poder especial** ainda não existem no jogo. A batalha é só poder × probabilidade. Falta decidir se viram mecânica (afetam a batalha) ou só informação. Se for informação, dá para tirar da PokéAPI no seed (moves por nível, abilities).
-- Se os outros jogadores veem a Pokédex de alguém na visita ao jardim (seção 1).
+- **Informação por progresso.** O servidor corta as camadas; o cliente nunca recebe o que está bloqueado. Marcos em `config/pokedex.ts`:
+  - nunca vista: só o número;
+  - vista: nome e sprite;
+  - capturada: tipos, linha evolutiva, habilidades da espécie;
+  - `max_level_reached` ≥ 15: onde encontrar (região, faixa de nível, raridade em faixas);
+  - `max_level_reached` ≥ 30: golpes que aprende (rápidos e carregados, com o nível) e atributos base.
+- **`max_level_reached`** em `pokedex_entries`: o maior nível que o jogador já teve da espécie. Sobrevive a soltar. Atualizado ao capturar, subir de nível (luta, daycare, doces), evoluir; backfill na migração 0014. Troca entre jogadores ainda não existe (seção 1).
+- **Onde encontrar** usa `snapshots/regions.json`. Raridade em faixas (comum / incomum / raro) pela fração do peso do slot no total da região — nunca o peso. Limites no config.
+- **Guia do jogo** na mesma tela (sub-aba): texto estático do front (energia, encontros, luta, captura, doces, evolução, daycare, berries). Sem API.
+- **Álbum por blocos.** Blocos derivados dos dados que já existem, com chave versionada (`…:v2`):
+  - **Obtível:** aparece em `regions.json`, ou evolui (por nível/doce, sem troca) de uma espécie obtível — calculado dos dados, sem lista fixa.
+  - cada região: espécies que podem sair nela (já obtíveis);
+  - cada linha evolutiva em que **todas** as espécies são obtíveis;
+  - Kanto e Johto: só as obtíveis da faixa (sem Mew, iniciais, lendários, fósseis, evoluções por troca…).
+  - Completo = toda espécie do bloco com `caught_count > 0`.
+  - Recompensas só com o que já existe: sementes (`inventory`), doces genéricos (`trainers.generic_candies`), energia (até o máximo, como a recompensa de nível). Valores no config.
+  - Resgate em `pokedex_claims` (`user_id`, `block_key`, `claimed_at`), com `immediate()`. O cliente nunca informa que completou.
+- **Resgate vale para sempre.** Se um bloco mudar de espécies, sobe `albumVersion` e a chave muda; resgates antigos (ex.: `…:v1`) ficam no banco e não se repetem.
+- **Linha evolutiva na ficha:** membro nunca visto vai só com o número (sem nome); a tela mostra "???".
+- **UI:** aba dentro da Coleção (`Meus Pokémon | Pokédex`), com sub-abas Lista · Álbum · Guia. Moldura estilo Pokédex só com cores/CSS (vermelho `#dc0a2d`, lente azul, luzinhas, tela verde-clara). Sem retratos nem arte nova. Mobile primeiro (seção 4.4); sprites da grade sob demanda.
+- Ainda em aberto: se os outros jogadores veem a Pokédex de alguém na visita ao jardim (seção 1).
 
 ### 5.13 Batalha com mais vida (ideia, ainda sem fase)
 > **As decisões desta seção viraram a 5.18 (Fase 8).** Continua valendo aqui o levantamento das animações do PMD e os fallbacks em CSS, usados na parte 8.3.
@@ -1163,8 +1160,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - ~~Ficha do Pokémon em abas~~ (feito em 2026-10-27): abas Perfil · Golpes · Treino, com topo e rodapé fixos, e barra de rolagem pixel no jogo todo.
 - ~~Som~~ (feito em 2026-10-27): volume base pela metade, ícone de alto-falante no HUD com painel de volume e mudo, e som atrasado descartado.
 
-**Fase 7 — Pokédex: guia e álbum** (seção 5.12)
-- Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.
+**Fase 7 — Pokédex: guia e álbum** (seção 5.12) — feito em 2026-10-28
+- ~~Vistos e capturados, informação liberada por progresso, onde encontrar, guia do jogo e álbum por blocos com recompensas.~~ Aba na Coleção; camadas no servidor; `max_level_reached` + `pokedex_claims`; recompensas de semente / doces genéricos / energia.
 
 **Fase 8 — Combate em tempo real** (seção 5.18; em partes, cada uma testada antes da próxima)
 - *8.1 — Traços dos Pokémon:* snapshots de golpes, pool por espécie e habilidades; colunas de IVs, EVs, nature, habilidade e golpes; sorteio na captura; migração dos que já existem (testada numa cópia do banco de produção, seção 4.6); ficha mostrando tudo. (A troca de golpe ao subir de nível saiu em 2026-10-28: golpes sorteados, seção 5.18.)

@@ -7,6 +7,7 @@ import { trainerXpToNext } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { grantTrainerLevelRewards } from '../db/inventory.js'
+import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
 import { applyLevelMovesToPokemon, rerollMovesOnEvolve, type MoveView } from '../game/levelMoves.js'
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
@@ -253,6 +254,7 @@ function feedOne(
     .set({ level: plan.level, xp: plan.xp })
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
+  bumpMaxLevelReached(userId, mon.speciesId, plan.level)
 
   const learnedMove =
     plan.levelsGained > 0 && mon.fastMove
@@ -351,7 +353,8 @@ function evolveOne(
     .set({ speciesId: next.id })
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
-  markCaught(userId, next.id, mon.isShiny, now)
+  markCaught(userId, next.id, mon.isShiny, now, mon.level)
+  bumpMaxLevelReached(userId, next.id, mon.level)
 
   const newMoves = mon.fastMove
     ? rerollMovesOnEvolve({ userId, pokemonId: id, speciesId: next.id, level: mon.level })
@@ -499,7 +502,13 @@ function patchOne(
   }
 }
 
-function markCaught(userId: number, speciesId: number, isShiny: boolean, now: number): void {
+function markCaught(
+  userId: number,
+  speciesId: number,
+  isShiny: boolean,
+  now: number,
+  level = 0,
+): void {
   const db = getDb()
   const existing = db
     .select({ speciesId: pokedexEntries.speciesId })
@@ -516,6 +525,7 @@ function markCaught(userId: number, speciesId: number, isShiny: boolean, now: nu
         firstSeenAt: now,
         firstCaughtAt: now,
         shinyCaught: isShiny,
+        maxLevelReached: level,
       })
       .run()
     return
@@ -527,6 +537,7 @@ function markCaught(userId: number, speciesId: number, isShiny: boolean, now: nu
       firstSeenAt: sql`coalesce(${pokedexEntries.firstSeenAt}, ${now})`,
       firstCaughtAt: sql`coalesce(${pokedexEntries.firstCaughtAt}, ${now})`,
       shinyCaught: sql`(${pokedexEntries.shinyCaught} or ${isShiny ? 1 : 0})`,
+      maxLevelReached: sql`max(${pokedexEntries.maxLevelReached}, ${level})`,
     })
     .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, speciesId)))
     .run()

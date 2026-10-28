@@ -8,6 +8,7 @@
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
+  import Pokedex from './lib/Pokedex.svelte'
   import { baseTasks, gameTasks, warmUp } from './lib/preload'
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
   import { formatClockTime, formatCountdown } from './lib/time'
@@ -33,6 +34,57 @@
   let focusPlot = $state<number | null>(null)
   /** Evita recarregar em loop quando o +1 vence: uma vez por `energyNextAt`. */
   let reloadedForNextAt = $state<number | null>(null)
+  /** Pokédex no HUD; fica montada após a 1ª abertura para lembrar filtros/rolagem. */
+  let pokedexOpen = $state(false)
+  let pokedexMounted = $state(false)
+  let pokedexHistoryPushed = $state(false)
+
+  const claimable = $derived(game?.pokedex.claimable ?? 0)
+
+  // Ícone da Pokédex no HUD (X = pixel aceso), no traço do alto-falante.
+  const DEX_ICON = [
+    '.XXXXXXXXXX.',
+    'X..........X',
+    'X.XX.X.X...X',
+    'X.XX.......X',
+    'X..........X',
+    'XXXXXXXXXXXX',
+    'X..........X',
+    'X.XXXXXXXX.X',
+    'X.XXXXXXXX.X',
+    'X.XXXXXXXX.X',
+    'X..........X',
+    '.XXXXXXXXXX.',
+  ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
+
+  function isNarrowDex(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 899px)').matches
+  }
+
+  function openPokedex() {
+    pokedexMounted = true
+    pokedexOpen = true
+    if (isNarrowDex() && !pokedexHistoryPushed) {
+      history.pushState({ pokedex: true }, '')
+      pokedexHistoryPushed = true
+    }
+  }
+
+  function closePokedex(fromPopstate = false) {
+    if (!pokedexOpen) return
+    pokedexOpen = false
+    if (!fromPopstate && pokedexHistoryPushed) {
+      pokedexHistoryPushed = false
+      history.back()
+      return
+    }
+    pokedexHistoryPushed = false
+  }
+
+  function togglePokedex() {
+    if (pokedexOpen) closePokedex()
+    else openPokedex()
+  }
 
   const clock = serverClock(() => game?.now ?? 0)
 
@@ -63,6 +115,9 @@
       return
     }
     if (response.status === 401) {
+      pokedexOpen = false
+      pokedexMounted = false
+      pokedexHistoryPushed = false
       game = null
       screen = 'meadow'
       if (phase !== 'auth') await warmUp(baseTasks(), onProgress)
@@ -109,6 +164,12 @@
 
   async function logout() {
     await api('/api/auth/logout', {})
+    if (pokedexOpen && pokedexHistoryPushed) {
+      pokedexHistoryPushed = false
+      history.back()
+    }
+    pokedexOpen = false
+    pokedexMounted = false
     game = null
     phase = 'auth'
     screen = 'meadow'
@@ -145,12 +206,20 @@
     bindAudioUnlock()
     muted = isMuted()
     void loadState()
-    return registerServiceWorker({
+    const onPopState = () => {
+      if (pokedexOpen) closePokedex(true)
+    }
+    window.addEventListener('popstate', onPopState)
+    const unregisterSw = registerServiceWorker({
       onChange: (handle) => {
         updateAvailable = handle.available
         applyUpdate = handle.apply
       },
     })
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      unregisterSw?.()
+    }
   })
 
   // Gritos do jardim prontos antes de tocar num Pokémon (só baixa os novos).
@@ -195,7 +264,11 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow fit" class:immersive={screen === 'meadow'}>
+  <main
+    class="meadow fit"
+    class:immersive={screen === 'meadow'}
+    class:pokedex-open={pokedexOpen}
+  >
     <!-- No jardim o gramado é o fundo da tela; HUD e docks flutuam por cima. -->
     {#if screen === 'meadow'}
       <div class="garden-layer">
@@ -258,6 +331,27 @@
             <rect x="9" y="9" width="1" height="1" />
           {/if}
         </svg>
+      </button>
+      <button
+        type="button"
+        class="btn dex-btn badge-host"
+        aria-label="Pokédex"
+        aria-pressed={pokedexOpen}
+        title="Pokédex"
+        onclick={togglePokedex}
+      >
+        <!-- Pokédex em pixels (grade 12×12), na cor do texto como o alto-falante:
+             lente e luzinhas em cima, dobradiça e tela embaixo. -->
+        <svg class="speaker" viewBox="0 0 12 12" width="22" height="22" aria-hidden="true">
+          {#each DEX_ICON as px (`${px.x},${px.y}`)}
+            <rect x={px.x} y={px.y} width="1" height="1" />
+          {/each}
+        </svg>
+        {#if claimable > 0}
+          <!-- Só uma bolinha: o número de blocos está no próprio álbum. -->
+          <span class="dot" aria-hidden="true"></span>
+          <span class="sr-only">{claimable === 1 ? '1 recompensa para resgatar' : `${claimable} recompensas para resgatar`}</span>
+        {/if}
       </button>
       <button type="button" class="btn bag-btn" aria-label="Mochila" onclick={() => (screen = 'bag')}>
         Mochila
@@ -327,6 +421,17 @@
         >
           {game.encounter ? 'Ver encontro' : 'Explorar'}
         </button>
+      </div>
+    {/if}
+
+    {#if pokedexMounted && game}
+      <div
+        class="pokedex-shell"
+        class:open={pokedexOpen}
+        aria-hidden={!pokedexOpen}
+        inert={!pokedexOpen ? true : undefined}
+      >
+        <Pokedex {game} onState={loadState} onClose={() => closePokedex()} />
       </div>
     {/if}
   </main>
@@ -599,14 +704,16 @@
     text-overflow: ellipsis;
   }
 
-  /* Altura vem do .btn (48px), igual para Som, Mochila e Sair. */
+  /* Altura vem do .btn (48px), igual para Som, Pokédex, Mochila e Sair. */
   .bag-btn,
-  .mute-btn {
+  .mute-btn,
+  .dex-btn {
     min-width: 44px;
     flex: none;
   }
 
-  .mute-btn {
+  .mute-btn,
+  .dex-btn {
     padding-left: 0.45rem;
     padding-right: 0.45rem;
   }
@@ -623,6 +730,33 @@
     height: 22px;
     fill: currentColor;
     shape-rendering: crispEdges;
+  }
+
+  /* Só para leitor de tela. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Alerta de resgate: bolinha pixelada (8px, cantos cortados) no canto. */
+  .dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    background: #f06a2a;
+    clip-path: polygon(2px 0, 6px 0, 6px 2px, 8px 2px, 8px 6px, 6px 6px, 6px 8px, 2px 8px, 2px 6px, 0 6px, 0 2px, 2px 2px);
+    box-shadow: inset -2px -2px 0 #b8401a;
+  }
+
+  .dex-btn.badge-host,
+  .badge-host {
+    position: relative;
   }
 
   .volume-dismiss {
@@ -714,7 +848,7 @@
     box-shadow: inset 0 -3px 0 #c79a00;
   }
 
-  /* Celular: nível e energia numa linha; som, Mochila e Sair embaixo. */
+  /* Celular: nível e energia numa linha; ícones + Mochila + Sair embaixo. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;
@@ -729,10 +863,70 @@
       flex: 1;
     }
 
-    /* O ícone não precisa da largura de um botão com texto. */
-    .hud .mute-btn {
+    /* Ícones: alvo ≥44px sem comer espaço dos botões de texto. */
+    .hud .mute-btn,
+    .hud .dex-btn {
       flex: none;
-      width: 56px;
+      width: 48px;
+      min-width: 48px;
+    }
+  }
+
+  /* Pokédex: tela cheia no celular; painel à direita no PC. */
+  .pokedex-shell {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .pokedex-shell.open {
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .pokedex-shell :global(.pokedex) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  @media (max-width: 899px) {
+    .meadow.pokedex-open .garden-layer,
+    .meadow.pokedex-open .hud,
+    .meadow.pokedex-open .docks,
+    .meadow.pokedex-open .ready-banner,
+    .meadow.pokedex-open .world,
+    .meadow.pokedex-open .update-banner {
+      display: none !important;
+    }
+  }
+
+  @media (min-width: 900px) {
+    .pokedex-shell {
+      inset: auto;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(420px, 100%);
+      transform: translateX(100%);
+      visibility: visible;
+      transition: transform 0.2s ease;
+      box-shadow: -4px 0 0 #00000022;
+    }
+
+    .pokedex-shell.open {
+      transform: translateX(0);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pokedex-shell {
+        transition: none;
+      }
     }
   }
 

@@ -74,6 +74,7 @@ export function createPlayer(input: {
       caughtCount: 1,
       firstSeenAt: now,
       firstCaughtAt: now,
+      maxLevelReached: trainerConfig.starterLevel,
     })
     .run()
   db.insert(inventory)

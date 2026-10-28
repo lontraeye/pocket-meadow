@@ -304,8 +304,23 @@ export const pokedexEntries = sqliteTable(
     firstSeenAt: integer('first_seen_at').notNull(),
     firstCaughtAt: integer('first_caught_at'),
     shinyCaught: integer('shiny_caught', { mode: 'boolean' }).notNull().default(false),
+    /** Maior nível já alcançado com a espécie (sobrevive a soltar). */
+    maxLevelReached: integer('max_level_reached').notNull().default(0),
   },
   (table) => [primaryKey({ columns: [table.userId, table.speciesId] })],
+)
+
+/** Resgates do álbum da Pokédex (chave versionada do bloco). */
+export const pokedexClaims = sqliteTable(
+  'pokedex_claims',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    blockKey: text('block_key').notNull(),
+    claimedAt: integer('claimed_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.blockKey] })],
 )
 
 export const berryPlots = sqliteTable(

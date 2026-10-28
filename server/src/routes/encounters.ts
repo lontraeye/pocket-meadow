@@ -29,6 +29,7 @@ import {
   type WildSpeciesRow,
 } from '../game/encounterBattle.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
+import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { isFinishTooEarly, simConfig } from '../game/sim/config.js'
 import { battleRngSeed, seedDropRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
@@ -450,6 +451,7 @@ function applyBattleOutcome(input: {
         })
         .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
         .run()
+      if (share > 0) bumpMaxLevelReached(userId, mon.speciesId, granted.level)
       if (share > 0 && granted.levelsGained > 0 && mon.fastMove) {
         learnedMove = applyLevelMovesToPokemon({
           userId,
@@ -809,6 +811,7 @@ function throwBall(userId: number, encounterId: number, now: number) {
         caughtCount: sql`${pokedexEntries.caughtCount} + 1`,
         firstCaughtAt: sql`coalesce(${pokedexEntries.firstCaughtAt}, ${now})`,
         shinyCaught: sql`(${pokedexEntries.shinyCaught} or ${encounter.isShiny ? 1 : 0})`,
+        maxLevelReached: sql`max(${pokedexEntries.maxLevelReached}, ${encounter.level})`,
       })
       .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, encounter.speciesId)))
       .run()

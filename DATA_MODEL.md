@@ -27,6 +27,7 @@ users 1──* encounters *──1 species
 encounters 1──* encounter_fighters *──0..1 pokemon
 species 1──* evolutions (from/to)
 users 1──* pokedex_entries
+users 1──* pokedex_claims
 ```
 
 ---
@@ -310,17 +311,32 @@ CREATE UNIQUE INDEX uq_encounters_one_pending
 ### `pokedex_entries`
 ```sql
 CREATE TABLE pokedex_entries (
-  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  species_id      INTEGER NOT NULL REFERENCES species(id),
-  seen_count      INTEGER NOT NULL DEFAULT 0,
-  caught_count    INTEGER NOT NULL DEFAULT 0,
-  first_seen_at   INTEGER NOT NULL,
-  first_caught_at INTEGER,
-  shiny_caught    INTEGER NOT NULL DEFAULT 0,
+  user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  species_id         INTEGER NOT NULL REFERENCES species(id),
+  seen_count         INTEGER NOT NULL DEFAULT 0,
+  caught_count       INTEGER NOT NULL DEFAULT 0,
+  first_seen_at      INTEGER NOT NULL,
+  first_caught_at    INTEGER,
+  shiny_caught       INTEGER NOT NULL DEFAULT 0,
+  max_level_reached  INTEGER NOT NULL DEFAULT 0,  -- maior nível já alcançado com a espécie (sobrevive a soltar)
   PRIMARY KEY (user_id, species_id)
 );
 ```
-Atualizada ao criar um encontro (visto), ao capturar e ao evoluir (a nova espécie conta como capturada).
+Atualizada ao criar um encontro (visto), ao capturar, ao evoluir (a nova espécie conta como capturada) e sempre que o nível sobe (luta, daycare, doces): `max_level_reached = max(atual, nível novo)`. A migração 0014 preencheu com o maior nível atual da coleção. Camadas da Pokédex (PLANNING 5.12) usam `seen_count`, `caught_count` e `max_level_reached`.
+
+No `GET /pokedex`, a linha evolutiva de uma espécie capturada lista `{ id, stage, displayName? }`: `displayName` só entra se o jogador já viu aquela espécie (`seen_count > 0`); senão só o número.
+
+### `pokedex_claims`
+Resgates do álbum da Pokédex. Chave versionada do bloco (`region:…:v2`, `chain:…:v2`, `game:kanto:v2`…). Resgate vale para sempre; mudança de espécies sobe a versão da chave. Resgates `v1` antigos permanecem e não se repetem nos blocos novos.
+
+```sql
+CREATE TABLE pokedex_claims (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  block_key  TEXT    NOT NULL,
+  claimed_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, block_key)
+);
+```
 
 ---
 

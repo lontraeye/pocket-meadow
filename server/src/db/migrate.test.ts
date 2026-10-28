@@ -692,3 +692,113 @@ test('a migração battle_auto preserva trainers, pokemon e encounter_fighters',
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migra��o pokedex_album preserva dados e preenche max_level_reached', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-pokedex-album-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+    '0009_battle_started.sql',
+    '0010_battle_setup_json.sql',
+    '0011_won_at.sql',
+    '0012_battle_auto.sql',
+    '0013_encounter_secret_seed.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, created_at) values ('ash', 1)`).run()
+  db.prepare(
+    `insert into trainers (
+      user_id, level, xp, energy, energy_updated_at, updated_at
+    ) values (1, 3, 10, 8, 100, 100)`,
+  ).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values
+      (16, 'pidgey', 'Pidgey', 'normal', 40, 45, 40, 35, 35, 56, 251, 50, 255, 10, 1, 0, 0, 0, 0, 0, 1),
+      (19, 'rattata', 'Rattata', 'normal', 30, 56, 35, 25, 35, 72, 253, 51, 255, 14, 1, 0, 0, 0, 0, 0, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, caught_at, original_species_id,
+      nature, ability_slot, fast_move, charged_move,
+      iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values
+      (1, 16, 12, 0, 1, 16, 'hardy', '1', 'tackle', 'gust', 15, 15, 15, 15, 15, 15, 0, 0, 0, 0, 0, 0),
+      (1, 16, 7, 0, 2, 16, 'hardy', '1', 'tackle', 'gust', 15, 15, 15, 15, 15, 15, 0, 0, 0, 0, 0, 0),
+      (1, 19, 4, 0, 3, 19, 'hardy', '1', 'tackle', null, 15, 15, 15, 15, 15, 15, 0, 0, 0, 0, 0, 0)`,
+  ).run()
+  db.prepare(
+    `insert into pokedex_entries (
+      user_id, species_id, seen_count, caught_count, first_seen_at, first_caught_at, shiny_caught
+    ) values
+      (1, 16, 2, 2, 1, 1, 0),
+      (1, 19, 1, 1, 2, 2, 0)`,
+  ).run()
+  db.prepare(
+    `insert into encounters (
+      user_id, region_slug, species_id, level, is_shiny, rng_seed, status, created_at, expires_at
+    ) values (1, 'kanto-route-1', 16, 3, 0, 42, 'pending', 100, 200)`,
+  ).run()
+  db.prepare(
+    `insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (1, 0, 1, 12.5)`,
+  ).run()
+
+  const before = {
+    pokemon: (db.prepare(`select count(*) as n from pokemon`).get() as { n: number }).n,
+    pokedex: (db.prepare(`select count(*) as n from pokedex_entries`).get() as { n: number }).n,
+    encounters: (db.prepare(`select count(*) as n from encounters`).get() as { n: number }).n,
+    fighters: (db.prepare(`select count(*) as n from encounter_fighters`).get() as { n: number }).n,
+  }
+
+  execMigration(db, '0014_pokedex_album.sql')
+
+  assert.equal((db.prepare(`select count(*) as n from pokemon`).get() as { n: number }).n, before.pokemon)
+  assert.equal(
+    (db.prepare(`select count(*) as n from pokedex_entries`).get() as { n: number }).n,
+    before.pokedex,
+  )
+  assert.equal(
+    (db.prepare(`select count(*) as n from encounters`).get() as { n: number }).n,
+    before.encounters,
+  )
+  assert.equal(
+    (db.prepare(`select count(*) as n from encounter_fighters`).get() as { n: number }).n,
+    before.fighters,
+  )
+
+  const pidgey = db
+    .prepare(`select max_level_reached from pokedex_entries where species_id = 16`)
+    .get() as { max_level_reached: number }
+  const rattata = db
+    .prepare(`select max_level_reached from pokedex_entries where species_id = 19`)
+    .get() as { max_level_reached: number }
+  assert.equal(pidgey.max_level_reached, 12)
+  assert.equal(rattata.max_level_reached, 4)
+
+  db.prepare(
+    `insert into pokedex_claims (user_id, block_key, claimed_at) values (1, 'region:route-1:v1', 999)`,
+  ).run()
+  assert.equal(
+    (db.prepare(`select count(*) as n from pokedex_claims`).get() as { n: number }).n,
+    1,
+  )
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})
