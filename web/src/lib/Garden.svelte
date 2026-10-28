@@ -154,8 +154,28 @@
     }
   }
 
-  const columns = 6
-  const gridRows = 6
+  // Zona andável 12×12. O mundo tem uma margem em volta só para a câmera ter
+  // folga; o gramado de fora (mais escuro) é o fundo do .lawn, que não acaba.
+  const playCols = 12
+  const playRows = 12
+  const margin = 10
+  const worldCols = playCols + margin * 2
+  const worldRows = playRows + margin * 2
+  const playCol0 = margin
+  const playRow0 = margin
+  const playColEnd = margin + playCols
+  const playRowEnd = margin + playRows
+  // Faixa de z: chão (0..span-1), entidades (span..) — sprites grandes não furam o gramado.
+  const depthSpan = worldCols + worldRows
+  // Zoom manual (1–3). Abertura mais afastada (~8 tiles de largura).
+  const scaleMin = 1
+  const scaleMax = 3
+  // Passo de meio: o PMD vai de 2× a 6× (sempre inteiro, sem borrar o pixel).
+  const scaleStep = 0.5
+  const wheelStepPx = 60
+  // Pinça: abrir ou fechar 20% a distância entre os dedos muda um passo.
+  const pinchStepRatio = 1.2
+  const defaultViewTiles = 8
   const baseTileW = 48
   const baseTileH = 24
   const showdownSize = 64
@@ -169,6 +189,10 @@
   // numa direção nova, em vez de girar na hora.
   const turnStepMs = 110
   const sleepDir = 0
+  // Casa da frente ocupada por outro: espera e tenta de novo; passando disso, muda de destino.
+  const blockedWaitMs = 350
+  const blockedTries = 4
+  const panDragPx = 6
 
   // A pose de sono do PMD olha para ↙ em quase todas as espécies. Quem dorme
   // olhando para a direita (↘ → ↗) usa a pose espelhada, para não virar de lado.
@@ -176,13 +200,25 @@
     return walker.anim === 'Sleep' && walker.dir >= 1 && walker.dir <= 3
   }
 
-  /** Canteiros na última fileira (mesma regra do desenho dos tiles). */
+  function inPlay(col: number, row: number): boolean {
+    return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
+  }
+
+  /** Canteiros na última fileira da zona jogável; plotIndex = col − margem. */
   function isPlotCell(col: number, row: number): boolean {
-    return row === gridRows - 1 && col >= 0 && col < game.plotSlotsUnlocked
+    return (
+      row === playRowEnd - 1 &&
+      col >= playCol0 &&
+      col < playCol0 + game.plotSlotsUnlocked
+    )
+  }
+
+  function plotIndexAt(col: number): number {
+    return col - playCol0
   }
 
   function isWalkable(col: number, row: number): boolean {
-    return col >= 0 && col < columns && row >= 0 && row < gridRows && !isPlotCell(col, row)
+    return inPlay(col, row) && !isPlotCell(col, row)
   }
 
   type Walker = {
@@ -198,6 +234,14 @@
 
   let lawn = $state<HTMLDivElement | null>(null)
   let scale = $state(1)
+  let lawnW = $state(0)
+  let lawnH = $state(0)
+  let stageBoxW = $state(0)
+  let stageBoxH = $state(0)
+  let panX = $state(0)
+  let panY = $state(0)
+  /** Já escolheu zoom inicial e centrou a câmera nesta montagem. */
+  let viewSeeded = false
   let time = $state(0)
   let walkers = $state<Walker[]>([])
   // Comandos de teste (botão no card em modo dev), ligados pelo $effect do passeio.
@@ -209,7 +253,6 @@
   const tileW = $derived(baseTileW * scale)
   const tileH = $derived(baseTileH * scale)
   const pmdScale = $derived(2 * scale)
-  const depth = $derived(8 * scale)
   const halfW = $derived(tileW / 2)
   const halfH = $derived(tileH / 2)
 
@@ -239,22 +282,49 @@
     return out
   })
 
-  const unitWidth = $derived(
-    ((columns + gridRows) * baseTileW) / 2 + 2 * Math.max(0, extent.side - baseTileW / 2),
-  )
   const padX = $derived(Math.max(0, extent.side * scale - halfW))
   const padTop = $derived(Math.max(0, extent.up * scale - halfH))
-  const padBottom = $derived(Math.max(0, extent.down * scale - halfH - depth))
+  const padBottom = $derived(Math.max(0, extent.down * scale - halfH))
 
-  const originX = $derived(gridRows * halfW + padX)
+  const originX = $derived(worldRows * halfW + padX)
   const originY = $derived(padTop)
-  const stageW = $derived((columns + gridRows) * halfW + padX * 2)
-  const stageH = $derived(originY + (columns + gridRows) * halfH + depth + padBottom)
+  const stageW = $derived((worldCols + worldRows) * halfW + padX * 2)
+  const stageH = $derived(originY + (worldCols + worldRows) * halfH + padBottom)
 
-  const tiles = Array.from({ length: columns * gridRows }, (_, index) => ({
-    col: index % columns,
-    row: Math.floor(index / columns),
+  function metricsFor(nextScale: number) {
+    const hw = (baseTileW * nextScale) / 2
+    const hh = (baseTileH * nextScale) / 2
+    const px = Math.max(0, extent.side * nextScale - hw)
+    const pt = Math.max(0, extent.up * nextScale - hh)
+    const pb = Math.max(0, extent.down * nextScale - hh)
+    const ox = worldRows * hw + px
+    const oy = pt
+    const sw = (worldCols + worldRows) * hw + px * 2
+    const sh = oy + (worldCols + worldRows) * hh + pb
+    return { hw, hh, ox, oy, sw, sh }
+  }
+
+  // Só a zona jogável vira elemento; o resto é o padrão do fundo (lawnBackground).
+  const tiles = Array.from({ length: playCols * playRows }, (_, index) => ({
+    col: playCol0 + (index % playCols),
+    row: playRow0 + Math.floor(index / playCols),
   }))
+
+  // Fundo do gramado: losangos iguais aos ladrilhos, em verde mais escuro, que
+  // seguem o pan e o zoom. Cada quadro do padrão (tileW × tileH) tem um
+  // losango inteiro no meio (cor dos ladrilhos sem .alt) e os cantos na cor
+  // .alt, então o xadrez continua o dos ladrilhos sem emenda.
+  const lawnPattern =
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 1' preserveAspectRatio='none' shape-rendering='crispEdges'%3E%3Crect width='2' height='1' fill='%234f7a3a'/%3E%3Cpolygon points='1,0 2,0.5 1,1 0,0.5' fill='%235d8a45'/%3E%3C/svg%3E\")"
+  const lawnBackground = $derived.by(() => {
+    // Centro do primeiro ladrilho jogável, que tem col + row par (sem .alt).
+    const cx = panX + originX + (playCol0 - playRow0) * halfW
+    const cy = panY + originY + (playCol0 + playRow0) * halfH + halfH
+    return {
+      size: `${tileW}px ${tileH}px`,
+      position: `${cx - halfW}px ${cy - halfH}px`,
+    }
+  })
 
   function place(col: number, row: number): { x: number; y: number } {
     return {
@@ -263,17 +333,256 @@
     }
   }
 
+  /** Limita o pan para a viewport não alcançar a borda do mundo (gramado “sem fim”). */
+  function clampPan(x: number, y: number, viewW: number, viewH: number, sw: number, sh: number): { x: number; y: number } {
+    // Folga ~2 tiles: a câmera para antes da última fileira do estágio.
+    const padX = Math.min(viewW * 0.35, baseTileW * scale * 2)
+    const padY = Math.min(viewH * 0.35, baseTileH * scale * 4)
+    let minX: number
+    let maxX: number
+    let minY: number
+    let maxY: number
+    if (sw <= viewW) {
+      minX = maxX = (viewW - sw) / 2
+    } else {
+      minX = viewW - sw + padX
+      maxX = -padX
+      if (minX > maxX) {
+        minX = maxX = (viewW - sw) / 2
+      }
+    }
+    if (sh <= viewH) {
+      minY = maxY = (viewH - sh) / 2
+    } else {
+      minY = viewH - sh + padY
+      maxY = -padY
+      if (minY > maxY) {
+        minY = maxY = (viewH - sh) / 2
+      }
+    }
+    return {
+      x: Math.min(maxX, Math.max(minX, x)),
+      y: Math.min(maxY, Math.max(minY, y)),
+    }
+  }
+
+  function centerPanOnPlay(viewW: number, viewH: number, sw: number, sh: number, hw: number, hh: number, ox: number, oy: number) {
+    const midCol = playCol0 + (playCols - 1) / 2
+    const midRow = playRow0 + (playRows - 1) / 2
+    const cx = ox + (midCol - midRow) * hw
+    const cy = oy + (midCol + midRow) * hh + hh
+    return clampPan(viewW / 2 - cx, viewH / 2 - cy, viewW, viewH, sw, sh)
+  }
+
+  /** Arredonda para o passo de zoom, dentro de 1–3. */
+  function snapScale(raw: number): number {
+    const snapped = Math.round(raw / scaleStep) * scaleStep
+    return Math.min(scaleMax, Math.max(scaleMin, snapped))
+  }
+
+  /**
+   * Muda o zoom mantendo parado o ponto do jardim que está sob `focus` (o
+   * mouse ou o meio da pinça, em px do gramado). Sem `focus`, usa o centro.
+   */
+  function applyZoom(nextRaw: number, focus?: { x: number; y: number }) {
+    const nextScale = snapScale(nextRaw)
+    const prevScale = untrack(() => scale)
+    if (nextScale === prevScale) return
+    const node = lawn
+    const viewW = node?.clientWidth ?? lawnW
+    const viewH = node?.clientHeight ?? lawnH
+    const prevPanX = untrack(() => panX)
+    const prevPanY = untrack(() => panY)
+    const { sw, sh } = metricsFor(nextScale)
+    stageBoxW = sw
+    stageBoxH = sh
+    scale = nextScale
+    if (!viewW || !viewH) return
+    const fx = focus?.x ?? viewW / 2
+    const fy = focus?.y ?? viewH / 2
+    const ratio = nextScale / prevScale
+    const clamped = clampPan(fx - (fx - prevPanX) * ratio, fy - (fy - prevPanY) * ratio, viewW, viewH, sw, sh)
+    panX = clamped.x
+    panY = clamped.y
+  }
+
+  /** Ponto do evento em px do gramado. */
+  function lawnPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const box = lawn?.getBoundingClientRect()
+    return { x: clientX - (box?.left ?? 0), y: clientY - (box?.top ?? 0) }
+  }
+
+  // Rodinha do mouse: um passo de zoom a cada "dente". O touchpad manda vários
+  // deltas pequenos, então soma até passar do limiar.
   $effect(() => {
     const node = lawn
     if (!node) return
+    let acc = 0
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const delta = event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY
+      acc += delta
+      if (Math.abs(acc) < wheelStepPx) return
+      const direction = acc < 0 ? 1 : -1
+      acc = 0
+      applyZoom(untrack(() => scale) + direction * scaleStep, lawnPoint(event.clientX, event.clientY))
+    }
+    node.addEventListener('wheel', onWheel, { passive: false })
+    return () => node.removeEventListener('wheel', onWheel)
+  })
+
+  $effect(() => {
+    const node = lawn
+    if (!node) {
+      viewSeeded = false
+      return
+    }
     const measure = () => {
-      const fit = Math.floor(node.clientWidth / unitWidth)
-      scale = Math.min(2, Math.max(1, fit))
+      const viewW = node.clientWidth
+      const viewH = node.clientHeight
+      lawnW = viewW
+      lawnH = viewH
+      if (!viewSeeded) {
+        viewSeeded = true
+        // Abertura mais afastada que o encaixe apertado de ~5 tiles.
+        const nextScale = snapScale(viewW / (defaultViewTiles * baseTileW))
+        scale = nextScale
+        const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
+        stageBoxW = sw
+        stageBoxH = sh
+        const centered = centerPanOnPlay(viewW, viewH, sw, sh, hw, hh, ox, oy)
+        panX = centered.x
+        panY = centered.y
+        return
+      }
+      const current = untrack(() => scale)
+      const { sw, sh } = metricsFor(current)
+      stageBoxW = sw
+      stageBoxH = sh
+      // Não ler pan reativo aqui: senão cada arrasto recria o observer.
+      const clamped = clampPan(untrack(() => panX), untrack(() => panY), viewW, viewH, sw, sh)
+      panX = clamped.x
+      panY = clamped.y
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(node)
     return () => observer.disconnect()
+  })
+
+  // Pan por arrastar: limiar evita roubar toque em canteiro/Pokémon.
+  // Dois dedos: pinça de zoom (o pan para até sobrar um dedo só).
+  $effect(() => {
+    const node = lawn
+    if (!node) return
+    let pointerId: number | null = null
+    let startX = 0
+    let startY = 0
+    let originPanX = 0
+    let originPanY = 0
+    let dragging = false
+    let suppressClick = false
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinchBase = 0
+
+    const pinchDistance = () => {
+      const [a, b] = [...touches.values()]
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0
+    }
+
+    const onDown = (event: PointerEvent) => {
+      if (event.button !== 0 && event.pointerType === 'mouse') return
+      if (event.pointerType === 'touch') {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2) {
+          pinchBase = pinchDistance()
+          pointerId = null
+          dragging = false
+          suppressClick = true
+          return
+        }
+      }
+      if (touches.size > 1) return
+      pointerId = event.pointerId
+      startX = event.clientX
+      startY = event.clientY
+      originPanX = panX
+      originPanY = panY
+      dragging = false
+    }
+
+    const onMove = (event: PointerEvent) => {
+      if (touches.has(event.pointerId)) {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2 && pinchBase > 0) {
+          const distance = pinchDistance()
+          const ratio = distance / pinchBase
+          if (ratio >= pinchStepRatio || ratio <= 1 / pinchStepRatio) {
+            const [a, b] = [...touches.values()]
+            const mid = lawnPoint((a!.x + b!.x) / 2, (a!.y + b!.y) / 2)
+            applyZoom(untrack(() => scale) + (ratio > 1 ? scaleStep : -scaleStep), mid)
+            pinchBase = distance
+          }
+          return
+        }
+      }
+      if (pointerId !== event.pointerId) return
+      const dx = event.clientX - startX
+      const dy = event.clientY - startY
+      if (!dragging) {
+        if (dx * dx + dy * dy < panDragPx * panDragPx) return
+        dragging = true
+        suppressClick = true
+        try {
+          node.setPointerCapture(event.pointerId)
+        } catch {
+          // Alguns alvos já capturam; seguimos sem capture.
+        }
+      }
+      const next = clampPan(originPanX + dx, originPanY + dy, lawnW, lawnH, stageBoxW, stageBoxH)
+      panX = next.x
+      panY = next.y
+    }
+
+    const onUp = (event: PointerEvent) => {
+      if (touches.delete(event.pointerId) && touches.size < 2) pinchBase = 0
+      if (pointerId !== event.pointerId) return
+      pointerId = null
+      if (dragging) {
+        try {
+          node.releasePointerCapture(event.pointerId)
+        } catch {
+          // ignore
+        }
+      }
+      dragging = false
+    }
+
+    const onClickCapture = (event: MouseEvent) => {
+      if (!suppressClick) return
+      suppressClick = false
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    // Sem isso, um clique que começa numa imagem (sprite, berry) ou em algo
+    // selecionado às vezes vira o arrasto nativo do navegador (a "imagem
+    // fantasma"), que engole os pointermove e trava o pan até soltar.
+    const onDragStart = (event: DragEvent) => event.preventDefault()
+    node.addEventListener('dragstart', onDragStart)
+    node.addEventListener('pointerdown', onDown)
+    node.addEventListener('pointermove', onMove)
+    node.addEventListener('pointerup', onUp)
+    node.addEventListener('pointercancel', onUp)
+    node.addEventListener('click', onClickCapture, true)
+    return () => {
+      node.removeEventListener('dragstart', onDragStart)
+      node.removeEventListener('pointerdown', onDown)
+      node.removeEventListener('pointermove', onMove)
+      node.removeEventListener('pointerup', onUp)
+      node.removeEventListener('pointercancel', onUp)
+      node.removeEventListener('click', onClickCapture, true)
+    }
   })
 
   $effect(() => {
@@ -287,9 +596,12 @@
     const mons = gardenPokemon
     // Lê os canteiros desbloqueados para o efeito recrear se a faixa mudar.
     void game.plotSlotsUnlocked
-    const spots = walkableSpots()
+    // Cada um nasce numa casa sorteada do jardim todo, olhando para um lado
+    // qualquer (antes saíam em ordem e se amontoavam no canto de cima).
+    // Provisório: o PC e os biomas vão decidir onde cada um fica.
+    const spots = shuffled(walkableSpots())
     const created = mons.map((mon, index) => {
-      const spot = spots[index % Math.max(1, spots.length)] ?? { col: 1, row: 1 }
+      const spot = spots[index % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
       return {
         id: mon.id,
         speciesId: mon.speciesId,
@@ -297,12 +609,38 @@
         isShiny: mon.isShiny,
         col: spot.col,
         row: spot.row,
-        dir: 1,
+        dir: Math.floor(Math.random() * 8),
         anim: 'Idle' as const,
       }
     })
     walkers = created
     const live = untrack(() => walkers)
+
+    // Uma casa, um Pokémon. Cada um é dono da casa onde está e reserva a
+    // próxima antes de dar o passo; só solta a de trás ao chegar. Se a próxima
+    // tem dono, espera parado e tenta de novo; depois de algumas vezes desiste
+    // e escolhe outro destino (assim dois cara a cara não travam).
+    const occupied = new Map<string, number>()
+    const cell = (col: number, row: number) => `${col},${row}`
+    const takenByOther = (walker: Walker) => (col: number, row: number) => {
+      const holder = occupied.get(cell(col, row))
+      return holder !== undefined && holder !== walker.id
+    }
+    function reserve(walker: Walker, col: number, row: number): boolean {
+      if (takenByOther(walker)(col, row)) return false
+      occupied.set(cell(col, row), walker.id)
+      return true
+    }
+    function release(walker: Walker, col: number, row: number) {
+      const key = cell(col, row)
+      if (occupied.get(key) === walker.id) occupied.delete(key)
+    }
+    /** Solta tudo o que ele segura e fica só com a casa onde está agora. */
+    function settle(walker: Walker) {
+      for (const [key, holder] of occupied) if (holder === walker.id) occupied.delete(key)
+      reserve(walker, Math.round(walker.col), Math.round(walker.row))
+    }
+    for (const walker of live) reserve(walker, walker.col, walker.row)
 
     let cancelled = false
     const frames: number[] = []
@@ -337,7 +675,7 @@
       }
       const hereCol = Math.round(walker.col)
       const hereRow = Math.round(walker.row)
-      const target = pickWalkTarget(hereCol, hereRow)
+      const target = pickWalkTarget(hereCol, hereRow, takenByOther(walker))
       if (!target) {
         waits.push(
           window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
@@ -354,6 +692,7 @@
 
     function walkSteps(walker: Walker, plan: number, steps: Step[], done: () => void) {
       let index = 0
+      let blocked = 0
       const next = () => {
         if (!alive(walker, plan)) return
         const step = steps[index]
@@ -361,6 +700,16 @@
           done()
           return
         }
+        if (!reserve(walker, step.col, step.row)) {
+          // Casa da frente ocupada: espera parado; insistindo demais, desiste
+          // do caminho (o done volta ao passeio, que sorteia outro destino).
+          walker.anim = 'Idle'
+          blocked += 1
+          if (blocked > blockedTries) done()
+          else waits.push(window.setTimeout(next, blockedWaitMs))
+          return
+        }
+        blocked = 0
         index += 1
         turn(walker, plan, step.dir, () => {
           walker.anim = 'Walk'
@@ -373,7 +722,13 @@
             walker.col = fromCol + (step.col - fromCol) * progress
             walker.row = fromRow + (step.row - fromRow) * progress
             if (progress < 1) frames.push(requestAnimationFrame(tick))
-            else next()
+            else {
+              const leftCol = Math.round(fromCol)
+              const leftRow = Math.round(fromRow)
+              // Saindo do meio de um passo, o arredondado pode ser a própria casa nova.
+              if (leftCol !== step.col || leftRow !== step.row) release(walker, leftCol, leftRow)
+              next()
+            }
           }
           frames.push(requestAnimationFrame(tick))
         })
@@ -398,6 +753,7 @@
     function start(walker: Walker, delay: number) {
       const plan = (plans.get(walker.id) ?? 0) + 1
       plans.set(walker.id, plan)
+      settle(walker)
       waits.push(window.setTimeout(() => wander(walker, plan), delay))
     }
 
@@ -419,6 +775,9 @@
       else if (walker.dir === 3) row = Math.floor(row)
       col = Math.round(col)
       row = Math.round(row)
+      // O passo interrompido segurava duas casas: fica só com a de destino.
+      for (const [key, holder] of occupied) if (holder === walker.id) occupied.delete(key)
+      reserve(walker, col, row)
       const steps: Step[] = []
       if (col !== walker.col || row !== walker.row) steps.push({ col, row, dir: walker.dir })
 
@@ -463,18 +822,34 @@
     return () => cancelAnimationFrame(frame)
   })
 
+  /** Cópia embaralhada (Fisher–Yates). */
+  function shuffled<T>(items: T[]): T[] {
+    const out = [...items]
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[out[i], out[j]] = [out[j]!, out[i]!]
+    }
+    return out
+  }
+
   function walkableSpots(): { col: number; row: number }[] {
     const spots: { col: number; row: number }[] = []
-    for (let row = 0; row < gridRows; row += 1) {
-      for (let col = 0; col < columns; col += 1) {
+    for (let row = playRow0; row < playRowEnd; row += 1) {
+      for (let col = playCol0; col < playColEnd; col += 1) {
         if (isWalkable(col, row)) spots.push({ col, row })
       }
     }
     return spots
   }
 
-  function pickWalkTarget(hereCol: number, hereRow: number): { col: number; row: number } | null {
-    const spots = walkableSpots().filter((spot) => spot.col !== hereCol || spot.row !== hereRow)
+  function pickWalkTarget(
+    hereCol: number,
+    hereRow: number,
+    taken: (col: number, row: number) => boolean,
+  ): { col: number; row: number } | null {
+    const spots = walkableSpots().filter(
+      (spot) => (spot.col !== hereCol || spot.row !== hereRow) && !taken(spot.col, spot.row),
+    )
     if (spots.length === 0) return null
     return spots[Math.floor(Math.random() * spots.length)] ?? null
   }
@@ -491,7 +866,7 @@
       const escape: Step[] = [{ col: fromCol, row: fromRow - 1, dir: 3 }]
       return [...escape, ...route(fromCol, fromRow - 1, toCol, toRow)]
     }
-    const viaRow = Math.min(fromRow, toRow, gridRows - 2)
+    const viaRow = Math.min(fromRow, toRow, playRowEnd - 2)
     const via = orthRoute(fromCol, fromRow, fromCol, viaRow, false)
     const rest = orthRoute(fromCol, viaRow, toCol, toRow, true)
     if (via && rest && pathClear(via) && pathClear(rest)) return [...via, ...rest]
@@ -538,12 +913,25 @@
 </script>
 
 <div class="layout">
-  <div class="lawn" bind:this={lawn} aria-label="Jardim">
-    <div class="stage" style:width="{stageW}px" style:height="{stageH}px">
+  <div
+    class="lawn"
+    bind:this={lawn}
+    aria-label="Jardim"
+    style:background-image={lawnPattern}
+    style:background-size={lawnBackground.size}
+    style:background-position={lawnBackground.position}
+  >
+    <div
+      class="stage"
+      style:width="{stageW}px"
+      style:height="{stageH}px"
+      style:transform="translate({panX}px, {panY}px)"
+    >
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
-        {@const isPlot = tile.row === gridRows - 1 && tile.col < game.plotSlotsUnlocked}
-        {@const plot = isPlot ? plotsByIndex.get(tile.col) : undefined}
+        {@const isPlot = isPlotCell(tile.col, tile.row)}
+        {@const plotIdx = isPlot ? plotIndexAt(tile.col) : -1}
+        {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
         {@const stage = isPlot ? plotStage(plot) : null}
         {#if isPlot}
           <button
@@ -556,13 +944,11 @@
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
-            style:height="{tileH + depth}px"
-            style:--half="{halfH}px"
-            style:--depth="{depth}px"
+            style:height="{tileH}px"
             style:margin-left="{-halfW}px"
-            style:z-index={tile.col + tile.row}
-            aria-label={`Canteiro ${tile.col + 1}`}
-            onclick={() => openPlot(tile.col)}
+            style:z-index={tile.col + tile.row + depthSpan}
+            aria-label={`Canteiro ${plotIdx + 1}`}
+            onclick={() => openPlot(plotIdx)}
           >
             {#if stage === 'planted'}
               <span class="crop sprout" aria-hidden="true"></span>
@@ -579,9 +965,7 @@
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
-            style:height="{tileH + depth}px"
-            style:--half="{halfH}px"
-            style:--depth="{depth}px"
+            style:height="{tileH}px"
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row}
           ></div>
@@ -597,7 +981,7 @@
           style:left="{spot.x}px"
           style:top="{spot.y + halfH}px"
           style:--size="{showdownSize * scale}px"
-          style:z-index={Math.round(walker.col + walker.row) + 1}
+          style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
           aria-label={walker.displayName}
           onclick={() => {
             selectedId = walker.id
@@ -628,6 +1012,40 @@
           {/if}
         </button>
       {/each}
+    </div>
+
+    <!-- Zoom: + e − com a barrinha do nível no meio (tocar nela também escolhe). -->
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button
+        type="button"
+        class="zoom-btn"
+        aria-label="Aproximar"
+        disabled={scale >= scaleMax}
+        onclick={() => applyZoom(scale + scaleStep)}
+      >
+        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M5 1h2v4h4v2H7v4H5V7H1V5h4z" /></svg>
+      </button>
+      <button
+        type="button"
+        class="zoom-track"
+        aria-label={`Zoom ${String(scale).replace('.', ',')}×`}
+        onclick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect()
+          const t = 1 - (event.clientY - box.top) / box.height
+          applyZoom(scaleMin + t * (scaleMax - scaleMin))
+        }}
+      >
+        <span class="zoom-fill" style:height="{((scale - scaleMin) / (scaleMax - scaleMin)) * 100}%"></span>
+      </button>
+      <button
+        type="button"
+        class="zoom-btn"
+        aria-label="Afastar"
+        disabled={scale <= scaleMin}
+        onclick={() => applyZoom(scale - scaleStep)}
+      >
+        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 5h10v2H1z" /></svg>
+      </button>
     </div>
   </div>
 
@@ -726,39 +1144,46 @@
     display: flex;
     flex: 1;
     flex-direction: column;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
   }
 
   .lawn {
-    display: flex;
+    position: relative;
     flex: 1;
-    align-items: center;
-    justify-content: center;
     min-height: 0;
     overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+    /* Nada no jardim se seleciona nem se arrasta como imagem (ver onDragStart). */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    /* O padrão (tamanho e posição) vem do script: lawnBackground. */
+    background-color: #4f7a3a;
+    background-repeat: repeat;
+  }
+
+  .lawn:active {
+    cursor: grabbing;
   }
 
   .stage {
-    position: relative;
+    position: absolute;
+    left: 0;
+    top: 0;
     flex: none;
+    will-change: transform;
   }
 
-  /* Bloco isométrico: losango de cima + duas laterais. */
+  /* Losango plano (sem extrusão 3D). */
   .tile {
     --top: var(--grass-1);
-    --left: var(--grass-side);
-    --right: #6ea44b;
     position: absolute;
-    background: var(--left);
-    clip-path: polygon(
-      50% 0,
-      100% var(--half),
-      100% calc(var(--half) + var(--depth)),
-      50% 100%,
-      0 calc(var(--half) + var(--depth)),
-      0 var(--half)
-    );
+    background: var(--top);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   }
 
   .tile.alt {
@@ -766,12 +1191,13 @@
   }
 
   .tile.plot {
+    cursor: pointer;
     --top: var(--soil);
-    --left: #7a5530;
-    --right: #93683c;
     padding: 0;
     border: 0;
-    cursor: pointer;
+    background:
+      repeating-linear-gradient(90deg, #00000018 0 4px, transparent 4px 8px),
+      var(--top);
     touch-action: manipulation;
   }
 
@@ -780,13 +1206,92 @@
     outline-offset: 2px;
   }
 
+  .tile.plot.alt {
+    --top: #c49a5e;
+  }
+
   .crop {
     position: absolute;
     left: 50%;
-    top: calc(var(--half) * 0.35);
+    top: 28%;
     z-index: 2;
     transform: translateX(-50%);
     pointer-events: none;
+  }
+
+  .zoom {
+    position: absolute;
+    z-index: 6;
+    left: calc(0.5rem + env(safe-area-inset-left));
+    bottom: calc(4.1rem + env(safe-area-inset-bottom));
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    padding: 0.2rem;
+    background: #1d1a1466;
+    box-shadow: inset 0 0 0 var(--px) #ffffff22;
+    pointer-events: auto;
+    cursor: default;
+  }
+
+  .zoom-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .zoom-btn svg {
+    fill: currentColor;
+    filter: drop-shadow(0 var(--px) 0 #0006);
+  }
+
+  .zoom-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .zoom-btn:focus-visible,
+  .zoom-track:focus-visible {
+    outline: var(--px) dashed #fff;
+    outline-offset: 1px;
+  }
+
+  /* Área de toque larga; a barrinha visível é o ::before, fina, no meio. */
+  .zoom-track {
+    position: relative;
+    width: 40px;
+    height: 64px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .zoom-track::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 2px);
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #ffffff40;
+  }
+
+  .zoom-fill {
+    position: absolute;
+    left: calc(50% - 2px);
+    bottom: 0;
+    width: 4px;
+    background: #fff;
+    transition: height 0.12s steps(3, end);
   }
 
   .dev-row {
@@ -830,30 +1335,6 @@
     50% {
       transform: translateX(-50%) translateY(-3px);
     }
-  }
-
-  .tile::before,
-  .tile::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-  }
-
-  .tile::after {
-    background: var(--right);
-    clip-path: polygon(50% calc(var(--half) * 2), 100% var(--half), 100% calc(var(--half) + var(--depth)), 50% 100%);
-  }
-
-  .tile::before {
-    z-index: 1;
-    background: var(--top);
-    clip-path: polygon(50% 0, 100% var(--half), 50% calc(var(--half) * 2), 0 var(--half));
-  }
-
-  .tile.plot::before {
-    background:
-      repeating-linear-gradient(90deg, #00000018 0 4px, transparent 4px 8px),
-      var(--top);
   }
 
   .mon {

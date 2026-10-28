@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mulberry32 } from './rng.js'
 import {
-  applyLearnedMoves,
   canLearnMove,
   isFastMove,
-  moveLearnOffers,
+  learnChargedOnLevelUp,
   resolveAbilityKey,
+  rollMoves,
   rollTraits,
   traitsRngSeed,
 } from './traits.js'
@@ -71,70 +71,45 @@ test('canLearnMove aceita só o pool até o nível', () => {
   assert.equal(canLearnMove(learnset, 31, 'flamethrower', moves), true)
 })
 
-test('slot de carregado vazio é preenchido sozinho ao aprender carregado', () => {
-  const result = applyLearnedMoves({
-    fromLevel: 19,
-    toLevel: 20,
-    learnset,
-    moves,
-    fastMove: 'scratch',
-    chargedMove: null,
-  })
-  assert.equal(result.chargedMove, 'slash')
-  assert.deepEqual(result.offers, [])
-})
+// Rng fixo: devolve os valores da lista, um por chamada.
+const fixed = (...values: number[]) => () => values.shift() ?? 0
 
-test('troca só é oferecida quando já há golpe no slot', () => {
-  const result = applyLearnedMoves({
+test('slot de carregado vazio: entra um carregado sorteado entre os que conhece', () => {
+  // No Nv 31 conhece slash (20) e flamethrower (31): 0,9 sorteia o 2º.
+  const charged = learnChargedOnLevelUp(fixed(0.9), {
     fromLevel: 19,
     toLevel: 31,
     learnset,
     moves,
-    fastMove: 'scratch',
+    chargedMove: null,
+  })
+  assert.equal(charged, 'flamethrower')
+  assert.equal(
+    learnChargedOnLevelUp(fixed(0), { fromLevel: 19, toLevel: 31, learnset, moves, chargedMove: null }),
+    'slash',
+  )
+})
+
+test('com carregado no slot, subir de nível não troca nada (sem ofertas)', () => {
+  const charged = learnChargedOnLevelUp(fixed(0.9), {
+    fromLevel: 19,
+    toLevel: 31,
+    learnset,
+    moves,
     chargedMove: 'slash',
   })
-  assert.equal(result.chargedMove, 'slash')
-  assert.deepEqual(
-    result.offers.map((entry) => entry.move),
-    ['flamethrower'],
+  assert.equal(charged, 'slash')
+})
+
+test('antes do primeiro carregado da espécie o slot continua vazio', () => {
+  assert.equal(
+    learnChargedOnLevelUp(fixed(0.5), { fromLevel: 5, toLevel: 19, learnset, moves, chargedMove: null }),
+    null,
   )
 })
 
-test('daycare subindo vários níveis: primeiro carregado entra, o resto oferece', () => {
-  const result = applyLearnedMoves({
-    fromLevel: 5,
-    toLevel: 31,
-    learnset,
-    moves,
-    fastMove: 'scratch',
-    chargedMove: null,
-  })
-  assert.equal(result.chargedMove, 'slash')
-  assert.deepEqual(
-    result.offers.map((entry) => entry.move),
-    ['ember', 'flamethrower'],
-  )
-})
-
-test('moveLearnOffers no estado já atualizado bate com o pós-apply', () => {
-  const applied = applyLearnedMoves({
-    fromLevel: 5,
-    toLevel: 31,
-    learnset,
-    moves,
-    fastMove: 'scratch',
-    chargedMove: null,
-  })
-  const offers = moveLearnOffers({
-    fromLevel: 5,
-    toLevel: 31,
-    learnset,
-    moves,
-    fastMove: 'scratch',
-    chargedMove: applied.chargedMove,
-  })
-  assert.deepEqual(
-    offers.map((entry) => entry.move),
-    applied.offers.map((entry) => entry.move),
-  )
+test('evoluir sorteia os dois golpes de novo pelo conjunto da espécie', () => {
+  // Nv 31: rápidos scratch e ember; carregados slash e flamethrower.
+  assert.deepEqual(rollMoves(fixed(0.9, 0.9), 31, learnset, moves), { fast: 'ember', charged: 'flamethrower' })
+  assert.deepEqual(rollMoves(fixed(0, 0), 31, learnset, moves), { fast: 'scratch', charged: 'slash' })
 })

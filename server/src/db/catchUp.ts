@@ -87,7 +87,6 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
         speciesId: before.speciesId,
         fromLevel: before.level,
         toLevel: slot.level,
-        fastMove: before.fastMove,
         chargedMove: before.chargedMove,
       })
     }

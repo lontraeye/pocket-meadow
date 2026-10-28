@@ -86,7 +86,7 @@ export function rollTraits(
   }
   const nature = natures[Math.floor(rng() * natures.length)]!.key
   const abilitySlot = rollAbilitySlot(rng, input.abilities)
-  const moves = pickMoves(rng, input.level, input.learnset, input.moves)
+  const moves = rollMoves(rng, input.level, input.learnset, input.moves)
   return {
     ivs,
     evs: { hp: 0, attack: 0, defense: 0, spAttack: 0, spDefense: 0, speed: 0 },
@@ -104,58 +104,29 @@ export function resolveAbilityKey(abilities: SpeciesAbilities, slot: AbilitySlot
   return abilities.slot1
 }
 
-export function movesLearnedBetween(
-  learnset: LearnEntry[],
-  fromLevel: number,
-  toLevel: number,
-  moves: Map<string, MoveInfo>,
-): LearnEntry[] {
-  if (toLevel <= fromLevel) return []
-  return learnset.filter(
-    (entry) => entry.level > fromLevel && entry.level <= toLevel && moves.has(entry.move),
-  )
-}
-
 /**
- * Golpes aprendidos ao subir de nível (ou ao evoluir com fromLevel 0).
- * Carregado com slot vazio → entra direto (primeiro por nível); o resto vira oferta.
+ * Ao subir de nível o golpe rápido não muda e não há oferta de troca. O
+ * carregado só entra se o slot estiver vazio: sorteado entre os carregados que
+ * a espécie conhece até o nível novo (PLANNING.md, seção 5.18). O sorteio dá
+ * valor ao indivíduo: o mesmo Pokémon com o golpe bom vale mais.
  */
-export function applyLearnedMoves(input: {
-  fromLevel: number
-  toLevel: number
-  learnset: LearnEntry[]
-  moves: Map<string, MoveInfo>
-  fastMove: string
-  chargedMove: string | null
-}): { chargedMove: string | null; offers: LearnEntry[] } {
-  const learned = movesLearnedBetween(input.learnset, input.fromLevel, input.toLevel, input.moves)
-  let charged = input.chargedMove
-  const offers: LearnEntry[] = []
-  for (const entry of learned) {
+export function learnChargedOnLevelUp(
+  rng: Rng,
+  input: {
+    fromLevel: number
+    toLevel: number
+    learnset: LearnEntry[]
+    moves: Map<string, MoveInfo>
+    chargedMove: string | null
+  },
+): string | null {
+  if (input.chargedMove !== null || input.toLevel <= input.fromLevel) return input.chargedMove
+  const pool = input.learnset.filter((entry) => {
     const info = input.moves.get(entry.move)
-    if (!info) continue
-    if (isChargedMove(info.power) && charged === null) {
-      charged = entry.move
-      continue
-    }
-    if (entry.move === input.fastMove || entry.move === charged) continue
-    offers.push(entry)
-  }
-  return { chargedMove: charged, offers }
-}
-
-/** Ofertas de destaque a partir do estado já atualizado (ex.: após catch-up do daycare). */
-export function moveLearnOffers(input: {
-  fromLevel: number
-  toLevel: number
-  learnset: LearnEntry[]
-  moves: Map<string, MoveInfo>
-  fastMove: string
-  chargedMove: string | null
-}): LearnEntry[] {
-  return movesLearnedBetween(input.learnset, input.fromLevel, input.toLevel, input.moves).filter(
-    (entry) => entry.move !== input.fastMove && entry.move !== input.chargedMove,
-  )
+    return entry.level <= input.toLevel && info !== undefined && isChargedMove(info.power)
+  })
+  if (pool.length === 0) return null
+  return pool[Math.floor(rng() * pool.length)]!.move
 }
 
 export function canLearnMove(
@@ -197,7 +168,12 @@ function rollAbilitySlot(rng: Rng, abilities: SpeciesAbilities): AbilitySlot {
   return '1'
 }
 
-function pickMoves(
+/**
+ * Sorteio dos dois golpes pelas regras da captura: um rápido e, se houver, um
+ * carregado entre os que a espécie aprende até o nível. Usado na captura e de
+ * novo ao evoluir, com o conjunto da espécie nova (como no Pokémon GO).
+ */
+export function rollMoves(
   rng: Rng,
   level: number,
   learnset: LearnEntry[],

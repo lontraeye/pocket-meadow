@@ -90,6 +90,13 @@ export const simConfig = {
   /** Folga além do tempo limite para considerar a luta abandonada como derrota. */
   abandonSlackMs: 2000,
 
+  /**
+   * Teto de toques num fim de luta. O front só registra toque com o golpe
+   * liberado: 60 s com cooldown mínimo de 1,1 s dá ~55 toques. O teto sobra
+   * bastante e barra lista gigante feita para gastar memória do servidor.
+   */
+  maxInputs: 600,
+
   // ---- 8.6 status, crítico, efeitos ----
 
   /** Crítico: 1/24 normal; 1/8 com crit_rate ≥ 1; Super Luck sobe um degrau (até 1/2). */

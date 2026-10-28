@@ -16,12 +16,16 @@ export function wildTraitsSeed(source: number): number {
 /** @deprecated use wildTraitsSeed */
 export const wildFightTraitsSeed = wildTraitsSeed
 
-/** Lançamentos da captura em passos (8.4): 1ª rolagem = 1º lançamento, etc. */
+/**
+ * Lançamentos da captura em passos (8.4): 1ª rolagem = 1º lançamento, etc.
+ * O `source` aqui é a seed secreta do encontro (`secret_seed`), nunca a
+ * rng_seed: o XOR deixa recuperar a rng_seed a partir da seed da luta.
+ */
 export function throwRngSeed(source: number): number {
   return (source ^ 0x54485257) >>> 0 // "THRW"
 }
 
-/** Semente de berry na vitória (separada dos lançamentos). */
+/** Semente de berry na vitória (separada dos lançamentos). Também usa a seed secreta. */
 export function seedDropRngSeed(source: number): number {
   return (source ^ 0x53444544) >>> 0 // "SDED"
 }

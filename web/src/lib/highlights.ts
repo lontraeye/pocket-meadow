@@ -4,7 +4,7 @@ import {
   type BattleOutcome,
   type BerryInfo,
   type ItemCredit,
-  type LearnEntryView,
+  type MoveView,
   type RegionInfo,
 } from './api'
 import type { SfxName } from './sound'
@@ -29,11 +29,10 @@ export function battleHighlightCards(input: {
   battle: BattleOutcome
   nameOf: (pokemonId: number) => string
   canEvolve: (fighter: BattleOutcome['fighters'][number]) => boolean
-  learnsetOf?: (pokemonId: number) => LearnEntryView[]
   regions: RegionInfo[]
   berries: BerryInfo[]
 }): HighlightCard[] {
-  const { battle, nameOf, canEvolve, learnsetOf, regions, berries } = input
+  const { battle, nameOf, canEvolve, regions, berries } = input
   const cards: HighlightCard[] = []
 
   if (!battle.won) {
@@ -58,15 +57,7 @@ export function battleHighlightCards(input: {
       tone: 'good',
       ...(fighter.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
     })
-    if (fighter.levelsGained > 0) {
-      if (fighter.moveOffers && fighter.moveOffers.length > 0) {
-        cards.push(...moveOfferCards(name, fighter.moveOffers))
-      } else if (learnsetOf) {
-        cards.push(
-          ...moveLearnCards(name, learnsetOf(fighter.pokemonId), fighter.level - fighter.levelsGained, fighter.level),
-        )
-      }
-    }
+    if (fighter.learnedMove) cards.push(learnedMoveCard(name, fighter.learnedMove))
     if (canEvolve(fighter)) {
       cards.push({
         id: `evolve-${fighter.pokemonId}`,
@@ -179,8 +170,7 @@ export function xpHighlightCards(input: {
   levelsGained: number
   level: number
   canEvolve: boolean
-  learnset?: LearnEntryView[]
-  moveOffers?: LearnEntryView[]
+  learnedMove?: MoveView | null
 }): HighlightCard[] {
   const cards: HighlightCard[] = []
   if (input.levelsGained <= 0 && input.xpGained <= 0) return cards
@@ -194,40 +184,16 @@ export function xpHighlightCards(input: {
     tone: 'good',
     ...(input.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
   })
-  if (input.moveOffers && input.moveOffers.length > 0) {
-    cards.push(...moveOfferCards(input.name, input.moveOffers))
-  } else if (input.levelsGained > 0 && input.learnset) {
-    cards.push(
-      ...moveLearnCards(input.name, input.learnset, input.level - input.levelsGained, input.level),
-    )
-  }
+  if (input.learnedMove) cards.push(learnedMoveCard(input.name, input.learnedMove))
   if (input.canEvolve) {
     cards.push({ id: 'feed-evolve', title: `${input.name} pode evoluir`, tone: 'good' })
   }
   return cards
 }
 
-export function moveOfferCards(name: string, offers: LearnEntryView[]): HighlightCard[] {
-  return offers.map((entry) => ({
-    id: `learn-${entry.move}-${entry.level}`,
-    title: `${name} pode aprender ${entry.displayName ?? entry.move}`,
-    detail: `Nv ${entry.level}`,
-    tone: 'good' as const,
-  }))
-}
-
-/** Cartões "X pode aprender Y" ao cruzar o nível do golpe de dano. */
-export function moveLearnCards(
-  name: string,
-  learnset: LearnEntryView[],
-  fromLevel: number,
-  toLevel: number,
-): HighlightCard[] {
-  if (toLevel <= fromLevel) return []
-  return moveOfferCards(
-    name,
-    learnset.filter((entry) => entry.level > fromLevel && entry.level <= toLevel),
-  )
+/** O carregado sorteado que entrou no slot vazio ao subir de nível. */
+export function learnedMoveCard(name: string, move: MoveView): HighlightCard {
+  return { id: `learned-${move.name}`, title: `${name} aprendeu ${move.displayName}`, detail: 'Golpe carregado', tone: 'good' }
 }
 
 export function evolveHighlightCards(input: {
@@ -238,7 +204,7 @@ export function evolveHighlightCards(input: {
   levelRewards: { itemKey: string; quantity: number }[]
   regions: RegionInfo[]
   berries: BerryInfo[]
-  moveOffers?: LearnEntryView[]
+  newMoves?: { fast: MoveView | null; charged: MoveView | null } | null
 }): HighlightCard[] {
   const cards: HighlightCard[] = [
     {
@@ -248,7 +214,12 @@ export function evolveHighlightCards(input: {
       tone: 'good',
     },
   ]
-  if (input.moveOffers?.length) cards.push(...moveOfferCards(input.toName, input.moveOffers))
+  if (input.newMoves) {
+    const names = [input.newMoves.fast, input.newMoves.charged].filter((move) => move !== null).map((move) => move.displayName)
+    if (names.length > 0) {
+      cards.push({ id: 'evolved-moves', title: 'Golpes sorteados', detail: names.join(' · '), tone: 'neutral' })
+    }
+  }
   cards.push(...trainerCards(input.trainer, input.trainerXpGained, input.regions))
   cards.push(...rewardCards(input.levelRewards, input.berries))
   return cards

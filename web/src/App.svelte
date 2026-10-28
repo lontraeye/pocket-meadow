@@ -186,7 +186,19 @@
 {:else if phase === 'auth' || game === null}
   <AuthForm onSignedIn={loadState} />
 {:else}
-  <main class="meadow fit">
+  <main class="meadow fit" class:immersive={screen === 'meadow'}>
+    <!-- No jardim o gramado é o fundo da tela; HUD e docks flutuam por cima. -->
+    {#if screen === 'meadow'}
+      <div class="garden-layer">
+        <Garden
+          {game}
+          onState={loadState}
+          openPlotIndex={focusPlot}
+          onPlotOpened={() => (focusPlot = null)}
+        />
+      </div>
+    {/if}
+
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -260,32 +272,28 @@
         </div>
       {/if}
     </header>
-    <!-- Mundo: área fixa. HUD flutuante (banner) não entra no fluxo e não empurra. -->
-    <div class="world">
-      {#if screen === 'explore'}
-        <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-      {:else if screen === 'collection'}
-        <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-      {:else if screen === 'daycare'}
-        <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-      {:else if screen === 'bag'}
-        <Bag {game} onClose={() => (screen = 'meadow')} onState={loadState} />
-      {:else}
-        <Garden
-          {game}
-          onState={loadState}
-          openPlotIndex={focusPlot}
-          onPlotOpened={() => (focusPlot = null)}
-        />
-        {#if showReadyBanner && ready?.summary}
-          <div class="ready-banner panel" role="status">
-            <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
-            <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
-          </div>
+
+    {#if screen !== 'meadow'}
+      <div class="world">
+        {#if screen === 'explore'}
+          <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+        {:else if screen === 'collection'}
+          <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+        {:else if screen === 'daycare'}
+          <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+        {:else if screen === 'bag'}
+          <Bag {game} onClose={() => (screen = 'meadow')} onState={loadState} />
         {/if}
-      {/if}
-    </div>
+      </div>
+    {/if}
+
     {#if screen === 'meadow'}
+      {#if showReadyBanner && ready?.summary}
+        <div class="ready-banner panel" role="status">
+          <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
+          <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
+        </div>
+      {/if}
       <div class="docks">
         <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
         <button type="button" class="btn badge-host" onclick={() => (screen = 'daycare')}>
@@ -392,9 +400,84 @@
     gap: 0.5rem;
   }
 
+  /* Jardim = fundo da janela; HUD/docks flutuam por cima (fora do fluxo). */
+  .meadow.immersive {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    max-width: none;
+    margin: 0;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    /* Mesmo verde do gramado de fora (Garden.svelte), para as bordas do celular. */
+    background: #4f7a3a;
+  }
+
+  .garden-layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* No PC os menus não esticam na tela toda: largura limitada e centralizados.
+     No celular o limite não chega a valer. */
+  .meadow.immersive .hud,
+  .meadow.immersive .docks {
+    width: min(
+      calc(100% - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)),
+      var(--menu-max)
+    );
+    margin-inline: auto;
+  }
+
+  .meadow.immersive .hud {
+    --menu-max: 40rem;
+    position: absolute;
+    z-index: 4;
+    top: calc(0.5rem + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    pointer-events: none;
+  }
+
+  .meadow.immersive .hud > * {
+    pointer-events: auto;
+  }
+
+  .meadow.immersive .docks {
+    --menu-max: 30rem;
+    position: absolute;
+    z-index: 4;
+    bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    pointer-events: none;
+  }
+
+  .meadow.immersive .docks > * {
+    pointer-events: auto;
+  }
+
+  /* Abaixo do HUD (que no celular vira duas linhas). */
+  .meadow.immersive .ready-banner {
+    top: calc(7.25rem + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    width: min(calc(100% - 0.7rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 40rem);
+    margin-inline: auto;
+  }
+
   .hud {
     /* Referência do painel de volume, que abre logo abaixo. */
     position: relative;
+    z-index: 4;
     display: flex;
     align-items: center;
     gap: 0.5rem;
