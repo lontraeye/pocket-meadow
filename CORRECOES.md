@@ -28,6 +28,8 @@ Branch de ajustes soltos — bugs de UI, travas de teste, polimentos — **fora*
 
 - [x] **Pokémon não andam uns sobre os outros** — cada casa tem no máximo um dono. Antes de cada passo o Pokémon reserva a casa seguinte e só solta a de trás ao chegar; se a da frente está ocupada, espera parado (350 ms) e tenta de novo, e depois de 4 tentativas escolhe outro destino (dois cara a cara não travam). O destino sorteado já ignora casas ocupadas. Medido: 10 Pokémon andando por 40 s, nenhum na mesma casa.
 
+- [x] **Zoom lembrado** — o nível escolhido fica salvo no aparelho (`localStorage`, como o volume) e volta igual depois do F5. Sem nada salvo, abre no zoom calculado pela largura da tela, como antes.
+
 ## Já no `main` (antes desta branch)
 
 - [x] **Chips da coleção no mobile** — filtros enchem a largura da linha em vez de ficarem grudados à esquerda (`8423987`).

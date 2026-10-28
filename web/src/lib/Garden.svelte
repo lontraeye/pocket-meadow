@@ -397,6 +397,7 @@
     stageBoxW = sw
     stageBoxH = sh
     scale = nextScale
+    saveZoom(nextScale)
     if (!viewW || !viewH) return
     const fx = focus?.x ?? viewW / 2
     const fy = focus?.y ?? viewH / 2
@@ -404,6 +405,26 @@
     const clamped = clampPan(fx - (fx - prevPanX) * ratio, fy - (fy - prevPanY) * ratio, viewW, viewH, sw, sh)
     panX = clamped.x
     panY = clamped.y
+  }
+
+  // O zoom escolhido fica no aparelho, como o volume: volta igual depois do F5.
+  const zoomKey = 'pm-garden-zoom'
+
+  function loadZoom(): number | null {
+    try {
+      const value = Number(localStorage.getItem(zoomKey))
+      return value >= scaleMin && value <= scaleMax ? value : null
+    } catch {
+      return null
+    }
+  }
+
+  function saveZoom(value: number) {
+    try {
+      localStorage.setItem(zoomKey, String(value))
+    } catch {
+      // Sem armazenamento (aba anônima, bloqueado): só não lembra.
+    }
   }
 
   /** Ponto do evento em px do gramado. */
@@ -445,7 +466,7 @@
       if (!viewSeeded) {
         viewSeeded = true
         // Abertura mais afastada que o encaixe apertado de ~5 tiles.
-        const nextScale = snapScale(viewW / (defaultViewTiles * baseTileW))
+        const nextScale = snapScale(loadZoom() ?? viewW / (defaultViewTiles * baseTileW))
         scale = nextScale
         const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
         stageBoxW = sw
