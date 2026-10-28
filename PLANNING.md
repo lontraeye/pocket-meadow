@@ -444,20 +444,92 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   catchChance = clamp((captureRate / 255) * CATCH_MULT * berryBonus, CATCH_MIN, 1)
   ```
   `captureRate` vem da PokéAPI (3 para lendários, 255 para comuns). Inicial: `CATCH_MULT = 1.2`, `CATCH_MIN = 0.03`.
-- Sucesso: o Pokémon entra na coleção (no jardim). Falha: ele foge.
-- Uma tentativa por encontro (pode ser revisto no futuro).
+- Sucesso: o Pokémon entra na coleção (no jardim). Falha: ele pode fugir; dá para lançar de novo (seção 5.18, parte 8.4).
+- Com a Fase 9, cada lançamento gasta uma bola, a bola entra na fórmula e a fuga cresce com os erros (ver "Pokébolas" abaixo).
 
-#### Pokébolas (ideia, ainda sem fase)
-Anotado para depois. Precisa de especificação própria.
-- Tipos de bola com multiplicador na captura (ex.: Poké Ball ×1, Great Ball ×1,5, Ultra Ball ×2), todos em config. O multiplicador entra na fórmula acima, ao lado do `berryBonus`.
-- As bolas são itens do `inventory` (`ball:poke`, `ball:great`…), sem tabela nova.
-- **Sprites:** cada bola com o seu ícone do `PokeAPI/sprites` (`items/poke-ball.png`, `great-ball.png`, `ultra-ball.png`…), baixados pelo mesmo script e com o mesmo crédito da Poké Ball da parte 6.2. A cena de captura da 6.2 deve receber a bola como parâmetro, para trocar o sprite sem mexer na animação.
-- Responde a questão em aberto "mais de uma tentativa de captura por encontro": cada tentativa gasta uma bola, e o jogador escolhe qual usar. Cada tentativa é uma rolagem a mais no PRNG (seção 7), na ordem em que foram feitas.
-- A decidir:
-  - de onde vêm as bolas (inicial, recompensa de nível de treinador, álbum da seção 5.12, colheita);
-  - se encontro sem bola permite capturar;
-  - um limite de tentativas por encontro;
-  - a relação com a animação da pokébola da seção 5.13.
+#### Pokébolas (Fase 9, especificado em 2026-10-28)
+Hoje a Poké Ball é infinita e cada erro tem 25% fixos de fuga (`throwFleeChance`). A Fase 9 transforma as bolas em itens, deixa escolher qual lançar, guarda no Pokémon a bola que o capturou e troca a fuga fixa por uma que cresce com os erros, com berries para acalmar.
+
+**Decidido (2026-10-28):**
+- **Sem bola não há captura.** Sem nenhuma bola, o botão de lançar fica desativado com o motivo ("Sem pokébolas"), e sobra só "Deixar ir".
+- **Cada lançamento gasta uma bola**, acerte ou erre. Não há como recuperar a bola.
+- **Origem definitiva:** compra e craft (seção 5.16), que ainda não existem. **Até lá:** estoque inicial, recompensas de nível de treinador e do álbum, e o painel de teste.
+- **O Pokémon guarda a bola que o capturou** (`pokemon.caught_ball`). Vai servir para efeitos futuros (bônus por bola, visual na ficha, conquistas), então é gravado desde já, mesmo para bolas sem efeito.
+- **Trocar de bola antes de lançar** faz parte do jogo: a tela mostra cada bola que o jogador tem, com a quantidade e a chance de captura com ela.
+- **Fuga cresce com os erros:** base + degrau por erro, com teto. Berries acalmam (ver abaixo).
+- **Berries na captura, inspiradas no Pokémon GO:** umas melhores, outras piores para cada coisa.
+
+**Bolas da primeira versão** (tudo em `server/src/config/balls.ts`; bola nova entra só no config):
+
+| Chave | Bola | Efeito na captura |
+|---|---|---|
+| `poke` | Poké Ball | ×1 |
+| `great` | Great Ball | ×1,5 |
+| `ultra` | Ultra Ball | ×2 |
+| `master` | Master Ball | captura garantida |
+| `quick` | Quick Ball | ×4 no 1º lançamento do encontro, ×1 depois |
+| `timer` | Timer Ball | cresce a cada lançamento: ×(1 + 0,3 × lançamentos anteriores), teto ×4 |
+| `net` | Net Ball | ×3 contra Inseto ou Água, ×1 contra o resto |
+| `nest` | Nest Ball | forte em nível baixo: ×max(1, (41 − nível) / 10), teto ×4 |
+| `premier` | Premier Ball | ×1, só enfeite |
+| `luxury` | Luxury Ball | ×1, só enfeite por enquanto (efeito depois do capturado, a definir) |
+
+- **Fórmula:** `catchChance = clamp((captureRate / 255) × CATCH_MULT × ballMult × berryMult, CATCH_MIN, 1)`. A Master Ball pula a fórmula (chance 1).
+- **Itens no `inventory`** (`ball:poke`, `ball:great`…), sem tabela nova.
+- **Sprites:** o ícone de cada bola vem do `PokeAPI/sprites` (`items/<nome>-ball.png`), pelo mesmo script e com o mesmo crédito da Poké Ball da parte 6.2. A cena de captura recebe a bola como parâmetro e troca só o sprite.
+- **Efeitos depois da captura** (ex.: Luxury Ball dando mais doces ou XP) ficam para quando houver o que ligar. O `caught_ball` já guarda o necessário.
+
+**Fuga crescente:**
+- O encontro guarda a **agitação** (`encounters.agitation`, começa em 0). Cada lançamento que erra soma 1.
+- Depois de um erro, a chance de fuga é `min(FLEE_MAX, FLEE_BASE + FLEE_STEP × (agitação − 1))`. Inicial: `FLEE_BASE = 0,10`, `FLEE_STEP = 0,15`, `FLEE_MAX = 0,90` (10%, 25%, 40%, 55%, 70%, 85%, 90%…).
+- A tela mostra a agitação de um jeito simples (ex.: o selvagem fica mais inquieto, com um medidor ou ícone), sem número cru.
+
+**Berries na captura (mapeadas pelo Pokémon GO):**
+- Dá para dar **uma berry antes de cada lançamento**. Ela vale só para o próximo lançamento e é gasta mesmo se a bola errar, como a bola.
+- O efeito na captura é separado do efeito de usar pela Mochila (seção 5.10). No config de cada berry, um campo `capture` opcional; berry sem esse campo não aparece na captura.
+
+| Berry | No Pokémon GO | Na captura (proposta) |
+|---|---|---|
+| Razz | chance ×1,5 | chance ×1,5 |
+| Pinap | doces em dobro | se capturar, ganha doces da linha (ex.: 3; hoje a captura não dá doces) |
+| Nanab | acalma | agitação −2 (até 0) |
+| Oran | (não existe no GO) | agitação −1 |
+| Lum | (não existe no GO) | acalma tudo: agitação 0 |
+| Golden Razz (nova) | chance ×2,5 e acalma | chance ×2,5 e agitação −1 |
+| Silver Pinap (nova) | chance ×1,8 e doces | chance ×1,8 e, se capturar, doces da linha (ex.: 5) |
+
+- As duas berries novas (Golden Razz e Silver Pinap) são plantadas como as outras, mais raras e mais demoradas, e entram na queda de sementes e nas recompensas com peso baixo.
+- **A Pinap pela Mochila** (`catch_boost` ×1,5 no próximo lançamento) fica redundante com a Razz na captura. Decidido: a Pinap sai da Mochila e passa a valer só na captura. Quem tiver carga de `catch_boost` ativa continua usando até gastar.
+
+**Dados e servidor:**
+- **Migração** (só avança, testada numa cópia do banco de produção, seção 4.6):
+  - `pokemon.caught_ball TEXT NOT NULL DEFAULT 'poke'`: os Pokémon que já existem ficam como Poké Ball, inclusive o inicial;
+  - `encounters.agitation INTEGER NOT NULL DEFAULT 0`;
+  - a bola e a berry de cada lançamento não precisam de tabela: o resultado sai da seed. Se for útil guardar o histórico, ele vai num JSON do próprio encontro (decidir na implementação);
+  - estoque inicial para quem já joga: `ball:poke` (quantidade em config) somado ao inventário de cada treinador.
+- **Rota:** `POST /encounters/:id/throw` passa a receber `{ ball, berry? }`. Em uma transação: confere se tem a bola (e a berry), debita, rola, grava. Erros novos: `no_ball`, `unknown_ball`, `berry_not_usable`.
+- **PRNG (seção 7):** continua uma rolagem de captura + uma de fuga por lançamento falho, na ordem. A bola e a berry mudam só as chances, não o número de rolagens, então o replay de `throwRngAt` não muda. A Master Ball também consome a rolagem, para a sequência não mudar.
+- **Estado:** o `/state` manda as bolas do inventário (já vêm no `inventory`) e o config das bolas e dos efeitos de captura das berries, para o front calcular a chance de cada bola só para mostrar. O servidor decide.
+
+**Front:**
+- **Escolha da bola:** uma fileira de bolas que o jogador tem (ícone, quantidade, chance), com a última usada já marcada (lembrada no aparelho). Toque troca. Alvos de 44px, cabe em 360px.
+- **Berry:** um botão "Dar berry" que abre as berries com efeito de captura, com o efeito escrito. A berry escolhida aparece marcada até o lançamento.
+- **Cena:** a cena de lançamento usa o sprite da bola escolhida.
+- **Ficha do Pokémon:** o ícone da bola ao lado do nome ou na aba Perfil ("Capturado com Great Ball · Rota 1").
+- **Painel de teste:** "Ganhar bolas (teste)" dá algumas de cada tipo, só com `DEV_TOOLS=1`, como os outros botões de teste.
+
+**De onde vêm as bolas até a compra e o craft** (números iniciais em config, para revisar jogando):
+- **Estoque inicial:** 30 Poké Balls para treinador novo e para quem já joga (pela migração).
+- **Nível de treinador:** +5 Poké Balls em todo nível; +3 Great Balls a cada 5 níveis; +2 Ultra Balls a cada 10.
+- **Álbum (seção 5.12):** bloco de região +5 Poké Balls; linha evolutiva +2 Great Balls; jogo completo +5 Ultra Balls e 1 Master Ball.
+- **Vitória (opcional):** chance pequena de cair uma Poké Ball, como a semente da seção 5.10. Decidir depois de jogar se o estoque está curto.
+
+**Decidido em 2026-10-28, depois da proposta:**
+- O mapeamento das berries na captura vale como está na tabela, e a Pinap sai da Mochila.
+- Golden Razz e Silver Pinap entram já (parte 9.3). Os ícones existem no `PokeAPI/sprites` (`items/golden-razz-berry.png`, `items/silver-pinap-berry.png`), com o mesmo status das outras berries; chaves `golden-razz` e `silver-pinap`, para o script baixar `<chave>-berry.png` sem mudança. São só de captura: sem efeito pela Mochila.
+- Os números do estoque e das recompensas acima servem para começar.
+- **Sem limite de lançamentos** por encontro: a fuga crescente já limita.
+- **Botão de teste para ganhar bolas** (e as berries novas), além do estoque: só com `DEV_TOOLS=1`.
 
 ### 5.7 Doces (pontos ao soltar)
 O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com ele. Ele não é requisito para evoluir (seção 5.8).
@@ -1190,7 +1262,13 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - **Futuro: animação própria por golpe** (anotado em 2026-10-28). Hoje o efeito sai por tipo (PVFX Foundry, `web/src/lib/fx.ts`) e os golpes especiais soltam uma bola na cor do tipo. Nos jogos, cada golpe tem a sua (o Will-O-Wisp faz um arco antes de bater, por exemplo). O Pokémon Showdown faz isso com uma animação escrita à mão por golpe, montada com poucas peças: imagem que voa de um ponto a outro com curva, movimento do atacante e do alvo e flash no fundo. Dá para seguir o mesmo modelo com as nossas peças, começando pelos golpes mais usados. O código e as imagens do Showdown não podem ser usados (AGPL e imagens sem licença livre).
   - Do pacote, o Warm Explosion (Fogo) e o Ember Jet (pulso da queimadura) desenham só a metade da frente do anel no chão, que fica aberto quando a fumaça some. Se incomodar, a troca sugerida é Fogo → Solar Shrapnel e a queimadura numa chaminha em código.
 
-**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); pokébolas (5.6); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
+**Fase 9 — Pokébolas** (seção 5.6, "Pokébolas"; em partes, cada uma testada antes da próxima)
+- *9.1 — Bolas como item:* config das bolas, sprites, migração (`caught_ball`, `agitation` e estoque inicial para quem já joga), lançamento com `{ ball }` gastando a bola, escolha da bola na tela com a chance de cada uma, bola na cena e na ficha, recompensas de nível e do álbum, botão de teste.
+- *9.2 — Fuga crescente e berries na captura:* agitação, fórmula de fuga por degrau, "Dar berry" antes do lançamento com os efeitos de captura, Pinap fora da Mochila.
+- *9.3 — Berries novas:* Golden Razz e Silver Pinap nos canteiros, na queda de sementes e nas recompensas.
+- Pronto quando: sem bola não dá para capturar; cada lançamento gasta a bola certa; a chance mostrada bate com a do servidor; quem já jogava recebeu o estoque e os Pokémon antigos aparecem com Poké Ball; a fuga sobe a cada erro e as berries a baixam.
+
+**Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 
