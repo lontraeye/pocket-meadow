@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { SqliteError } from 'better-sqlite3'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
 import { type Region, regionBySlug } from '../config/regions.js'
 import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
@@ -16,7 +17,7 @@ import {
   species,
   trainers,
 } from '../db/schema.js'
-import { creditItems, grantTrainerLevelRewards } from '../db/inventory.js'
+import { creditItems, debitItem, grantTrainerLevelRewards } from '../db/inventory.js'
 import { catchChance, fighterXp, rollWild } from '../game/battle.js'
 import { rollBattleSeed } from '../game/berries.js'
 import {
@@ -132,12 +133,15 @@ encounterRoutes.post('/:id/flee', requireUser, (c) => {
   return c.json({ status: result.status, encounterId })
 })
 
-encounterRoutes.post('/:id/throw', requireUser, (c) => {
+encounterRoutes.post('/:id/throw', requireUser, async (c) => {
   const encounterId = parseId(c.req.param('id'))
   if (encounterId === null) return c.json({ error: 'encounter_not_found' }, 404)
+  const body = (await readObject(c)) ?? {}
+  const ball = body.ball
+  if (typeof ball !== 'string') return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
-  const result = immediate(() => throwBall(userId, encounterId, now))
+  const result = immediate(() => throwBall(userId, encounterId, now, ball))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.throw)
 })
@@ -762,21 +766,34 @@ function releaseWild(userId: number, encounterId: number, now: number): { ok: tr
   return { ok: true }
 }
 
-function throwBall(userId: number, encounterId: number, now: number) {
+function throwBall(userId: number, encounterId: number, now: number, ballKey: string) {
   const clock = persistCatchUp(userId, now)
   const loaded = loadPendingEncounter(userId, encounterId)
   if (!loaded.ok) return loaded
   const encounter = loaded.row
   if (encounter.wonAt == null) return fail('battle_not_won', 400)
 
+  const ball = getBall(ballKey)
+  if (!ball) return fail('unknown_ball', 400)
+  if (!debitItem(userId, ballItemKey(ball.key), 1)) return fail('no_ball', 400)
+
   const wild = loadWildSpecies(encounter.speciesId)
   const throwIndex = encounter.throwCount
   const berryBonus = takeBonus(userId, 'catch_boost')
+  const types = [wild.type1, wild.type2].filter((t): t is string => Boolean(t))
+  const ballMult = ballMultiplier({
+    key: ball.key,
+    throwIndex,
+    wildLevel: encounter.level,
+    types,
+  })
   const roll = rollThrow({
     encounterSeed: hiddenSeed(encounter),
     throwIndex,
     captureRate: wild.captureRate,
     berryBonus,
+    ballMult,
+    guaranteed: isMasterBall(ball.key),
   })
 
   const db = getDb()
@@ -798,6 +815,7 @@ function throwBall(userId: number, encounterId: number, now: number) {
         isShiny: encounter.isShiny,
         caughtAt: now,
         caughtRegion: encounter.regionSlug,
+        caughtBall: ball.key,
         originalSpeciesId: encounter.speciesId,
         ...traitColumns(traits),
       })

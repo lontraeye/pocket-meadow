@@ -802,3 +802,97 @@ test('a migra��o pokedex_album preserva dados e preenche max_level_reached',
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração pokeballs adiciona caught_ball, agitation e estoque de Poké Balls', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-pokeballs-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+    '0009_battle_started.sql',
+    '0010_battle_setup_json.sql',
+    '0011_won_at.sql',
+    '0012_battle_auto.sql',
+    '0013_encounter_secret_seed.sql',
+    '0014_pokedex_album.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  db.prepare(`insert into users (username, created_at) values ('ash', 1)`).run()
+  db.prepare(
+    `insert into trainers (
+      user_id, level, xp, energy, energy_updated_at, updated_at
+    ) values (1, 3, 10, 8, 100, 100)`,
+  ).run()
+  db.prepare(`insert into users (username, created_at) values ('misty', 2)`).run()
+  db.prepare(
+    `insert into trainers (
+      user_id, level, xp, energy, energy_updated_at, updated_at
+    ) values (2, 1, 0, 10, 100, 100)`,
+  ).run()
+  db.prepare(
+    `insert into inventory (user_id, item_key, quantity) values (1, 'ball:poke', 5)`,
+  ).run()
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values
+      (16, 'pidgey', 'Pidgey', 'normal', 40, 45, 40, 35, 35, 56, 251, 50, 255, 10, 1, 0, 0, 0, 0, 0, 1)`,
+  ).run()
+  db.prepare(
+    `insert into pokemon (
+      user_id, species_id, level, xp, caught_at, original_species_id,
+      nature, ability_slot, fast_move, charged_move,
+      iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values
+      (1, 16, 12, 0, 1, 16, 'hardy', '1', 'tackle', 'gust', 15, 15, 15, 15, 15, 15, 0, 0, 0, 0, 0, 0)`,
+  ).run()
+  db.prepare(
+    `insert into encounters (
+      user_id, region_slug, species_id, level, is_shiny, rng_seed, status, created_at, expires_at
+    ) values (1, 'kanto-route-1', 16, 3, 0, 42, 'pending', 100, 200)`,
+  ).run()
+
+  const pokemonBefore = (db.prepare(`select count(*) as n from pokemon`).get() as { n: number }).n
+  const encountersBefore = (db.prepare(`select count(*) as n from encounters`).get() as { n: number }).n
+
+  execMigration(db, '0015_pokeballs.sql')
+
+  assert.equal((db.prepare(`select count(*) as n from pokemon`).get() as { n: number }).n, pokemonBefore)
+  assert.equal(
+    (db.prepare(`select count(*) as n from encounters`).get() as { n: number }).n,
+    encountersBefore,
+  )
+
+  const mon = db.prepare(`select caught_ball from pokemon where id = 1`).get() as { caught_ball: string }
+  assert.equal(mon.caught_ball, 'poke')
+
+  const enc = db.prepare(`select agitation from encounters where id = 1`).get() as { agitation: number }
+  assert.equal(enc.agitation, 0)
+
+  const ashBalls = db
+    .prepare(`select quantity from inventory where user_id = 1 and item_key = 'ball:poke'`)
+    .get() as { quantity: number }
+  assert.equal(ashBalls.quantity, 35)
+
+  const mistyBalls = db
+    .prepare(`select quantity from inventory where user_id = 2 and item_key = 'ball:poke'`)
+    .get() as { quantity: number }
+  assert.equal(mistyBalls.quantity, 30)
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})

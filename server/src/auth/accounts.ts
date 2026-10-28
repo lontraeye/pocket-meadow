@@ -62,6 +62,7 @@ export function createPlayer(input: {
       speciesId: starterSpecies.id,
       level: trainerConfig.starterLevel,
       caughtAt: now,
+      caughtBall: 'poke',
       originalSpeciesId: starterSpecies.id,
       ...traitColumns(traits),
     })

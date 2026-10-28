@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { ballList, ballsConfig } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
 import { berryConfig, berryList, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
 import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
@@ -66,6 +67,8 @@ function readState(userId: number, now: number) {
       isFavorite: pokemon.isFavorite,
       location: pokemon.location,
       caughtAt: pokemon.caughtAt,
+      caughtRegion: pokemon.caughtRegion,
+      caughtBall: pokemon.caughtBall,
       ivHp: pokemon.ivHp,
       ivAttack: pokemon.ivAttack,
       ivDefense: pokemon.ivDefense,
@@ -130,7 +133,11 @@ function readState(userId: number, now: number) {
       battleStartedAt: encounters.battleStartedAt,
       wonAt: encounters.wonAt,
       catchChance: encounters.catchChance,
+      throwCount: encounters.throwCount,
+      agitation: encounters.agitation,
       captureRate: species.captureRate,
+      type1: species.type1,
+      type2: species.type2,
     })
     .from(encounters)
     .innerJoin(species, eq(encounters.speciesId, species.id))
@@ -178,6 +185,17 @@ function readState(userId: number, now: number) {
       effectDescription: berry.effectDescription,
       effectKey: berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
     })),
+    balls: {
+      startingPokeBalls: ballsConfig.startingPokeBalls,
+      list: ballList.map((ball) => ({
+        key: ball.key,
+        displayName: ball.displayName,
+        sprite: ball.sprite,
+        itemKey: `ball:${ball.key}`,
+      })),
+      catchMult: battleConfig.catchMult,
+      catchMin: battleConfig.catchMin,
+    },
     battle: {
       k: battleConfig.k,
       minChance: battleConfig.minChance,
@@ -244,6 +262,8 @@ function readState(userId: number, now: number) {
         isFavorite: mon.isFavorite,
         location: mon.location,
         caughtAt: mon.caughtAt,
+        caughtRegion: mon.caughtRegion,
+        caughtBall: mon.caughtBall,
         power: power(mon.baseStatTotal, mon.level),
         evolutions: evolutionsBySpecies.get(mon.speciesId) ?? [],
         ivRating: view.ivRating,
@@ -287,6 +307,11 @@ function readState(userId: number, now: number) {
             pending.wonAt != null
               ? catchChance(pending.captureRate, peekCatchBonus(userId, effects))
               : null,
+          throwCount: pending.throwCount,
+          agitation: pending.agitation,
+          captureRate: pending.captureRate,
+          type1: pending.type1,
+          type2: pending.type2,
         })
       : null,
     pokedex: {

@@ -2,11 +2,13 @@ import { and, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { asUsername, createPlayer, isStarter, openSession, setSessionCookie } from '../auth/accounts.js'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { ballItemKey, ballList, ballsConfig } from '../config/balls.js'
 import { progressConfig } from '../config/progress.js'
 import { loadRegions } from '../config/regions.js'
 import { trainerConfig } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
+import { creditItems } from '../db/inventory.js'
 import { berryPlots, daycareSlots, species, trainers, users } from '../db/schema.js'
 import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
@@ -156,4 +158,20 @@ devRoutes.post('/plots/advance', requireUser, async (c) => {
   })
   if (!found) return c.json({ error: 'plot_empty' }, 404)
   return c.json({ plotIndex })
+})
+
+/** Dá algumas de cada pokébola (Master: 3) para testes de captura. */
+devRoutes.post('/balls', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const granted = immediate(() => {
+    persistCatchUp(userId, now)
+    const items = ballList.map((ball) => ({
+      itemKey: ballItemKey(ball.key),
+      quantity: ball.key === 'master' ? ballsConfig.devGrantMaster : ballsConfig.devGrantEach,
+    }))
+    creditItems(userId, items)
+    return items
+  })
+  return c.json({ granted })
 })

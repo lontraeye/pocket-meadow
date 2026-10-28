@@ -23,8 +23,27 @@ export type PendingEncounter = {
   battleStartedAt: number | null
   /** null = luta ainda não vencida; epoch ms da vitória (8.4, aguardando captura). */
   wonAt: number | null
-  /** Chance atual de captura; null se ainda não venceu. */
+  /** Chance base (catch_boost); a UI recalcula por bola. */
   catchChance: number | null
+  throwCount: number
+  agitation: number
+  captureRate: number
+  type1: string
+  type2: string | null
+}
+
+export type BallInfo = {
+  key: string
+  displayName: string
+  sprite: string
+  itemKey: string
+}
+
+export type BallsConfig = {
+  startingPokeBalls: number
+  list: BallInfo[]
+  catchMult: number
+  catchMin: number
 }
 
 export type RegionInfo = {
@@ -117,6 +136,8 @@ export type OwnedPokemon = {
   isFavorite: boolean
   location: 'garden' | 'daycare'
   caughtAt: number
+  caughtRegion: string | null
+  caughtBall: string
   power: number
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
   ivRating: { total: number; percent: number; stars: number }
@@ -199,6 +220,7 @@ export type GameState = {
   plotSlotsUnlocked: number
   nextPlotSlotLevel: number | null
   berries: BerryInfo[]
+  balls: BallsConfig
   uprootSeedReturnChance: number
   battle: BattleRules
   progression: ProgressionRules
@@ -269,7 +291,11 @@ export function berryIconSrc(berryKey: string): string {
   return `/sprites/items/${berryKey}-berry.png`
 }
 
-export function itemLabel(itemKey: string, berries: BerryInfo[]): string {
+export function ballIconSrc(spriteOrKey: string): string {
+  return `/sprites/items/${spriteOrKey}-ball.png`
+}
+
+export function itemLabel(itemKey: string, berries: BerryInfo[], balls?: BallInfo[]): string {
   if (itemKey.startsWith('seed:')) {
     const berry = berries.find((row) => row.key === itemKey.slice(5))
     return berry ? `Semente ${berry.name}` : itemKey
@@ -277,6 +303,10 @@ export function itemLabel(itemKey: string, berries: BerryInfo[]): string {
   if (itemKey.startsWith('berry:')) {
     const berry = berries.find((row) => row.key === itemKey.slice(6))
     return berry ? `Berry ${berry.name}` : itemKey
+  }
+  if (itemKey.startsWith('ball:')) {
+    const ball = balls?.find((row) => row.key === itemKey.slice(5))
+    return ball?.displayName ?? itemKey
   }
   return itemKey
 }
@@ -374,6 +404,12 @@ export function errorText(error: ApiError): string {
       return 'Você não tem esse item.'
     case 'unknown_item':
       return 'Esse item não existe.'
+    case 'no_ball':
+      return 'Você não tem essa pokébola.'
+    case 'unknown_ball':
+      return 'Essa pokébola não existe.'
+    case 'berry_not_usable':
+      return 'Essa berry não serve na captura.'
     case 'energy_full':
       return 'Energia já está cheia.'
     case 'move_not_found':

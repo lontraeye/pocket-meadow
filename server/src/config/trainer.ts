@@ -15,6 +15,7 @@ export const trainerConfig = {
   startingItems: [
     { itemKey: 'seed:oran', quantity: 3 },
     { itemKey: 'seed:pinap', quantity: 1 },
+    { itemKey: 'ball:poke', quantity: 30 },
   ],
 } as const
 

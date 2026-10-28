@@ -17,6 +17,7 @@
     type RegionInfo,
     type ThrowOutcome,
   } from './api'
+  import { ballIconSrc, previewCatchChance } from './balls'
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
   import { setLiveFight } from './liveFight'
@@ -63,13 +64,75 @@
   let fightInputs = $state<BattleInput[]>([])
   let fightResumeMs = $state(0)
   let lastThrow = $state<ThrowOutcome | null>(null)
+  let thrownBallSprite = $state('poke')
   let throwing = $state(false)
   let notice = $state('')
   let appliedThrow = $state<number | null>(null)
   let battleAuto = $state(untrack(() => game.trainer.battleAuto))
   let prefsBusy = false
+  const ballStorageKey = 'pocket-meadow-last-ball'
+  let selectedBall = $state(
+    untrack(() => {
+      try {
+        return localStorage.getItem(ballStorageKey) ?? 'poke'
+      } catch {
+        return 'poke'
+      }
+    }),
+  )
 
   const clock = serverClock(() => game.now)
+
+  const ownedBalls = $derived(
+    game.balls.list
+      .map((ball) => {
+        const qty = game.inventory.find((row) => row.itemKey === ball.itemKey)?.quantity ?? 0
+        return { ...ball, quantity: qty }
+      })
+      .filter((ball) => ball.quantity > 0),
+  )
+  const hasBalls = $derived(ownedBalls.length > 0)
+  const activeBall = $derived(
+    ownedBalls.find((ball) => ball.key === selectedBall) ?? ownedBalls[0] ?? null,
+  )
+  const catchBerryBonus = $derived(
+    (() => {
+      const rows = game.effects.filter((e) => e.effectKey === 'catch_boost').sort((a, b) => a.id - b.id)
+      const chosen = rows.find((row) => row.charges !== null) ?? rows[0]
+      return chosen?.multiplier ?? 1
+    })(),
+  )
+
+  function chanceForBall(ballKey: string): number {
+    if (!encounter || encounter.wonAt == null) return 0
+    const types = [encounter.type1, encounter.type2].filter((t): t is string => Boolean(t))
+    return previewCatchChance({
+      captureRate: encounter.captureRate,
+      catchMult: game.balls.catchMult,
+      catchMin: game.balls.catchMin,
+      ballKey,
+      throwIndex: encounter.throwCount,
+      wildLevel: encounter.level,
+      types,
+      berryBonus: catchBerryBonus,
+    })
+  }
+
+  function pickBall(key: string) {
+    selectedBall = key
+    try {
+      localStorage.setItem(ballStorageKey, key)
+    } catch {
+      // ignore
+    }
+  }
+
+  $effect(() => {
+    if (!hasBalls) return
+    if (!ownedBalls.some((ball) => ball.key === selectedBall)) {
+      selectedBall = ownedBalls[0]!.key
+    }
+  })
 
   $effect(() => {
     const server = game.trainer.battleAuto
@@ -241,6 +304,7 @@
       canEvolve: readyToEvolve,
       regions,
       berries: game.berries,
+      balls: game.balls.list,
     })
   }
 
@@ -278,6 +342,7 @@
             levelRewards: extra.levelRewards,
             regions,
             berries: game.berries,
+            balls: game.balls.list,
           })
         : []
     battleCards = mergeCaptureOutcome(battleCards, kind, bonus)
@@ -438,14 +503,15 @@
   }
 
   async function throwBall() {
-    if (!encounter) return
+    if (!encounter || !activeBall) return
     play('tap')
     pending = true
     throwing = true
     message = ''
     notice = ''
+    const ballKey = activeBall.key
     try {
-      const response = await api(`/api/encounters/${encounter.id}/throw`, {})
+      const response = await api(`/api/encounters/${encounter.id}/throw`, { ball: ballKey })
       if (!response.ok) {
         const error = await readError(response)
         message = errorText(error)
@@ -458,7 +524,8 @@
       }
       const outcome = (await response.json()) as ThrowOutcome
       lastThrow = outcome
-      encounter = { ...encounter, catchChance: outcome.catchChance }
+      thrownBallSprite = activeBall?.sprite ?? game.balls.list.find((b) => b.key === ballKey)?.sprite ?? 'poke'
+      encounter = { ...encounter, catchChance: outcome.catchChance, throwCount: outcome.throwNumber }
       if (prefersReducedMotion()) afterThrow()
       else step = 'throw'
     } catch {
@@ -466,6 +533,20 @@
     } finally {
       pending = false
       throwing = false
+    }
+  }
+
+  async function grantBalls() {
+    pending = true
+    message = ''
+    try {
+      const response = await api('/api/dev/balls', {})
+      if (!response.ok) message = errorText(await readError(response))
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
     }
   }
 
@@ -659,6 +740,9 @@
         {/if}
         {#if game.devTools}
           <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+          <button type="button" class="btn choice" disabled={pending} onclick={() => void grantBalls()}>
+            Ganhar bolas (teste)
+          </button>
           <form
             class="dev-encounter"
             onsubmit={(event) => {
@@ -809,8 +893,30 @@
     <div class="scroll">
       <section class="panel sheet wild">
         {@render wild(encounter, 'dizzy')}
-        {#if encounter.catchChance !== null}
-          <p class="odds">Chance de captura {percent(encounter.catchChance)}</p>
+        {#if activeBall}
+          <p class="odds">Chance com {activeBall.displayName}: {percent(chanceForBall(activeBall.key))}</p>
+        {/if}
+        {#if hasBalls}
+          <div class="ball-row" role="listbox" aria-label="Pokébolas">
+            {#each ownedBalls as ball (ball.key)}
+              <button
+                type="button"
+                class="ball-pick"
+                class:on={activeBall?.key === ball.key}
+                role="option"
+                aria-selected={activeBall?.key === ball.key}
+                disabled={pending}
+                onclick={() => pickBall(ball.key)}
+              >
+                <img src={ballIconSrc(ball.sprite)} alt="" width="28" height="28" />
+                <span class="ball-name">{ball.displayName}</span>
+                <strong>×{ball.quantity}</strong>
+                <small>{percent(chanceForBall(ball.key))}</small>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="hint">Sem pokébolas.</p>
         {/if}
       </section>
     </div>
@@ -819,13 +925,15 @@
         type="button"
         class="btn btn-primary big"
         aria-busy={throwing}
-        disabled={pending}
+        disabled={pending || !hasBalls}
         onclick={() => void throwBall()}
       >
         {#if throwing}
           <span class="ball sprite-wait" aria-hidden="true"></span>Lançando…
+        {:else if !hasBalls}
+          Sem pokébolas
         {:else}
-          Lançar Poké Ball
+          Lançar {activeBall?.displayName ?? 'bola'}
         {/if}
       </button>
       <button type="button" class="btn big" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
@@ -838,6 +946,7 @@
           <BattleScene
             {encounter}
             throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
+            ballSrc={ballIconSrc(thrownBallSprite)}
             {time}
             onDone={afterThrow}
           />
@@ -930,6 +1039,53 @@
 
   .odds {
     text-align: center;
+  }
+
+  .ball-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+  }
+
+  .ball-pick {
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    box-sizing: border-box;
+    min-height: 44px;
+    margin: 0;
+    padding: 0.35rem 0.25rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.15;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .ball-pick.on {
+    border-color: var(--selected);
+    background: var(--selected-face);
+    box-shadow:
+      inset 0 0 0 2px var(--selected-ring),
+      inset 0 -2px 0 var(--selected);
+  }
+
+  .ball-pick img {
+    image-rendering: pixelated;
+  }
+
+  .ball-name {
+    overflow: hidden;
+    max-width: 100%;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .alert {

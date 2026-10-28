@@ -80,10 +80,15 @@ export type LevelRewardSpec =
 
 /** Recompensas ao atingir exatamente este nível de treinador. */
 export function trainerLevelRewards(level: number): LevelRewardSpec[] {
-  const rewards: LevelRewardSpec[] = [{ itemKey: 'seed:oran', quantity: 1 }]
+  const rewards: LevelRewardSpec[] = [
+    { itemKey: 'seed:oran', quantity: 1 },
+    { itemKey: 'ball:poke', quantity: 5 },
+  ]
   if (level === 3) rewards.push({ itemKey: 'seed:razz', quantity: 1 })
   if (level === 5) rewards.push({ itemKey: 'seed:nanab', quantity: 1 })
   if (level === 8) rewards.push({ itemKey: 'seed:lum', quantity: 1 })
+  if (level % 5 === 0) rewards.push({ itemKey: 'ball:great', quantity: 3 })
+  if (level % 10 === 0) rewards.push({ itemKey: 'ball:ultra', quantity: 2 })
   if (level >= 10 && level % 5 === 0) rewards.push({ kind: 'random_seed' })
   return rewards
 }

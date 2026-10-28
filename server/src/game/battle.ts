@@ -38,8 +38,15 @@ export function winChance(team: number, wild: number): number {
   return clamp(chance, battleConfig.minChance, battleConfig.maxChance)
 }
 
-export function catchChance(captureRate: number, berryBonus = 1): number {
-  const raw = (captureRate / 255) * battleConfig.catchMult * berryBonus
+/** Chance de captura (PLANNING 5.6). Master Ball: passe guaranteed=true → 1. */
+export function catchChance(
+  captureRate: number,
+  berryBonus = 1,
+  ballMult = 1,
+  guaranteed = false,
+): number {
+  if (guaranteed) return 1
+  const raw = (captureRate / 255) * battleConfig.catchMult * ballMult * berryBonus
   return clamp(raw, battleConfig.catchMin, 1)
 }
 

@@ -25,12 +25,18 @@ export const pokedexConfig = {
   albumVersion: 2,
   rewards: {
     region: {
-      items: [{ itemKey: 'seed:oran', quantity: 2 }],
+      items: [
+        { itemKey: 'seed:oran', quantity: 2 },
+        { itemKey: 'ball:poke', quantity: 5 },
+      ],
       genericCandies: 1,
       energy: 1,
     },
     chain: {
-      items: [{ itemKey: 'seed:pinap', quantity: 1 }],
+      items: [
+        { itemKey: 'seed:pinap', quantity: 1 },
+        { itemKey: 'ball:great', quantity: 2 },
+      ],
       genericCandies: 3,
       energy: 0,
     },
@@ -38,6 +44,8 @@ export const pokedexConfig = {
       items: [
         { itemKey: 'seed:oran', quantity: 5 },
         { itemKey: 'seed:pinap', quantity: 2 },
+        { itemKey: 'ball:ultra', quantity: 5 },
+        { itemKey: 'ball:master', quantity: 1 },
       ],
       genericCandies: 10,
       energy: 3,

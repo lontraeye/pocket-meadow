@@ -188,7 +188,12 @@
         title: string
         reward: AlbumBlock['reward']
       }
-      cards = albumClaimCards({ title: body.title, reward: body.reward, berries: game.berries })
+      cards = albumClaimCards({
+        title: body.title,
+        reward: body.reward,
+        berries: game.berries,
+        balls: game.balls.list,
+      })
       await onState()
       await reload()
     } catch {

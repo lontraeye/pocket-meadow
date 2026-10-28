@@ -64,3 +64,51 @@ test('catchChance da tentativa bate com a fórmula da 5.6', () => {
   assert.ok(roll.catchChance >= battleConfig.catchMin)
   assert.ok(roll.catchChance <= 1)
 })
+
+test('bola e berry mudam só a chance; a sequência RNG continua a mesma', () => {
+  const seed = 99
+  const rate = 45
+  const plain = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: rate })
+  const withBall = rollThrow({
+    encounterSeed: seed,
+    throwIndex: 0,
+    captureRate: rate,
+    ballMult: 1.5,
+  })
+  assert.equal(withBall.catchChance, catchChance(rate, 1, 1.5))
+  assert.notEqual(withBall.catchChance, plain.catchChance)
+
+  // Mesmo avanço: after throwIndex 0 miss-stay, throwIndex 1 starts at the same RNG offset.
+  let staySeed = 0
+  for (let s = 1; s < 8000; s += 1) {
+    const first = rollThrow({
+      encounterSeed: s,
+      throwIndex: 0,
+      captureRate: 3,
+      fleeChance: 0,
+      ballMult: 2,
+    })
+    if (!first.caught && !first.fled) {
+      staySeed = s
+      break
+    }
+  }
+  assert.ok(staySeed > 0)
+  const rngAfterMiss = throwRngAt(staySeed, 0)
+  rngAfterMiss()
+  rngAfterMiss()
+  const rngAt1 = throwRngAt(staySeed, 1)
+  assert.equal(rngAt1(), rngAfterMiss())
+})
+
+test('Master Ball: chance 1 e ainda consome a rolagem de captura', () => {
+  const roll = rollThrow({
+    encounterSeed: 7,
+    throwIndex: 0,
+    captureRate: 3,
+    guaranteed: true,
+  })
+  assert.equal(roll.catchChance, 1)
+  assert.equal(roll.caught, true)
+  assert.equal(roll.fled, false)
+})

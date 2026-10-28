@@ -155,6 +155,8 @@ export const pokemon = sqliteTable(
       .default('garden'),
     caughtAt: integer('caught_at').notNull(),
     caughtRegion: text('caught_region'),
+    /** Chave da bola usada na captura (`poke`, `great`…). */
+    caughtBall: text('caught_ball').notNull().default('poke'),
     originalSpeciesId: integer('original_species_id')
       .notNull()
       .references(() => species.id),
@@ -258,6 +260,8 @@ export const encounters = sqliteTable(
     wonAt: integer('won_at'),
     /** Quantos lançamentos já foram feitos neste encontro vencido. */
     throwCount: integer('throw_count').notNull().default(0),
+    /** Erros de captura acumulados; sobe a fuga (Fase 9.2). */
+    agitation: integer('agitation').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     resolvedAt: integer('resolved_at'),

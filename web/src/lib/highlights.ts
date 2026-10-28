@@ -1,12 +1,25 @@
 import {
+  ballIconSrc,
   berryIconSrc,
   itemLabel,
+  type BallInfo,
   type BattleOutcome,
   type BerryInfo,
   type ItemCredit,
   type MoveView,
   type RegionInfo,
 } from './api'
+
+function rewardIcon(itemKey: string, balls?: BallInfo[]): string | undefined {
+  if (itemKey.startsWith('seed:')) return berryIconSrc(itemKey.slice(5))
+  if (itemKey.startsWith('berry:')) return berryIconSrc(itemKey.slice(6))
+  if (itemKey.startsWith('ball:')) {
+    const key = itemKey.slice(5)
+    const sprite = balls?.find((b) => b.key === key)?.sprite ?? key
+    return ballIconSrc(sprite)
+  }
+  return undefined
+}
 import type { SfxName } from './sound'
 
 export type HighlightCard = {
@@ -31,8 +44,9 @@ export function battleHighlightCards(input: {
   canEvolve: (fighter: BattleOutcome['fighters'][number]) => boolean
   regions: RegionInfo[]
   berries: BerryInfo[]
+  balls?: BallInfo[]
 }): HighlightCard[] {
-  const { battle, nameOf, canEvolve, regions, berries } = input
+  const { battle, nameOf, canEvolve, regions, berries, balls } = input
   const cards: HighlightCard[] = []
 
   if (!battle.won) {
@@ -78,7 +92,7 @@ export function battleHighlightCards(input: {
       tone: 'good',
     })
   }
-  cards.push(...rewardCards(battle.levelRewards ?? [], berries))
+  cards.push(...rewardCards(battle.levelRewards ?? [], berries, balls))
 
   return cards
 }
@@ -118,10 +132,11 @@ export function throwRewardCards(input: {
   levelRewards?: ItemCredit[]
   regions: RegionInfo[]
   berries: BerryInfo[]
+  balls?: BallInfo[]
 }): HighlightCard[] {
   const cards: HighlightCard[] = []
   if (input.trainer) cards.push(...trainerCards(input.trainer, input.trainerXpGained ?? 0, input.regions))
-  cards.push(...rewardCards(input.levelRewards ?? [], input.berries))
+  cards.push(...rewardCards(input.levelRewards ?? [], input.berries, input.balls))
   return cards.map((card) => ({ ...card, id: `catch-${card.id}` }))
 }
 
@@ -146,12 +161,16 @@ function trainerCards(
   ]
 }
 
-function rewardCards(levelRewards: { itemKey: string; quantity: number }[], berries: BerryInfo[]): HighlightCard[] {
+function rewardCards(
+  levelRewards: { itemKey: string; quantity: number }[],
+  berries: BerryInfo[],
+  balls?: BallInfo[],
+): HighlightCard[] {
   return levelRewards.map((reward) => ({
     id: `reward-${reward.itemKey}`,
     title: 'Recompensa de nível',
-    detail: `${itemLabel(reward.itemKey, berries)} ×${reward.quantity}`,
-    iconSrc: reward.itemKey.startsWith('seed:') ? berryIconSrc(reward.itemKey.slice(5)) : undefined,
+    detail: `${itemLabel(reward.itemKey, berries, balls)} ×${reward.quantity}`,
+    iconSrc: rewardIcon(reward.itemKey, balls),
     tone: 'good',
   }))
 }
@@ -165,6 +184,7 @@ export function albumClaimCards(input: {
     energy: number
   }
   berries: BerryInfo[]
+  balls?: BallInfo[]
 }): HighlightCard[] {
   const cards: HighlightCard[] = [
     {
@@ -179,8 +199,8 @@ export function albumClaimCards(input: {
     cards.push({
       id: `album-item-${item.itemKey}`,
       title: 'Recompensa do álbum',
-      detail: `${itemLabel(item.itemKey, input.berries)} ×${item.quantity}`,
-      iconSrc: item.itemKey.startsWith('seed:') ? berryIconSrc(item.itemKey.slice(5)) : undefined,
+      detail: `${itemLabel(item.itemKey, input.berries, input.balls)} ×${item.quantity}`,
+      iconSrc: rewardIcon(item.itemKey, input.balls),
       tone: 'good',
     })
   }
@@ -251,6 +271,7 @@ export function evolveHighlightCards(input: {
   levelRewards: { itemKey: string; quantity: number }[]
   regions: RegionInfo[]
   berries: BerryInfo[]
+  balls?: BallInfo[]
   newMoves?: { fast: MoveView | null; charged: MoveView | null } | null
 }): HighlightCard[] {
   const cards: HighlightCard[] = [
@@ -268,10 +289,10 @@ export function evolveHighlightCards(input: {
     }
   }
   cards.push(...trainerCards(input.trainer, input.trainerXpGained, input.regions))
-  cards.push(...rewardCards(input.levelRewards, input.berries))
+  cards.push(...rewardCards(input.levelRewards, input.berries, input.balls))
   return cards
 }
 
-export function pokeBallSrc(): string {
-  return '/sprites/items/poke-ball.png'
+export function pokeBallSrc(sprite = 'poke'): string {
+  return `/sprites/items/${sprite}-ball.png`
 }

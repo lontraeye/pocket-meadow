@@ -2,6 +2,7 @@
   import { spriteLoading } from './spriteLoading'
   import {
     api,
+    ballIconSrc,
     errorText,
     type ApiError,
     type GameState,
@@ -108,8 +109,17 @@
     nickInput.select()
   })
 
+  $effect(() => {
+    if (tab !== 'perfil' || regionsCache) return
+    void loadRegions()
+  })
+
   const natureHint = $derived(formatNature(mon.nature))
   const ivStars = $derived('★'.repeat(mon.ivRating.stars) + '☆'.repeat(5 - mon.ivRating.stars))
+  const caughtBall = $derived(game.balls.list.find((ball) => ball.key === mon.caughtBall) ?? null)
+  const caughtRegionName = $derived(
+    regionsCache?.find((region) => region.slug === mon.caughtRegion)?.name ?? mon.caughtRegion,
+  )
 
   $effect(() => {
     if (seenSpecies === 0) {
@@ -234,6 +244,7 @@
         levelRewards: payload.levelRewards ?? [],
         regions,
         berries: game.berries,
+        balls: game.balls.list,
         newMoves: payload.newMoves ?? null,
       })
     } catch {
@@ -482,6 +493,14 @@
     {#if tab === 'perfil'}
     <div class="block traits">
       <h3>Traços</h3>
+      <p class="hint caught-with">
+        {#if caughtBall}
+          <img class="caught-ball" src={ballIconSrc(caughtBall.sprite)} alt="" width="20" height="20" />
+          Capturado com {caughtBall.displayName}{#if caughtRegionName} · {caughtRegionName}{/if}
+        {:else}
+          Capturado com Poké Ball{#if caughtRegionName} · {caughtRegionName}{/if}
+        {/if}
+      </p>
       <p class="hint">IVs {ivStars} · {mon.ivRating.percent}%</p>
       <p class="hint">Natureza {mon.nature.displayName} ({natureHint})</p>
       <p class="hint">
@@ -1057,6 +1076,19 @@
 
   .traits .hint {
     justify-self: center;
+  }
+
+  .caught-with {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  .caught-ball {
+    flex: none;
+    image-rendering: pixelated;
   }
 
   .move {

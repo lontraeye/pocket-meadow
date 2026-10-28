@@ -28,16 +28,24 @@ export function loadImage(url: string): Promise<void> {
 export function baseTasks(): Promise<unknown>[] {
   return [
     // Os iniciais aparecem no cadastro, logo depois do primeiro login.
-    ...[...uiArt, ...itemArt, '/sprites/items/poke-ball.png', ...[1, 4, 7].map((id) => `/sprites/showdown/${id}.gif`)].map(
-      loadImage,
-    ),
+    ...[
+      ...uiArt,
+      ...itemArt,
+      '/sprites/items/poke-ball.png',
+      '/sprites/items/great-ball.png',
+      '/sprites/items/ultra-ball.png',
+      ...[1, 4, 7].map((id) => `/sprites/showdown/${id}.gif`),
+    ].map(loadImage),
     ...fonts.map((font) => document.fonts.load(font).catch(() => undefined)),
   ]
 }
 
 /** O jardim do jogador: folhas PMD (ou GIF, quem não tem PMD) e os ícones das berries do config. */
 export function gameTasks(game: GameState): Promise<unknown>[] {
-  const tasks: Promise<unknown>[] = game.berries.map((berry) => loadImage(`/sprites/items/${berry.key}-berry.png`))
+  const tasks: Promise<unknown>[] = [
+    ...game.berries.map((berry) => loadImage(`/sprites/items/${berry.key}-berry.png`)),
+    ...game.balls.list.map((ball) => loadImage(`/sprites/items/${ball.sprite}-ball.png`)),
+  ]
   const seen = new Set<string>()
   for (const mon of game.pokemon) {
     if (mon.location !== 'garden') continue

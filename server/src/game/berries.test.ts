@@ -77,6 +77,8 @@ describe('recompensas e sementes', () => {
   test('sobe vários níveis e soma as recompensas de cada um', () => {
     const rewards = rewardsForLevelsGained(1, 5, () => 'lum')
     assert.deepEqual(rewards, [
+      { itemKey: 'ball:great', quantity: 3 },
+      { itemKey: 'ball:poke', quantity: 20 },
       { itemKey: 'seed:nanab', quantity: 1 },
       { itemKey: 'seed:oran', quantity: 4 },
       { itemKey: 'seed:razz', quantity: 1 },

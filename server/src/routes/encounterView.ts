@@ -16,8 +16,13 @@ export type EncounterView = {
   battleStartedAt: number | null
   /** null = ainda não venceu; número = epoch ms da vitória (8.4, aguardando captura). */
   wonAt: number | null
-  /** Chance atual de captura (com catch_boost se ativo); null se ainda não venceu. */
+  /** Chance base de captura (catch_boost, sem bola); null se ainda não venceu. */
   catchChance: number | null
+  throwCount: number
+  agitation: number
+  captureRate: number
+  type1: string
+  type2: string | null
 }
 
 export function toEncounterView(input: {
@@ -33,6 +38,11 @@ export function toEncounterView(input: {
   battleStartedAt?: number | null
   wonAt?: number | null
   catchChance?: number | null
+  throwCount?: number
+  agitation?: number
+  captureRate?: number
+  type1?: string
+  type2?: string | null
 }): EncounterView {
   return {
     id: input.id,
@@ -48,5 +58,10 @@ export function toEncounterView(input: {
     battleStartedAt: input.battleStartedAt ?? null,
     wonAt: input.wonAt ?? null,
     catchChance: input.catchChance ?? null,
+    throwCount: input.throwCount ?? 0,
+    agitation: input.agitation ?? 0,
+    captureRate: input.captureRate ?? 255,
+    type1: input.type1 ?? 'normal',
+    type2: input.type2 ?? null,
   }
 }

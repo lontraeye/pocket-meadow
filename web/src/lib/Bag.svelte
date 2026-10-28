@@ -3,6 +3,7 @@
   import { formatCountdown } from './time'
   import {
     api,
+    ballIconSrc,
     berryIconSrc,
     effectLabel,
     errorText,
@@ -28,6 +29,14 @@
     game.inventory
       .filter((row) => row.itemKey.startsWith('berry:') && row.quantity > 0)
       .sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
+  )
+  const balls = $derived(
+    game.balls.list
+      .map((ball) => {
+        const quantity = game.inventory.find((row) => row.itemKey === ball.itemKey)?.quantity ?? 0
+        return { ...ball, quantity }
+      })
+      .filter((ball) => ball.quantity > 0),
   )
 
   const clock = serverClock(() => game.now)
@@ -110,8 +119,25 @@
             {@const key = row.itemKey.slice(5)}
             <li>
               <img src={berryIconSrc(key)} alt="" width="30" height="30" />
-              <span>{itemLabel(row.itemKey, game.berries)}</span>
+              <span>{itemLabel(row.itemKey, game.berries, game.balls.list)}</span>
               <strong>×{row.quantity}</strong>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    <section class="panel sheet">
+      <h2>Pokébolas</h2>
+      {#if balls.length === 0}
+        <p class="hint">Nenhuma pokébola.</p>
+      {:else}
+        <ul class="list">
+          {#each balls as ball (ball.key)}
+            <li>
+              <img src={ballIconSrc(ball.sprite)} alt="" width="30" height="30" />
+              <span>{ball.displayName}</span>
+              <strong>×{ball.quantity}</strong>
             </li>
           {/each}
         </ul>
