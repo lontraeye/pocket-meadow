@@ -16,6 +16,8 @@ const gardenAnims = ['Walk', 'Idle', 'Sleep'] as const satisfies ReadonlyArray<(
 const sheetGlobs = (base: string) => [
   ...anims.map((anim) => `${base}/${anim}-Anim.png`),
   ...anims.map((anim) => `${base}/${anim}-Shadow.png`),
+  // Só o do Sleep: dá a posição da cabeça para o Zzz do jardim.
+  `${base}/Sleep-Offsets.png`,
 ]
 const sparse = [
   '/tracker.json',
@@ -32,7 +34,10 @@ const sparse = [
 // branco da folha -Shadow, e anda dentro do quadro durante o Walk. Vem como
 // [x, y] quando é igual em todos os quadros; senão, [x, y] por quadro, linha a
 // linha (direção × quadros).
-type AnimSheet = { w: number; h: number; dirs: number; durations: number[]; ground: number[] }
+// head (só no Sleep): [x, y] do alto da cabeça no 1º quadro, relativo ao canto
+// do quadro. O x é o pixel preto da folha -Offsets (a cabeça); o y é o primeiro
+// pixel visível do sprite naquela faixa, para o Zzz nascer acima dela.
+type AnimSheet = { w: number; h: number; dirs: number; durations: number[]; ground: number[]; head?: number[] }
 type GardenAnim = (typeof gardenAnims)[number]
 type BattleAnim = Exclude<(typeof anims)[number], GardenAnim>
 type Variant = Record<GardenAnim, AnimSheet> & Partial<Record<BattleAnim, AnimSheet>>
@@ -199,7 +204,48 @@ function loadSheet(
   }
   const dirs = size.h / resolved.h
   const ground = readGround(folder, resolved.name, resolved.w, resolved.h, resolved.durations.length, dirs, size, label)
-  return { sheet: { w: resolved.w, h: resolved.h, dirs, durations: resolved.durations, ground }, png }
+  const sheet: AnimSheet = { w: resolved.w, h: resolved.h, dirs, durations: resolved.durations, ground }
+  if (anim === 'Sleep') {
+    const head = readHead(folder, resolved.name, resolved.w, resolved.h, png, label)
+    if (head) sheet.head = head
+  }
+  return { sheet, png }
+}
+
+function readHead(folder: string, name: string, w: number, h: number, animPng: string, label: string): number[] | undefined {
+  const file = materialize(`${folder}/${name}-Offsets.png`)
+  if (!file) {
+    warnings.push(`${label}: ${name}-Offsets.png ausente, Zzz na posição padrão`)
+    return undefined
+  }
+  const offsets = PNG.sync.read(fs.readFileSync(file))
+  const head = colorPixel(offsets, w, h, [0, 0, 0])
+  if (!head) return undefined
+  const [headX, headY] = head
+  // Alto da cabeça: o pixel visível mais alto numa faixa estreita em volta do x dela.
+  const sprite = PNG.sync.read(fs.readFileSync(animPng))
+  let top = headY ?? 0
+  for (let x = Math.max(0, (headX ?? 0) - 2); x <= Math.min(w - 1, (headX ?? 0) + 2); x += 1) {
+    for (let y = 0; y < top; y += 1) {
+      if (sprite.data[(y * sprite.width + x) * 4 + 3] !== 0) {
+        top = y
+        break
+      }
+    }
+  }
+  return [headX ?? 0, top]
+}
+
+function colorPixel(png: PNG, w: number, h: number, rgb: [number, number, number]): number[] | undefined {
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const at = (y * png.width + x) * 4
+      if (png.data[at + 3] !== 0 && png.data[at] === rgb[0] && png.data[at + 1] === rgb[1] && png.data[at + 2] === rgb[2]) {
+        return [x, y]
+      }
+    }
+  }
+  return undefined
 }
 
 function loadVariant(folder: string, label: string): Ready | undefined {

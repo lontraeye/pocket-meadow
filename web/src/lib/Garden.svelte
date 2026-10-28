@@ -7,7 +7,15 @@
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
   import { play, playCry } from './sound'
-  import { gardenExtent, gardenSprite, preloadPmd, showdownSrc, type PmdAnimName } from './sprites'
+  import {
+    gardenExtent,
+    gardenSprite,
+    groundAt,
+    preloadPmd,
+    showdownSrc,
+    type GardenLook,
+    type PmdAnimName,
+  } from './sprites'
 
   let {
     game,
@@ -198,6 +206,26 @@
   // olhando para a direita (↘ → ↗) usa a pose espelhada, para não virar de lado.
   function sleepFlip(walker: Walker): boolean {
     return walker.anim === 'Sleep' && walker.dir >= 1 && walker.dir <= 3
+  }
+
+  // Onde o Zzz nasce, a partir do ponto do chão: perto do focinho, um pouco à
+  // frente e abaixo do alto da cabeça (dado do manifest), e sobe para a frente.
+  // A pose de sono olha para ↙, então "frente" é a esquerda (direita se espelhada).
+  // Sem o dado, um pouco acima do sprite.
+  const zzzForward = 4
+  const zzzDrop = 3
+  function zzzSpot(walker: Walker, look: GardenLook): { x: number; y: number; drift: number } {
+    if (look.kind === 'pmd' && look.anims.Sleep.head) {
+      const sheet = look.anims.Sleep
+      const ground = groundAt(sheet, walker.dir, 0)
+      const [headX = 0, headY = 0] = sheet.head ?? []
+      const forward = sleepFlip(walker) ? 1 : -1
+      // Espelhado, o pixel x vira (w - 1 - x): a distância ao chão troca de sinal.
+      const x = ((headX - ground.x) * -forward + zzzForward * forward) * pmdScale
+      return { x, y: (headY + zzzDrop - ground.y) * pmdScale, drift: forward }
+    }
+    const lift = look.kind === 'pmd' ? 22 * pmdScale : showdownSize * scale * 0.6
+    return { x: 0, y: -lift, drift: 1 }
   }
 
   function inPlay(col: number, row: number): boolean {
@@ -1031,6 +1059,19 @@
               style:transform={walker.dir === 5 || walker.dir === 7 ? 'scaleX(-1)' : undefined}
             />
           {/if}
+          {#if walker.anim === 'Sleep'}
+            <!-- Fora do PmdSprite: lá dentro o flip espelharia as letras. -->
+            {@const zzz = zzzSpot(walker, look)}
+            <span
+              class="zzz"
+              style:left="{zzz.x}px"
+              style:top="{zzz.y}px"
+              style:--drift={zzz.drift}
+              aria-hidden="true"
+            >
+              <span>z</span><span>z</span><span>Z</span>
+            </span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -1405,6 +1446,74 @@
     79%,
     100% {
       opacity: 1;
+    }
+  }
+
+  /* Zzz de quem dorme: três letras que nascem no alto da cabeça (zzzSpot),
+     sobem em diagonal para o lado dela crescendo e somem, uma atrás da outra. */
+  .zzz {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* A letra (~8×14px) fica centrada em x e com a base no ponto. */
+  .zzz span {
+    position: absolute;
+    left: -4px;
+    top: -14px;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    color: #eef2ff;
+    text-shadow:
+      0 var(--px) 0 var(--ink),
+      0 calc(var(--px) * -1) 0 var(--ink),
+      var(--px) 0 0 var(--ink),
+      calc(var(--px) * -1) 0 0 var(--ink);
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .zzz span {
+      animation: zzz-float 2.4s steps(12, end) infinite;
+    }
+
+    .zzz span:nth-child(2) {
+      animation-delay: 0.8s;
+    }
+
+    .zzz span:nth-child(3) {
+      animation-delay: 1.6s;
+    }
+  }
+
+  /* Sem animação: um "zZ" parado já diz que está dormindo. */
+  @media (prefers-reduced-motion: reduce) {
+    .zzz span:nth-child(n + 2) {
+      opacity: 1;
+    }
+
+    .zzz span:nth-child(3) {
+      transform: translate(calc(var(--drift) * 9px), -10px);
+    }
+  }
+
+  @keyframes zzz-float {
+    0% {
+      transform: translate(0, 0) scale(0.6);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    75% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(calc(var(--drift) * 16px), -28px) scale(1.2);
+      opacity: 0;
     }
   }
 
