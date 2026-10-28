@@ -42,7 +42,7 @@
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'throw' | 'highlights' | 'result'
+  type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result'
   type Result =
     | { kind: 'fled' }
     | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[]; left?: boolean }
@@ -71,6 +71,8 @@
   let lastThrow = $state<ThrowOutcome | null>(null)
   let thrownBallSprite = $state('poke')
   let throwing = $state(false)
+  /** Cena de hit/absorver/chão/chacoalhada na mesma tela da captura (não troca de step). */
+  let captureAnim = $state(false)
   let notice = $state('')
   let appliedThrow = $state<number | null>(null)
   let battleAuto = $state(untrack(() => game.trainer.battleAuto))
@@ -315,7 +317,7 @@
   $effect(() => {
     const found = game.encounter
     if (!found?.wonAt) return
-    if (step === 'throw' || step === 'fight' || step === 'highlights' || step === 'result') return
+    if (captureAnim || step === 'fight' || step === 'highlights' || step === 'result') return
     encounter = found
     if (step !== 'decide') step = 'decide'
     const look = gardenSprite(found.speciesId, found.isShiny)
@@ -666,7 +668,7 @@
         agitation: outcome.agitation,
       }
       if (prefersReducedMotion()) afterThrow()
-      else step = 'throw'
+      else captureAnim = true
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -715,6 +717,7 @@
 
   function afterThrow() {
     const outcome = lastThrow
+    captureAnim = false
     if (!outcome) {
       step = 'decide'
       return
@@ -1079,6 +1082,25 @@
         />
       </section>
     </div>
+  {:else if step === 'decide' && encounter && captureAnim && lastThrow}
+    <!-- Continua na mesma tela: hit → absorver → chão → chacoalhada (skipThrow). -->
+    <div class="scroll">
+      <section class="panel sheet capture-scene">
+        {#key lastThrow.throwNumber}
+          <BattleScene
+            {encounter}
+            throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
+            ballSrc={ballIconSrc(thrownBallSprite)}
+            skipThrow
+            {time}
+            onDone={afterThrow}
+          />
+        {/key}
+      </section>
+    </div>
+    <div class="dock">
+      <button type="button" class="btn" onclick={afterThrow}>Pular cena</button>
+    </div>
   {:else if step === 'decide' && encounter}
     <div class="scroll">
       <section class="panel sheet wild">
@@ -1215,24 +1237,6 @@
       </div>
       <!-- Sair da captura é deixar ir: não fica encontro esperando no jardim. -->
       <button type="button" class="btn" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
-    </div>
-  {:else if step === 'throw' && encounter && lastThrow}
-    <div class="scroll">
-      <section class="panel sheet">
-        {#key lastThrow.throwNumber}
-          <BattleScene
-            {encounter}
-            throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
-            ballSrc={ballIconSrc(thrownBallSprite)}
-            skipThrow
-            {time}
-            onDone={afterThrow}
-          />
-        {/key}
-      </section>
-    </div>
-    <div class="dock">
-      <button type="button" class="btn" onclick={afterThrow}>Pular cena</button>
     </div>
   {:else if step === 'highlights' && result?.kind === 'battle'}
     <div class="scroll">
