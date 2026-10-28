@@ -1,20 +1,30 @@
 /*
-  Tema pixel. Molduras em 9-slice do Kenney Pixel UI Pack (CC0), em web/public/ui.
-  Cada PNG tem 48px e borda de 6px; desenhamos a borda em 2x (12px) para manter
-  o pixel inteiro. Não usar escala fracionária nesses assets.
+  Tema clássico (branco/cinza), no jeito das caixas de texto Gen 1–3.
+  Molduras em CSS puro — sem os PNGs bege do Kenney — para dá para
+  comparar o look sem gerar assets novos.
 */
 
 :root {
-  --ink: #3b2a1a;
-  --ink-soft: #6b5238;
-  --paper: #d4bc8f;
-  --grass-1: #8fcb6b;
-  --grass-2: #7bbd59;
-  --grass-side: #5a8f3c;
-  --soil: #b98a52;
-  --sky: #cfe8b5;
-  --accent: #ffcc00;
-  --danger: #b33a2b;
+  --ink: #181820;
+  --ink-soft: #585868;
+  --paper: #f0f0f4;
+  --panel-face: #f8f8f8;
+  --panel-hi: #ffffff;
+  --panel-shade: #a0a0a8;
+  --panel-edge: #101018;
+  --inlay-face: #d8d8e0;
+  --inlay-shade: #b0b0b8;
+  --selected: #3870d8;
+  --grass-1: #78c850;
+  --grass-2: #68b040;
+  --grass-side: #489030;
+  --soil: #a08050;
+  --sky: #c8d0e0;
+  --accent: #f8d030;
+  --accent-shade: #c9a000;
+  --primary: #3870c8;
+  --primary-shade: #204888;
+  --danger: #c03028;
   --px: 2px;
   /* Altura útil: o body já tem o padding de safe-area em cima e embaixo. */
   --screen-h: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
@@ -39,9 +49,9 @@ body {
   /* A Pixelify Sans junta "fi" numa ligadura que vira um glifo estranho
      ("Perfil" aparecia como "PerAl"). */
   font-variant-ligatures: none;
-  /* Quadriculado leve de grama ao fundo, em pixels de 8px. */
+  /* Quadriculado frio (cinza-azulado), no lugar do xadrez bege/verde. */
   background:
-    repeating-conic-gradient(#c6e2a9 0 25%, transparent 0 50%) 0 0 / 16px 16px,
+    repeating-conic-gradient(#b8c0d0 0 25%, transparent 0 50%) 0 0 / 16px 16px,
     var(--sky);
   padding:
     env(safe-area-inset-top)
@@ -83,8 +93,8 @@ img {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--ink-soft);
-  border: 2px solid var(--ink);
+  background: var(--panel-shade);
+  border: 2px solid var(--panel-edge);
   border-radius: 0;
   box-shadow: inset -2px -2px 0 #00000033;
 }
@@ -126,12 +136,14 @@ h3 {
   outline-offset: 3px;
 }
 
+/* Caixa clássica: borda fina + um filete interno, sem moldura tripla. */
 .panel {
   box-sizing: border-box;
-  border: 12px solid transparent;
-  border-image: url('/ui/panel.png') 6 fill / 12px round;
+  border: 2px solid var(--panel-edge);
+  background: var(--panel-face);
+  box-shadow: inset 0 0 0 1px var(--panel-shade);
   image-rendering: pixelated;
-  padding: 0.25rem 0.5rem 0.5rem;
+  padding: 0.4rem 0.5rem 0.5rem;
 }
 
 .btn {
@@ -143,9 +155,10 @@ h3 {
   min-height: 48px;
   min-width: 48px;
   padding: 0 0.75rem;
-  border: 12px solid transparent;
-  border-image: url('/ui/panel.png') 6 fill / 12px round;
-  background: none;
+  border: 2px solid var(--panel-edge);
+  background: var(--panel-face);
+  box-shadow: inset 0 -2px 0 var(--panel-shade);
+  color: var(--ink);
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
@@ -155,18 +168,22 @@ h3 {
 }
 
 .btn:active:not(:disabled) {
-  border-image-source: url('/ui/button-pressed.png');
+  box-shadow: inset 0 2px 0 #00000022;
   transform: translateY(var(--px));
+  background: var(--paper);
 }
 
+/* Primário azul de menu clássico (no lugar do verde madeira). */
 .btn-primary {
-  border-image-source: url('/ui/button-primary.png');
+  background: var(--primary);
   color: #fff;
-  text-shadow: 0 var(--px) 0 #3f7a2a;
+  text-shadow: 0 var(--px) 0 var(--primary-shade);
+  box-shadow: inset 0 -2px 0 var(--primary-shade);
 }
 
 .btn-primary:active:not(:disabled) {
-  border-image-source: url('/ui/button-primary-pressed.png');
+  background: var(--primary-shade);
+  box-shadow: inset 0 2px 0 #00000033;
 }
 
 .btn:disabled {
@@ -194,18 +211,33 @@ h3 {
   box-sizing: border-box;
   width: 100%;
   min-height: 48px;
-  padding: 0 0.25rem;
-  border: 8px solid transparent;
-  border-image: url('/ui/inlay.png') 4 fill / 8px round;
-  background: none;
+  padding: 0 0.45rem;
+  border: 2px solid var(--panel-edge);
+  background: var(--inlay-face);
+  box-shadow: inset 0 1px 0 var(--inlay-shade);
   /* 16px ou mais: o iOS não dá zoom ao focar. */
   font-size: 18px;
 }
 
 .field:focus {
   outline: none;
-  border-image-source: url('/ui/selected.png');
-  border-image-slice: 6 fill;
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px #78a8f088;
+}
+
+/* Moldura “afundada” / selecionada para cards e chips (antes: inlay.png). */
+.inlay {
+  border: 2px solid var(--panel-edge);
+  background: var(--inlay-face);
+  box-shadow: inset 0 1px 0 var(--inlay-shade);
+}
+
+.inlay.on,
+.inlay[aria-pressed='true'],
+.selected-frame {
+  border-color: var(--selected);
+  background: #e8f0ff;
+  box-shadow: inset 0 -2px 0 var(--selected);
 }
 
 @media (prefers-reduced-motion: reduce) {

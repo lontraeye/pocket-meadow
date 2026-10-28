@@ -5,6 +5,7 @@
   import Highlights from './Highlights.svelte'
   import PmdSprite from './PmdSprite.svelte'
   import { gardenSprite, groundAt, pmdAnim, showdownSrc } from './sprites'
+  import StatTable from './StatTable.svelte'
   import { typeLabelPt } from './typesPt'
 
   let {
@@ -364,11 +365,10 @@
           {/if}
 
           {#if open.baseStats}
-            <h4>Atributos base</h4>
-            <p class="stats">
-              PS {open.baseStats.hp} · Atq {open.baseStats.attack} · Def {open.baseStats.defense} ·
-              AtqE {open.baseStats.spAttack} · DefE {open.baseStats.spDefense} · Vel {open.baseStats.speed}
-            </p>
+            <div class="base-stats">
+              <h4>Atributos base</h4>
+              <StatTable stats={open.baseStats} />
+            </div>
           {/if}
           {#if open.moves}
             <h4>Golpes</h4>
@@ -560,40 +560,39 @@
 
 <style>
   .pokedex {
-    --dex-red: #dc0a2d;
-    --dex-red-dark: #8b061c;
-    --dex-screen: #c8e6c0;
-    --dex-ink: #1a2e14;
     --dex-lens: #7ec8e3;
-    --dex-bar: #5a9e3a;
+    --dex-bar: var(--primary);
     position: relative;
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0;
     min-height: 0;
     min-width: 0;
     height: 100%;
-    padding: 0.25rem;
-    padding-top: max(0.25rem, env(safe-area-inset-top));
-    background: var(--dex-red);
-    box-shadow: inset 0 0 0 var(--px) var(--dex-red-dark);
-    color: var(--dex-ink);
+    padding: 0;
+    padding-top: env(safe-area-inset-top);
+    background: var(--paper);
+    border-left: 2px solid var(--panel-edge);
+    color: var(--ink);
   }
 
   .chrome {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    min-height: 44px;
-    padding: 0 0.15rem;
+    min-height: 48px;
+    padding: 0.35rem 0.45rem;
     flex: none;
+    background: var(--panel-face);
+    border-bottom: 2px solid var(--panel-edge);
+    box-shadow: inset 0 -1px 0 var(--panel-shade);
   }
 
   .lens {
     flex: none;
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 1.2rem;
+    height: 1.2rem;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #eaf7ff, var(--dex-lens) 55%, #2a6a88);
     box-shadow: inset 0 0 0 1px #0e3a52;
@@ -607,8 +606,8 @@
 
   .lights i {
     display: block;
-    width: 0.4rem;
-    height: 0.4rem;
+    width: 0.35rem;
+    height: 0.35rem;
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px #00000055;
   }
@@ -629,8 +628,7 @@
     margin: 0;
     font-size: 1.05rem;
     font-weight: 800;
-    color: #fff;
-    text-shadow: 0 1px 0 #00000055;
+    color: var(--ink);
     line-height: 1.1;
   }
 
@@ -639,19 +637,25 @@
     min-width: 44px;
     min-height: 44px;
     padding: 0;
-    color: #fff;
+    box-shadow: none;
   }
 
   .screen {
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.35rem;
     min-height: 0;
-    padding: 0.35rem;
-    background: var(--dex-screen);
-    box-shadow: inset 0 0 0 var(--px) #1a2e14;
+    /* Sem padding à direita: a barra de rolagem cola na borda do painel. */
+    padding: 0.45rem 0 0.45rem 0.45rem;
+    background: var(--panel-face);
     overflow: hidden;
+  }
+
+  .tabs,
+  .controls,
+  .alert {
+    padding-right: 0.45rem;
   }
 
   .tabs {
@@ -747,9 +751,11 @@
     padding: 0.25rem;
     overflow-y: auto;
     list-style: none;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    box-shadow: 0 var(--px) 0 #0003;
+    border: 2px solid var(--panel-edge);
+    background: var(--panel-face);
+    box-shadow:
+      inset 0 0 0 1px var(--panel-shade),
+      0 var(--px) 0 #0003;
   }
 
   .region-list button {
@@ -773,7 +779,8 @@
   }
 
   .region-list button.on {
-    background: #5a8f3c33;
+    background: #e8f0ff;
+    box-shadow: inset 3px 0 0 var(--selected);
   }
 
   .chips {
@@ -794,6 +801,9 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    /* Conteúdo inset; a barra fica na faixa à direita, fora das células. */
+    padding-right: 10px;
+    scrollbar-gutter: stable;
   }
 
   .grid {
@@ -809,10 +819,10 @@
     gap: 0.05rem;
     min-height: 0;
     margin: 0;
-    padding: 0.2rem 0.1rem 0.25rem;
-    border: 0;
-    background: #00000010;
-    box-shadow: inset 0 0 0 var(--px) #00000022;
+    padding: 0.25rem 0.1rem 0.3rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 1px 0 var(--inlay-shade);
     color: inherit;
     font: inherit;
     cursor: pointer;
@@ -889,9 +899,10 @@
   .block {
     display: grid;
     gap: 0.2rem;
-    padding: 0.35rem 0.4rem;
-    background: #00000010;
-    box-shadow: inset 0 0 0 var(--px) #00000022;
+    padding: 0.4rem 0.45rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 1px 0 var(--inlay-shade);
   }
 
   .block header {
@@ -941,6 +952,12 @@
     font-size: 0.85rem;
   }
 
+  @media (max-width: 899px) {
+    .pokedex {
+      border-left: 0;
+    }
+  }
+
   /* Dentro da Pokédex (painel no PC; tela cheia no celular). */
   .overlay {
     position: absolute;
@@ -955,7 +972,7 @@
     position: absolute;
     inset: 0;
     border: 0;
-    background: #1a1208aa;
+    background: #18182099;
   }
 
   .sheet {
@@ -1052,9 +1069,10 @@
     justify-items: center;
     gap: 0.1rem;
     margin: 0;
-    padding: 0.15rem;
-    border: 0;
-    background: #00000010;
+    padding: 0.2rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 1px 0 var(--inlay-shade);
     color: inherit;
     font: inherit;
     cursor: pointer;
@@ -1101,9 +1119,12 @@
     flex: none;
   }
 
-  .stats {
-    margin: 0;
-    font-size: 0.85rem;
+  .base-stats {
+    text-align: center;
+  }
+
+  .base-stats h4 {
+    margin-bottom: 0;
   }
 
   ul {

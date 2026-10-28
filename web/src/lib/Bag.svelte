@@ -189,6 +189,9 @@
     gap: 0.5rem;
     min-height: 0;
     overflow: auto;
+    /* Barra na faixa da direita, fora dos painéis (não por cima). */
+    padding-right: 10px;
+    scrollbar-gutter: stable;
   }
 
   .sheet {
@@ -241,7 +244,7 @@
   }
 
   .list.use li {
-    align-items: stretch;
+    align-items: center;
   }
 
   .meta {
@@ -262,7 +265,10 @@
 
   .list .btn {
     flex: none;
+    align-self: center;
     min-width: 72px;
+    min-height: 36px;
+    padding-block: 0;
   }
 
   .dock {

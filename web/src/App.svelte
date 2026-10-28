@@ -491,7 +491,7 @@
     display: block;
     height: 100%;
     background: var(--accent);
-    box-shadow: inset 0 -3px 0 #c79a00;
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
     transition: width 0.15s steps(4, end);
   }
 
@@ -506,7 +506,7 @@
     padding: 0 1.25rem;
     border: 3px solid var(--ink);
     background: var(--accent);
-    box-shadow: inset 0 -4px 0 #c79a00;
+    box-shadow: inset 0 -4px 0 var(--accent-shade);
     font-weight: 700;
     cursor: pointer;
     touch-action: manipulation;
@@ -576,8 +576,7 @@
     min-height: 0;
   }
 
-  /* No PC os menus não esticam na tela toda: largura limitada e centralizados.
-     No celular o limite não chega a valer. */
+  /* Desktop: menus com folga e largura limitada. Celular: cola nas bordas. */
   .meadow.immersive .hud,
   .meadow.immersive .docks {
     width: min(
@@ -624,14 +623,59 @@
     margin-inline: auto;
   }
 
+  @media (max-width: 899px) {
+    .meadow {
+      padding: 0;
+    }
+
+    .meadow.immersive .hud,
+    .meadow.immersive .docks,
+    .meadow.immersive .ready-banner {
+      width: 100%;
+      max-width: none;
+      margin-inline: 0;
+      left: 0;
+      right: 0;
+    }
+
+    .meadow.immersive .hud {
+      top: env(safe-area-inset-top);
+      border-left: 0;
+      border-right: 0;
+      border-top: 0;
+      box-shadow: inset 0 -1px 0 var(--panel-shade);
+    }
+
+    .meadow.immersive .docks {
+      bottom: env(safe-area-inset-bottom);
+      gap: 0.35rem;
+      padding: 0 0.35rem 0.35rem;
+      box-sizing: border-box;
+    }
+
+    .meadow.immersive .ready-banner {
+      top: calc(6.75rem + env(safe-area-inset-top));
+      width: 100%;
+    }
+
+    .meadow.fit .world {
+      padding: 0.5rem;
+    }
+  }
+
   .hud {
     /* Referência do painel de volume, que abre logo abaixo. */
     position: relative;
     z-index: 4;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0 0.25rem;
+    gap: 0.4rem;
+    padding: 0.35rem 0.4rem;
+  }
+
+  /* Botões dentro do HUD: borda mais leve para não colar na moldura do painel. */
+  .hud .btn {
+    box-shadow: none;
   }
 
   .level {
@@ -691,7 +735,7 @@
   .pip.full {
     background: var(--accent);
     box-shadow:
-      inset 0 calc(var(--px) * -2) 0 #c79a00,
+      inset 0 calc(var(--px) * -2) 0 var(--accent-shade),
       inset 0 var(--px) 0 #fff3a0;
   }
 
@@ -834,7 +878,7 @@
     border: 3px solid var(--ink);
     border-radius: 0;
     background: var(--accent);
-    box-shadow: inset 0 -3px 0 #c79a00;
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
     appearance: none;
   }
 
@@ -845,14 +889,14 @@
     border: 3px solid var(--ink);
     border-radius: 0;
     background: var(--accent);
-    box-shadow: inset 0 -3px 0 #c79a00;
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
   }
 
   /* Celular: nível e energia numa linha; ícones + Mochila + Sair embaixo. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;
-      row-gap: 0.25rem;
+      row-gap: 0.45rem;
     }
 
     .energy {

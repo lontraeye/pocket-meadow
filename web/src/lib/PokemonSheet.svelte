@@ -18,6 +18,7 @@
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { play } from './sound'
   import { showdownSrc } from './sprites'
+  import StatTable from './StatTable.svelte'
   import { damageClassLabelPt, typeLabelPt } from './typesPt'
 
   let {
@@ -37,6 +38,8 @@
   let doses = $state(1)
   let useGeneric = $state(false)
   let nickname = $state('')
+  let editingNick = $state(false)
+  let nickInput = $state<HTMLInputElement | null>(null)
   let confirmRelease = $state(false)
   /** Espécie de destino esperando confirmação: evoluir sorteia os golpes de novo. */
   let confirmEvolve = $state<number | null>(null)
@@ -91,11 +94,18 @@
   $effect(() => {
     const current = mon.id
     nickname = mon.nickname ?? ''
+    editingNick = false
     doses = 1
     confirmRelease = false
     confirmEvolve = null
     swapping = null
     void current
+  })
+
+  $effect(() => {
+    if (!editingNick || !nickInput) return
+    nickInput.focus()
+    nickInput.select()
   })
 
   const natureHint = $derived(formatNature(mon.nature))
@@ -246,8 +256,19 @@
     confirmRelease = true
   }
 
+  function startNick() {
+    nickname = mon.nickname ?? ''
+    editingNick = true
+  }
+
+  function cancelNick() {
+    nickname = mon.nickname ?? ''
+    editingNick = false
+  }
+
   async function saveNickname() {
-    await send(`/api/pokemon/${mon.id}`, { nickname }, 'PATCH')
+    const ok = await send(`/api/pokemon/${mon.id}`, { nickname }, 'PATCH')
+    if (ok) editingNick = false
   }
 
   async function toggleFavorite() {
@@ -348,28 +369,94 @@
       </div>
     {/if}
     <div class="head">
-      <div class="portrait" class:popping>
-        <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
+      <div class="title-row">
+        {#if editingNick}
+          <form
+            class="name-edit"
+            onsubmit={(event) => {
+              event.preventDefault()
+              void saveNickname()
+            }}
+          >
+            <input
+              class="field nick-input"
+              bind:this={nickInput}
+              bind:value={nickname}
+              maxlength="12"
+              autocomplete="off"
+              aria-label="Apelido"
+              placeholder={mon.displayName}
+              disabled={pending}
+            />
+            <button type="submit" class="icon-btn" aria-label="Confirmar apelido" disabled={pending}>✓</button>
+            <button type="button" class="icon-btn" aria-label="Cancelar" disabled={pending} onclick={cancelNick}>✕</button>
+          </form>
+        {:else}
+          <h2>
+            <span class="name-text">{mon.nickname ?? mon.displayName}</span>
+            {#if mon.isShiny}<span class="shiny" title="Shiny">★</span>{/if}
+            <button type="button" class="icon-btn" aria-label="Editar apelido" disabled={pending} onclick={startNick}>✎</button>
+          </h2>
+        {/if}
+        <button
+          type="button"
+          class="icon-btn star"
+          aria-label={mon.isFavorite ? 'Remover dos favoritos' : 'Marcar como favorito'}
+          aria-pressed={mon.isFavorite}
+          disabled={pending}
+          onclick={() => void toggleFavorite()}
+        >
+          <!-- 24×24 nativo (Pixelarticons): escala só em múltiplo inteiro pra não amassar o pixel. -->
+          <svg class="pixel-star" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" shape-rendering="crispEdges">
+            {#if mon.isFavorite}
+              <rect x="11" y="1" width="2" height="1" />
+              <rect x="11" y="2" width="2" height="1" />
+              <rect x="9" y="3" width="6" height="4" />
+              <rect x="1" y="7" width="22" height="4" />
+              <rect x="3" y="11" width="18" height="2" />
+              <rect x="5" y="13" width="14" height="3" />
+              <rect x="3" y="16" width="18" height="2" />
+              <rect x="3" y="18" width="7" height="2" />
+              <rect x="14" y="18" width="7" height="2" />
+              <rect x="3" y="20" width="5" height="2" />
+              <rect x="16" y="20" width="5" height="2" />
+            {:else}
+              <path
+                d="M5 20H8V22H3V16H5V20ZM21 22H16V20H19V16H21V22ZM10 20H8V18H10V20ZM16 20H14V18H16V20ZM14 18H10V16H14V18ZM7 16H5V13H7V16ZM19 16H17V13H19V16ZM5 13H3V11H5V13ZM21 13H19V11H21V13ZM9 9H3V11H1V7H9V9ZM23 11H21V9H15V7H23V11ZM11 7H9V3H11V7ZM15 7H13V3H15V7ZM13 3H11V1H13V3Z"
+              />
+            {/if}
+          </svg>
+        </button>
+        <button type="button" class="btn close" aria-label="Fechar" onclick={onClose}>✕</button>
       </div>
-      <div class="info">
-        <h2>
-          {mon.nickname ?? mon.displayName}
-          {#if mon.isShiny}<span class="shiny" title="Shiny">★</span>{/if}
-        </h2>
-        <p class="lv">Nv {mon.level}</p>
-        <div class="xp">
-          {#if mon.xpToNext === null}
-            <span>XP no máximo</span>
-          {:else}
-            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={mon.xpToNext} aria-valuenow={mon.xp}>
-              <span style:width="{Math.min(100, (mon.xp / mon.xpToNext) * 100)}%"></span>
-            </div>
-            <small>XP {mon.xp}/{mon.xpToNext}</small>
-          {/if}
+      <div class="body-row">
+        <div class="portrait" class:popping>
+          <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
         </div>
-        <p class="candy">Linha {chainCandies} · genérico {generic}</p>
+        <div class="meta">
+          <p class="lv">Nv {mon.level}</p>
+          <div class="xp">
+            {#if mon.xpToNext === null}
+              <span>XP no máximo</span>
+            {:else}
+              <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={mon.xpToNext} aria-valuenow={mon.xp}>
+                <span style:width="{Math.min(100, (mon.xp / mon.xpToNext) * 100)}%"></span>
+              </div>
+              <small>XP {mon.xp}/{mon.xpToNext}</small>
+            {/if}
+          </div>
+          <div class="candies" aria-label="Doces">
+            <span class="candy chain" title="Doces da linha evolutiva">
+              <small>Lin</small>
+              <strong>{chainCandies}</strong>
+            </span>
+            <span class="candy generic" title="Doces genéricos">
+              <small>Gen</small>
+              <strong>{generic}</strong>
+            </span>
+          </div>
+        </div>
       </div>
-      <button type="button" class="btn close" aria-label="Fechar" onclick={onClose}>✕</button>
     </div>
 
     {#if message}<p class="alert" role="alert">{message}</p>{/if}
@@ -393,20 +480,6 @@
 
   <div class="scroll" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
     {#if tab === 'perfil'}
-    <form
-      class="nick"
-      onsubmit={(event) => {
-        event.preventDefault()
-        void saveNickname()
-      }}
-    >
-      <input class="field" bind:value={nickname} maxlength="12" autocomplete="off" aria-label="Apelido" placeholder="Apelido" />
-      <button type="submit" class="btn" disabled={pending}>Salvar</button>
-      <button type="button" class="btn" aria-pressed={mon.isFavorite} disabled={pending} onclick={() => void toggleFavorite()}>
-        {mon.isFavorite ? '★ Favorito' : 'Favorito'}
-      </button>
-    </form>
-
     <div class="block traits">
       <h3>Traços</h3>
       <p class="hint">IVs {ivStars} · {mon.ivRating.percent}%</p>
@@ -417,14 +490,7 @@
           <span class="muted"> · sem efeito em combate por enquanto</span>
         {/if}
       </p>
-      <ul class="stats">
-        <li><span>HP</span><strong>{mon.stats.hp}</strong></li>
-        <li><span>Atq</span><strong>{mon.stats.attack}</strong></li>
-        <li><span>Def</span><strong>{mon.stats.defense}</strong></li>
-        <li><span>AtqE</span><strong>{mon.stats.spAttack}</strong></li>
-        <li><span>DefE</span><strong>{mon.stats.spDefense}</strong></li>
-        <li><span>Vel</span><strong>{mon.stats.speed}</strong></li>
-      </ul>
+      <StatTable stats={mon.stats} />
     </div>
 
     {:else if tab === 'golpes'}
@@ -684,26 +750,48 @@
     box-sizing: border-box;
     min-width: 0;
     min-height: 44px;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font-weight: 600;
     cursor: pointer;
     touch-action: manipulation;
   }
 
   .tab[aria-selected='true'] {
-    border-image: url('/ui/selected.png') 6 fill / 8px round;
+    border-color: var(--selected);
+    background: #e8f0ff;
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -2px 0 var(--selected);
     font-weight: 700;
   }
 
   .head {
-    position: relative;
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .title-row h2,
+  .title-row .name-edit {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .body-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.75rem;
     align-items: center;
-    padding-right: 3.25rem;
+    min-width: 0;
   }
 
   .portrait {
@@ -711,8 +799,9 @@
     place-items: center;
     width: 88px;
     height: 88px;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
   }
 
   .portrait.popping img {
@@ -735,7 +824,7 @@
     max-height: 96px;
   }
 
-  .info {
+  .meta {
     display: grid;
     gap: 0.2rem;
     min-width: 0;
@@ -747,10 +836,75 @@
   }
 
   h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
     font-size: 1.25rem;
+  }
+
+  .name-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .name-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .nick-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    min-height: 36px;
+    padding: 0.2rem 0.4rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .icon-btn {
+    flex: none;
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .icon-btn.star {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Contorno = Pixelarticons (MIT); cheia = mesmo traço. Sempre 24 CSS px (= grade). */
+  .pixel-star {
+    display: block;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+    overflow: visible;
   }
 
   h3 {
@@ -766,16 +920,63 @@
   }
 
   .lv,
-  .candy,
   .hint,
   .preview {
     font-weight: 600;
   }
 
-  .candy,
   .hint,
   .preview {
     font-size: 16px;
+  }
+
+  .candies {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.15rem;
+  }
+
+  .candy {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 0.25rem;
+    box-sizing: border-box;
+    width: calc(3ch + 3ch + 0.25rem + 0.8rem + 4px);
+    min-height: 28px;
+    padding: 0.15rem 0.4rem;
+    border: 2px solid var(--panel-edge);
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .candy small {
+    width: 3ch;
+    flex: none;
+    font-size: 0.72rem;
+    font-weight: 700;
+    opacity: 0.9;
+  }
+
+  .candy strong {
+    width: 3ch;
+    flex: none;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .candy.chain {
+    background: #f8d0e8;
+    box-shadow: inset 0 -2px 0 #c878a0;
+  }
+
+  .candy.generic {
+    background: #d0e0f8;
+    box-shadow: inset 0 -2px 0 #7890c8;
   }
 
   .xp {
@@ -801,13 +1002,15 @@
   }
 
   .close {
-    position: absolute;
-    top: 0;
-    right: 0;
+    flex: none;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
     padding: 0;
+    font-size: 0.95rem;
   }
 
-  .nick,
   .coins,
   .stepper,
   .block,
@@ -831,13 +1034,11 @@
   }
 
   .dock .btn,
-  .block .btn,
-  .nick .btn {
+  .block .btn {
     width: 100%;
   }
 
   .danger {
-    border-image-source: url('/ui/panel.png');
     color: var(--danger);
   }
 
@@ -852,25 +1053,12 @@
     opacity: 0.75;
   }
 
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.35rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .traits {
+    text-align: center;
   }
 
-  .stats li {
-    display: grid;
-    gap: 0.1rem;
-    min-width: 0;
-  }
-
-  .stats span {
-    font-size: 14px;
-    font-weight: 700;
-    opacity: 0.8;
+  .traits .hint {
+    justify-self: center;
   }
 
   .move {

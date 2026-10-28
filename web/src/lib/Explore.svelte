@@ -886,6 +886,8 @@
     gap: 0.5rem;
     min-height: 0;
     overflow: auto;
+    padding-right: 10px;
+    scrollbar-gutter: stable;
   }
 
   .sheet {
@@ -963,8 +965,8 @@
     min-width: 0;
     min-height: 44px;
     padding: 0 0.5rem;
-    border: var(--px) solid var(--ink-soft);
-    background: #fffaf0;
+    border: var(--px) solid var(--panel-edge);
+    background: var(--panel-face);
     color: var(--ink);
     font: inherit;
   }
@@ -1122,9 +1124,9 @@
     width: 100%;
     min-height: 48px;
     padding: 0 0.6rem;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font-weight: 600;
     text-align: left;
     cursor: pointer;
@@ -1132,7 +1134,11 @@
   }
 
   .member.on {
-    border-image: url('/ui/selected.png') 6 fill / 8px round;
+    border-color: var(--selected);
+    background: #e8f0ff;
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -2px 0 var(--selected);
   }
 
   .member:disabled {
@@ -1167,9 +1173,12 @@
   }
 
   .auto-pref.on {
-    border-image-source: url('/ui/button-primary.png');
-    color: #f3ffe8;
-    text-shadow: 0 var(--px) 0 #3f7a2a;
+    background: var(--primary);
+    color: #fff;
+    text-shadow: 0 var(--px) 0 var(--primary-shade);
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -3px 0 var(--primary-shade);
   }
 
   /* Poké Ball quicando dentro do botão enquanto espera (sprite-wait, app.css). */

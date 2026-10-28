@@ -222,6 +222,8 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    padding-right: 10px;
+    scrollbar-gutter: stable;
   }
 
   .cards,
@@ -257,8 +259,9 @@
     place-items: center;
     width: 72px;
     height: 72px;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
   }
 
   .portrait img {
@@ -315,7 +318,7 @@
 
   .bar.clock span {
     background: var(--accent);
-    box-shadow: inset 0 calc(var(--px) * -2) 0 #c79a00, inset 0 0 0 var(--px) var(--ink);
+    box-shadow: inset 0 calc(var(--px) * -2) 0 var(--accent-shade), inset 0 0 0 var(--px) var(--ink);
   }
 
   .xp small {
@@ -328,10 +331,10 @@
     gap: 0.5rem;
     align-items: center;
     min-height: 48px;
-    padding: 0.25rem 0.4rem;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    padding: 0.35rem 0.5rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font: inherit;
     font-weight: 700;
     color: inherit;

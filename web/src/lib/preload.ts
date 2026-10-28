@@ -1,16 +1,9 @@
 import type { GameState } from './api'
 import { gardenSprite, loadPmd, loadPmdBattle, showdownSrc } from './sprites'
 
-// Arte da abertura (App.svelte): o que aparece em quase toda tela. As molduras
-// entram por border-image no CSS; sem elas, painéis e botões aparecem crus.
-const uiArt = [
-  '/ui/panel.png',
-  '/ui/inlay.png',
-  '/ui/selected.png',
-  '/ui/button-pressed.png',
-  '/ui/button-primary.png',
-  '/ui/button-primary-pressed.png',
-]
+// Arte da abertura (App.svelte). Molduras de painel/botão agora são CSS
+// (tema clássico); esta lista fica só com o que ainda é PNG.
+const uiArt: string[] = []
 // Os ícones das berries também saem de game.berries; esta lista cobre a tela
 // de login, que ainda não tem o estado.
 const itemArt = ['oran', 'pinap', 'razz', 'nanab', 'lum'].map((key) => `/sprites/items/${key}-berry.png`)

@@ -1441,9 +1441,12 @@
   }
 
   .auto.on {
-    border-image-source: url('/ui/button-primary.png');
-    color: #f3ffe8;
-    text-shadow: 0 var(--px) 0 #3f7a2a;
+    background: var(--primary);
+    color: #fff;
+    text-shadow: 0 var(--px) 0 var(--primary-shade);
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -3px 0 var(--primary-shade);
   }
 
   .arena {
@@ -1762,8 +1765,8 @@
     width: 9.5rem;
     box-sizing: border-box;
     padding: 0.3rem 0.45rem;
-    background: #f3e7c6e6;
-    box-shadow: inset 0 0 0 var(--px) var(--ink-soft);
+    background: #f8f8f8e6;
+    box-shadow: inset 0 0 0 var(--px) var(--panel-edge);
   }
 
   .wild-plate {
@@ -2010,8 +2013,12 @@
   }
 
   .act.charged.ready {
-    border-image-source: url('/ui/button-primary.png');
+    background: var(--primary);
     color: #fff;
+    text-shadow: 0 var(--px) 0 var(--primary-shade);
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -3px 0 var(--primary-shade);
     animation: ready-pulse 0.8s steps(2, jump-none) infinite alternate;
   }
 
@@ -2096,9 +2103,9 @@
     min-height: 64px;
     padding: 0 0.6rem;
     align-content: center;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font: inherit;
     font-weight: 600;
     text-align: left;
@@ -2109,7 +2116,11 @@
   }
 
   .chip.on {
-    border-image: url('/ui/selected.png') 6 fill / 8px round;
+    border-color: var(--selected);
+    background: #e8f0ff;
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -2px 0 var(--selected);
   }
 
   .chip:disabled {

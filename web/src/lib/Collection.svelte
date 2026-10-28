@@ -42,6 +42,7 @@
   const initial = readPrefs()
   let filter = $state<Filter>(initial.filter)
   let sort = $state<Sort>(initial.sort)
+  let sortOpen = $state(false)
   let query = $state('')
   let selecting = $state(false)
   let picked = $state<number[]>([])
@@ -49,6 +50,8 @@
   let confirm = $state(false)
   let message = $state('')
   let pending = $state(false)
+
+  const sortLabel = $derived(sorts.find((item) => item.id === sort)?.label ?? 'Recentes')
 
   const counts = $derived.by(() => {
     const map = new Map<number, number>()
@@ -171,14 +174,46 @@
         </button>
       {/each}
     </div>
-    <label class="sort">
-      Ordem
-      <select class="field" bind:value={sort}>
-        {#each sorts as item (item.id)}
-          <option value={item.id}>{item.label}</option>
-        {/each}
-      </select>
-    </label>
+    <!-- Menu próprio: o <select> nativo ignora a fonte e a lista aberta sai do tema. -->
+    <div class="sort">
+      <span class="sort-label" id="sort-label">Ordem</span>
+      <div class="sort-menu">
+        <button
+          type="button"
+          class="field sort-btn"
+          aria-haspopup="listbox"
+          aria-expanded={sortOpen}
+          aria-labelledby="sort-label"
+          onclick={() => (sortOpen = !sortOpen)}
+        >
+          <span class="sort-name">{sortLabel}</span>
+          <svg class="caret" viewBox="0 0 5 3" width="10" height="6" aria-hidden="true">
+            <rect x="0" y="0" width="5" height="1" /><rect x="1" y="1" width="3" height="1" /><rect x="2" y="2" width="1" height="1" />
+          </svg>
+        </button>
+        {#if sortOpen}
+          <button type="button" class="sort-dismiss" aria-label="Fechar ordem" onclick={() => (sortOpen = false)}></button>
+          <ul class="sort-list" role="listbox" aria-labelledby="sort-label">
+            {#each sorts as item (item.id)}
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={sort === item.id}
+                  class:on={sort === item.id}
+                  onclick={() => {
+                    sort = item.id
+                    sortOpen = false
+                  }}
+                >
+                  {item.label}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    </div>
     {#if visible.length === 0}
       <p class="hint">Ninguém com esse filtro.</p>
     {:else}
@@ -244,6 +279,9 @@
     min-height: 0;
     min-width: 0;
     overflow: auto;
+    /* Faixa à direita só pra barra — cards não ficam por baixo. */
+    padding-right: 12px;
+    scrollbar-gutter: stable;
   }
 
   .chips {
@@ -265,6 +303,93 @@
     font-weight: 700;
   }
 
+  .sort-label {
+    font-weight: 700;
+  }
+
+  .sort-menu {
+    position: relative;
+    min-width: 0;
+  }
+
+  .sort-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    width: 100%;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sort-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .caret {
+    flex: none;
+    fill: currentColor;
+    shape-rendering: crispEdges;
+  }
+
+  .sort-dismiss {
+    position: fixed;
+    z-index: 19;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: default;
+  }
+
+  .sort-list {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.2rem);
+    left: 0;
+    right: 0;
+    display: grid;
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    border: 2px solid var(--panel-edge);
+    background: var(--panel-face);
+    box-shadow:
+      inset 0 0 0 1px var(--panel-shade),
+      0 var(--px) 0 #0003;
+  }
+
+  .sort-list button {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 0.5rem;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sort-list button:hover,
+  .sort-list button:focus-visible {
+    outline: none;
+    background: #00000014;
+  }
+
+  .sort-list button.on {
+    background: #e8f0ff;
+    box-shadow: inset 3px 0 0 var(--selected);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -277,10 +402,10 @@
     gap: 0.1rem;
     min-width: 0;
     min-height: 44px;
-    padding: 0.25rem;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    padding: 0.35rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font: inherit;
     font-weight: 700;
     color: inherit;
@@ -289,8 +414,11 @@
   }
 
   .card.on {
-    border-image-source: url('/ui/selected.png');
-    border-image-slice: 6 fill;
+    border-color: var(--selected);
+    background: #e8f0ff;
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -2px 0 var(--selected);
   }
 
   .card img {

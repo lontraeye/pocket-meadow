@@ -232,10 +232,10 @@
     justify-items: center;
     gap: 0.1rem;
     min-width: 0;
-    padding: 0 0 0.15rem;
-    border: 8px solid transparent;
-    border-image: url('/ui/inlay.png') 4 fill / 8px round;
-    background: none;
+    padding: 0.25rem 0 0.3rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    box-shadow: inset 0 2px 0 var(--inlay-shade);
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
@@ -243,7 +243,11 @@
   }
 
   .starter.selected {
-    border-image: url('/ui/selected.png') 6 fill / 8px round;
+    border-color: var(--selected);
+    background: #e8f0ff;
+    box-shadow:
+      inset 0 0 0 2px #78a8f0,
+      inset 0 -2px 0 var(--selected);
   }
 
   .starter img {
