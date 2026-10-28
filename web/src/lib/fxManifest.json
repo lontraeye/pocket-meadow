@@ -1,0 +1,218 @@
+{
+  "source": "PVFX Foundry 0.10.0 (CC0, Pixel VFX Studio)",
+  "frameSize": 96,
+  "columns": 5,
+  "frameMs": 50,
+  "effects": {
+    "crescent-slash": {
+      "frames": 10,
+      "loop": false,
+      "pivot": [
+        48,
+        50
+      ],
+      "contact": 0,
+      "peak": 2
+    },
+    "warm-explosion": {
+      "frames": 15,
+      "loop": false,
+      "pivot": [
+        48,
+        58
+      ],
+      "contact": 0,
+      "peak": 4
+    },
+    "splash-crown": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        70
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "electric-impact": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        54
+      ],
+      "contact": 0,
+      "peak": 1
+    },
+    "leaf-gust": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        62
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "frost-nova": {
+      "frames": 13,
+      "loop": false,
+      "pivot": [
+        48,
+        61
+      ],
+      "contact": 2,
+      "peak": 5
+    },
+    "solar-shrapnel": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        56
+      ],
+      "contact": 2,
+      "peak": 3
+    },
+    "acid-splash": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        64
+      ],
+      "contact": 3,
+      "peak": 6
+    },
+    "earth-rupture": {
+      "frames": 20,
+      "loop": false,
+      "pivot": [
+        48,
+        71
+      ],
+      "contact": 4,
+      "peak": 9
+    },
+    "resonant-break": {
+      "frames": 34,
+      "loop": false,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "mercury-molt": {
+      "frames": 32,
+      "loop": false,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "void-implosion": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        50
+      ],
+      "contact": 3,
+      "peak": 7
+    },
+    "spectral-bloom": {
+      "frames": 16,
+      "loop": false,
+      "pivot": [
+        48,
+        64
+      ],
+      "contact": null,
+      "peak": 5
+    },
+    "smoke-puff": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "ferrospine": {
+      "frames": 40,
+      "loop": true,
+      "pivot": [
+        48,
+        75
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "prism-loom": {
+      "frames": 60,
+      "loop": true,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "focus-charge": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "radiant-heal": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        48,
+        67
+      ],
+      "contact": 3,
+      "peak": 7
+    },
+    "venom-ward": {
+      "frames": 16,
+      "loop": true,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "choir-moths": {
+      "frames": 60,
+      "loop": true,
+      "pivot": [
+        48,
+        48
+      ],
+      "contact": null,
+      "peak": null
+    },
+    "ember-jet": {
+      "frames": 14,
+      "loop": false,
+      "pivot": [
+        24,
+        56
+      ],
+      "contact": null,
+      "peak": 4
+    }
+  }
+}

@@ -2,6 +2,22 @@
   import { onMount, untrack } from 'svelte'
   import { api, type BattleOutcome, type BattleStart, type OwnedPokemon, type PendingEncounter } from './api'
   import { clearSavedBattle, saveBattleProgress } from './battlePersist'
+  import {
+    FX_FLYING_RATE,
+    FX_FRAME_SIZE,
+    FX_MAX_ON_SCREEN,
+    FX_SCALE_CHARGED,
+    FX_SCALE_FAST,
+    FX_SCALE_STATUS,
+    FX_STATUS_PULSE_MS,
+    fxContactMs,
+    fxForMove,
+    fxHitFrameCap,
+    fxMeta,
+    loadBattleFx,
+    type FxId,
+  } from './fx'
+  import FxSprite from './FxSprite.svelte'
   import { prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import {
@@ -19,7 +35,16 @@
     type SimFighter,
   } from './sim'
   import { play } from './sound'
-  import { battleAnimChoice, gardenSprite, pmdAnim, pmdHasAnim, showdownSrc, type PmdAnimName } from './sprites'
+  import {
+    battleAnimChoice,
+    gardenSprite,
+    pmdAnim,
+    pmdBody,
+    pmdHasAnim,
+    showdownSrc,
+    type PmdAnimName,
+    type SpriteBody,
+  } from './sprites'
   import { formatCountdown } from './time'
 
   // Luta ao vivo (8.3). A tela re-simula `runBattle({ untilMs })` com os inputs
@@ -28,7 +53,8 @@
   // snapshot continua valendo (HP e energia só mudam em eventos); o
   // requestAnimationFrame cuida só do relógio da interface (cooldowns, anims).
 
-  // Juice visual (parte 1): só transform/opacity; não atrasa a simulação.
+  // Juice visual (parte 1 + 2): só transform/opacity/background-position;
+  // não atrasa a simulação.
   const HIT_FLASH_MS = 120
   const SHAKE_FAST_MS = 150
   const SHAKE_CHARGED_MS = 220
@@ -40,6 +66,35 @@
   const HP_TRAIL_HOLD_MS = 90
   const HP_TRAIL_MS = 280
   const FLOAT_MS = 1000
+  // Voo da bola dos golpes especiais (o impacto espera ela chegar).
+  const PROJ_FAST_MS = 260
+  const PROJ_CHARGED_MS = 380
+  const PROJ_TRAIL_MS = 35
+  // Choque da paralisia: quanto dura cada pulso (3 piscadas).
+  const ZAP_MS = 360
+  // Evento mais velho que isso (em ms de luta) aparece sem efeito: a tela só
+  // estava atrasada (aba em segundo plano), não vale repetir a rajada toda.
+  const FX_STALE_MS = 700
+  // Pivot do efeito (y no quadro de 96) a partir do qual ele é "de chão".
+  const FX_GROUND_PIVOT_MIN = 54
+  // Raiozinho em pixel art 5×8 (X = aceso).
+  const BOLT_PIXELS = ['..XXX', '.XXX.', '.XX..', 'XXXX.', '..XX.', '.XX..', '.X...', 'X....'].flatMap(
+    (line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])),
+  )
+  // Bola em pixel art 8×8: d = contorno escuro, m = cor do tipo, l = clara,
+  // w = brilho branco. As cores saem de --c (TYPE_GLOW) no CSS.
+  const ORB_PIXELS = [
+    '..dddd..',
+    '.dmmmmd.',
+    'dmmllmmd',
+    'dmlwwlmd',
+    'dmlwwlmd',
+    'dmmllmmd',
+    '.dmmmmd.',
+    '..dddd..',
+  ].flatMap((line, y) =>
+    [...line].flatMap((tone, x) => (tone === '.' ? [] : [{ x, y, tone }])),
+  )
 
   const TYPE_GLOW: Record<string, string> = {
     normal: '#a8a878',
@@ -89,6 +144,7 @@
 
   type Pose = { id: number; start: number; steps: Step[] }
   type Step = { anim: PmdAnimName | null; css: 'lunge' | 'hurt' | 'faint' | null; ms: number }
+  type FloaterTone = 'hit' | 'burn' | 'poison' | 'recoil' | 'confusion' | 'heal'
   type Floater = {
     id: number
     side: 'player' | 'wild'
@@ -98,8 +154,48 @@
     charged?: boolean
     effectiveness?: number
     note?: string
+    tone?: FloaterTone
   }
   type ChargedFx = { name: string; color: string; side: 'player' | 'wild'; until: number }
+  type LiveFx = {
+    key: string
+    uid: number
+    fxId: FxId
+    side: 'player' | 'wild'
+    place: 'body' | 'head' | 'attacker'
+    scale: 1 | 2
+    loop: boolean
+    sticky: boolean
+    rate: number
+    maxFrames: number | null
+    born: number
+  }
+  type PendingHit = {
+    at: number
+    side: 'player' | 'wild'
+    damage: number
+    effectiveness: number
+    charged: boolean
+    critical: boolean
+  }
+  /** Efeito de impacto que só aparece quando o projétil chega. */
+  type PendingFx = {
+    at: number
+    side: 'player' | 'wild'
+    fxId: FxId
+    scale: 1 | 2
+    rate: number
+    maxFrames: number | null
+  }
+  /** Bola na cor do tipo, do atacante até o alvo (golpes especiais). */
+  type Projectile = {
+    uid: number
+    from: { x: number; y: number }
+    to: { x: number; y: number }
+    ms: number
+    color: string
+    big: boolean
+  }
   type Status = 'live' | 'finishing' | 'offline'
 
   const { setup, seed, timeLimit, encounterId } = untrack(() => ({
@@ -117,6 +213,7 @@
   let status = $state<Status>('live')
   let clock = $state(performance.now())
   let floaters = $state.raw<Floater[]>([])
+  let liveFx = $state.raw<LiveFx[]>([])
   let allyPose = $state.raw<Pose | null>(null)
   let wildPose = $state.raw<Pose | null>(null)
   // Instante (ms de luta) do último golpe/entrada do jogador: base da barra de espera.
@@ -132,10 +229,19 @@
 
   let seen = 0
   let primed = false
-  let lastSimAt = 0
   let nextEventAt = 0
   let poseId = 0
   let floaterId = 0
+  let fxUid = 0
+  let pendingHits: PendingHit[] = []
+  let pendingFx: PendingFx[] = []
+  let projectiles = $state.raw<Projectile[]>([])
+  let arenaEl = $state<HTMLDivElement | null>(null)
+  let wildSlotEl = $state<HTMLDivElement | null>(null)
+  let allySlotEl = $state<HTMLDivElement | null>(null)
+  let lastBurnPulse = { player: 0, wild: 0 }
+  let lastParaPulse = { player: 0, wild: 0 }
+  let zapUntil = $state({ player: 0, wild: 0 })
   let autoAt: number | null = null
   let autoFor = -1
   let frame = 0
@@ -203,6 +309,38 @@
   const allyLook = $derived(gardenSprite(active.speciesId, allyShiny))
   const wildLook = $derived(gardenSprite(encounter.speciesId, encounter.isShiny))
 
+  // Corpo medido de cada lado (escala 1), para alinhar os efeitos ao sprite.
+  // O seu Pokémon olha ↗ (linha 3) e o selvagem ↙ (linha 7), como nos PmdSprite.
+  const spriteScale = 2
+  let wildBody = $state<SpriteBody | null>(null)
+  let allyBody = $state<SpriteBody | null>(null)
+  $effect(() => {
+    const look = wildLook
+    const speciesId = encounter.speciesId
+    wildBody = null
+    if (look.kind !== 'pmd') return
+    let alive = true
+    void pmdBody(speciesId, look.shinySheet, 7).then((body) => {
+      if (alive) wildBody = body
+    })
+    return () => {
+      alive = false
+    }
+  })
+  $effect(() => {
+    const look = allyLook
+    const speciesId = active.speciesId
+    allyBody = null
+    if (look.kind !== 'pmd') return
+    let alive = true
+    void pmdBody(speciesId, look.shinySheet, 3).then((body) => {
+      if (alive) allyBody = body
+    })
+    return () => {
+      alive = false
+    }
+  })
+
   const idleTime = $derived(reduced ? 0 : clock)
   const allyView = $derived(poseView(allyPose, clock, idleTime))
   const wildView = $derived(poseView(wildPose, clock, idleTime))
@@ -224,12 +362,13 @@
   // ---- Simulação ao vivo -------------------------------------------------
 
   function commit(next: BattleResult, e: number) {
-    const skipFx = !primed || e - lastSimAt > 700 || next.log.length < seen
-    if (skipFx) {
+    // Primeira foto (retomada) ou log menor que o visto: só sincroniza, sem efeitos.
+    const resync = !primed || next.log.length < seen
+    if (resync) {
       allyPose = null
       wildPose = null
     }
-    const startAt = skipFx ? next.log.length : seen
+    const startAt = resync ? next.log.length : seen
     let slot = 0
     let from = 0
     for (let i = 0; i < next.log.length; i += 1) {
@@ -240,11 +379,16 @@
         if (i >= startAt) allyPose = null
       }
       if (event.kind === 'move' && event.side === 'player') from = event.t
-      if (i >= startAt) react(event, slot, next.snapshot.result === 'win' || next.snapshot.result === 'lose')
+      // Só pula o efeito de evento velho de verdade (a aba ficou em segundo
+      // plano, por exemplo). Antes pulava tudo quando a última re-simulação
+      // tinha mais de 700 ms, e isso acontecia no meio da luta, entre um golpe
+      // e outro: a vida descia, mas o efeito, o número e o flash não saíam.
+      if (i >= startAt && event.t >= e - FX_STALE_MS) {
+        react(event, slot, next.snapshot.result === 'win' || next.snapshot.result === 'lose')
+      }
     }
     seen = next.log.length
     primed = true
-    lastSimAt = e
     cdFrom = from
     sim = next
     nextEventAt = nextEventFor(next, e)
@@ -355,7 +499,22 @@
     if (floaters.length > 0 && floaters.some((f) => now - f.born > FLOAT_MS)) {
       floaters = floaters.filter((f) => now - f.born <= FLOAT_MS)
     }
+    if (pendingHits.length > 0) {
+      const due = pendingHits.filter((hit) => now >= hit.at)
+      if (due.length > 0) {
+        for (const hit of due) applyHitJuice(hit)
+        pendingHits = pendingHits.filter((hit) => now < hit.at)
+      }
+    }
+    if (pendingFx.length > 0) {
+      const due = pendingFx.filter((item) => now >= item.at)
+      if (due.length > 0) {
+        for (const item of due) spawnBurstFx(item.side, item.fxId, item)
+        pendingFx = pendingFx.filter((item) => now < item.at)
+      }
+    }
     if (chargedFx && now >= chargedFx.until) chargedFx = null
+    pulseStatusFx(now)
     if (status !== 'live') return
     const e = elapsedAt(now)
     if (e >= nextEventAt) resim(e)
@@ -365,11 +524,52 @@
 
   onMount(() => {
     persist()
+    void loadBattleFx()
     frame = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(frame)
       window.clearTimeout(flashClear)
     }
+  })
+
+  $effect(() => {
+    // Só depende dos status do snapshot; bursts ficam de fora do tracking.
+    const want: { key: string; side: 'player' | 'wild'; fxId: FxId; place: 'body' | 'head' }[] = []
+    if (!reduced) {
+      if (!snap.wild.fainted && snap.wild.status === 'poison') {
+        want.push({ key: 'status-poison-wild', side: 'wild', fxId: 'venom-ward', place: 'body' })
+      }
+      if (!snap.wild.fainted && snap.wild.confused) {
+        want.push({ key: 'status-conf-wild', side: 'wild', fxId: 'choir-moths', place: 'head' })
+      }
+      if (!active.fainted && active.status === 'poison') {
+        want.push({ key: 'status-poison-player', side: 'player', fxId: 'venom-ward', place: 'body' })
+      }
+      if (!active.fainted && active.confused) {
+        want.push({ key: 'status-conf-player', side: 'player', fxId: 'choir-moths', place: 'head' })
+      }
+    }
+    const bursts = untrack(() => liveFx.filter((fx) => !fx.sticky))
+    const prevSticky = untrack(() => liveFx.filter((fx) => fx.sticky))
+    const stickies: LiveFx[] = want.map((item) => {
+      const kept = prevSticky.find((fx) => fx.key === item.key)
+      if (kept) return kept
+      fxUid += 1
+      return {
+        key: item.key,
+        uid: fxUid,
+        fxId: item.fxId,
+        side: item.side,
+        place: item.place,
+        scale: FX_SCALE_STATUS,
+        loop: true,
+        sticky: true,
+        rate: 1,
+        maxFrames: null,
+        born: performance.now(),
+      }
+    })
+    liveFx = [...bursts, ...stickies].slice(-FX_MAX_ON_SCREEN)
   })
 
   // ---- Fim da luta -------------------------------------------------------
@@ -435,13 +635,33 @@
       const defenderSide = event.side === 'player' ? 'wild' : 'player'
       const charged = event.move === 'charged'
       const crit = event.critical === true
+      const move = charged ? attacker.chargedMove : attacker.fastMove
       if (event.side === 'player') play(charged ? 'charged' : 'fast')
       if (charged) showCharged(attacker, event.side, event.moveName)
       poseFor(event.side, attackSteps(attacker, event.side, event.move))
-      if (event.damage > 0) {
-        play('hit')
-        bumpJuice(defenderSide, charged || crit)
-        spawnDamage(defenderSide, event.damage, event.effectiveness, charged || crit, crit)
+      if (event.damage > 0 && move) {
+        const fxId = fxForMove(move.type, move.damageClass, event.move)
+        const rate = move.type === 'flying' ? FX_FLYING_RATE : 1
+        // Golpe especial: a bola voa até o alvo e o impacto (efeito, número,
+        // flash) espera ela chegar. O resultado da luta não muda: é só visual.
+        const flight = move.damageClass === 'special' ? launchProjectile(event.side, move.type, charged) : 0
+        const impact = {
+          side: defenderSide,
+          fxId,
+          scale: charged ? FX_SCALE_CHARGED : FX_SCALE_FAST,
+          rate,
+          maxFrames: fxHitFrameCap(fxId),
+        } as const
+        if (flight > 0) pendingFx = [...pendingFx, { at: performance.now() + flight, ...impact }]
+        else spawnBurstFx(defenderSide, fxId, impact)
+        scheduleHit({
+          side: defenderSide,
+          damage: event.damage,
+          effectiveness: event.effectiveness,
+          charged: charged || crit,
+          critical: crit,
+          delayMs: reduced ? 0 : flight + fxContactMs(fxId),
+        })
         if (!event.fainted) {
           poseFor(
             defenderSide,
@@ -452,9 +672,23 @@
       if (event.fainted && ended) endingFaint = true
     } else if (event.kind === 'heal' || event.kind === 'drain') {
       spawnHeal(event.side, event.amount)
-    } else if (event.kind === 'status_damage' || event.kind === 'recoil' || event.kind === 'confusion_hit') {
-      spawnSoftDamage(event.side, event.damage)
+      spawnBurstFx(event.side, 'radiant-heal', { scale: FX_SCALE_FAST })
+    } else if (event.kind === 'status_damage') {
+      spawnSoftDamage(event.side, event.damage, event.status === 'burn' ? 'burn' : 'poison')
       if (event.fainted && ended) endingFaint = true
+    } else if (event.kind === 'recoil') {
+      spawnSoftDamage(event.side, event.damage, 'recoil')
+      if (event.fainted && ended) endingFaint = true
+    } else if (event.kind === 'confusion_hit') {
+      spawnSoftDamage(event.side, event.damage, 'confusion')
+      if (event.fainted && ended) endingFaint = true
+    } else if (event.kind === 'status') {
+      if (event.status === 'freeze') {
+        spawnBurstFx(event.side, 'frost-nova', {
+          scale: FX_SCALE_STATUS,
+          maxFrames: (fxMeta('frost-nova')?.peak ?? 5) + 1,
+        })
+      }
     } else if (event.kind === 'stat_change') {
       spawnStatArrow(event.side, event.stat, event.stages)
     } else if (event.kind === 'faint') {
@@ -473,6 +707,33 @@
       side,
       until: performance.now() + CHARGED_BANNER_MS,
     }
+    spawnBurstFx(side, 'focus-charge', { scale: FX_SCALE_FAST, place: 'attacker' })
+  }
+
+  function scheduleHit(input: {
+    side: 'player' | 'wild'
+    damage: number
+    effectiveness: number
+    charged: boolean
+    critical: boolean
+    delayMs: number
+  }) {
+    const hit: PendingHit = {
+      at: performance.now() + Math.max(0, input.delayMs),
+      side: input.side,
+      damage: input.damage,
+      effectiveness: input.effectiveness,
+      charged: input.charged,
+      critical: input.critical,
+    }
+    if (input.delayMs <= 0) applyHitJuice(hit)
+    else pendingHits = [...pendingHits, hit]
+  }
+
+  function applyHitJuice(hit: PendingHit) {
+    play('hit')
+    bumpJuice(hit.side, hit.charged)
+    spawnDamage(hit.side, hit.damage, hit.effectiveness, hit.charged, hit.critical)
   }
 
   function bumpJuice(side: 'player' | 'wild', charged: boolean) {
@@ -484,6 +745,128 @@
     }, HIT_FLASH_MS)
     shakeHard = charged
     shakeToken += 1
+  }
+
+  function spawnBurstFx(
+    side: 'player' | 'wild',
+    fxId: FxId,
+    opts: {
+      scale?: 1 | 2
+      rate?: number
+      maxFrames?: number | null
+      place?: 'body' | 'head' | 'attacker'
+    } = {},
+  ) {
+    if (reduced) return
+    fxUid += 1
+    const next: LiveFx = {
+      key: `burst-${fxUid}`,
+      uid: fxUid,
+      fxId,
+      side,
+      place: opts.place ?? 'body',
+      scale: opts.scale ?? FX_SCALE_FAST,
+      loop: false,
+      sticky: false,
+      rate: opts.rate ?? 1,
+      maxFrames: opts.maxFrames ?? null,
+      born: performance.now(),
+    }
+    let list = [...liveFx, next]
+    while (list.length > FX_MAX_ON_SCREEN) {
+      const drop = list.findIndex((fx) => !fx.sticky)
+      if (drop < 0) break
+      list = list.filter((_, i) => i !== drop)
+    }
+    liveFx = list
+  }
+
+  /**
+   * Onde fica o pivot do efeito, em px da arena: o meio do corpo (ou o alto da
+   * cabeça). A arena corta o que passa da borda, e um efeito 2× perto do canto
+   * (o seu Pokémon fica embaixo à esquerda, o selvagem no alto) perderia um
+   * pedaço: o quadro inteiro é empurrado para dentro, por todos os lados.
+   */
+  function fxPoint(fx: LiveFx): { x: number; y: number } | null {
+    const meta = fxMeta(fx.fxId)
+    // O pivot do PVFX diz como o efeito foi desenhado: abaixo do meio do quadro
+    // é um efeito de chão (explosão, anel, respingo saindo do solo) e vai no pé
+    // do Pokémon; no meio é um impacto e vai no meio do corpo. Pôr um efeito de
+    // chão no meio do corpo deixava a base reta dele cortando o Pokémon.
+    const grounded = (meta?.pivot[1] ?? 0) >= FX_GROUND_PIVOT_MIN
+    const point = bodyPoint(fx.side, fx.place === 'head' ? 'head' : grounded ? 'ground' : 'body')
+    if (!point || !arenaEl) return point
+    const pivotX = (meta?.pivot[0] ?? FX_FRAME_SIZE / 2) * fx.scale
+    const pivotY = (meta?.pivot[1] ?? FX_FRAME_SIZE / 2) * fx.scale
+    const size = FX_FRAME_SIZE * fx.scale
+    const fit = (at: number, pivot: number, room: number) =>
+      size >= room ? at : Math.min(room - size + pivot, Math.max(pivot, at))
+    return {
+      x: fit(point.x, pivotX, arenaEl.clientWidth),
+      y: fit(point.y, pivotY, arenaEl.clientHeight),
+    }
+  }
+
+  /** Meio do corpo (ou alto da cabeça) de um lado, em px da arena (ou null sem medir). */
+  function bodyPoint(
+    side: 'player' | 'wild',
+    place: 'body' | 'head' | 'ground' = 'body',
+  ): { x: number; y: number } | null {
+    const slot = side === 'wild' ? wildSlotEl : allySlotEl
+    if (!arenaEl || !slot) return null
+    const arena = arenaEl.getBoundingClientRect()
+    const box = slot.getBoundingClientRect()
+    const body = side === 'wild' ? wildBody : allyBody
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    const groundX = box.left + box.width / 2 - arena.left
+    const groundY = box.bottom - 0.75 * rem - arena.top
+    if (place === 'ground') return { x: groundX + (body?.centerX ?? 0) * spriteScale, y: groundY }
+    if (!body) {
+      return { x: groundX, y: box.top + box.height * (place === 'head' ? 0.18 : 0.42) - arena.top }
+    }
+    const lift = place === 'head' ? body.top + 4 : body.centerY
+    return { x: groundX + body.centerX * spriteScale, y: groundY + lift * spriteScale }
+  }
+
+  /** Solta a bola do atacante até o alvo; devolve quanto ela leva (0 = sem bola). */
+  function launchProjectile(attackerSide: 'player' | 'wild', type: string, charged: boolean): number {
+    if (reduced) return 0
+    const from = bodyPoint(attackerSide)
+    const to = bodyPoint(attackerSide === 'player' ? 'wild' : 'player')
+    if (!from || !to) return 0
+    const ms = charged ? PROJ_CHARGED_MS : PROJ_FAST_MS
+    fxUid += 1
+    const uid = fxUid
+    projectiles = [...projectiles, { uid, from, to, ms, color: TYPE_GLOW[type] ?? '#fff', big: charged }]
+    window.setTimeout(() => {
+      projectiles = projectiles.filter((item) => item.uid !== uid)
+    }, ms)
+    return ms
+  }
+
+  function dropFx(uid: number) {
+    liveFx = liveFx.filter((fx) => fx.uid !== uid)
+  }
+
+  function pulseStatusFx(now: number) {
+    if (reduced || status !== 'live') return
+    pulseSide(now, 'wild', snap.wild)
+    pulseSide(now, 'player', active)
+  }
+
+  function pulseSide(now: number, side: 'player' | 'wild', state: BattleSnapshotSide) {
+    if (state.fainted) return
+    if (state.status === 'burn' && now - lastBurnPulse[side] >= FX_STATUS_PULSE_MS) {
+      lastBurnPulse[side] = now
+      const peak = fxMeta('ember-jet')?.peak ?? 4
+      spawnBurstFx(side, 'ember-jet', { scale: FX_SCALE_STATUS, maxFrames: peak + 1 })
+    }
+    // Paralisia não é golpe: em vez do impacto elétrico, um choque próprio a
+    // cada segundo (o sprite pisca amarelo e saem dois raiozinhos).
+    if (state.status === 'paralysis' && now - lastParaPulse[side] >= FX_STATUS_PULSE_MS) {
+      lastParaPulse[side] = now
+      zapUntil = { ...zapUntil, [side]: now + ZAP_MS }
+    }
   }
 
   function spawnDamage(
@@ -509,21 +892,25 @@
         charged,
         effectiveness,
         note,
+        tone: 'hit',
       },
     ]
   }
 
-  function spawnSoftDamage(side: 'player' | 'wild', damage: number) {
+  function spawnSoftDamage(side: 'player' | 'wild', damage: number, tone: FloaterTone) {
     floaterId += 1
     floaters = [
       ...floaters,
-      { id: floaterId, side, text: `-${damage}`, heal: false, born: performance.now() },
+      { id: floaterId, side, text: `-${damage}`, heal: false, born: performance.now(), tone },
     ]
   }
 
   function spawnHeal(side: 'player' | 'wild', amount: number) {
     floaterId += 1
-    floaters = [...floaters, { id: floaterId, side, text: `+${amount}`, heal: true, born: performance.now() }]
+    floaters = [
+      ...floaters,
+      { id: floaterId, side, text: `+${amount}`, heal: true, born: performance.now(), tone: 'heal' },
+    ]
   }
 
   function spawnStatArrow(side: 'player' | 'wild', stat: string, stages: number) {
@@ -736,6 +1123,31 @@
   </span>
 {/snippet}
 
+{#snippet fxLayer()}
+  {#each liveFx as fx (fx.uid)}
+    {@const at = fxPoint(fx)}
+    <!-- Uma camada só, em coordenadas da arena: o efeito vai ao meio do corpo
+         (ou ao alto da cabeça) e, se o quadro passaria da borda (a arena corta),
+         é empurrado para dentro. -->
+    <span
+      class="fx-anchor"
+      style:left="{at?.x ?? -999}px"
+      style:top="{at?.y ?? -999}px"
+      aria-hidden="true"
+    >
+      <FxSprite
+        id={fx.fxId}
+        scale={fx.scale}
+        loop={fx.loop}
+        rate={fx.rate}
+        maxFrames={fx.maxFrames}
+        time={clock - fx.born}
+        onDone={() => dropFx(fx.uid)}
+      />
+    </span>
+  {/each}
+{/snippet}
+
 <div class="live" class:ending={endingFaint && status === 'finishing'}>
   <div class="top">
     <span class="timer" class:late={remaining < 10_000} aria-label="Tempo restante">{formatCountdown(remaining)}</span>
@@ -746,12 +1158,60 @@
 
   <div
     class="arena"
+    bind:this={arenaEl}
     class:nudge-a={!reduced && shakeToken > 0 && shakeToken % 2 === 1}
     class:nudge-b={!reduced && shakeToken > 0 && shakeToken % 2 === 0}
     aria-label="Campo de batalha"
     style:--shake-px="{shakePx}px"
     style:--shake-ms="{shakeMs}ms"
   >
+    {@render fxLayer()}
+    <!-- Choque da paralisia: dois raiozinhos em pixel art dos lados do corpo. -->
+    {#each ['wild', 'player'] as const as side (side)}
+      {#if clock < zapUntil[side]}
+        {@const at = bodyPoint(side)}
+        {#if at}
+          <span class="zap" style:left="{at.x}px" style:top="{at.y}px" aria-hidden="true">
+            {#each [0, 1] as k (k)}
+              <svg class="bolt b{k}" viewBox="0 0 5 8" shape-rendering="crispEdges">
+                {#each BOLT_PIXELS as px (`${px.x},${px.y}`)}
+                  <rect x={px.x} y={px.y} width="1" height="1" />
+                {/each}
+              </svg>
+            {/each}
+          </span>
+        {/if}
+      {/if}
+    {/each}
+    <!-- Bola do golpe especial. Cada uma das três (a bola e dois rastros que
+         saem um pouco depois) tem duas camadas: .proj anda em linha reta do
+         atacante ao alvo e .proj-arc sobe e desce, o que desenha a curva. -->
+    {#each projectiles as shot (shot.uid)}
+      {#each [2, 1, 0] as lag (lag)}
+        <div
+          class="proj"
+          class:big={shot.big}
+          aria-hidden="true"
+          style:--x0="{shot.from.x}px"
+          style:--y0="{shot.from.y}px"
+          style:--x1="{shot.to.x}px"
+          style:--y1="{shot.to.y}px"
+          style:--c={shot.color}
+          style:--ms="{shot.ms}ms"
+          style:--lag="{lag * PROJ_TRAIL_MS}ms"
+          style:--size={1 - lag * 0.25}
+          style:opacity={1 - lag * 0.3}
+        >
+          <span class="proj-arc">
+            <svg class="orb" viewBox="0 0 8 8" shape-rendering="crispEdges">
+              {#each ORB_PIXELS as px (`${px.x},${px.y}`)}
+                <rect x={px.x} y={px.y} width="1" height="1" class="o{px.tone}" />
+              {/each}
+            </svg>
+          </span>
+        </div>
+      {/each}
+    {/each}
     {#if chargedFx && !reduced}
       <div class="charged-veil" aria-hidden="true"></div>
       <p class="charged-banner" style:--glow={chargedFx.color}>{chargedFx.name}</p>
@@ -771,12 +1231,16 @@
       </span>
     </div>
 
-    <div class="slot wild" style:--dx="-22px" style:--dy="16px">
+    <div class="slot wild" bind:this={wildSlotEl} style:--dx="-22px" style:--dy="16px">
       <div
         class="body {wildView.css}"
         class:down={snap.wild.fainted}
         class:hit-flash={flashSide === 'wild'}
         class:type-glow={chargedFx?.side === 'wild'}
+        class:tone-burn={snap.wild.status === 'burn'}
+        class:tone-freeze={snap.wild.status === 'freeze'}
+        class:zapped={clock < zapUntil.wild}
+        class:asleep={snap.wild.status === 'sleep'}
         style:--glow={chargedFx?.side === 'wild' ? chargedFx.color : 'transparent'}
       >
         {#if wildLook.kind === 'pmd'}
@@ -794,6 +1258,7 @@
         {:else}
           <img class="gif" src={showdownSrc(encounter.speciesId, encounter.isShiny)} alt="" />
         {/if}
+        {#if snap.wild.status === 'sleep' && !reduced}<span class="zzz" aria-hidden="true">Zzz</span>{/if}
       </div>
       {#each floaters.filter((f) => f.side === 'wild') as f (f.id)}
         <span
@@ -802,6 +1267,10 @@
           class:charged={f.charged}
           class:super={f.effectiveness !== undefined && f.effectiveness > 1}
           class:resist={f.effectiveness !== undefined && f.effectiveness > 0 && f.effectiveness < 1}
+          class:burn={f.tone === 'burn'}
+          class:poison={f.tone === 'poison'}
+          class:recoil={f.tone === 'recoil'}
+          class:confusion={f.tone === 'confusion'}
         >
           {f.text}
           {#if f.note}<small>{f.note}</small>{/if}
@@ -809,12 +1278,16 @@
       {/each}
     </div>
 
-    <div class="slot ally" style:--dx="22px" style:--dy="-16px">
+    <div class="slot ally" bind:this={allySlotEl} style:--dx="22px" style:--dy="-16px">
       <div
         class="body {allyView.css}"
         class:down={active.fainted}
         class:hit-flash={flashSide === 'player'}
         class:type-glow={chargedFx?.side === 'player'}
+        class:tone-burn={active.status === 'burn'}
+        class:tone-freeze={active.status === 'freeze'}
+        class:zapped={clock < zapUntil.player}
+        class:asleep={active.status === 'sleep'}
         style:--glow={chargedFx?.side === 'player' ? chargedFx.color : 'transparent'}
       >
         {#if allyLook.kind === 'pmd'}
@@ -832,6 +1305,7 @@
         {:else}
           <img class="gif flip" src={showdownSrc(active.speciesId, allyShiny)} alt="" />
         {/if}
+        {#if active.status === 'sleep' && !reduced}<span class="zzz" aria-hidden="true">Zzz</span>{/if}
       </div>
       {#each floaters.filter((f) => f.side === 'player') as f (f.id)}
         <span
@@ -840,6 +1314,10 @@
           class:charged={f.charged}
           class:super={f.effectiveness !== undefined && f.effectiveness > 1}
           class:resist={f.effectiveness !== undefined && f.effectiveness > 0 && f.effectiveness < 1}
+          class:burn={f.tone === 'burn'}
+          class:poison={f.tone === 'poison'}
+          class:recoil={f.tone === 'recoil'}
+          class:confusion={f.tone === 'confusion'}
         >
           {f.text}
           {#if f.note}<small>{f.note}</small>{/if}
@@ -924,6 +1402,15 @@
   /* No PC a arena esticava na tela toda e os dois ficavam longe um do outro:
      largura de celular, centralizada. */
   .live {
+    /* Cores dos selos e dos números de dano (um lugar só). */
+    --seal-burn: #c04020;
+    --seal-poison: #7040a0;
+    --seal-para: #c0a020;
+    --seal-sleep: #4868a8;
+    --seal-freeze: #58b0c8;
+    --seal-conf: #a05078;
+    --dmg-heal: #6ecf5a;
+    --dmg-recoil: #8a8a8a;
     width: min(100%, 30rem);
     margin: 0 auto;
     display: grid;
@@ -973,6 +1460,80 @@
 
   .arena.nudge-b {
     animation: arena-shake-b var(--shake-ms, 150ms) ease-out;
+  }
+
+  .proj {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 4;
+    pointer-events: none;
+    animation: proj-line var(--ms) linear var(--lag) both;
+  }
+
+  .proj-arc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    animation: proj-arc var(--ms) var(--lag) both;
+  }
+
+  /* 8 px de grade × 2 = 16 px; no carregado, 3× (24 px). O centro fica no ponto. */
+  .orb {
+    position: absolute;
+    left: -8px;
+    top: -8px;
+    width: 16px;
+    height: 16px;
+    transform: scale(var(--size, 1));
+    filter: drop-shadow(0 0 3px var(--c));
+  }
+
+  .proj.big .orb {
+    left: -12px;
+    top: -12px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .orb .od {
+    fill: color-mix(in srgb, var(--c) 55%, #000);
+  }
+
+  .orb .om {
+    fill: var(--c);
+  }
+
+  .orb .ol {
+    fill: color-mix(in srgb, var(--c) 45%, #fff);
+  }
+
+  .orb .ow {
+    fill: #fff;
+  }
+
+  @keyframes proj-line {
+    from {
+      transform: translate(var(--x0), var(--y0));
+    }
+    to {
+      transform: translate(var(--x1), var(--y1));
+    }
+  }
+
+  /* Sobe desacelerando e desce acelerando: com a linha reta, uma curva. */
+  @keyframes proj-arc {
+    0% {
+      transform: translateY(0);
+      animation-timing-function: ease-out;
+    }
+    50% {
+      transform: translateY(-16px);
+      animation-timing-function: ease-in;
+    }
+    100% {
+      transform: translateY(0);
+    }
   }
 
   .charged-veil {
@@ -1040,6 +1601,17 @@
     opacity: 0.45;
   }
 
+  /* Status: tom no sprite (filho), como o hit-flash. */
+  .body.tone-burn:not(.hit-flash) > .anchor,
+  .body.tone-burn:not(.hit-flash) > .gif {
+    filter: sepia(0.45) hue-rotate(-20deg) saturate(1.7);
+  }
+
+  .body.tone-freeze:not(.hit-flash) > .anchor,
+  .body.tone-freeze:not(.hit-flash) > .gif {
+    filter: sepia(0.35) hue-rotate(160deg) saturate(1.15) brightness(1.08);
+  }
+
   /* Acerto: o sprite inteiro fica branco por um instante (flash de pixel art).
      O filtro fica no filho, porque o .body já usa filter nas animações de dano. */
   .body.hit-flash > .anchor,
@@ -1048,9 +1620,114 @@
   }
 
   /* Golpe carregado: contorno na cor do tipo do golpe. */
-  .body.type-glow > .anchor,
-  .body.type-glow > .gif {
+  .body.type-glow:not(.hit-flash) > .anchor,
+  .body.type-glow:not(.hit-flash) > .gif {
     filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 4px var(--glow));
+  }
+
+  /* Paralisia: o sprite pisca amarelo (3 vezes por pulso; filtro no filho,
+     como o hit-flash) e dois raiozinhos piscam dos lados do corpo. */
+  .body.zapped:not(.hit-flash) > .anchor,
+  .body.zapped:not(.hit-flash) > .gif {
+    animation: zap-blink 0.36s steps(1, end);
+  }
+
+  .zap {
+    position: absolute;
+    z-index: 2;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .bolt {
+    position: absolute;
+    width: 20px;
+    height: 32px;
+    fill: #ffe14d;
+    filter: drop-shadow(0 0 2px #fff6a8);
+    animation: zap-blink-bolt 0.36s steps(1, end) both;
+  }
+
+  .bolt.b0 {
+    left: -38px;
+    top: -34px;
+  }
+
+  .bolt.b1 {
+    left: 18px;
+    top: -10px;
+    transform: scaleX(-1);
+    animation-delay: 0.06s;
+  }
+
+  @keyframes zap-blink {
+    0%,
+    34%,
+    68% {
+      filter: sepia(1) saturate(6) hue-rotate(5deg) brightness(1.35);
+    }
+    17%,
+    51%,
+    85% {
+      filter: none;
+    }
+  }
+
+  @keyframes zap-blink-bolt {
+    0%,
+    34%,
+    68% {
+      opacity: 1;
+    }
+    17%,
+    51%,
+    85%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Posição (left/top em px da arena) vem de fxPoint. Mesmo z dos números de
+     dano (.float), que vêm depois no DOM: o número fica por cima do efeito. */
+  .fx-anchor {
+    position: absolute;
+    z-index: 2;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .zzz {
+    position: absolute;
+    left: 58%;
+    top: 8%;
+    z-index: 4;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #dfe8ff;
+    text-shadow:
+      0 var(--px) 0 var(--ink),
+      0 calc(var(--px) * -1) 0 var(--ink),
+      var(--px) 0 0 var(--ink),
+      calc(var(--px) * -1) 0 0 var(--ink);
+    pointer-events: none;
+    animation: zzz-rise 1.6s ease-out infinite;
+  }
+
+  @keyframes zzz-rise {
+    0% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(10px, -22px);
+      opacity: 0;
+    }
   }
 
   /* Ponto do chão: o PmdSprite se posiciona a partir daqui. */
@@ -1136,24 +1813,24 @@
   }
 
   .seal.burn {
-    background: #c04020;
+    background: var(--seal-burn);
   }
   .seal.poison {
-    background: #7040a0;
+    background: var(--seal-poison);
   }
   .seal.para {
-    background: #c0a020;
+    background: var(--seal-para);
     color: #1a1208;
   }
   .seal.sleep {
-    background: #4868a8;
+    background: var(--seal-sleep);
   }
   .seal.freeze {
-    background: #58b0c8;
+    background: var(--seal-freeze);
     color: #0e2030;
   }
   .seal.conf {
-    background: #a05078;
+    background: var(--seal-conf);
   }
 
   @keyframes seal-pop {
@@ -1170,6 +1847,11 @@
   @media (prefers-reduced-motion: reduce) {
     .seal.pop {
       animation: none;
+    }
+
+    .zzz {
+      animation: none;
+      opacity: 0.85;
     }
   }
 
@@ -1252,7 +1934,23 @@
   }
 
   .float.heal {
-    color: #b9ff9a;
+    color: var(--dmg-heal);
+  }
+
+  .float.burn {
+    color: var(--seal-burn);
+  }
+
+  .float.poison {
+    color: var(--seal-poison);
+  }
+
+  .float.recoil {
+    color: var(--dmg-recoil);
+  }
+
+  .float.confusion {
+    color: var(--seal-conf);
   }
 
   .float.charged {

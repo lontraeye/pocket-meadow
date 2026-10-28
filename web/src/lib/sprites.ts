@@ -143,6 +143,66 @@ export function groundAt(sheet: PmdAnim, dir: number, frame: number): { x: numbe
 // Quanto o sprite passa do ponto do chão para cada lado, em px de tela na
 // escala 1 do jardim (PMD é desenhado em 2×). Considera todas as animações,
 // direções e quadros, para a margem do jardim não mudar quando a animação troca.
+/** Corpo visível de um sprite, em px na escala 1, a partir do ponto do chão (y negativo = para cima). */
+export type SpriteBody = { centerX: number; centerY: number; top: number }
+
+const bodyCache = new Map<string, Promise<SpriteBody | null>>()
+
+/**
+ * Mede o corpo de verdade no 1º quadro do Idle naquela direção (pixels não
+ * transparentes), para os efeitos da luta caírem no meio do Pokémon e não
+ * numa altura fixa: o quadro da folha tem folga em volta e cada espécie tem
+ * um tamanho.
+ */
+export function pmdBody(speciesId: number, shinySheet: boolean, dir: number): Promise<SpriteBody | null> {
+  const sheet = pmdAnim(speciesId, shinySheet, 'Idle')
+  if (!sheet) return Promise.resolve(null)
+  const row = sheet.dirs <= 1 ? 0 : Math.min(dir, sheet.dirs - 1)
+  const key = `${speciesId}:${shinySheet ? 1 : 0}:${row}`
+  const known = bodyCache.get(key)
+  if (known) return known
+  const measured = new Promise<SpriteBody | null>((resolve) => {
+    const image = new Image()
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = sheet.w
+        canvas.height = sheet.h
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return resolve(null)
+        ctx.drawImage(image, 0, row * sheet.h, sheet.w, sheet.h, 0, 0, sheet.w, sheet.h)
+        const { data } = ctx.getImageData(0, 0, sheet.w, sheet.h)
+        let minX = sheet.w
+        let minY = sheet.h
+        let maxX = -1
+        let maxY = -1
+        for (let y = 0; y < sheet.h; y += 1) {
+          for (let x = 0; x < sheet.w; x += 1) {
+            if ((data[(y * sheet.w + x) * 4 + 3] ?? 0) < 16) continue
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
+        }
+        if (maxX < 0) return resolve(null)
+        const ground = groundAt(sheet, row, 0)
+        resolve({
+          centerX: (minX + maxX + 1) / 2 - ground.x,
+          centerY: (minY + maxY + 1) / 2 - ground.y,
+          top: minY - ground.y,
+        })
+      } catch {
+        resolve(null)
+      }
+    }
+    image.onerror = () => resolve(null)
+    image.src = pmdSheetUrl(speciesId, shinySheet, 'Idle')
+  })
+  bodyCache.set(key, measured)
+  return measured
+}
+
 export function gardenExtent(look: GardenLook): { left: number; right: number; up: number; down: number } {
   if (look.kind === 'showdown') {
     return { left: showdownSize / 2, right: showdownSize / 2, up: showdownSize, down: 0 }

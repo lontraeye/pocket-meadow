@@ -29,6 +29,7 @@
   import PmdSprite from './PmdSprite.svelte'
   import { battleSpritesReady, spriteReady } from './preload'
   import { play, playCry, warmCries } from './sound'
+  import { loadBattleFx } from './fx'
   import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
   import { simConfig, type BattleInput } from './sim'
 
@@ -128,6 +129,7 @@
     if (step !== 'decide') step = 'decide'
     const look = gardenSprite(found.speciesId, found.isShiny)
     if (look.kind === 'pmd') void loadPmdBattle(found.speciesId, look.shinySheet)
+    void loadBattleFx()
   })
 
   /**
@@ -188,6 +190,7 @@
     fightTeam = members
     fightInputs = inputs
     fightResumeMs = Math.min(start.timeLimitMs, Math.max(0, Math.floor(elapsedMs)))
+    void loadBattleFx()
     step = 'fight'
   }
 
