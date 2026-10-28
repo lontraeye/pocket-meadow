@@ -1,4 +1,6 @@
 import type { BattleSetup } from '@sim'
+import { busyFromLastPress } from './busy'
+import { markOffline, markOnline } from './connection.svelte'
 
 export type BattleRules = {
   k: number
@@ -224,6 +226,14 @@ export type GameState = {
 
 export type ApiError = { error: string; min?: number; max?: number; pokemonId?: number; readyAt?: number }
 
+/** Sem resposta nesse tempo, a requisição é cancelada e conta como sem conexão. */
+export const REQUEST_TIMEOUT_MS = 15_000
+
+/**
+ * Toda chamada ao servidor passa por aqui. Falha de rede ou tempo estourado
+ * lança (quem chama já trata com "Sem conexão com o servidor.") e acende o
+ * aviso de sem conexão; 502–504 são o Caddy sem a API, e contam igual.
+ */
 export async function api(
   path: string,
   body?: unknown,
@@ -231,12 +241,28 @@ export async function api(
 ): Promise<Response> {
   const verb = method ?? (body === undefined ? 'GET' : 'POST')
   const hasBody = body !== undefined
-  return fetch(path, {
-    method: verb,
-    credentials: 'include',
-    headers: hasBody ? { 'content-type': 'application/json' } : undefined,
-    body: hasBody ? JSON.stringify(body) : undefined,
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const done = busyFromLastPress()
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: verb,
+      credentials: 'include',
+      headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+      body: hasBody ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    markOffline()
+    throw error
+  } finally {
+    clearTimeout(timer)
+    done()
+  }
+  if (response.status >= 502 && response.status <= 504) markOffline()
+  else markOnline()
+  return response
 }
 
 export function berryIconSrc(berryKey: string): string {

@@ -1299,8 +1299,8 @@
   .zoom-btn {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border: 0;
     background: none;
@@ -1328,7 +1328,7 @@
   /* Área de toque larga; a barrinha visível é o ::before, fina, no meio. */
   .zoom-track {
     position: relative;
-    width: 40px;
+    width: 44px;
     height: 64px;
     padding: 0;
     border: 0;

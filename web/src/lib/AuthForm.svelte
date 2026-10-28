@@ -261,8 +261,10 @@
     animation: hop 0.6s steps(2) infinite;
   }
 
+  /* Em 360px o "Charmander" não cabia em 15px; diminui só em tela estreita. */
   .starter span {
     max-width: 100%;
+    font-size: clamp(12px, 3.6vw, 15px);
     overflow: hidden;
     text-overflow: ellipsis;
   }

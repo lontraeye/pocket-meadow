@@ -666,7 +666,7 @@
   }
 
   .tab {
-    min-height: 40px;
+    min-height: 44px;
     font-size: 0.85rem;
   }
 
@@ -760,7 +760,7 @@
 
   .region-list button {
     width: 100%;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 0.5rem;
     border: 0;
     background: none;
@@ -790,7 +790,7 @@
   }
 
   .chip {
-    min-height: 36px;
+    min-height: 44px;
     padding-inline: 0.15rem;
     font-size: 0.72rem;
   }
@@ -934,7 +934,7 @@
   }
 
   .claim {
-    min-height: 36px;
+    min-height: 44px;
     font-size: 0.85rem;
   }
 

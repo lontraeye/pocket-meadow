@@ -1,6 +1,7 @@
 <script lang="ts">
   import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
+  import { connection } from './connection.svelte'
   import { formatCountdown } from './time'
   import { onMount, untrack } from 'svelte'
   import {
@@ -45,6 +46,8 @@
   )
   let encounter = $state<PendingEncounter | null>(untrack(() => game.encounter))
   let regions = $state<RegionInfo[]>([])
+  /** O último /regions falhou por rede (tenta de novo quando a conexão voltar). */
+  let regionsFailed = $state(false)
   let selected = $state<number[]>([])
   let result = $state<Result | null>(null)
   let message = $state('')
@@ -198,6 +201,7 @@
     if (on === battleAuto) return
     const prev = battleAuto
     battleAuto = on
+    message = ''
     prefsBusy = true
     try {
       const response = await api('/api/trainer/prefs', { battleAuto: on }, 'PUT')
@@ -280,14 +284,26 @@
   }
 
   async function loadRegions() {
-    const response = await api('/api/regions')
+    let response: Response
+    try {
+      response = await api('/api/regions')
+    } catch {
+      regionsFailed = true
+      return
+    }
     if (!response.ok) {
       message = errorText(await readError(response))
       return
     }
     const body = (await response.json()) as { regions: RegionInfo[] }
     regions = body.regions
+    regionsFailed = false
   }
+
+  // O mapa não veio por falta de rede: busca de novo quando a conexão voltar.
+  $effect(() => {
+    if (regionsFailed && !connection.offline) void loadRegions()
+  })
 
   async function search(slug: string, request = () => api('/api/encounters', { regionSlug: slug })) {
     play('tap')
@@ -704,7 +720,7 @@
           {/if}
         {/each}
         {#if regions.length === 0 && !message}
-          <p class="hint">Olhando o mapa…</p>
+          <p class="hint">{regionsFailed ? 'Sem conexão: o mapa abre quando voltar.' : 'Olhando o mapa…'}</p>
         {/if}
       </section>
     </div>

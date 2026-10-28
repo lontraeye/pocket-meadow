@@ -15,6 +15,10 @@
   import { serverClock } from './lib/serverClock.svelte'
   import { bindAudioUnlock, getVolume, isMuted, play, setVolume, toggleMute, warmCries } from './lib/sound'
   import { registerServiceWorker } from './lib/pwa'
+  import { connection } from './lib/connection.svelte'
+
+  /** Sem conexão no jogo: de quanto em quanto tempo tenta o /state de novo. */
+  const RECONNECT_MS = 5_000
 
   let phase = $state<'loading' | 'auth' | 'play'>('loading')
   let updateAvailable = $state(false)
@@ -162,8 +166,27 @@
     void loadState()
   }
 
+  // Sem conexão durante o jogo: tenta o /state a cada RECONNECT_MS e assim que
+  // o aparelho avisa que a rede voltou. A primeira resposta apaga o aviso
+  // (api() marca online) e já traz o estado atualizado.
+  $effect(() => {
+    if (phase !== 'play' || !connection.offline) return
+    const retryState = () => void loadState()
+    const timer = window.setInterval(retryState, RECONNECT_MS)
+    window.addEventListener('online', retryState)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('online', retryState)
+    }
+  })
+
   async function logout() {
-    await api('/api/auth/logout', {})
+    try {
+      await api('/api/auth/logout', {})
+    } catch {
+      // Sem rede o cookie continua valendo: fica no jogo, com o aviso no topo.
+      return
+    }
     if (pokedexOpen && pokedexHistoryPushed) {
       pokedexHistoryPushed = false
       history.back()
@@ -288,6 +311,9 @@
     {/if}
 
     <div class="top-chrome">
+    {#if connection.offline}
+      <p class="offline-banner" role="status">Sem conexão · tentando de novo</p>
+    {/if}
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -538,6 +564,35 @@
     cursor: pointer;
     touch-action: manipulation;
     z-index: 6;
+  }
+
+  /* Fica no topo do chrome, acima do HUD: no jardim desce junto com ele. Só
+     informa (não é botão), então pode ser mais baixo que um alvo de toque. */
+  .offline-banner {
+    flex: none;
+    margin: 0;
+    padding: 0.3rem 0.75rem;
+    background: var(--danger);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    text-shadow: 0 var(--px) 0 #00000055;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .offline-banner {
+      animation: offline-blink 1.6s steps(2, jump-none) infinite alternate;
+    }
+  }
+
+  @keyframes offline-blink {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.8;
+    }
   }
 
   /* Acima do HUD; no jardim o chrome desce um pouco se o aviso estiver aberto. */
