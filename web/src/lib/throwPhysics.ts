@@ -32,40 +32,47 @@ export const THROW_PHYSICS = {
    * a faixa que acerta ser larga o bastante para o dedo no celular.
    */
   idealUpSpeedPx: 1300,
-  /** Folga em volta da força ideal (fração): dentro dela, a altura é a do alvo. */
-  powerTolerance: 0.45,
   /**
-   * Auxílio de mira (como no GO, errar é difícil): chegando a menos de
-   * assistRadiusPx do centro do alvo, a bola é puxada esta fração do caminho
-   * até ele. Bem torto, fraco ou forte demais (mais longe que o raio) ainda erra.
+   * Folga estreita em volta da força ideal (fração): só nela a altura é a do
+   * alvo. Fora disso o pouso sobe/desce de verdade — sem “ímã” artificial.
    */
-  assistRadiusPx: 200,
-  assistStrength: 0.8,
+  powerTolerance: 0.18,
+  /**
+   * Auxílio invisível: só quase-acerto (anel + assistMaxPullPx). Empurra no
+   * máximo assistMaxPullPx em direção ao alvo — sem curva gigante “ímã”.
+   */
+  assistMaxPullPx: 18,
+  /** Fração do raio real para onde o empurrão aponta (sempre ≤ 1). */
+  assistLandInsideFrac: 0.92,
   /**
    * Fora da folga: px de erro na altura por unidade de força a mais ou a menos.
-   * Baixo de propósito: peteleco forte (comum no celular) ainda cai no auxílio.
    */
-  overshootPxPerPower: 110,
+  overshootPxPerPower: 160,
   /** Desvio lateral na chegada: segundos × velocidade horizontal do gesto (px/s). */
   lateralReachS: 0.22,
   /**
-   * Desvio da curva na chegada por volta de giro (px), antes do auxílio:
-   * mais voltas, mais curva (até spinMaxTurns). Mire compensando.
+   * Curva estilo Pokémon GO: desvio na chegada por volta de giro (px).
+   * Giro horário (tela) → curva para a direita; anti-horário → esquerda.
+   * Jogue um pouco para o lado oposto para compensar (como no GO).
    */
-  curveDriftPx: 40,
+  curveDriftPx: 92,
   /**
-   * Forma do voo (só visual): um arco de arremesso, que sobe na direção do gesto,
-   * passa arcHeightPx acima da chegada e desce nela.
+   * Forma do voo (só visual): sobe na direção do gesto, passa arcHeightPx
+   * acima da chegada e desce nela — a curva lateral vem só do pouso (giro).
    */
-  arcHeightPx: 60,
+  arcHeightPx: 56,
   /**
    * Duração do voo: a bola sai da mão na velocidade do dedo (sem "parar" ao
    * soltar), entre estes limites (ms).
    */
-  flightFastMs: 300,
-  flightSlowMs: 620,
-  /** Com giro, a saída abre para o lado oposto à curva: este ângulo (rad) por volta. */
-  curveLaunchRad: 0.16,
+  flightFastMs: 320,
+  flightSlowMs: 680,
+  /**
+   * Quanto o controle do arco “segura” a direção do peteleco (1 = topo na
+   * linha do gesto; >1 prolonga essa direção). O giro só puxa no pouso, então
+   * a bola sai para onde você jogou e só depois converte para a curva.
+   */
+  curveThrowHold: 1.18,
   /**
    * Inércia do giro: depois que o dedo para de girar, a bola continua rodando e
    * a velocidade cai pela metade a cada spinHalfLifeMs. Abaixo de spinRestRad/s, para.
@@ -224,6 +231,8 @@ export function isSimpleTap(dragPx: number, durationMs: number): boolean {
  * dentro da folga em volta da ideal ela chega na altura do alvo; fraco demais
  * fica curto (mais embaixo), forte demais passa por cima. O lado vem da
  * velocidade horizontal e, com giro, do desvio da curva.
+ * Quase-acerto (até assistMaxPullPx fora do anel) ganha um empurrão curto
+ * em direção ao alvo — nunca o suficiente para inventar uma curva enorme.
  */
 export function landingPoint(input: {
   x0: number
@@ -234,8 +243,10 @@ export function landingPoint(input: {
   turns?: number
   targetX: number
   targetY: number
+  /** Raio do hit-test (px). Define também a zona invisível de auxílio. */
+  targetRadius?: number
 }): { x: number; y: number } {
-  const { idealUpSpeedPx, powerTolerance, overshootPxPerPower, lateralReachS, curveDriftPx, assistRadiusPx, assistStrength } =
+  const { idealUpSpeedPx, powerTolerance, overshootPxPerPower, lateralReachS, curveDriftPx, assistMaxPullPx, assistLandInsideFrac } =
     THROW_PHYSICS
   const power = Math.max(0, -input.vy) / idealUpSpeedPx
   const off = power - 1
@@ -244,17 +255,32 @@ export function landingPoint(input: {
     x: input.x0 + input.vx * lateralReachS + input.curveDir * curveDriftPx * Math.max(1, input.turns ?? 1),
     y: input.targetY - excess * overshootPxPerPower,
   }
-  // Auxílio de mira: perto do alvo, puxa a bola boa parte do caminho até o centro.
+  const r = input.targetRadius ?? 0
+  const maxPull = assistMaxPullPx
+  if (!(r > 0) || !(maxPull > 0)) return raw
   const dx = raw.x - input.targetX
   const dy = raw.y - input.targetY
-  if (Math.hypot(dx, dy) > assistRadiusPx) return raw
-  return { x: input.targetX + dx * (1 - assistStrength), y: input.targetY + dy * (1 - assistStrength) }
+  const dist = Math.hypot(dx, dy)
+  if (!(dist > 0)) return raw
+  // Já ia acertar: não mexe (Nice/Great ficam honestos).
+  if (dist <= r) return raw
+  // Fora da auréola curta: erro limpo, sem puxar.
+  if (dist > r + maxPull) return raw
+  const goal = r * Math.min(1, Math.max(0.5, assistLandInsideFrac))
+  const gx = input.targetX + (dx / dist) * goal
+  const gy = input.targetY + (dy / dist) * goal
+  const mx = gx - raw.x
+  const my = gy - raw.y
+  const need = Math.hypot(mx, my) || 1
+  // No máximo maxPull px — se ainda ficar fora, erra (sem forçar o acerto).
+  const pull = Math.min(maxPull, need)
+  return { x: raw.x + (mx / need) * pull, y: raw.y + (my / need) * pull }
 }
 
 /**
- * Um arco de arremesso só (Bézier quadrática, nunca com dobra): sai na direção
- * do gesto, sobe até um pouco acima da chegada e desce nela, já com o auxílio.
- * Com giro, a saída abre para o lado oposto à curva e o arco volta para ela.
+ * Arco estilo Pokémon GO (Bézier quadrática): a bola sai na direção do peteleco
+ * (controle só nessa linha) e o giro só aparece no pouso — como na física real,
+ * joga para um lado e a curva converte depois, sem pular para o lado do giro.
  * A duração faz a bola sair da mão na velocidade do dedo.
  */
 function flightFrom(
@@ -265,8 +291,8 @@ function flightFrom(
   spinSpeed: number,
   /** Direção da saída (gesto); sem ela, reto para a chegada. */
   launchDir?: { x: number; y: number },
-  /** Voltas de giro: quanto a saída abre para o lado (só visual). */
-  turns = 0,
+  /** Voltas de giro (só no pouso / sparkles; o arco inicial ignora). */
+  _turns = 0,
   /** Velocidade do dedo ao soltar (px/s). */
   releaseSpeed: number = THROW_PHYSICS.idealUpSpeedPx,
 ): FlightState {
@@ -276,21 +302,13 @@ function flightFrom(
   const norm = Math.hypot(dirX, dirY) || 1
   dirX /= norm
   dirY /= norm
-  if (curveDir !== 0) {
-    // Gira a saída para o lado oposto à curva (horário na tela = curva para a direita).
-    const a = -curveDir * THROW_PHYSICS.curveLaunchRad * Math.max(1, turns)
-    const rx = dirX * Math.cos(a) - dirY * Math.sin(a)
-    const ry = dirX * Math.sin(a) + dirY * Math.cos(a)
-    dirX = rx
-    dirY = ry
-  }
-  // Topo do arco: acima da chegada. O lado é onde a linha do gesto chega nessa
-  // altura (limitado, para um peteleco quase deitado não sair da tela).
+  // Controle só na linha do peteleco (sem pendência do giro): a bola “guarda”
+  // a velocidade lateral do gesto e só depois o pouso com drift puxa a curva.
   const cy = Math.min(y0, land.y) - THROW_PHYSICS.arcHeightPx
   const rise = y0 - cy
-  const lineX = dirY < -0.2 ? x0 + (dirX / -dirY) * rise : (x0 + land.x) / 2
-  const spread = Math.max(120, rise * 0.6)
-  const cx = Math.max(Math.min(x0, land.x) - spread, Math.min(Math.max(x0, land.x) + spread, lineX))
+  const lineX = dirY < -0.15 ? x0 + (dirX / -dirY) * rise : x0
+  const hold = THROW_PHYSICS.curveThrowHold
+  const cx = x0 + (lineX - x0) * hold
   const { flightFastMs, flightSlowMs } = THROW_PHYSICS
   const startLen = Math.hypot(cx - x0, cy - y0)
   const durationMs = Math.min(flightSlowMs, Math.max(flightFastMs, ((2 * startLen) / Math.max(1, releaseSpeed)) * 1000))
@@ -327,9 +345,11 @@ export function beginFlight(input: {
   spinning: boolean
   /** Voltas de giro (spinTurns); mais voltas, mais curva. */
   turns?: number
-  /** Centro do alvo na tela (px): a força ideal chega na altura dele, e o auxílio puxa para ele. */
+  /** Centro do alvo na tela (px): a força ideal chega na altura dele. */
   targetX: number
   targetY: number
+  /** Raio do hit-test: só aplica auxílio se o pouso cru já acerta. */
+  targetRadius?: number
   /** Rotação da bola na mão ao soltar (rad e rad/s): o voo continua dela. */
   spinAngle?: number
   spinRate?: number
@@ -344,6 +364,7 @@ export function beginFlight(input: {
     turns,
     targetX: input.targetX,
     targetY: input.targetY,
+    targetRadius: input.targetRadius,
   })
   const spinRate = input.spinRate ?? curveDir * 10 * Math.max(1, turns)
   const releaseSpeed = Math.hypot(input.vx, input.vy)
@@ -426,6 +447,24 @@ export function hitTest(x: number, y: number, target: TargetCircle): boolean {
   const dx = x - target.cx
   const dy = y - target.cy
   return dx * dx + dy * dy <= target.radius * target.radius
+}
+
+/**
+ * Acerto se qualquer ponto do arco (não só o pouso) entra no alvo —
+ * evita “passou no Pokémon e contou erro”.
+ */
+export function flightHitsTarget(state: FlightState, target: TargetCircle, samples = 28): boolean {
+  const r2 = target.radius * target.radius
+  for (let i = 0; i <= samples; i += 1) {
+    const t = i / samples
+    const u = 1 - t
+    const x = u * u * state.x0 + 2 * u * t * state.cx + t * t * state.landX
+    const y = u * u * state.y0 + 2 * u * t * state.cy + t * t * state.landY
+    const dx = x - target.cx
+    const dy = y - target.cy
+    if (dx * dx + dy * dy <= r2) return true
+  }
+  return false
 }
 
 /** Deslocamento visual do alvo pela agitação (só front). */

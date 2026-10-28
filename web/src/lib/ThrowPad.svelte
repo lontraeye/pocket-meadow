@@ -6,6 +6,7 @@
     agitationOffset,
     beginFlight,
     beginGuaranteedFlight,
+    flightHitsTarget,
     hitTest,
     isSimpleTap,
     isSpinning,
@@ -195,14 +196,19 @@
     resetHold()
     flight = null
     flying = false
+    aimAtThrow = null
   }
 
-  function runFlight(next: FlightState, guaranteeHit: boolean) {
+  /** Mira congelada no arremesso — hit alinhado ao pouso (agitação não “rouba” acerto). */
+  let aimAtThrow: { cx: number; cy: number; radius: number } | null = null
+
+  function runFlight(next: FlightState, guaranteeHit: boolean, aim: { cx: number; cy: number; radius: number } | null = null) {
     // O voo leva a rotação daqui em diante (spinAngle/spinSpeed do FlightState).
     stopSpin()
     flying = true
     holding = false
     flight = next
+    aimAtThrow = aim
     lastRaf = performance.now()
     const loop = (now: number) => {
       const dt = Math.min(40, now - lastRaf)
@@ -211,6 +217,17 @@
       if (!cur) return
       const stepped = stepFlight(cur, dt)
       flight = stepped
+      // Contato no meio do voo = acerto (como no GO), sem esperar o pouso.
+      if (!guaranteeHit) {
+        const live = targetCircle()
+        if (
+          (aimAtThrow && hitTest(stepped.x, stepped.y, aimAtThrow)) ||
+          (live && hitTest(stepped.x, stepped.y, live))
+        ) {
+          finishFlight(stepped, guaranteeHit)
+          return
+        }
+      }
       if (!stepped.done) {
         raf = requestAnimationFrame(loop)
         return
@@ -229,11 +246,17 @@
 
   function finishFlight(state: FlightState, guaranteeHit: boolean) {
     stopRing()
-    const target = targetCircle()
-    const hit = guaranteeHit || (target ? hitTest(state.x, state.y, target) : false)
+    const live = targetCircle()
+    const aim = aimAtThrow
+    const target = aim ?? live
+    const hit =
+      guaranteeHit ||
+      (aim ? flightHitsTarget(state, aim) || hitTest(state.x, state.y, aim) : false) ||
+      (live ? flightHitsTarget(state, live) || hitTest(state.x, state.y, live) : false)
     const curve = mode === 'ball' && state.curveDir !== 0
     flying = false
     flight = null
+    aimAtThrow = null
 
     if (mode === 'berry') {
       if (hit) {
@@ -307,7 +330,7 @@
     startRing()
     const x0 = btn.left + btn.width / 2
     const y0 = btn.top + btn.height / 2
-    runFlight(beginGuaranteedFlight({ x0, y0, targetX: target.cx, targetY: target.cy }), true)
+    runFlight(beginGuaranteedFlight({ x0, y0, targetX: target.cx, targetY: target.cy }), true, target)
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -394,12 +417,13 @@
       turns: spinTurns(spin),
       targetX: target?.cx ?? e.clientX,
       targetY: target?.cy ?? e.clientY - 300,
+      targetRadius: target?.radius,
       spinAngle: holdAngle,
       spinRate,
     })
     holding = false
     pointerId = null
-    runFlight(next, false)
+    runFlight(next, false, target)
   }
 
   function onPointerCancel(e: PointerEvent) {
@@ -539,13 +563,19 @@
 
 <style>
   .throw-btn {
+    box-sizing: border-box;
     display: grid;
     justify-items: center;
-    gap: 0;
-    min-width: 108px;
-    min-height: 92px;
+    align-content: center;
+    gap: 0.1rem;
+    /* Largura/altura fixas: berry ↔ bola ↔ “Lançando…” não mexem o dock. */
+    width: 7.25rem;
+    min-width: 7.25rem;
+    max-width: 7.25rem;
+    height: 5.75rem;
+    min-height: 5.75rem;
     margin: 0;
-    padding: 0.2rem 0.5rem 0.35rem;
+    padding: 0.2rem 0.35rem 0.3rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow:
@@ -605,8 +635,13 @@
   }
 
   .throw-btn small {
+    overflow: hidden;
+    max-width: 100%;
     font-size: 0.72rem;
-    line-height: 1.1;
+    line-height: 1.15;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .throw-btn.spinning:not(:disabled) {

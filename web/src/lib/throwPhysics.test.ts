@@ -4,6 +4,7 @@ import {
   accumulateSpin,
   agitationOffset,
   beginFlight,
+  flightHitsTarget,
   hitTest,
   isSimpleTap,
   isSpinning,
@@ -99,26 +100,66 @@ test('voo avança depth e termina', () => {
   assert.equal(f.depth, 1)
 })
 
-/** Voa até o fim e diz se caiu no alvo (bola sai de 400 px abaixo dele). */
+/** Voa até o fim e diz se o arco tocou o alvo (bola sai de 400 px abaixo dele). */
 function lands(vx: number, vy: number, spinning = false, curveDir: -1 | 0 | 1 = 0, turns = 1): boolean {
   const target = { cx: 180, cy: 100, radius: 30 }
-  let f = beginFlight({ x0: 180, y0: 500, vx, vy, curveDir, spinning, turns, targetX: target.cx, targetY: target.cy })
+  let f = beginFlight({
+    x0: 180,
+    y0: 500,
+    vx,
+    vy,
+    curveDir,
+    spinning,
+    turns,
+    targetX: target.cx,
+    targetY: target.cy,
+    targetRadius: target.radius,
+  })
   while (!f.done) f = stepFlight(f, 16)
-  return hitTest(f.x, f.y, target)
+  return flightHitsTarget(f, target)
 }
 
-test('com o auxílio, peteleco reto acerta numa faixa bem larga de força', () => {
+test('peteleco reto acerta perto da força ideal; ao lado erra sem ímã', () => {
   const ideal = THROW_PHYSICS.idealUpSpeedPx
-  for (const k of [0.45, 0.6, 1, 1.5, 1.8]) assert.equal(lands(0, -ideal * k), true, `força ×${k}`)
+  for (const k of [0.9, 1, 1.1, 1.45]) assert.equal(lands(0, -ideal * k), true, `força ×${k}`)
+  // Forte demais ainda passa no corpo (contato no arco = acerto); torto erra.
+  assert.equal(lands(0, -ideal * 2.2), true)
+  assert.equal(lands(400, -ideal), false)
 })
 
-test('o auxílio perdoa um pouco de desvio para o lado', () => {
-  assert.equal(lands(250, -THROW_PHYSICS.idealUpSpeedPx), true)
+test('desvio lateral: quase-erro ganha empurrão curto; bem torto erra', () => {
+  // ~22 px: já no anel. ~44 px: auréola. ~88 px: fora do limite.
+  assert.equal(lands(100, -THROW_PHYSICS.idealUpSpeedPx), true)
+  assert.equal(lands(200, -THROW_PHYSICS.idealUpSpeedPx), true)
+  assert.equal(lands(400, -THROW_PHYSICS.idealUpSpeedPx), false)
 })
 
-test('peteleco forte (comum no celular) ainda acerta', () => {
+test('auxílio tem teto — não inventa curva gigante até o centro', () => {
   const ideal = THROW_PHYSICS.idealUpSpeedPx
-  for (const k of [2, 2.5]) assert.equal(lands(0, -ideal * k), true, `força ×${k}`)
+  // Pouso cru ~55 px à direita (fora da auréola 48): sem puxão.
+  const far = landingPoint({
+    x0: 180,
+    vx: 250,
+    vy: -ideal,
+    curveDir: 0,
+    targetX: 180,
+    targetY: 100,
+    targetRadius: 30,
+  })
+  assert.ok(Math.hypot(far.x - 180, far.y - 100) > 48, 'longe permanece cru')
+  // Quase-erro ~40 px: empurra no máx. 18 px, ainda do lado do erro.
+  const near = landingPoint({
+    x0: 180,
+    vx: 180,
+    vy: -ideal,
+    curveDir: 0,
+    targetX: 180,
+    targetY: 100,
+    targetRadius: 30,
+  })
+  const dist = Math.hypot(near.x - 180, near.y - 100)
+  assert.ok(dist < 40, 'quase-erro aproxima')
+  assert.ok(near.x > 180 + 12, 'sem teleporte ao centro')
 })
 
 test('o voo é um arco: sobe acima da chegada e desce nela, sem dobrar', () => {
@@ -141,23 +182,81 @@ test('a bola sai da mão na velocidade do dedo', () => {
   assert.ok(fast.durationMs < slow.durationMs)
 })
 
-test('muito fraco nem lança; muito forte ou muito torto ainda erra', () => {
+test('muito fraco nem lança; muito torto erra; forte passa no alvo e acerta', () => {
   const ideal = THROW_PHYSICS.idealUpSpeedPx
   assert.equal(shouldLaunch(-ideal * 0.1), false)
-  assert.equal(lands(0, -ideal * 4), false)
+  assert.equal(lands(0, -ideal * 4), true)
   assert.equal(lands(900, -ideal), false)
 })
 
-test('com giro o auxílio ainda segura o arremesso reto, e girar mais curva mais', () => {
+test('curva estilo GO: reto com giro erra; compensar o bastante acerta', () => {
   const ideal = THROW_PHYSICS.idealUpSpeedPx
-  for (let turns = 1; turns <= THROW_PHYSICS.spinMaxTurns; turns += 1) {
-    assert.equal(lands(0, -ideal, true, 1, turns), true, `${turns} volta(s)`)
-  }
+  assert.equal(lands(0, -ideal, true, 0, 1), true)
+  // Drift ~92 px: fora da auréola curta → miss (sem curva-ímã).
+  assert.equal(lands(0, -ideal, true, 1, 1), false)
+  // ~80% da compensação: perto o bastante para auxílio/arco.
+  const most = (-THROW_PHYSICS.curveDriftPx * 0.8) / THROW_PHYSICS.lateralReachS
+  assert.equal(lands(most, -ideal, true, 1, 1), true)
   const at = (turns: number) =>
-    landingPoint({ x0: 180, vx: 0, vy: -ideal, curveDir: 1, turns, targetX: 180, targetY: 100 }).x
+    landingPoint({ x0: 180, vx: 0, vy: -ideal, curveDir: 1, turns, targetX: 180, targetY: 100, targetRadius: 30 }).x
   assert.ok(at(3) > at(2) && at(2) > at(1))
   const compensate = (-THROW_PHYSICS.curveDriftPx * THROW_PHYSICS.spinMaxTurns) / THROW_PHYSICS.lateralReachS
   assert.equal(lands(compensate, -ideal, true, 1, THROW_PHYSICS.spinMaxTurns), true)
+})
+
+test('voo com giro sai na direção do peteleco e só depois curva para o pouso', () => {
+  const ideal = THROW_PHYSICS.idealUpSpeedPx
+  // Compensa para a esquerda (vx < 0) contra curva para a direita.
+  const vx = -THROW_PHYSICS.curveDriftPx / THROW_PHYSICS.lateralReachS
+  let f = beginFlight({
+    x0: 180,
+    y0: 500,
+    vx,
+    vy: -ideal,
+    curveDir: 1,
+    spinning: true,
+    turns: 1,
+    targetX: 180,
+    targetY: 100,
+    targetRadius: 30,
+  })
+  const early: number[] = []
+  while (!f.done) {
+    f = stepFlight(f, 16)
+    if (f.depth > 0.12 && f.depth < 0.35) early.push(f.x)
+  }
+  assert.ok(early.length > 0)
+  const avgEarly = early.reduce((a, b) => a + b, 0) / early.length
+  assert.ok(avgEarly < 180 - 12, 'cedo ainda segue a compensação')
+  assert.ok(Math.abs(f.x - 180) < 30, 'pouso compensado no alvo')
+  assert.ok(f.x > avgEarly + 8, 'curva de volta para a direita no voo')
+})
+
+test('gira pra esquerda e joga pra direita: sai pra direita e só depois curva', () => {
+  const ideal = THROW_PHYSICS.idealUpSpeedPx
+  let f = beginFlight({
+    x0: 180,
+    y0: 500,
+    vx: 420,
+    vy: -ideal,
+    curveDir: -1,
+    spinning: true,
+    turns: 2,
+    targetX: 180,
+    targetY: 100,
+    targetRadius: 30,
+  })
+  const early: number[] = []
+  const late: number[] = []
+  while (!f.done) {
+    f = stepFlight(f, 16)
+    if (f.depth > 0.08 && f.depth < 0.28) early.push(f.x)
+    if (f.depth > 0.72 && f.depth < 0.95) late.push(f.x)
+  }
+  const avgEarly = early.reduce((a, b) => a + b, 0) / early.length
+  const avgLate = late.reduce((a, b) => a + b, 0) / late.length
+  assert.ok(avgEarly > 180 + 20, 'cedo segue o peteleco para a direita')
+  assert.ok(avgLate < avgEarly - 15, 'depois converte para a esquerda (giro)')
 })
 
 test('hitTest e agitação 0 parada', () => {

@@ -247,6 +247,12 @@
 
   function pickBall(key: string) {
     selectedBall = key
+    // Equipar bola: se a berry ainda está no slot (não foi dada), sai.
+    // Berry já dada continua para o próximo lançamento.
+    if (!berryDelivered && selectedBerry) {
+      selectedBerry = null
+      berryFloaters = []
+    }
     try {
       localStorage.setItem(ballStorageKey, key)
     } catch {
@@ -1190,13 +1196,15 @@
           disabled={pending}
           onclick={() => toggleCapturePanel('bag')}
         >
-          {#if activeCaptureBerry}
-            <img src={berryIconSrc(activeCaptureBerry.key)} alt="" width="28" height="28" />
-          {:else}
-            <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
-              <path d="M4 1h4v1h1v2h2v7H1V4h2V2h1zm0 1v2h4V2zM2 5v5h8V5zm2 1h4v1H4z" />
-            </svg>
-          {/if}
+          <span class="icon-slot">
+            {#if activeCaptureBerry}
+              <img src={berryIconSrc(activeCaptureBerry.key)} alt="" width="28" height="28" />
+            {:else}
+              <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
+                <path d="M4 1h4v1h1v2h2v7H1V4h2V2h1zm0 1v2h4V2zM2 5v5h8V5zm2 1h4v1H4z" />
+              </svg>
+            {/if}
+          </span>
           <small>Mochila</small>
         </button>
         <ThrowPad
@@ -1228,9 +1236,11 @@
           disabled={pending || !hasBalls}
           onclick={() => toggleCapturePanel('balls')}
         >
-          <span class="ball-stack" aria-hidden="true">
-            <img src={ballIconSrc('great')} alt="" width="24" height="24" />
-            <img src={ballIconSrc('ultra')} alt="" width="24" height="24" />
+          <span class="icon-slot">
+            <span class="ball-stack" aria-hidden="true">
+              <img src={ballIconSrc('great')} alt="" width="24" height="24" />
+              <img src={ballIconSrc('ultra')} alt="" width="24" height="24" />
+            </span>
           </span>
           <small>Bolas</small>
         </button>
@@ -1334,20 +1344,22 @@
     margin-top: 0.5rem;
   }
 
-  /* Captura: Mochila · bola equipada (lança) · Bolas. */
+  /* Captura: Mochila · bola/berry (lança) · Bolas — colunas fixas, sem “pulo”. */
   .throw-row {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 7.25rem minmax(0, 1fr);
+    align-items: stretch;
     gap: 0.5rem;
   }
 
   .tool {
+    box-sizing: border-box;
     display: grid;
     justify-items: center;
     align-content: center;
     gap: 0.15rem;
-    min-height: 64px;
+    height: 5.75rem;
+    min-height: 5.75rem;
     padding: 0.3rem 0.25rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
@@ -1358,9 +1370,19 @@
     touch-action: manipulation;
   }
 
+  .tool .icon-slot {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 28px;
+  }
+
   .tool small {
+    overflow: hidden;
+    max-width: 100%;
     font-size: 0.78rem;
     font-weight: 700;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
