@@ -111,7 +111,8 @@
 
   $effect(() => {
     if (tab !== 'perfil' || regionsCache) return
-    void loadRegions()
+    // Só o nome da região: sem rede, a ficha mostra a chave e segue.
+    loadRegions().catch(() => undefined)
   })
 
   const natureHint = $derived(formatNature(mon.nature))

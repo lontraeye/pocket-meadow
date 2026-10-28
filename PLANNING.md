@@ -531,6 +531,37 @@ Hoje a Poké Ball é infinita e cada erro tem 25% fixos de fuga (`throwFleeChanc
 - **Sem limite de lançamentos** por encontro: a fuga crescente já limita.
 - **Botão de teste para ganhar bolas** (e as berries novas), além do estoque: só com `DEV_TOOLS=1`.
 
+**Tela de captura (refeita em 2026-10-28, na revisão da 9.1–9.3):** o card do selvagem com o palco na altura do sprite; embaixo, Mochila · bola equipada (o botão de lançar, com brilho fraco) · Bolas (equipar); dar berry faz ela voar até o selvagem e o efeito sobe em texto verde (ajudou) ou vermelho (não fez nada), como o número de dano da luta; sair da captura é só "Deixar ir".
+
+#### Arremesso com física (parte 9.4, especificado em 2026-10-28)
+O jogador arremessa a bola com o dedo, no estilo do Pokémon GO: segura a bola, pode girá-la, e solta com um movimento para cima. **A habilidade conta**: dá para errar, e um arremesso bom aumenta a chance. Berry também é arremessada, sem giro.
+
+**Decidido:**
+- **A habilidade conta.** Errar o alvo gasta a bola. Um anel que encolhe sobre o alvo dá **Nice / Great / Excellent**, e o arremesso com curva dá bônus. Isso entra na chance de captura.
+- **O selvagem se mexe mais quando está agitado.** Agitação 0: parado e tonto, como hoje. Cada degrau de agitação aumenta o quanto ele pula e anda de lado, e fica mais difícil de acertar. As berries de acalmar deixam ele mais parado: a agitação passa a ter efeito visível na mira.
+- Implementação pelo Cursor, com prompt próprio.
+
+**Gesto e física (front, em `web/src/lib/throwPhysics.ts`, funções puras; números em config no mesmo arquivo):**
+- **Segurar:** o toque começa na bola equipada (a de baixo). Ela acompanha o dedo. Durante o gesto a área não rola a página (`touch-action: none` só ali).
+- **Girar:** enquanto segura, o ângulo do dedo em volta do centro da bola é somado. Passou de uma volta (360°) no mesmo sentido, a bola fica "girando" (visual de rotação e brilho), e o sentido decide para que lado a curva vai.
+- **Soltar:** a velocidade do fim do gesto (px/s, média dos últimos ~80 ms) vira o arremesso. Gesto para baixo ou fraco demais não lança: a bola volta para a mão, sem gastar.
+- **Voo em 2,5D:** profundidade de 0 (mão) a 1 (selvagem), que só avança; a velocidade vertical do gesto decide o alcance, a horizontal o desvio, a gravidade puxa para baixo e a curva acelera para o lado. Na tela, a bola encolhe com a profundidade. Duração alvo de 0,6 a 0,9 s. Tudo em `requestAnimationFrame`.
+- **Acerto:** quando a profundidade chega a 1, o ponto da bola é comparado com o alvo (o corpo do selvagem; o tamanho pode vir do `pmdBody`, em `sprites.ts`). Fora do alvo é erro: a bola passa, cai e some, com um "Errou!" em vermelho.
+- **Anel:** um círculo colorido sobre o alvo encolhe e volta em loop (≈1,2 s). No acerto, o tamanho do anel naquele instante e a distância do ponto ao centro decidem: dentro do anel = **Nice** (anel grande), **Great** (médio) ou **Excellent** (pequeno); fora do anel mas no corpo = acerto comum.
+- **Selvagem se mexendo:** posição do alvo em função do tempo e da agitação (pulos e passos de lado com amplitude e frequência crescentes), só visual no front. Agitação 0 = parado.
+- **Berry:** escolhida na Mochila, ela vai para o lugar da bola e é arremessada do mesmo jeito, sem giro e sem anel. Acertou: a berry é "dada" (o efeito sobe em texto, como hoje) e a bola volta para a mão. Errou: a berry cai e **volta para a mochila** (não é gasta; quem gasta é o lançamento da bola, como hoje).
+- **Sem animação ou sem gesto:** com `prefers-reduced-motion`, pelo teclado (Enter/Espaço na bola) ou com um toque simples sem arrastar, a bola vai reto, **sempre acerta, sem anel nem curva** (qualidade comum). Ninguém fica sem conseguir capturar.
+
+**Qualidade do arremesso no servidor:**
+- `POST /encounters/:id/throw` passa a aceitar `{ ball, berry?, quality?: 'normal' | 'nice' | 'great' | 'excellent', curve?: boolean }`. Sem `quality`, vale `'normal'` (compatível com o lançamento de hoje).
+- **Multiplicadores em config** (`server/src/config/balls.ts` ou `battle.ts`), entrando na fórmula ao lado da bola e da berry: proposta inicial `normal ×1`, `nice ×1,15`, `great ×1,4`, `excellent ×1,8`, `curve ×1,3`. Revisar jogando.
+- **Erro:** `POST /encounters/:id/miss` com `{ ball }`: só debita a bola, numa transação. **Não rola nada, não conta como lançamento e não muda a agitação nem a fuga** (como no GO, errar não faz ele fugir). Assim o `throwRngAt` e o `throw_count` continuam iguais: só os lançamentos que acertaram consomem rolagens.
+- O servidor aceita a qualidade que o front manda (só valida os valores). É um jogo para uma pessoa e não há como conferir o gesto; fica registrado aqui como exceção consciente à seção 2. Se um dia houver ranking entre jogadores, rever.
+
+**Pontos a decidir na implementação (anotar no PLANNING):**
+- Os números da física (alcance, gravidade, curva, tamanho do alvo, ciclo do anel) e dos multiplicadores, ajustados jogando no celular.
+- Se o anel tem cor por dificuldade da espécie (como no GO: verde, amarelo, vermelho pela chance), só visual.
+
 ### 5.7 Doces (pontos ao soltar)
 O doce é um **extra**: XP para acelerar um Pokémon sem precisar batalhar com ele. Ele não é requisito para evoluir (seção 5.8).
 
@@ -1262,11 +1293,12 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - **Futuro: animação própria por golpe** (anotado em 2026-10-28). Hoje o efeito sai por tipo (PVFX Foundry, `web/src/lib/fx.ts`) e os golpes especiais soltam uma bola na cor do tipo. Nos jogos, cada golpe tem a sua (o Will-O-Wisp faz um arco antes de bater, por exemplo). O Pokémon Showdown faz isso com uma animação escrita à mão por golpe, montada com poucas peças: imagem que voa de um ponto a outro com curva, movimento do atacante e do alvo e flash no fundo. Dá para seguir o mesmo modelo com as nossas peças, começando pelos golpes mais usados. O código e as imagens do Showdown não podem ser usados (AGPL e imagens sem licença livre).
   - Do pacote, o Warm Explosion (Fogo) e o Ember Jet (pulso da queimadura) desenham só a metade da frente do anel no chão, que fica aberto quando a fumaça some. Se incomodar, a troca sugerida é Fogo → Solar Shrapnel e a queimadura numa chaminha em código.
 
-**Fase 9 — Pokébolas** (seção 5.6, "Pokébolas") — feito em 2026-10-28
+**Fase 9 — Pokébolas** (seção 5.6, "Pokébolas") — 9.1 a 9.3 feitas em 2026-10-28; 9.4 especificada
 - ~~*9.1 — Bolas como item:* config das bolas, sprites, migração (`caught_ball`, `agitation` e estoque inicial), lançamento com `{ ball }`, escolha na tela, bola na cena e na ficha, recompensas, botão de teste.~~
 - ~~*9.2 — Fuga crescente e berries na captura:* agitação, fuga por degrau, "Dar berry", Pinap só na captura (cargas antigas de `catch_boost` continuam até gastar).~~
 - ~~*9.3 — Berries novas:* Golden Razz e Silver Pinap (só captura), plantio lento, pesos baixos na queda de sementes, recompensas de nível 15/20 e bloco de jogo completo do álbum; o botão de teste também dá sementes/berries delas.~~
 - Decisões na implementação: `BerryDef.effect` opcional (berries só de captura); bônus de captura = `catch_boost` ativo × `capture.catchMult` da berry do lançamento; fuga usa `fleeBase`/`fleeStep`/`fleeMax` no `battleConfig` (não mais o `throwFleeChance` fixo no throw).
+- *9.4 — Arremesso com física* (seção 5.6, "Arremesso com física"): segurar, girar e soltar a bola; voo em 2,5D com curva; anel Nice/Great/Excellent; dá para errar (a bola é gasta, sem rolagem); selvagem se mexe mais quando agitado; berry arremessada do mesmo jeito, sem giro; toque simples, teclado e movimento reduzido lançam reto e acertam.
 
 **Depois (ideias anotadas, ainda sem fase):** breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 

@@ -12,6 +12,7 @@
     type ApiError,
     type BattleOutcome,
     type BattleStart,
+    type CaptureBerryInfo,
     type GameState,
     type OwnedPokemon,
     type PendingEncounter,
@@ -82,7 +83,47 @@
     }),
   )
   let selectedBerry = $state<string | null>(null)
-  let berryPickerOpen = $state(false)
+  /** Painel aberto na captura: as bolas (equipar) ou a mochila (dar berry). */
+  let capturePanel = $state<'balls' | 'bag' | null>(null)
+  let capturePanelEl = $state<HTMLDivElement | null>(null)
+  /** Berry voando até o selvagem e os textos do efeito, como o número de dano da luta. */
+  let tossBerry = $state<string | null>(null)
+  let tossId = $state(0)
+  let berryFloaters = $state<{ id: number; text: string; good: boolean }[]>([])
+  let floaterSeq = 0
+
+  // O painel abre abaixo do card: em tela baixa ele nasceria fora da vista.
+  $effect(() => {
+    if (capturePanel && capturePanelEl) capturePanelEl.scrollIntoView({ block: 'nearest' })
+  })
+
+  function toggleCapturePanel(panel: 'balls' | 'bag') {
+    play('tap')
+    capturePanel = capturePanel === panel ? null : panel
+  }
+
+  /** Agitação depois da berry escolhida (o servidor aplica no lançamento). */
+  function calmPreview(agitation: number, calm: number | 'all' | null | undefined): number {
+    if (calm === 'all') return 0
+    if (typeof calm === 'number') return Math.max(0, agitation - calm)
+    return agitation
+  }
+
+  function multText(mult: number): string {
+    return `×${String(mult).replace('.', ',')}`
+  }
+
+  /** Textos do efeito ao dar a berry: verde quando ajuda, vermelho quando não faz nada. */
+  function berryEffectTexts(capture: CaptureBerryInfo, agitation: number): { text: string; good: boolean }[] {
+    const texts: { text: string; good: boolean }[] = []
+    if (capture.catchMult) texts.push({ text: `Chance ${multText(capture.catchMult)}`, good: true })
+    if (capture.calm !== null) {
+      const calmed = agitation - calmPreview(agitation, capture.calm)
+      texts.push(calmed > 0 ? { text: calmed >= agitation ? 'Acalmou!' : `Acalmou −${calmed}`, good: true } : { text: 'Já está calmo', good: false })
+    }
+    if (capture.candyOnCatch) texts.push({ text: `+${capture.candyOnCatch} doces se capturar`, good: true })
+    return texts
+  }
 
   const clock = serverClock(() => game.now)
 
@@ -136,9 +177,20 @@
     })
   }
 
+  /** Dar a berry: ela fica guardada para o próximo lançamento (gasta junto com a bola). */
   function pickCaptureBerry(key: string | null) {
     selectedBerry = key
-    berryPickerOpen = false
+    capturePanel = null
+    const berry = key ? captureBerries.find((row) => row.key === key) : null
+    if (!berry || !encounter) return
+    play('tap')
+    tossBerry = berry.key
+    tossId += 1
+    const born = berryEffectTexts(berry.capture, encounter.agitation).map((row) => ({ ...row, id: (floaterSeq += 1) }))
+    berryFloaters = born
+    window.setTimeout(() => {
+      if (berryFloaters === born) berryFloaters = []
+    }, 1200 + born.length * 350)
   }
 
   function pickBall(key: string) {
@@ -553,7 +605,7 @@
       lastThrow = outcome
       thrownBallSprite = activeBall?.sprite ?? game.balls.list.find((b) => b.key === ballKey)?.sprite ?? 'poke'
       selectedBerry = null
-      berryPickerOpen = false
+      capturePanel = null
       encounter = {
         ...encounter,
         catchChance: outcome.catchChance,
@@ -707,7 +759,20 @@
   {@const head = sheet ? Math.round((sheet.ground[1] ?? sheet.h) * scale * 0.85) : 84}
   {@const unrest = Math.min(6, Math.max(0, mon.agitation))}
   <div class="wild-card" class:compact={variant === 'compact'}>
-    <div class="stage">
+    <!-- Na captura o palco tem a altura do sprite (+ estrelas): sem vazio acima da cabeça. -->
+    <div class="stage" style:height={variant === 'dizzy' ? `${Math.min(160, Math.max(72, head + 36))}px` : undefined}>
+      {#if variant === 'dizzy'}
+        {#key tossId}
+          {#if tossBerry}
+            <img class="berry-toss" src={berryIconSrc(tossBerry)} alt="" width="28" height="28" style:--head="{head}px" />
+          {/if}
+        {/key}
+        {#each berryFloaters as floater, i (floater.id)}
+          <span class="berry-float" class:bad={!floater.good} style:--head="{head}px" style:--i={i} aria-hidden="true">
+            {floater.text}
+          </span>
+        {/each}
+      {/if}
       <div class="anchor" class:dizzy={variant === 'dizzy'} class:restless={unrest > 0 && variant === 'dizzy'}>
         {#if look.kind === 'pmd' && sheet}
           <PmdSprite
@@ -934,17 +999,20 @@
   {:else if step === 'decide' && encounter}
     <div class="scroll">
       <section class="panel sheet wild">
-        {@render wild(encounter, 'dizzy')}
+        <!-- A agitação mostrada já desconta a berry dada (o servidor aplica no lançamento). -->
+        {@render wild({ ...encounter, agitation: calmPreview(encounter.agitation, activeCaptureBerry?.capture.calm) }, 'dizzy')}
         {#if activeBall}
           <p class="odds">Chance com {activeBall.displayName}: {percent(chanceForBall(activeBall.key))}</p>
+        {:else}
+          <p class="hint">Sem pokébolas.</p>
         {/if}
         {#if activeCaptureBerry}
           <p class="hint berry-on">
             Com {activeCaptureBerry.name}: {activeCaptureBerry.capture.description}
           </p>
         {/if}
-        {#if hasBalls}
-          <div class="ball-row" role="listbox" aria-label="Pokébolas">
+        {#if capturePanel === 'balls'}
+          <div class="ball-row" role="listbox" aria-label="Pokébolas" bind:this={capturePanelEl}>
             {#each ownedBalls as ball (ball.key)}
               <button
                 type="button"
@@ -952,87 +1020,111 @@
                 class:on={activeBall?.key === ball.key}
                 role="option"
                 aria-selected={activeBall?.key === ball.key}
+                aria-label={`${ball.displayName}, ${ball.quantity}, ${percent(chanceForBall(ball.key))}`}
+                title={ball.displayName}
                 disabled={pending}
-                onclick={() => pickBall(ball.key)}
+                onclick={() => {
+                  pickBall(ball.key)
+                  capturePanel = null
+                }}
               >
                 <img src={ballIconSrc(ball.sprite)} alt="" width="28" height="28" />
-                <span class="ball-name">{ball.displayName}</span>
                 <strong>×{ball.quantity}</strong>
                 <small>{percent(chanceForBall(ball.key))}</small>
               </button>
             {/each}
           </div>
-        {:else}
-          <p class="hint">Sem pokébolas.</p>
-        {/if}
-        {#if berryPickerOpen}
-          <div class="berry-picker" role="listbox" aria-label="Berries na captura">
-            <button
-              type="button"
-              class="ball-pick"
-              class:on={selectedBerry === null}
-              role="option"
-              aria-selected={selectedBerry === null}
-              disabled={pending}
-              onclick={() => pickCaptureBerry(null)}
-            >
-              <span class="ball-name">Nenhuma</span>
-            </button>
-            {#each captureBerries as berry (berry.key)}
+        {:else if capturePanel === 'bag'}
+          <div class="berry-picker" role="listbox" aria-label="Mochila: berries para a captura" bind:this={capturePanelEl}>
+            {#if captureBerries.length === 0}
+              <p class="hint bag-empty">Nenhuma berry para usar na captura.</p>
+            {:else}
               <button
                 type="button"
                 class="ball-pick"
-                class:on={selectedBerry === berry.key}
+                class:on={selectedBerry === null}
                 role="option"
-                aria-selected={selectedBerry === berry.key}
+                aria-selected={selectedBerry === null}
+                aria-label="Nenhuma berry"
+                title="Nenhuma"
                 disabled={pending}
-                onclick={() => pickCaptureBerry(berry.key)}
+                onclick={() => pickCaptureBerry(null)}
               >
-                <img src={berryIconSrc(berry.key)} alt="" width="28" height="28" />
-                <span class="ball-name">{berry.name}</span>
-                <strong>×{berry.quantity}</strong>
-                <small>{berry.capture.description}</small>
+                <span class="none-mark" aria-hidden="true">✕</span>
               </button>
-            {/each}
+              {#each captureBerries as berry (berry.key)}
+                <button
+                  type="button"
+                  class="ball-pick"
+                  class:on={selectedBerry === berry.key}
+                  role="option"
+                  aria-selected={selectedBerry === berry.key}
+                  aria-label={`${berry.name}, ${berry.quantity}: ${berry.capture.description}`}
+                  title={`${berry.name}: ${berry.capture.description}`}
+                  disabled={pending}
+                  onclick={() => pickCaptureBerry(berry.key)}
+                >
+                  <img src={berryIconSrc(berry.key)} alt="" width="28" height="28" />
+                  <strong>×{berry.quantity}</strong>
+                </button>
+              {/each}
+            {/if}
           </div>
         {/if}
       </section>
     </div>
     <div class="dock">
-      {#if captureBerries.length > 0}
+      <!-- Mochila · bola equipada (lança) · bolas (equipar). -->
+      <div class="throw-row">
         <button
           type="button"
-          class="btn big"
+          class="tool"
+          class:on={capturePanel === 'bag' || activeCaptureBerry !== null}
+          aria-expanded={capturePanel === 'bag'}
           disabled={pending}
-          onclick={() => {
-            play('tap')
-            berryPickerOpen = !berryPickerOpen
-          }}
+          onclick={() => toggleCapturePanel('bag')}
         >
           {#if activeCaptureBerry}
-            Berry: {activeCaptureBerry.name}
+            <img src={berryIconSrc(activeCaptureBerry.key)} alt="" width="28" height="28" />
           {:else}
-            Dar berry
+            <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
+              <path d="M4 1h4v1h1v2h2v7H1V4h2V2h1zm0 1v2h4V2zM2 5v5h8V5zm2 1h4v1H4z" />
+            </svg>
           {/if}
+          <small>Mochila</small>
         </button>
-      {/if}
-      <button
-        type="button"
-        class="btn btn-primary big"
-        aria-busy={throwing}
-        disabled={pending || !hasBalls}
-        onclick={() => void throwBall()}
-      >
-        {#if throwing}
-          <span class="ball sprite-wait" aria-hidden="true"></span>Lançando…
-        {:else if !hasBalls}
-          Sem pokébolas
-        {:else}
-          Lançar {activeBall?.displayName ?? 'bola'}
-        {/if}
-      </button>
-      <button type="button" class="btn big" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
-      <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
+        <button
+          type="button"
+          class="throw-btn"
+          aria-busy={throwing}
+          aria-label={activeBall ? `Lançar ${activeBall.displayName}` : 'Sem pokébolas'}
+          disabled={pending || !hasBalls}
+          onclick={() => void throwBall()}
+        >
+          {#if activeBall}
+            <img src={ballIconSrc(activeBall.sprite)} alt="" width="60" height="60" />
+          {/if}
+          <small>
+            {#if throwing}Lançando…{:else if activeBall}Lançar · ×{activeBall.quantity}{:else}Sem pokébolas{/if}
+          </small>
+        </button>
+        <button
+          type="button"
+          class="tool"
+          class:on={capturePanel === 'balls'}
+          aria-expanded={capturePanel === 'balls'}
+          disabled={pending || !hasBalls}
+          onclick={() => toggleCapturePanel('balls')}
+        >
+          <span class="ball-stack" aria-hidden="true">
+            <img src={ballIconSrc('great')} alt="" width="24" height="24" />
+            <img src={ballIconSrc('ultra')} alt="" width="24" height="24" />
+          </span>
+          <small>Bolas</small>
+        </button>
+      </div>
+      <!-- Sair da captura é deixar ir: não fica encontro esperando no jardim. -->
+      <button type="button" class="btn" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
     </div>
   {:else if step === 'throw' && encounter && lastThrow}
     <div class="scroll">
@@ -1136,11 +1228,239 @@
     text-align: center;
   }
 
-  .ball-row {
+  /* 5 por linha: as 10 bolas cabem em duas, e o nome fica na linha da chance
+     e no botão de lançar (os cartões só têm ícone, quantidade e chance). */
+  .ball-row,
+  .berry-picker {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-    gap: 0.35rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.3rem;
+    width: 100%;
     margin-top: 0.5rem;
+  }
+
+  /* Captura: Mochila · bola equipada (lança) · Bolas. */
+  .throw-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .tool {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.15rem;
+    min-height: 64px;
+    padding: 0.3rem 0.25rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--panel-face);
+    box-shadow: inset 0 -2px 0 var(--panel-shade);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tool small,
+  .throw-btn small {
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .tool.on {
+    border-color: var(--selected);
+    background: var(--selected-face);
+    box-shadow:
+      inset 0 0 0 2px var(--selected-ring),
+      inset 0 -2px 0 var(--selected);
+  }
+
+  .tool:disabled,
+  .throw-btn:disabled {
+    filter: grayscale(1) opacity(0.6);
+    cursor: default;
+  }
+
+  .tool img,
+  .throw-btn img {
+    image-rendering: pixelated;
+  }
+
+  .bag-icon {
+    fill: currentColor;
+  }
+
+  .ball-stack {
+    position: relative;
+    display: block;
+    width: 34px;
+    height: 28px;
+  }
+
+  .ball-stack img {
+    position: absolute;
+    top: 0;
+  }
+
+  .ball-stack img:first-child {
+    left: 0;
+  }
+
+  .ball-stack img:last-child {
+    left: 10px;
+    top: 4px;
+  }
+
+  .throw-btn {
+    display: grid;
+    justify-items: center;
+    gap: 0;
+    min-width: 108px;
+    min-height: 92px;
+    padding: 0.2rem 0.5rem 0.35rem;
+    border: 2px solid var(--panel-edge);
+    border-radius: 0;
+    background: var(--panel-face);
+    box-shadow: inset 0 -3px 0 var(--panel-shade);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .throw-btn:active:not(:disabled) {
+    transform: translateY(var(--px));
+  }
+
+  .throw-btn[aria-busy='true']:disabled {
+    filter: none;
+    cursor: progress;
+  }
+
+  /* Brilho fraco na bola: é aqui que se toca para lançar. */
+  .throw-btn:not(:disabled) img {
+    filter: drop-shadow(0 0 2px #ffe66d66);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .throw-btn:not(:disabled) img {
+      animation: ball-glow 2.4s steps(8, jump-none) infinite alternate;
+    }
+  }
+
+  @keyframes ball-glow {
+    from {
+      filter: drop-shadow(0 0 1px #ffe66d44);
+    }
+    to {
+      filter: drop-shadow(0 0 5px #ffe66daa);
+    }
+  }
+
+  .bag-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+    text-align: center;
+  }
+
+  /* Dar berry: ela sobe até o selvagem e some; os efeitos sobem depois, como o
+     número de dano da luta (verde quando ajuda, vermelho quando não faz nada). */
+  .berry-toss {
+    position: absolute;
+    left: 50%;
+    bottom: calc(0.75rem + var(--head) * 0.45);
+    z-index: 3;
+    opacity: 0;
+    image-rendering: pixelated;
+    pointer-events: none;
+  }
+
+  .berry-float {
+    position: absolute;
+    left: 50%;
+    bottom: calc(0.75rem + var(--head) * 0.75);
+    z-index: 3;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: #6ecf5a;
+    text-shadow:
+      0 var(--px) 0 var(--ink),
+      0 calc(var(--px) * -1) 0 var(--ink),
+      var(--px) 0 0 var(--ink),
+      calc(var(--px) * -1) 0 0 var(--ink);
+    transform: translate(-50%, 0);
+    pointer-events: none;
+    animation: berry-float-fade 0.9s ease-out both;
+    animation-delay: calc(0.25s + var(--i) * 0.35s);
+  }
+
+  .berry-float.bad {
+    color: #e05a4a;
+  }
+
+  @keyframes berry-float-fade {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .berry-toss {
+      animation: berry-toss 0.28s steps(4, jump-none) both;
+    }
+
+    .berry-float {
+      animation-name: berry-float-rise;
+    }
+  }
+
+  @keyframes berry-toss {
+    0% {
+      transform: translate(-50%, 9rem) scale(0.7);
+      opacity: 1;
+    }
+    80% {
+      transform: translate(-50%, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, 0) scale(0.4);
+      opacity: 0;
+    }
+  }
+
+  @keyframes berry-float-rise {
+    0% {
+      transform: translate(-50%, 0.4rem);
+      opacity: 0;
+    }
+    15% {
+      transform: translate(-50%, 0);
+      opacity: 1;
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -1.6rem);
+      opacity: 0;
+    }
+  }
+
+  .none-mark {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
   }
 
   .ball-pick {
@@ -1175,32 +1495,13 @@
     image-rendering: pixelated;
   }
 
-  .ball-name {
+  .ball-pick small {
     overflow: hidden;
     max-width: 100%;
-    text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .berry-picker {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
-    gap: 0.35rem;
-    width: 100%;
-    margin-top: 0.5rem;
-  }
-
-  .berry-picker .ball-pick small {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    white-space: normal;
-    font-size: 0.65rem;
-    font-weight: 600;
-    line-height: 1.15;
-  }
 
   .berry-on {
     margin: 0;
@@ -1267,12 +1568,6 @@
   .choice,
   .dock .btn {
     width: 100%;
-  }
-
-  .big {
-    min-height: 64px;
-    font-size: 1.15rem;
-    touch-action: manipulation;
   }
 
   /* Só em teste: a espécie numa linha; o nível e o botão embaixo. */
@@ -1343,6 +1638,7 @@
   .compact .stage {
     height: 5.5rem;
   }
+
 
   .anchor {
     position: absolute;
