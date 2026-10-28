@@ -15,14 +15,14 @@ pocket.lontraeye.com {
 		@hashed path /assets/*
 		header @hashed Cache-Control "public, max-age=31536000, immutable"
 
-		# Sprites, sons e molduras quase nunca mudam. Passado um dia, o navegador usa
-		# o que tem e confere em segundo plano, sem travar a tela.
-		@art path /sprites/* /sounds/* /ui/* /favicon.svg
+		# Sprites, sons, molduras e ícones do PWA quase nunca mudam. Passado um dia,
+		# o navegador usa o que tem e confere em segundo plano, sem travar a tela.
+		@art path /sprites/* /sounds/* /ui/* /icons/* /favicon.svg
 		header @art Cache-Control "public, max-age=86400, stale-while-revalidate=2592000"
 
-		# O index aponta para os arquivos com hash: sempre conferido, para um
-		# deploy novo aparecer na hora.
-		@page not path /assets/* /sprites/* /sounds/* /ui/* /favicon.svg
+		# O index, o SW e o manifest: sempre conferidos, para um deploy novo
+		# aparecer na hora (no-cache cobre /sw.js e /manifest.webmanifest).
+		@page not path /assets/* /sprites/* /sounds/* /ui/* /icons/* /favicon.svg
 		header @page Cache-Control "no-cache"
 
 		try_files {path} /index.html

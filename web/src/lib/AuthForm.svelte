@@ -25,7 +25,9 @@
   let starter = $state('charmander')
   let message = $state('')
   let pending = $state(false)
-  const devLogin = import.meta.env.DEV
+  // Entrada sem conta: aparece quando o servidor está com DEV_TOOLS (a rota
+  // /dev/status só existe lá). Vale no `npm run dev` e no `npm run preview`.
+  let devLogin = $state(false)
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search)
@@ -37,7 +39,16 @@
       window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''))
     }
     void checkSignup()
+    void checkDevTools()
   })
+
+  async function checkDevTools() {
+    try {
+      devLogin = (await api('/api/dev/status')).ok
+    } catch {
+      devLogin = false
+    }
+  }
 
   async function checkSignup() {
     try {
