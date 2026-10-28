@@ -287,6 +287,7 @@
       </button>
     {/if}
 
+    <div class="top-chrome">
     <header class="panel hud">
       <div class="level" aria-label="Nível de treinador">
         <small>Nv</small>{game.trainer.level}
@@ -381,6 +382,13 @@
         </div>
       {/if}
     </header>
+    {#if screen === 'meadow' && showReadyBanner && ready?.summary}
+      <div class="ready-banner panel" role="status">
+        <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
+        <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
+      </div>
+    {/if}
+    </div>
 
     {#if screen !== 'meadow'}
       <div class="world">
@@ -397,12 +405,6 @@
     {/if}
 
     {#if screen === 'meadow'}
-      {#if showReadyBanner && ready?.summary}
-        <div class="ready-banner panel" role="status">
-          <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
-          <button type="button" class="ready-dismiss" aria-label="Dispensar" onclick={dismissReady}>✕</button>
-        </div>
-      {/if}
       <div class="docks">
         <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
         <button type="button" class="btn badge-host" onclick={() => (screen = 'daycare')}>
@@ -538,7 +540,7 @@
     z-index: 6;
   }
 
-  /* Acima do HUD; no jardim o HUD desce um pouco se o aviso estiver aberto. */
+  /* Acima do HUD; no jardim o chrome desce um pouco se o aviso estiver aberto. */
   .meadow.immersive .update-banner {
     position: absolute;
     top: env(safe-area-inset-top);
@@ -546,7 +548,7 @@
     right: 0;
   }
 
-  .meadow.immersive:has(.update-banner) .hud {
+  .meadow.immersive:has(.update-banner) .top-chrome {
     top: calc(2.75rem + env(safe-area-inset-top));
   }
 
@@ -577,7 +579,7 @@
   }
 
   /* Desktop: menus com folga e largura limitada. Celular: cola nas bordas. */
-  .meadow.immersive .hud,
+  .meadow.immersive .top-chrome,
   .meadow.immersive .docks {
     width: min(
       calc(100% - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)),
@@ -586,13 +588,28 @@
     margin-inline: auto;
   }
 
-  .meadow.immersive .hud {
+  /* HUD + banner “pronto” no mesmo fluxo: o banner acompanha a altura do HUD. */
+  .meadow.immersive .top-chrome {
     --menu-max: 40rem;
     position: absolute;
     z-index: 4;
     top: calc(0.5rem + env(safe-area-inset-top));
     left: 0;
     right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    pointer-events: none;
+  }
+
+  .meadow.immersive .top-chrome > * {
+    pointer-events: auto;
+  }
+
+  .meadow.immersive .hud {
+    position: relative;
+    width: 100%;
+    margin: 0;
     pointer-events: none;
   }
 
@@ -614,13 +631,13 @@
     pointer-events: auto;
   }
 
-  /* Abaixo do HUD (que no celular vira duas linhas). */
   .meadow.immersive .ready-banner {
-    top: calc(7.25rem + env(safe-area-inset-top));
-    left: 0;
-    right: 0;
-    width: min(calc(100% - 0.7rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 40rem);
-    margin-inline: auto;
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    margin: 0;
   }
 
   @media (max-width: 899px) {
@@ -628,9 +645,8 @@
       padding: 0;
     }
 
-    .meadow.immersive .hud,
-    .meadow.immersive .docks,
-    .meadow.immersive .ready-banner {
+    .meadow.immersive .top-chrome,
+    .meadow.immersive .docks {
       width: 100%;
       max-width: none;
       margin-inline: 0;
@@ -638,8 +654,11 @@
       right: 0;
     }
 
-    .meadow.immersive .hud {
+    .meadow.immersive .top-chrome {
       top: env(safe-area-inset-top);
+    }
+
+    .meadow.immersive .hud {
       border-left: 0;
       border-right: 0;
       border-top: 0;
@@ -651,11 +670,6 @@
       gap: 0.35rem;
       padding: 0 0.35rem 0.35rem;
       box-sizing: border-box;
-    }
-
-    .meadow.immersive .ready-banner {
-      top: calc(6.75rem + env(safe-area-inset-top));
-      width: 100%;
     }
 
     .meadow.fit .world {
@@ -941,9 +955,8 @@
 
   @media (max-width: 899px) {
     .meadow.pokedex-open .garden-layer,
-    .meadow.pokedex-open .hud,
+    .meadow.pokedex-open .top-chrome,
     .meadow.pokedex-open .docks,
-    .meadow.pokedex-open .ready-banner,
     .meadow.pokedex-open .world,
     .meadow.pokedex-open .update-banner {
       display: none !important;
@@ -984,12 +997,13 @@
     overflow: hidden;
   }
 
+  .top-chrome {
+    display: contents;
+  }
+
   .ready-banner {
-    position: absolute;
+    position: relative;
     z-index: 8;
-    top: 0.35rem;
-    left: 0.35rem;
-    right: 0.35rem;
     display: flex;
     align-items: stretch;
     gap: 0.25rem;

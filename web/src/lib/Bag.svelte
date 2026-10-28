@@ -267,7 +267,7 @@
     flex: none;
     align-self: center;
     min-width: 72px;
-    min-height: 36px;
+    min-height: 44px;
     padding-block: 0;
   }
 

@@ -1445,7 +1445,7 @@
     color: #fff;
     text-shadow: 0 var(--px) 0 var(--primary-shade);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -3px 0 var(--primary-shade);
   }
 
@@ -2008,7 +2008,7 @@
     position: absolute;
     inset: 0;
     transform-origin: center bottom;
-    background: #ffcc0099;
+    background: #f8d03099;
     pointer-events: none;
   }
 
@@ -2017,7 +2017,7 @@
     color: #fff;
     text-shadow: 0 var(--px) 0 var(--primary-shade);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -3px 0 var(--primary-shade);
     animation: ready-pulse 0.8s steps(2, jump-none) infinite alternate;
   }
@@ -2082,7 +2082,7 @@
     position: absolute;
     inset: 0;
     transform-origin: left center;
-    background: #5a8f3c44;
+    background: #a0a0a866;
     pointer-events: none;
   }
 
@@ -2117,9 +2117,9 @@
 
   .chip.on {
     border-color: var(--selected);
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -2px 0 var(--selected);
   }
 

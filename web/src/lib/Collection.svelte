@@ -43,6 +43,8 @@
   let filter = $state<Filter>(initial.filter)
   let sort = $state<Sort>(initial.sort)
   let sortOpen = $state(false)
+  let sortBtn = $state<HTMLButtonElement | null>(null)
+  let sortList = $state<HTMLUListElement | null>(null)
   let query = $state('')
   let selecting = $state(false)
   let picked = $state<number[]>([])
@@ -103,6 +105,26 @@
     } catch {
       // O navegador pode bloquear o storage; a coleção segue sem lembrar.
     }
+  })
+
+  function closeSort() {
+    if (!sortOpen) return
+    sortOpen = false
+    sortBtn?.focus()
+  }
+
+  $effect(() => {
+    if (!sortOpen) return
+    const selected = sortList?.querySelector<HTMLButtonElement>('button[aria-selected="true"]')
+    selected?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeSort()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   })
 
   function toggle(id: number) {
@@ -181,10 +203,14 @@
         <button
           type="button"
           class="field sort-btn"
+          bind:this={sortBtn}
           aria-haspopup="listbox"
           aria-expanded={sortOpen}
           aria-labelledby="sort-label"
-          onclick={() => (sortOpen = !sortOpen)}
+          onclick={() => {
+            if (sortOpen) closeSort()
+            else sortOpen = true
+          }}
         >
           <span class="sort-name">{sortLabel}</span>
           <svg class="caret" viewBox="0 0 5 3" width="10" height="6" aria-hidden="true">
@@ -192,8 +218,8 @@
           </svg>
         </button>
         {#if sortOpen}
-          <button type="button" class="sort-dismiss" aria-label="Fechar ordem" onclick={() => (sortOpen = false)}></button>
-          <ul class="sort-list" role="listbox" aria-labelledby="sort-label">
+          <button type="button" class="sort-dismiss" aria-label="Fechar ordem" onclick={closeSort}></button>
+          <ul class="sort-list" role="listbox" aria-labelledby="sort-label" bind:this={sortList}>
             {#each sorts as item (item.id)}
               <li>
                 <button
@@ -203,7 +229,7 @@
                   class:on={sort === item.id}
                   onclick={() => {
                     sort = item.id
-                    sortOpen = false
+                    closeSort()
                   }}
                 >
                   {item.label}
@@ -367,7 +393,7 @@
 
   .sort-list button {
     width: 100%;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 0.5rem;
     border: 0;
     background: none;
@@ -386,7 +412,7 @@
   }
 
   .sort-list button.on {
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow: inset 3px 0 0 var(--selected);
   }
 
@@ -415,9 +441,9 @@
 
   .card.on {
     border-color: var(--selected);
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -2px 0 var(--selected);
   }
 

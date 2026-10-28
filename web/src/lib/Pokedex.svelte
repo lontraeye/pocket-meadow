@@ -779,7 +779,7 @@
   }
 
   .region-list button.on {
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow: inset 3px 0 0 var(--selected);
   }
 

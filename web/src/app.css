@@ -1,7 +1,6 @@
 /*
-  Tema clássico (branco/cinza), no jeito das caixas de texto Gen 1–3.
-  Molduras em CSS puro — sem os PNGs bege do Kenney — para dá para
-  comparar o look sem gerar assets novos.
+  Tema clássico (branco/cinza), no estilo das caixas de texto da Gen 1–3.
+  Molduras em CSS puro.
 */
 
 :root {
@@ -15,6 +14,8 @@
   --inlay-face: #d8d8e0;
   --inlay-shade: #b0b0b8;
   --selected: #3870d8;
+  --selected-face: #e8f0ff;
+  --selected-ring: #78a8f0;
   --grass-1: #78c850;
   --grass-2: #68b040;
   --grass-side: #489030;
@@ -222,7 +223,7 @@ h3 {
 .field:focus {
   outline: none;
   border-color: var(--selected);
-  box-shadow: 0 0 0 2px #78a8f088;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--selected-ring) 53%, transparent);
 }
 
 /* Moldura “afundada” / selecionada para cards e chips (antes: inlay.png). */
@@ -236,8 +237,10 @@ h3 {
 .inlay[aria-pressed='true'],
 .selected-frame {
   border-color: var(--selected);
-  background: #e8f0ff;
-  box-shadow: inset 0 -2px 0 var(--selected);
+  background: var(--selected-face);
+  box-shadow:
+    inset 0 0 0 2px var(--selected-ring),
+    inset 0 -2px 0 var(--selected);
 }
 
 @media (prefers-reduced-motion: reduce) {

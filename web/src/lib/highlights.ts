@@ -172,7 +172,7 @@ export function albumClaimCards(input: {
       title: 'Álbum completo!',
       detail: input.title,
       tone: 'good',
-      sound: 'level',
+      sound: 'levelup',
     },
   ]
   for (const item of input.reward.items) {

@@ -244,9 +244,9 @@
 
   .starter.selected {
     border-color: var(--selected);
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -2px 0 var(--selected);
   }
 

@@ -760,9 +760,9 @@
 
   .tab[aria-selected='true'] {
     border-color: var(--selected);
-    background: #e8f0ff;
+    background: var(--selected-face);
     box-shadow:
-      inset 0 0 0 2px #78a8f0,
+      inset 0 0 0 2px var(--selected-ring),
       inset 0 -2px 0 var(--selected);
     font-weight: 700;
   }
@@ -776,7 +776,7 @@
   .title-row {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.15rem;
     min-width: 0;
   }
 
@@ -838,9 +838,9 @@
   h2 {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.15rem;
     min-width: 0;
-    font-size: 1.25rem;
+    font-size: 1.15rem;
   }
 
   .name-text {
@@ -869,8 +869,8 @@
   .icon-btn {
     flex: none;
     box-sizing: border-box;
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     margin: 0;
     padding: 0;
     border: 0;
@@ -893,8 +893,6 @@
   .icon-btn.star {
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
   }
 
   /* Contorno = Pixelarticons (MIT); cheia = mesmo traço. Sempre 24 CSS px (= grade). */
@@ -1003,10 +1001,10 @@
 
   .close {
     flex: none;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    min-height: 36px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
     padding: 0;
     font-size: 0.95rem;
   }

@@ -62,8 +62,7 @@
   }
 
   /* Separador entre as duas metades (3+3). */
-  .stat-table th:nth-child(3),
-  .stat-table td:nth-child(3) {
+  .stat-table th:nth-child(3) {
     border-left-width: 2px;
     border-left-color: var(--panel-edge);
   }

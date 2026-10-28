@@ -98,7 +98,7 @@
   }
 
   .card.bad {
-    background: #b33a2b18;
+    background: #c0302818;
   }
 
   .card img {

@@ -5,7 +5,7 @@ Pocket Meadow é um fan project sem fins comerciais. Pokémon é marca da Ninten
 | O quê | Onde | Autor | Licença |
 |---|---|---|---|
 | Molduras de UI em 9-slice | `web/public/ui/` | [Kenney](https://kenney.nl/assets/pixel-ui-pack) (Pixel UI Pack) | CC0 |
-| Ícone de estrela (favorito) | `web/public/ui/star-outline.svg` (e `star-fill.svg`, preenchimento derivado) | [Pixelarticons](https://pixelarticons.com/) (`star`), via [Iconify](https://icon-sets.iconify.design/pixelarticons/star/) | MIT |
+| Ícone de estrela (favorito) | inline em `web/src/lib/PokemonSheet.svelte` (contorno Pixelarticons; cheia derivada do mesmo traço) | [Pixelarticons](https://pixelarticons.com/) (`star`), via [Iconify](https://icon-sets.iconify.design/pixelarticons/star/) | MIT |
 | Ícone do app (o Mystery Egg) | `web/icons/meadow.svg` (os pixels do sprite em SVG, fundo transparente; branco só onde o sistema exige), `web/public/favicon.svg`, `web/public/icons/` | [PokeAPI/sprites](https://github.com/PokeAPI/sprites) (`sprites/items/mystery-egg.png`) | Arte de propriedade da Nintendo / Game Freak; mesmo status dos ícones de itens |
 | Fonte Pixelify Sans | `@fontsource/pixelify-sans` | Stefie Justprince | SIL OFL 1.1 |
 | Sprites animados dos Pokémon | `web/public/sprites/showdown/` | Pokémon Showdown, via [PokeAPI/sprites](https://github.com/PokeAPI/sprites) | Arte de propriedade da Nintendo / Game Freak |
