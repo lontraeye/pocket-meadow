@@ -28,4 +28,28 @@ export const battleConfig = {
   xpLevelExp: BATTLE_XP_LEVEL_EXP,
   catchMult: 1.2,
   catchMin: 0.03,
+  /** Qualidade do arremesso (Fase 9.4). Multiplica a chance junto da bola/berry. */
+  throwQualityMult: {
+    normal: 1,
+    nice: 1.15,
+    great: 1.4,
+    excellent: 1.8,
+  },
+  /** Bônus de curva (independente da qualidade). */
+  throwCurveMult: 1.3,
 } as const
+
+export type ThrowQuality = keyof typeof battleConfig.throwQualityMult
+
+export const THROW_QUALITIES = Object.keys(battleConfig.throwQualityMult) as ThrowQuality[]
+
+/** Multiplicador total do arremesso: qualidade × (curva ou 1). */
+export function throwAimMult(quality: ThrowQuality, curve: boolean): number {
+  const q = battleConfig.throwQualityMult[quality]
+  return q * (curve ? battleConfig.throwCurveMult : 1)
+}
+
+export function parseThrowQuality(value: unknown): ThrowQuality | null {
+  if (typeof value !== 'string') return null
+  return (THROW_QUALITIES as readonly string[]).includes(value) ? (value as ThrowQuality) : null
+}

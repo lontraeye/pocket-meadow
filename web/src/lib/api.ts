@@ -42,11 +42,15 @@ export type BallInfo = {
   itemKey: string
 }
 
+export type ThrowQuality = 'normal' | 'nice' | 'great' | 'excellent'
+
 export type BallsConfig = {
   startingPokeBalls: number
   list: BallInfo[]
   catchMult: number
   catchMin: number
+  throwQualityMult: Record<ThrowQuality, number>
+  throwCurveMult: number
 }
 
 export type RegionInfo = {
@@ -425,6 +429,8 @@ export function errorText(error: ApiError): string {
       return 'Essa pokébola não existe.'
     case 'berry_not_usable':
       return 'Essa berry não serve na captura.'
+    case 'invalid_throw_quality':
+      return 'Qualidade de arremesso inválida.'
     case 'energy_full':
       return 'Energia já está cheia.'
     case 'move_not_found':

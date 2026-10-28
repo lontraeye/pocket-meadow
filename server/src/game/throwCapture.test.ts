@@ -112,3 +112,39 @@ test('Master Ball: chance 1 e ainda consome a rolagem de captura', () => {
   assert.equal(roll.caught, true)
   assert.equal(roll.fled, false)
 })
+
+test('qualidade e curva mudam só a chance; a sequência RNG continua a mesma', () => {
+  const seed = 55
+  const rate = 45
+  const plain = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: rate, fleeChance: 0 })
+  const great = rollThrow({
+    encounterSeed: seed,
+    throwIndex: 0,
+    captureRate: rate,
+    throwMult: 1.4,
+    fleeChance: 0,
+  })
+  assert.equal(great.catchChance, catchChance(rate, 1, 1, false, 1.4))
+  assert.notEqual(great.catchChance, plain.catchChance)
+
+  let stay = 0
+  for (let s = 1; s < 8000; s += 1) {
+    const first = rollThrow({
+      encounterSeed: s,
+      throwIndex: 0,
+      captureRate: 3,
+      fleeChance: 0,
+      throwMult: 1.8 * 1.3,
+    })
+    if (!first.caught && !first.fled) {
+      stay = s
+      break
+    }
+  }
+  assert.ok(stay > 0)
+  const rngAfter = throwRngAt(stay, 0)
+  rngAfter()
+  rngAfter()
+  const rngAt1 = throwRngAt(stay, 1)
+  assert.equal(rngAt1(), rngAfter())
+})

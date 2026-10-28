@@ -30,6 +30,8 @@ export function rollThrow(input: {
   captureRate: number
   berryBonus?: number
   ballMult?: number
+  /** Qualidade × curva (9.4). */
+  throwMult?: number
   /** Master Ball: chance 1, mas ainda consome a rolagem de captura. */
   guaranteed?: boolean
   fleeChance?: number
@@ -39,6 +41,7 @@ export function rollThrow(input: {
     input.berryBonus ?? 1,
     input.ballMult ?? 1,
     input.guaranteed === true,
+    input.throwMult ?? 1,
   )
   const fleeOdds = input.fleeChance ?? battleConfig.throwFleeChance
   const rng = throwRngAt(input.encounterSeed, input.throwIndex)

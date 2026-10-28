@@ -39,6 +39,7 @@ export function previewCatchChance(input: {
   wildLevel: number
   types: readonly string[]
   berryBonus?: number
+  throwMult?: number
 }): number {
   if (input.ballKey === 'master') return 1
   const ballMult = ballMultiplier({
@@ -47,7 +48,12 @@ export function previewCatchChance(input: {
     wildLevel: input.wildLevel,
     types: input.types,
   })
-  const raw = (input.captureRate / 255) * input.catchMult * ballMult * (input.berryBonus ?? 1)
+  const raw =
+    (input.captureRate / 255) *
+    input.catchMult *
+    ballMult *
+    (input.berryBonus ?? 1) *
+    (input.throwMult ?? 1)
   return Math.min(1, Math.max(input.catchMin, raw))
 }
 

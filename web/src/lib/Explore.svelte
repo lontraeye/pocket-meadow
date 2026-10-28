@@ -18,10 +18,13 @@
     type PendingEncounter,
     type RegionInfo,
     type ThrowOutcome,
+    type ThrowQuality,
   } from './api'
   import { ballIconSrc, previewCatchChance } from './balls'
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
+  import ThrowPad from './ThrowPad.svelte'
+  import { throwAimMult } from './throwPhysics'
   import { setLiveFight } from './liveFight'
   import BattleScene from './BattleScene.svelte'
   import {
@@ -83,14 +86,16 @@
     }),
   )
   let selectedBerry = $state<string | null>(null)
+  /** Berry já arremessada com sucesso; o slot volta a mostrar a bola. */
+  let berryDelivered = $state(false)
   /** Painel aberto na captura: as bolas (equipar) ou a mochila (dar berry). */
   let capturePanel = $state<'balls' | 'bag' | null>(null)
   let capturePanelEl = $state<HTMLDivElement | null>(null)
-  /** Berry voando até o selvagem e os textos do efeito, como o número de dano da luta. */
-  let tossBerry = $state<string | null>(null)
-  let tossId = $state(0)
+  let wildStageEl = $state<HTMLElement | null>(null)
+  /** Textos do efeito ao acertar a berry no selvagem. */
   let berryFloaters = $state<{ id: number; text: string; good: boolean }[]>([])
   let floaterSeq = 0
+  let aimSpinning = $state(false)
 
   // O painel abre abaixo do card: em tela baixa ele nasceria fora da vista.
   $effect(() => {
@@ -157,14 +162,26 @@
       const rows = game.effects.filter((e) => e.effectKey === 'catch_boost').sort((a, b) => a.id - b.id)
       const chosen = rows.find((row) => row.charges !== null) ?? rows[0]
       const bag = chosen?.multiplier ?? 1
-      const thrown = activeCaptureBerry?.capture.catchMult ?? 1
+      const thrown =
+        berryDelivered && activeCaptureBerry ? (activeCaptureBerry.capture.catchMult ?? 1) : 1
       return bag * thrown
     })(),
+  )
+  const decideAgitation = $derived(
+    berryDelivered
+      ? calmPreview(encounter?.agitation ?? 0, activeCaptureBerry?.capture.calm)
+      : (encounter?.agitation ?? 0),
   )
 
   function chanceForBall(ballKey: string): number {
     if (!encounter || encounter.wonAt == null) return 0
     const types = [encounter.type1, encounter.type2].filter((t): t is string => Boolean(t))
+    const throwMult = throwAimMult(
+      'normal',
+      aimSpinning,
+      game.balls.throwQualityMult,
+      game.balls.throwCurveMult,
+    )
     return previewCatchChance({
       captureRate: encounter.captureRate,
       catchMult: game.balls.catchMult,
@@ -174,23 +191,53 @@
       wildLevel: encounter.level,
       types,
       berryBonus: catchBerryBonus,
+      throwMult,
     })
   }
 
-  /** Dar a berry: ela fica guardada para o próximo lançamento (gasta junto com a bola). */
+  const throwMode = $derived(
+    selectedBerry && !berryDelivered ? ('berry' as const) : ('ball' as const),
+  )
+  const throwSpriteSrc = $derived(
+    throwMode === 'berry' && activeCaptureBerry
+      ? berryIconSrc(activeCaptureBerry.key)
+      : ballIconSrc(activeBall?.sprite ?? 'poke'),
+  )
+  const throwLabel = $derived(
+    throwMode === 'berry' && activeCaptureBerry
+      ? `Dar ${activeCaptureBerry.name}`
+      : activeBall
+        ? `Lançar · ×${activeBall.quantity}`
+        : 'Sem pokébolas',
+  )
+
+  /** Escolhe a berry para o arremesso (efeito só quando acertar o gesto). */
   function pickCaptureBerry(key: string | null) {
-    selectedBerry = key
-    capturePanel = null
-    const berry = key ? captureBerries.find((row) => row.key === key) : null
-    if (!berry || !encounter) return
     play('tap')
-    tossBerry = berry.key
-    tossId += 1
-    const born = berryEffectTexts(berry.capture, encounter.agitation).map((row) => ({ ...row, id: (floaterSeq += 1) }))
+    selectedBerry = key
+    berryDelivered = false
+    berryFloaters = []
+    capturePanel = null
+  }
+
+  function onBerryHit() {
+    const berry = activeCaptureBerry
+    if (!berry || !encounter) return
+    berryDelivered = true
+    const born = berryEffectTexts(berry.capture, encounter.agitation).map((row) => ({
+      ...row,
+      id: (floaterSeq += 1),
+    }))
     berryFloaters = born
     window.setTimeout(() => {
       if (berryFloaters === born) berryFloaters = []
     }, 1200 + born.length * 350)
+  }
+
+  function onBerryMiss() {
+    selectedBerry = null
+    berryDelivered = false
+    berryFloaters = []
   }
 
   function pickBall(key: string) {
@@ -577,9 +624,8 @@
     step = 'result'
   }
 
-  async function throwBall() {
+  async function throwBall(quality: ThrowQuality, curve: boolean) {
     if (!encounter || !activeBall) return
-    play('tap')
     pending = true
     throwing = true
     message = ''
@@ -589,6 +635,8 @@
     try {
       const response = await api(`/api/encounters/${encounter.id}/throw`, {
         ball: ballKey,
+        quality,
+        curve,
         ...(berryKey ? { berry: berryKey } : {}),
       })
       if (!response.ok) {
@@ -605,7 +653,9 @@
       lastThrow = outcome
       thrownBallSprite = activeBall?.sprite ?? game.balls.list.find((b) => b.key === ballKey)?.sprite ?? 'poke'
       selectedBerry = null
+      berryDelivered = false
       capturePanel = null
+      aimSpinning = false
       encounter = {
         ...encounter,
         catchChance: outcome.catchChance,
@@ -614,6 +664,30 @@
       }
       if (prefersReducedMotion()) afterThrow()
       else step = 'throw'
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+      throwing = false
+    }
+  }
+
+  async function missBallThrow() {
+    if (!encounter || !activeBall) return
+    pending = true
+    throwing = true
+    message = ''
+    const ballKey = activeBall.key
+    try {
+      const response = await api(`/api/encounters/${encounter.id}/miss`, { ball: ballKey })
+      if (!response.ok) {
+        message = errorText(await readError(response))
+        if (response.status === 404) {
+          encounter = null
+          step = 'regions'
+        }
+      }
+      await onState()
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -760,20 +834,24 @@
   {@const unrest = Math.min(6, Math.max(0, mon.agitation))}
   <div class="wild-card" class:compact={variant === 'compact'}>
     <!-- Na captura o palco tem a altura do sprite (+ estrelas): sem vazio acima da cabeça. -->
-    <div class="stage" style:height={variant === 'dizzy' ? `${Math.min(160, Math.max(72, head + 36))}px` : undefined}>
+    <div
+      class="stage"
+      style:height={variant === 'dizzy' ? `${Math.min(160, Math.max(72, head + 36))}px` : undefined}
+      bind:this={wildStageEl}
+    >
       {#if variant === 'dizzy'}
-        {#key tossId}
-          {#if tossBerry}
-            <img class="berry-toss" src={berryIconSrc(tossBerry)} alt="" width="28" height="28" style:--head="{head}px" />
-          {/if}
-        {/key}
         {#each berryFloaters as floater, i (floater.id)}
           <span class="berry-float" class:bad={!floater.good} style:--head="{head}px" style:--i={i} aria-hidden="true">
             {floater.text}
           </span>
         {/each}
       {/if}
-      <div class="anchor" class:dizzy={variant === 'dizzy'} class:restless={unrest > 0 && variant === 'dizzy'}>
+      <div
+        class="anchor"
+        class:dizzy={variant === 'dizzy'}
+        class:restless={unrest > 0 && variant === 'dizzy'}
+        style:--unrest={unrest}
+      >
         {#if look.kind === 'pmd' && sheet}
           <PmdSprite
             speciesId={mon.speciesId}
@@ -999,17 +1077,18 @@
   {:else if step === 'decide' && encounter}
     <div class="scroll">
       <section class="panel sheet wild">
-        <!-- A agitação mostrada já desconta a berry dada (o servidor aplica no lançamento). -->
-        {@render wild({ ...encounter, agitation: calmPreview(encounter.agitation, activeCaptureBerry?.capture.calm) }, 'dizzy')}
+        {@render wild({ ...encounter, agitation: decideAgitation }, 'dizzy')}
         {#if activeBall}
           <p class="odds">Chance com {activeBall.displayName}: {percent(chanceForBall(activeBall.key))}</p>
         {:else}
           <p class="hint">Sem pokébolas.</p>
         {/if}
-        {#if activeCaptureBerry}
+        {#if berryDelivered && activeCaptureBerry}
           <p class="hint berry-on">
             Com {activeCaptureBerry.name}: {activeCaptureBerry.capture.description}
           </p>
+        {:else if throwMode === 'berry' && activeCaptureBerry}
+          <p class="hint">Arremesse a {activeCaptureBerry.name} no selvagem.</p>
         {/if}
         {#if capturePanel === 'balls'}
           <div class="ball-row" role="listbox" aria-label="Pokébolas" bind:this={capturePanelEl}>
@@ -1093,21 +1172,26 @@
           {/if}
           <small>Mochila</small>
         </button>
-        <button
-          type="button"
-          class="throw-btn"
-          aria-busy={throwing}
-          aria-label={activeBall ? `Lançar ${activeBall.displayName}` : 'Sem pokébolas'}
-          disabled={pending || !hasBalls}
-          onclick={() => void throwBall()}
-        >
-          {#if activeBall}
-            <img src={ballIconSrc(activeBall.sprite)} alt="" width="60" height="60" />
-          {/if}
-          <small>
-            {#if throwing}Lançando…{:else if activeBall}Lançar · ×{activeBall.quantity}{:else}Sem pokébolas{/if}
-          </small>
-        </button>
+        <ThrowPad
+          mode={throwMode}
+          spriteSrc={throwSpriteSrc}
+          label={throwLabel}
+          disabled={pending || (throwMode === 'ball' && !hasBalls) || (throwMode === 'berry' && !activeCaptureBerry)}
+          busy={throwing}
+          agitation={decideAgitation}
+          stageEl={wildStageEl}
+          onBallHit={(quality, curve) => {
+            aimSpinning = false
+            void throwBall(quality, curve)
+          }}
+          onBallMiss={() => {
+            aimSpinning = false
+            void missBallThrow()
+          }}
+          onBerryHit={onBerryHit}
+          onBerryMiss={onBerryMiss}
+          onSpinChange={(on) => (aimSpinning = on)}
+        />
         <button
           type="button"
           class="tool"
@@ -1263,8 +1347,7 @@
     touch-action: manipulation;
   }
 
-  .tool small,
-  .throw-btn small {
+  .tool small {
     font-size: 0.78rem;
     font-weight: 700;
     white-space: nowrap;
@@ -1278,14 +1361,12 @@
       inset 0 -2px 0 var(--selected);
   }
 
-  .tool:disabled,
-  .throw-btn:disabled {
+  .tool:disabled {
     filter: grayscale(1) opacity(0.6);
     cursor: default;
   }
 
-  .tool img,
-  .throw-btn img {
+  .tool img {
     image-rendering: pixelated;
   }
 
@@ -1314,68 +1395,10 @@
     top: 4px;
   }
 
-  .throw-btn {
-    display: grid;
-    justify-items: center;
-    gap: 0;
-    min-width: 108px;
-    min-height: 92px;
-    padding: 0.2rem 0.5rem 0.35rem;
-    border: 2px solid var(--panel-edge);
-    border-radius: 0;
-    background: var(--panel-face);
-    box-shadow: inset 0 -3px 0 var(--panel-shade);
-    color: var(--ink);
-    font: inherit;
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-
-  .throw-btn:active:not(:disabled) {
-    transform: translateY(var(--px));
-  }
-
-  .throw-btn[aria-busy='true']:disabled {
-    filter: none;
-    cursor: progress;
-  }
-
-  /* Brilho fraco na bola: é aqui que se toca para lançar. */
-  .throw-btn:not(:disabled) img {
-    filter: drop-shadow(0 0 2px #ffe66d66);
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .throw-btn:not(:disabled) img {
-      animation: ball-glow 2.4s steps(8, jump-none) infinite alternate;
-    }
-  }
-
-  @keyframes ball-glow {
-    from {
-      filter: drop-shadow(0 0 1px #ffe66d44);
-    }
-    to {
-      filter: drop-shadow(0 0 5px #ffe66daa);
-    }
-  }
-
   .bag-empty {
     grid-column: 1 / -1;
     margin: 0;
     text-align: center;
-  }
-
-  /* Dar berry: ela sobe até o selvagem e some; os efeitos sobem depois, como o
-     número de dano da luta (verde quando ajuda, vermelho quando não faz nada). */
-  .berry-toss {
-    position: absolute;
-    left: 50%;
-    bottom: calc(0.75rem + var(--head) * 0.45);
-    z-index: 3;
-    opacity: 0;
-    image-rendering: pixelated;
-    pointer-events: none;
   }
 
   .berry-float {
@@ -1413,27 +1436,8 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .berry-toss {
-      animation: berry-toss 0.28s steps(4, jump-none) both;
-    }
-
     .berry-float {
       animation-name: berry-float-rise;
-    }
-  }
-
-  @keyframes berry-toss {
-    0% {
-      transform: translate(-50%, 9rem) scale(0.7);
-      opacity: 1;
-    }
-    80% {
-      transform: translate(-50%, 0) scale(1);
-      opacity: 1;
-    }
-    100% {
-      transform: translate(-50%, 0) scale(0.4);
-      opacity: 0;
     }
   }
 
@@ -1525,15 +1529,25 @@
   }
 
   .anchor.restless {
-    animation: restless 0.55s ease-in-out infinite alternate;
+    --amp: calc(var(--unrest, 1) * 1px);
+    animation: restless calc(0.7s / (0.55 + var(--unrest, 1) * 0.12)) ease-in-out infinite;
   }
 
   @keyframes restless {
-    from {
-      transform: translateX(-1px);
+    0% {
+      transform: translate(calc(var(--amp) * -3), 0);
     }
-    to {
-      transform: translateX(1px);
+    25% {
+      transform: translate(calc(var(--amp) * 2), calc(var(--amp) * -2));
+    }
+    50% {
+      transform: translate(calc(var(--amp) * 3), 0);
+    }
+    75% {
+      transform: translate(calc(var(--amp) * -2), calc(var(--amp) * -1.5));
+    }
+    100% {
+      transform: translate(calc(var(--amp) * -3), 0);
     }
   }
 

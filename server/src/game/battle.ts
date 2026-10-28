@@ -44,9 +44,11 @@ export function catchChance(
   berryBonus = 1,
   ballMult = 1,
   guaranteed = false,
+  /** Qualidade × curva do arremesso (9.4); 1 se omitido. */
+  throwMult = 1,
 ): number {
   if (guaranteed) return 1
-  const raw = (captureRate / 255) * battleConfig.catchMult * ballMult * berryBonus
+  const raw = (captureRate / 255) * battleConfig.catchMult * ballMult * berryBonus * throwMult
   return clamp(raw, battleConfig.catchMin, 1)
 }
 

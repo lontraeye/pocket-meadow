@@ -205,6 +205,8 @@ function readState(userId: number, now: number) {
       })),
       catchMult: battleConfig.catchMult,
       catchMin: battleConfig.catchMin,
+      throwQualityMult: battleConfig.throwQualityMult,
+      throwCurveMult: battleConfig.throwCurveMult,
     },
     battle: {
       k: battleConfig.k,

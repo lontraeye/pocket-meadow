@@ -3,7 +3,7 @@ import { SqliteError } from 'better-sqlite3'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
-import { battleConfig } from '../config/battle.js'
+import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
 import { type Region, regionBySlug } from '../config/regions.js'
 import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
@@ -149,11 +149,37 @@ encounterRoutes.post('/:id/throw', requireUser, async (c) => {
         ? body.berry
         : undefined
   if (berry === undefined) return c.json({ error: 'invalid_body' }, 400)
+  const quality =
+    body.quality === undefined || body.quality === null
+      ? 'normal'
+      : parseThrowQuality(body.quality)
+  if (quality === null) return c.json({ error: 'invalid_throw_quality' }, 400)
+  const curve =
+    body.curve === undefined || body.curve === null
+      ? false
+      : typeof body.curve === 'boolean'
+        ? body.curve
+        : undefined
+  if (curve === undefined) return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
-  const result = immediate(() => throwBall(userId, encounterId, now, ball, berry))
+  const result = immediate(() => throwBall(userId, encounterId, now, ball, berry, quality, curve))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.throw)
+})
+
+/** Errou o alvo: gasta a bola, sem rolagem, sem agitação, sem throw_count. */
+encounterRoutes.post('/:id/miss', requireUser, async (c) => {
+  const encounterId = parseId(c.req.param('id'))
+  if (encounterId === null) return c.json({ error: 'encounter_not_found' }, 404)
+  const body = (await readObject(c)) ?? {}
+  const ball = body.ball
+  if (typeof ball !== 'string') return c.json({ error: 'invalid_body' }, 400)
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => missBall(userId, encounterId, now, ball))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json(result.miss)
 })
 
 encounterRoutes.post('/:id/release', requireUser, (c) => {
@@ -777,12 +803,35 @@ function releaseWild(userId: number, encounterId: number, now: number): { ok: tr
   return { ok: true }
 }
 
+function missBall(userId: number, encounterId: number, now: number, ballKey: string) {
+  persistCatchUp(userId, now)
+  const loaded = loadPendingEncounter(userId, encounterId)
+  if (!loaded.ok) return loaded
+  const encounter = loaded.row
+  if (encounter.wonAt == null) return fail('battle_not_won', 400)
+
+  const ball = getBall(ballKey)
+  if (!ball) return fail('unknown_ball', 400)
+  if (!debitItem(userId, ballItemKey(ball.key), 1)) return fail('no_ball', 400)
+
+  return {
+    ok: true as const,
+    miss: {
+      ball: ball.key,
+      throwCount: encounter.throwCount,
+      agitation: encounter.agitation,
+    },
+  }
+}
+
 function throwBall(
   userId: number,
   encounterId: number,
   now: number,
   ballKey: string,
   berryKey: string | null,
+  quality: ThrowQuality,
+  curve: boolean,
 ) {
   const clock = persistCatchUp(userId, now)
   const loaded = loadPendingEncounter(userId, encounterId)
@@ -818,6 +867,7 @@ function throwBall(
     wildLevel: encounter.level,
     types,
   })
+  const throwMult = throwAimMult(quality, curve)
   const calmed = calmAgitation(encounter.agitation, captureBerry?.capture?.calm)
   const agitationIfMiss = calmed + 1
   const roll = rollThrow({
@@ -826,6 +876,7 @@ function throwBall(
     captureRate: wild.captureRate,
     berryBonus,
     ballMult,
+    throwMult,
     guaranteed: isMasterBall(ball.key),
     fleeChance: fleeChanceAt(agitationIfMiss),
   })
