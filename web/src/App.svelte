@@ -413,7 +413,8 @@
     gap: 0;
     padding: 0;
     overflow: hidden;
-    background: #5c6358;
+    /* Mesmo verde do gramado de fora (Garden.svelte), para as bordas do celular. */
+    background: #4f7a3a;
   }
 
   .garden-layer {
@@ -425,12 +426,24 @@
     min-height: 0;
   }
 
+  /* No PC os menus não esticam na tela toda: largura limitada e centralizados.
+     No celular o limite não chega a valer. */
+  .meadow.immersive .hud,
+  .meadow.immersive .docks {
+    width: min(
+      calc(100% - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)),
+      var(--menu-max)
+    );
+    margin-inline: auto;
+  }
+
   .meadow.immersive .hud {
+    --menu-max: 40rem;
     position: absolute;
     z-index: 4;
     top: calc(0.5rem + env(safe-area-inset-top));
-    left: calc(0.5rem + env(safe-area-inset-left));
-    right: calc(0.5rem + env(safe-area-inset-right));
+    left: 0;
+    right: 0;
     pointer-events: none;
   }
 
@@ -439,11 +452,12 @@
   }
 
   .meadow.immersive .docks {
+    --menu-max: 30rem;
     position: absolute;
     z-index: 4;
     bottom: calc(0.5rem + env(safe-area-inset-bottom));
-    left: calc(0.5rem + env(safe-area-inset-left));
-    right: calc(0.5rem + env(safe-area-inset-right));
+    left: 0;
+    right: 0;
     pointer-events: none;
   }
 
@@ -454,8 +468,10 @@
   /* Abaixo do HUD (que no celular vira duas linhas). */
   .meadow.immersive .ready-banner {
     top: calc(7.25rem + env(safe-area-inset-top));
-    left: calc(0.35rem + env(safe-area-inset-left));
-    right: calc(0.35rem + env(safe-area-inset-right));
+    left: 0;
+    right: 0;
+    width: min(calc(100% - 0.7rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 40rem);
+    margin-inline: auto;
   }
 
   .hud {

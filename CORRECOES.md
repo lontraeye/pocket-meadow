@@ -16,6 +16,18 @@ Branch de ajustes soltos — bugs de UI, travas de teste, polimentos — **fora*
 - [x] **Metadata do drizzle em dia** — as migrações `0008`–`0012` foram escritas à mão sem snapshot, e o `drizzle-kit generate` passava a propor recriar colunas e a tabela `pokemon`. A `0013` foi escrita à mão (só a coluna nova) e o `0013_snapshot.json` traz o schema completo, então o próximo `generate` volta a comparar certo. Obs.: o `schema.ts` declara o CHECK `ck_pokemon_ability_slot`, que o banco não tem (a `0008` não criou); não faz falta, o código só grava valores válidos.
 - [x] **Limites contra corpo gigante** — `bodyLimit` de 64 KB em todas as rotas (413 `payload_too_large`) e teto de 600 toques no fim da luta (`simConfig.maxInputs`). Uma luta normal tem ~55 toques.
 
+- [x] **Zoom do jardim minimalista** — no lugar do slider, um controle vertical semitransparente com + e − e a barrinha do nível no meio (tocar nela também escolhe). Rodinha do mouse e pinça no celular, sempre em volta do ponto do mouse ou dos dedos. Passos de meio (1×, 1,5×, 2×, 2,5×, 3×): o PMD fica em 2× a 6×, sempre inteiro, sem borrar.
+
+- [x] **Gramado infinito de verdade, verde escuro fora da área** — no lugar do anel cinza de ladrilhos (32×32, mais de mil elementos), o gramado de fora é o fundo do jardim: losangos em verde escuro, alinhados com os ladrilhos e seguindo pan e zoom, sem borda em lugar nenhum. Só os 144 ladrilhos da zona jogável viram elementos.
+
+- [x] **Menus do jardim menores no PC** — com o jardim em tela cheia, o HUD e os botões de baixo esticavam na largura toda. Agora ficam centralizados, com largura máxima (HUD 40rem, botões 30rem); no celular nada muda.
+
+- [x] **Pan travando no PC** — às vezes o clique começava numa imagem ou em algo selecionado e o navegador iniciava o arrasto nativo (a "imagem fantasma" do jardim), que engole o movimento do mouse e trava o pan até soltar. O jardim agora cancela o `dragstart` e não deixa selecionar nada.
+
+- [x] **Pokémon espalhados ao abrir o jardim** — antes cada um nascia na próxima casa livre, em ordem, e todos se amontoavam no canto de cima até saírem andando. Agora nascem em casas sorteadas do jardim todo, olhando para lados diferentes. Provisório até o PC e os biomas decidirem onde cada um fica.
+
+- [x] **Pokémon não andam uns sobre os outros** — cada casa tem no máximo um dono. Antes de cada passo o Pokémon reserva a casa seguinte e só solta a de trás ao chegar; se a da frente está ocupada, espera parado (350 ms) e tenta de novo, e depois de 4 tentativas escolhe outro destino (dois cara a cara não travam). O destino sorteado já ignora casas ocupadas. Medido: 10 Pokémon andando por 40 s, nenhum na mesma casa.
+
 ## Já no `main` (antes desta branch)
 
 - [x] **Chips da coleção no mobile** — filtros enchem a largura da linha em vez de ficarem grudados à esquerda (`8423987`).

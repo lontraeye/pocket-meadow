@@ -154,7 +154,8 @@
     }
   }
 
-  // Zona andável 12×12; anel cinza ao redor (demarcação) grande o bastante p/ parecer infinito.
+  // Zona andável 12×12. O mundo tem uma margem em volta só para a câmera ter
+  // folga; o gramado de fora (mais escuro) é o fundo do .lawn, que não acaba.
   const playCols = 12
   const playRows = 12
   const margin = 10
@@ -169,6 +170,11 @@
   // Zoom manual (1–3). Abertura mais afastada (~8 tiles de largura).
   const scaleMin = 1
   const scaleMax = 3
+  // Passo de meio: o PMD vai de 2× a 6× (sempre inteiro, sem borrar o pixel).
+  const scaleStep = 0.5
+  const wheelStepPx = 60
+  // Pinça: abrir ou fechar 20% a distância entre os dedos muda um passo.
+  const pinchStepRatio = 1.2
   const defaultViewTiles = 8
   const baseTileW = 48
   const baseTileH = 24
@@ -183,6 +189,9 @@
   // numa direção nova, em vez de girar na hora.
   const turnStepMs = 110
   const sleepDir = 0
+  // Casa da frente ocupada por outro: espera e tenta de novo; passando disso, muda de destino.
+  const blockedWaitMs = 350
+  const blockedTries = 4
   const panDragPx = 6
 
   // A pose de sono do PMD olha para ↙ em quase todas as espécies. Quem dorme
@@ -295,10 +304,27 @@
     return { hw, hh, ox, oy, sw, sh }
   }
 
-  const tiles = Array.from({ length: worldCols * worldRows }, (_, index) => ({
-    col: index % worldCols,
-    row: Math.floor(index / worldCols),
+  // Só a zona jogável vira elemento; o resto é o padrão do fundo (lawnBackground).
+  const tiles = Array.from({ length: playCols * playRows }, (_, index) => ({
+    col: playCol0 + (index % playCols),
+    row: playRow0 + Math.floor(index / playCols),
   }))
+
+  // Fundo do gramado: losangos iguais aos ladrilhos, em verde mais escuro, que
+  // seguem o pan e o zoom. Cada quadro do padrão (tileW × tileH) tem um
+  // losango inteiro no meio (cor dos ladrilhos sem .alt) e os cantos na cor
+  // .alt, então o xadrez continua o dos ladrilhos sem emenda.
+  const lawnPattern =
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 1' preserveAspectRatio='none' shape-rendering='crispEdges'%3E%3Crect width='2' height='1' fill='%234f7a3a'/%3E%3Cpolygon points='1,0 2,0.5 1,1 0,0.5' fill='%235d8a45'/%3E%3C/svg%3E\")"
+  const lawnBackground = $derived.by(() => {
+    // Centro do primeiro ladrilho jogável, que tem col + row par (sem .alt).
+    const cx = panX + originX + (playCol0 - playRow0) * halfW
+    const cy = panY + originY + (playCol0 + playRow0) * halfH + halfH
+    return {
+      size: `${tileW}px ${tileH}px`,
+      position: `${cx - halfW}px ${cy - halfH}px`,
+    }
+  })
 
   function place(col: number, row: number): { x: number; y: number } {
     return {
@@ -348,37 +374,62 @@
     return clampPan(viewW / 2 - cx, viewH / 2 - cy, viewW, viewH, sw, sh)
   }
 
-  function applyZoom(nextRaw: number, keepCenter: boolean) {
-    const nextScale = Math.min(scaleMax, Math.max(scaleMin, Math.round(nextRaw)))
+  /** Arredonda para o passo de zoom, dentro de 1–3. */
+  function snapScale(raw: number): number {
+    const snapped = Math.round(raw / scaleStep) * scaleStep
+    return Math.min(scaleMax, Math.max(scaleMin, snapped))
+  }
+
+  /**
+   * Muda o zoom mantendo parado o ponto do jardim que está sob `focus` (o
+   * mouse ou o meio da pinça, em px do gramado). Sem `focus`, usa o centro.
+   */
+  function applyZoom(nextRaw: number, focus?: { x: number; y: number }) {
+    const nextScale = snapScale(nextRaw)
+    const prevScale = untrack(() => scale)
+    if (nextScale === prevScale) return
     const node = lawn
     const viewW = node?.clientWidth ?? lawnW
     const viewH = node?.clientHeight ?? lawnH
-    const prevScale = untrack(() => scale)
     const prevPanX = untrack(() => panX)
     const prevPanY = untrack(() => panY)
-    const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
+    const { sw, sh } = metricsFor(nextScale)
     stageBoxW = sw
     stageBoxH = sh
     scale = nextScale
     if (!viewW || !viewH) return
-    if (keepCenter && prevScale > 0) {
-      const ratio = nextScale / prevScale
-      const sx = viewW / 2 - prevPanX
-      const sy = viewH / 2 - prevPanY
-      const clamped = clampPan(viewW / 2 - sx * ratio, viewH / 2 - sy * ratio, viewW, viewH, sw, sh)
-      panX = clamped.x
-      panY = clamped.y
-    } else {
-      const centered = centerPanOnPlay(viewW, viewH, sw, sh, hw, hh, ox, oy)
-      panX = centered.x
-      panY = centered.y
-    }
+    const fx = focus?.x ?? viewW / 2
+    const fy = focus?.y ?? viewH / 2
+    const ratio = nextScale / prevScale
+    const clamped = clampPan(fx - (fx - prevPanX) * ratio, fy - (fy - prevPanY) * ratio, viewW, viewH, sw, sh)
+    panX = clamped.x
+    panY = clamped.y
   }
 
-  function onZoomInput(event: Event) {
-    const value = Number((event.currentTarget as HTMLInputElement).value)
-    applyZoom(value, true)
+  /** Ponto do evento em px do gramado. */
+  function lawnPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const box = lawn?.getBoundingClientRect()
+    return { x: clientX - (box?.left ?? 0), y: clientY - (box?.top ?? 0) }
   }
+
+  // Rodinha do mouse: um passo de zoom a cada "dente". O touchpad manda vários
+  // deltas pequenos, então soma até passar do limiar.
+  $effect(() => {
+    const node = lawn
+    if (!node) return
+    let acc = 0
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const delta = event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY
+      acc += delta
+      if (Math.abs(acc) < wheelStepPx) return
+      const direction = acc < 0 ? 1 : -1
+      acc = 0
+      applyZoom(untrack(() => scale) + direction * scaleStep, lawnPoint(event.clientX, event.clientY))
+    }
+    node.addEventListener('wheel', onWheel, { passive: false })
+    return () => node.removeEventListener('wheel', onWheel)
+  })
 
   $effect(() => {
     const node = lawn
@@ -394,8 +445,7 @@
       if (!viewSeeded) {
         viewSeeded = true
         // Abertura mais afastada que o encaixe apertado de ~5 tiles.
-        const fit = Math.round(viewW / (defaultViewTiles * baseTileW))
-        const nextScale = Math.min(scaleMax, Math.max(scaleMin, fit))
+        const nextScale = snapScale(viewW / (defaultViewTiles * baseTileW))
         scale = nextScale
         const { hw, hh, ox, oy, sw, sh } = metricsFor(nextScale)
         stageBoxW = sw
@@ -421,6 +471,7 @@
   })
 
   // Pan por arrastar: limiar evita roubar toque em canteiro/Pokémon.
+  // Dois dedos: pinça de zoom (o pan para até sobrar um dedo só).
   $effect(() => {
     const node = lawn
     if (!node) return
@@ -431,9 +482,27 @@
     let originPanY = 0
     let dragging = false
     let suppressClick = false
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinchBase = 0
+
+    const pinchDistance = () => {
+      const [a, b] = [...touches.values()]
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0
+    }
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.pointerType === 'mouse') return
+      if (event.pointerType === 'touch') {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2) {
+          pinchBase = pinchDistance()
+          pointerId = null
+          dragging = false
+          suppressClick = true
+          return
+        }
+      }
+      if (touches.size > 1) return
       pointerId = event.pointerId
       startX = event.clientX
       startY = event.clientY
@@ -443,6 +512,20 @@
     }
 
     const onMove = (event: PointerEvent) => {
+      if (touches.has(event.pointerId)) {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2 && pinchBase > 0) {
+          const distance = pinchDistance()
+          const ratio = distance / pinchBase
+          if (ratio >= pinchStepRatio || ratio <= 1 / pinchStepRatio) {
+            const [a, b] = [...touches.values()]
+            const mid = lawnPoint((a!.x + b!.x) / 2, (a!.y + b!.y) / 2)
+            applyZoom(untrack(() => scale) + (ratio > 1 ? scaleStep : -scaleStep), mid)
+            pinchBase = distance
+          }
+          return
+        }
+      }
       if (pointerId !== event.pointerId) return
       const dx = event.clientX - startX
       const dy = event.clientY - startY
@@ -462,6 +545,7 @@
     }
 
     const onUp = (event: PointerEvent) => {
+      if (touches.delete(event.pointerId) && touches.size < 2) pinchBase = 0
       if (pointerId !== event.pointerId) return
       pointerId = null
       if (dragging) {
@@ -481,12 +565,18 @@
       event.stopPropagation()
     }
 
+    // Sem isso, um clique que começa numa imagem (sprite, berry) ou em algo
+    // selecionado às vezes vira o arrasto nativo do navegador (a "imagem
+    // fantasma"), que engole os pointermove e trava o pan até soltar.
+    const onDragStart = (event: DragEvent) => event.preventDefault()
+    node.addEventListener('dragstart', onDragStart)
     node.addEventListener('pointerdown', onDown)
     node.addEventListener('pointermove', onMove)
     node.addEventListener('pointerup', onUp)
     node.addEventListener('pointercancel', onUp)
     node.addEventListener('click', onClickCapture, true)
     return () => {
+      node.removeEventListener('dragstart', onDragStart)
       node.removeEventListener('pointerdown', onDown)
       node.removeEventListener('pointermove', onMove)
       node.removeEventListener('pointerup', onUp)
@@ -506,7 +596,10 @@
     const mons = gardenPokemon
     // Lê os canteiros desbloqueados para o efeito recrear se a faixa mudar.
     void game.plotSlotsUnlocked
-    const spots = walkableSpots()
+    // Cada um nasce numa casa sorteada do jardim todo, olhando para um lado
+    // qualquer (antes saíam em ordem e se amontoavam no canto de cima).
+    // Provisório: o PC e os biomas vão decidir onde cada um fica.
+    const spots = shuffled(walkableSpots())
     const created = mons.map((mon, index) => {
       const spot = spots[index % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
       return {
@@ -516,12 +609,38 @@
         isShiny: mon.isShiny,
         col: spot.col,
         row: spot.row,
-        dir: 1,
+        dir: Math.floor(Math.random() * 8),
         anim: 'Idle' as const,
       }
     })
     walkers = created
     const live = untrack(() => walkers)
+
+    // Uma casa, um Pokémon. Cada um é dono da casa onde está e reserva a
+    // próxima antes de dar o passo; só solta a de trás ao chegar. Se a próxima
+    // tem dono, espera parado e tenta de novo; depois de algumas vezes desiste
+    // e escolhe outro destino (assim dois cara a cara não travam).
+    const occupied = new Map<string, number>()
+    const cell = (col: number, row: number) => `${col},${row}`
+    const takenByOther = (walker: Walker) => (col: number, row: number) => {
+      const holder = occupied.get(cell(col, row))
+      return holder !== undefined && holder !== walker.id
+    }
+    function reserve(walker: Walker, col: number, row: number): boolean {
+      if (takenByOther(walker)(col, row)) return false
+      occupied.set(cell(col, row), walker.id)
+      return true
+    }
+    function release(walker: Walker, col: number, row: number) {
+      const key = cell(col, row)
+      if (occupied.get(key) === walker.id) occupied.delete(key)
+    }
+    /** Solta tudo o que ele segura e fica só com a casa onde está agora. */
+    function settle(walker: Walker) {
+      for (const [key, holder] of occupied) if (holder === walker.id) occupied.delete(key)
+      reserve(walker, Math.round(walker.col), Math.round(walker.row))
+    }
+    for (const walker of live) reserve(walker, walker.col, walker.row)
 
     let cancelled = false
     const frames: number[] = []
@@ -556,7 +675,7 @@
       }
       const hereCol = Math.round(walker.col)
       const hereRow = Math.round(walker.row)
-      const target = pickWalkTarget(hereCol, hereRow)
+      const target = pickWalkTarget(hereCol, hereRow, takenByOther(walker))
       if (!target) {
         waits.push(
           window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
@@ -573,6 +692,7 @@
 
     function walkSteps(walker: Walker, plan: number, steps: Step[], done: () => void) {
       let index = 0
+      let blocked = 0
       const next = () => {
         if (!alive(walker, plan)) return
         const step = steps[index]
@@ -580,6 +700,16 @@
           done()
           return
         }
+        if (!reserve(walker, step.col, step.row)) {
+          // Casa da frente ocupada: espera parado; insistindo demais, desiste
+          // do caminho (o done volta ao passeio, que sorteia outro destino).
+          walker.anim = 'Idle'
+          blocked += 1
+          if (blocked > blockedTries) done()
+          else waits.push(window.setTimeout(next, blockedWaitMs))
+          return
+        }
+        blocked = 0
         index += 1
         turn(walker, plan, step.dir, () => {
           walker.anim = 'Walk'
@@ -592,7 +722,13 @@
             walker.col = fromCol + (step.col - fromCol) * progress
             walker.row = fromRow + (step.row - fromRow) * progress
             if (progress < 1) frames.push(requestAnimationFrame(tick))
-            else next()
+            else {
+              const leftCol = Math.round(fromCol)
+              const leftRow = Math.round(fromRow)
+              // Saindo do meio de um passo, o arredondado pode ser a própria casa nova.
+              if (leftCol !== step.col || leftRow !== step.row) release(walker, leftCol, leftRow)
+              next()
+            }
           }
           frames.push(requestAnimationFrame(tick))
         })
@@ -617,6 +753,7 @@
     function start(walker: Walker, delay: number) {
       const plan = (plans.get(walker.id) ?? 0) + 1
       plans.set(walker.id, plan)
+      settle(walker)
       waits.push(window.setTimeout(() => wander(walker, plan), delay))
     }
 
@@ -638,6 +775,9 @@
       else if (walker.dir === 3) row = Math.floor(row)
       col = Math.round(col)
       row = Math.round(row)
+      // O passo interrompido segurava duas casas: fica só com a de destino.
+      for (const [key, holder] of occupied) if (holder === walker.id) occupied.delete(key)
+      reserve(walker, col, row)
       const steps: Step[] = []
       if (col !== walker.col || row !== walker.row) steps.push({ col, row, dir: walker.dir })
 
@@ -682,6 +822,16 @@
     return () => cancelAnimationFrame(frame)
   })
 
+  /** Cópia embaralhada (Fisher–Yates). */
+  function shuffled<T>(items: T[]): T[] {
+    const out = [...items]
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[out[i], out[j]] = [out[j]!, out[i]!]
+    }
+    return out
+  }
+
   function walkableSpots(): { col: number; row: number }[] {
     const spots: { col: number; row: number }[] = []
     for (let row = playRow0; row < playRowEnd; row += 1) {
@@ -692,8 +842,14 @@
     return spots
   }
 
-  function pickWalkTarget(hereCol: number, hereRow: number): { col: number; row: number } | null {
-    const spots = walkableSpots().filter((spot) => spot.col !== hereCol || spot.row !== hereRow)
+  function pickWalkTarget(
+    hereCol: number,
+    hereRow: number,
+    taken: (col: number, row: number) => boolean,
+  ): { col: number; row: number } | null {
+    const spots = walkableSpots().filter(
+      (spot) => (spot.col !== hereCol || spot.row !== hereRow) && !taken(spot.col, spot.row),
+    )
     if (spots.length === 0) return null
     return spots[Math.floor(Math.random() * spots.length)] ?? null
   }
@@ -757,7 +913,14 @@
 </script>
 
 <div class="layout">
-  <div class="lawn" bind:this={lawn} aria-label="Jardim">
+  <div
+    class="lawn"
+    bind:this={lawn}
+    aria-label="Jardim"
+    style:background-image={lawnPattern}
+    style:background-size={lawnBackground.size}
+    style:background-position={lawnBackground.position}
+  >
     <div
       class="stage"
       style:width="{stageW}px"
@@ -766,7 +929,6 @@
     >
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
-        {@const dim = !inPlay(tile.col, tile.row)}
         {@const isPlot = isPlotCell(tile.col, tile.row)}
         {@const plotIdx = isPlot ? plotIndexAt(tile.col) : -1}
         {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
@@ -800,7 +962,6 @@
           <div
             class="tile"
             class:alt={(tile.col + tile.row) % 2 === 1}
-            class:dim={dim}
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
@@ -853,20 +1014,39 @@
       {/each}
     </div>
 
-    <label class="zoom-bar panel">
-      <span>Zoom</span>
-      <input
-        type="range"
-        class="zoom-range"
-        min={scaleMin}
-        max={scaleMax}
-        step="1"
-        value={scale}
-        aria-valuetext={`${scale}×`}
-        oninput={onZoomInput}
-      />
-      <strong>{scale}×</strong>
-    </label>
+    <!-- Zoom: + e − com a barrinha do nível no meio (tocar nela também escolhe). -->
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button
+        type="button"
+        class="zoom-btn"
+        aria-label="Aproximar"
+        disabled={scale >= scaleMax}
+        onclick={() => applyZoom(scale + scaleStep)}
+      >
+        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M5 1h2v4h4v2H7v4H5V7H1V5h4z" /></svg>
+      </button>
+      <button
+        type="button"
+        class="zoom-track"
+        aria-label={`Zoom ${String(scale).replace('.', ',')}×`}
+        onclick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect()
+          const t = 1 - (event.clientY - box.top) / box.height
+          applyZoom(scaleMin + t * (scaleMax - scaleMin))
+        }}
+      >
+        <span class="zoom-fill" style:height="{((scale - scaleMin) / (scaleMax - scaleMin)) * 100}%"></span>
+      </button>
+      <button
+        type="button"
+        class="zoom-btn"
+        aria-label="Afastar"
+        disabled={scale <= scaleMin}
+        onclick={() => applyZoom(scale - scaleStep)}
+      >
+        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 5h10v2H1z" /></svg>
+      </button>
+    </div>
   </div>
 
   {#if plotIndex !== null}
@@ -977,9 +1157,13 @@
     overflow: hidden;
     touch-action: none;
     cursor: grab;
-    /* Tom da margem cinza — o anel demarca o 12×12 e parece infinito no pan. */
-    background:
-      repeating-conic-gradient(#6a7164 0% 25%, #5c6358 0% 50%) 0 0 / 24px 24px;
+    /* Nada no jardim se seleciona nem se arrasta como imagem (ver onDragStart). */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    /* O padrão (tamanho e posição) vem do script: lawnBackground. */
+    background-color: #4f7a3a;
+    background-repeat: repeat;
   }
 
   .lawn:active {
@@ -1004,14 +1188,6 @@
 
   .tile.alt {
     --top: var(--grass-2);
-  }
-
-  .tile.dim {
-    --top: #6a7164;
-  }
-
-  .tile.dim.alt {
-    --top: #5c6358;
   }
 
   .tile.plot {
@@ -1043,31 +1219,79 @@
     pointer-events: none;
   }
 
-  .zoom-bar {
+  .zoom {
     position: absolute;
     z-index: 6;
     left: calc(0.5rem + env(safe-area-inset-left));
     bottom: calc(4.1rem + env(safe-area-inset-bottom));
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin: 0;
-    padding: 0.25rem 0.45rem;
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    padding: 0.2rem;
+    background: #1d1a1466;
+    box-shadow: inset 0 0 0 var(--px) #ffffff22;
     pointer-events: auto;
-    font-size: 14px;
-    font-weight: 700;
+    cursor: default;
   }
 
-  .zoom-bar strong {
-    min-width: 1.6rem;
-    text-align: right;
-  }
-
-  .zoom-range {
-    width: 7rem;
-    margin: 0;
-    accent-color: var(--accent);
+  .zoom-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #fff;
     cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .zoom-btn svg {
+    fill: currentColor;
+    filter: drop-shadow(0 var(--px) 0 #0006);
+  }
+
+  .zoom-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .zoom-btn:focus-visible,
+  .zoom-track:focus-visible {
+    outline: var(--px) dashed #fff;
+    outline-offset: 1px;
+  }
+
+  /* Área de toque larga; a barrinha visível é o ::before, fina, no meio. */
+  .zoom-track {
+    position: relative;
+    width: 40px;
+    height: 64px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .zoom-track::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 2px);
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #ffffff40;
+  }
+
+  .zoom-fill {
+    position: absolute;
+    left: calc(50% - 2px);
+    bottom: 0;
+    width: 4px;
+    background: #fff;
+    transition: height 0.12s steps(3, end);
   }
 
   .dev-row {
