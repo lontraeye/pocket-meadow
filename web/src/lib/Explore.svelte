@@ -1344,11 +1344,12 @@
     margin-top: 0.5rem;
   }
 
-  /* Captura: Mochila · bola/berry (lança) · Bolas — colunas fixas, sem “pulo”. */
+  /* Captura: Mochila · bola/berry · Bolas — três quadrados iguais. */
   .throw-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 7.25rem minmax(0, 1fr);
-    align-items: stretch;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    justify-items: center;
     gap: 0.5rem;
   }
 
@@ -1358,9 +1359,13 @@
     justify-items: center;
     align-content: center;
     gap: 0.15rem;
+    width: 5.75rem;
     height: 5.75rem;
+    min-width: 5.75rem;
+    max-width: 5.75rem;
     min-height: 5.75rem;
-    padding: 0.3rem 0.25rem;
+    max-height: 5.75rem;
+    padding: 0.25rem 0.2rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow: inset 0 -2px 0 var(--panel-shade);

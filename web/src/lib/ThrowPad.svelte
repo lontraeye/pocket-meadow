@@ -470,8 +470,8 @@
     <img
       src={spriteSrc}
       alt=""
-      width="60"
-      height="60"
+      width="48"
+      height="48"
       draggable="false"
       style:transform={holdAngle !== 0 ? `rotate(${holdAngle}rad)` : undefined}
     />
@@ -568,14 +568,15 @@
     justify-items: center;
     align-content: center;
     gap: 0.1rem;
-    /* Largura/altura fixas: berry ↔ bola ↔ “Lançando…” não mexem o dock. */
-    width: 7.25rem;
-    min-width: 7.25rem;
-    max-width: 7.25rem;
+    /* Mesmo quadrado dos botões laterais (Mochila / Bolas). */
+    width: 5.75rem;
+    min-width: 5.75rem;
+    max-width: 5.75rem;
     height: 5.75rem;
     min-height: 5.75rem;
+    max-height: 5.75rem;
     margin: 0;
-    padding: 0.2rem 0.35rem 0.3rem;
+    padding: 0.2rem 0.2rem 0.25rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow:
@@ -603,8 +604,8 @@
 
   .throw-btn img,
   .ghost {
-    width: 60px;
-    height: 60px;
+    width: 48px;
+    height: 48px;
     image-rendering: pixelated;
   }
 
