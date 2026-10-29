@@ -17,9 +17,13 @@ export type RegionSlot = {
   weight: number
 }
 
-export type RegionSnapshotEntry = {
+export type RegionSource = {
   area: string
   version: string
+}
+
+export type RegionSnapshotEntry = {
+  sources: RegionSource[]
   slots: RegionSlot[]
 }
 
@@ -127,6 +131,31 @@ function normalizeWeights(slots: RawSlot[], name: string): RegionSlot[] {
 // Passos 1 a 6 da seção 5.3. exclude e levelOverride entram antes da
 // normalização final, para a tabela publicada continuar somando 100.
 export function slotsFromArea(area: LocationArea, options: RegionTableOptions): RegionSlot[] {
+  return normalizeWeights([...rawSlotsFromArea(area, options).values()], options.name)
+}
+
+/**
+ * Área com várias fontes (andares, versões): a média das tabelas, cada fonte
+ * com o mesmo peso (JORNADA.md, seção 3). Com uma fonte só, dá o mesmo que
+ * slotsFromArea.
+ */
+export function slotsFromSources(
+  sources: readonly { area: LocationArea; version: string }[],
+  options: Omit<RegionTableOptions, 'version'>,
+): RegionSlot[] {
+  if (sources.length === 0) throw new Error(`${options.name} has no sources`)
+  const merged = new Map<string, RawSlot>()
+  for (const source of sources) {
+    const raw = [...rawSlotsFromArea(source.area, { ...options, version: source.version }).values()]
+    const total = raw.reduce((sum, slot) => sum + slot.chance, 0)
+    for (const slot of raw) {
+      addChance(merged, slot.speciesId, slot.minLevel, slot.maxLevel, slot.chance / total / sources.length)
+    }
+  }
+  return normalizeWeights([...merged.values()], options.name)
+}
+
+function rawSlotsFromArea(area: LocationArea, options: RegionTableOptions): Map<string, RawSlot> {
   const exclude = new Set(options.exclude ?? [])
   const override = options.levelOverride
   if (override && override[1] < override[0]) {
@@ -146,9 +175,9 @@ export function slotsFromArea(area: LocationArea, options: RegionTableOptions): 
         if (detail.max_level < detail.min_level) {
           throw new Error(`${options.name} has an inverted level range for species ${speciesId}`)
         }
-        const names = detail.condition_values.map((condition) => condition.name)
+        // "Sem enxame" é o mato normal; enxame, rádio e o resto não entram.
+        const names = detail.condition_values.map((condition) => condition.name).filter((name) => name !== 'swarm-no')
         const periods = names.filter(isPeriod)
-        // Enxame, rádio e o resto não entram no mato normal.
         if (periods.length !== names.length) continue
         const targets = periods.length === 0 ? PERIODS : [...new Set(periods)]
         for (const period of targets) {
@@ -183,7 +212,7 @@ export function slotsFromArea(area: LocationArea, options: RegionTableOptions): 
     throw new Error(`${options.name} has no walk encounters in ${options.version}`)
   }
 
-  return normalizeWeights([...merged.values()], options.name)
+  return merged
 }
 
 export function readRegionsSnapshot(): RegionsSnapshot {
@@ -206,8 +235,7 @@ export function writeRegionsSnapshot(snapshot: RegionsSnapshot): void {
       const lines = [...entry.slots].sort(compareSlots).map((slot) => `      ${JSON.stringify(slot)}`)
       return [
         `  ${JSON.stringify(slug)}: {`,
-        `    "area": ${JSON.stringify(entry.area)},`,
-        `    "version": ${JSON.stringify(entry.version)},`,
+        `    "sources": ${JSON.stringify(entry.sources)},`,
         `    "slots": [`,
         lines.join(',\n'),
         `    ]`,

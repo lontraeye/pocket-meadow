@@ -1,7 +1,92 @@
 {
+  "burned-tower": {
+    "sources": [{"area":"burned-tower-1f","version":"crystal"},{"area":"burned-tower-b1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":13,"maxLevel":13,"weight":15},
+      {"speciesId":19,"minLevel":14,"maxLevel":14,"weight":15},
+      {"speciesId":19,"minLevel":15,"maxLevel":15,"weight":12.5},
+      {"speciesId":20,"minLevel":15,"maxLevel":15,"weight":2.5},
+      {"speciesId":41,"minLevel":14,"maxLevel":14,"weight":5},
+      {"speciesId":41,"minLevel":15,"maxLevel":15,"weight":5},
+      {"speciesId":109,"minLevel":12,"maxLevel":12,"weight":2.5},
+      {"speciesId":109,"minLevel":14,"maxLevel":14,"weight":30},
+      {"speciesId":109,"minLevel":16,"maxLevel":16,"weight":12},
+      {"speciesId":110,"minLevel":16,"maxLevel":16,"weight":0.5}
+    ]
+  },
+  "dark-cave-blackthorn": {
+    "sources": [{"area":"dark-cave-blackthorn-city-entrance","version":"crystal"}],
+    "slots": [
+      {"speciesId":41,"minLevel":23,"maxLevel":23,"weight":30},
+      {"speciesId":42,"minLevel":23,"maxLevel":23,"weight":5},
+      {"speciesId":74,"minLevel":23,"maxLevel":23,"weight":30},
+      {"speciesId":75,"minLevel":25,"maxLevel":25,"weight":20},
+      {"speciesId":202,"minLevel":20,"maxLevel":20,"weight":3.3},
+      {"speciesId":202,"minLevel":25,"maxLevel":25,"weight":1.7},
+      {"speciesId":216,"minLevel":20,"maxLevel":20,"weight":1.7},
+      {"speciesId":217,"minLevel":20,"maxLevel":20,"weight":3.3},
+      {"speciesId":217,"minLevel":25,"maxLevel":25,"weight":3.3},
+      {"speciesId":217,"minLevel":30,"maxLevel":30,"weight":1.7}
+    ]
+  },
+  "dark-cave-violet": {
+    "sources": [{"area":"dark-cave-violet-city-entrance","version":"crystal"}],
+    "slots": [
+      {"speciesId":41,"minLevel":2,"maxLevel":2,"weight":33.3},
+      {"speciesId":41,"minLevel":4,"maxLevel":4,"weight":4},
+      {"speciesId":74,"minLevel":2,"maxLevel":2,"weight":20},
+      {"speciesId":74,"minLevel":3,"maxLevel":3,"weight":30},
+      {"speciesId":74,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":206,"minLevel":4,"maxLevel":4,"weight":1},
+      {"speciesId":216,"minLevel":2,"maxLevel":2,"weight":1.7}
+    ]
+  },
+  "ice-path": {
+    "sources": [{"area":"ice-path-1f","version":"crystal"},{"area":"ice-path-b1f","version":"crystal"},{"area":"ice-path-b2f","version":"crystal"},{"area":"ice-path-b3f","version":"crystal"}],
+    "slots": [
+      {"speciesId":42,"minLevel":22,"maxLevel":22,"weight":13.7},
+      {"speciesId":42,"minLevel":23,"maxLevel":23,"weight":13.5},
+      {"speciesId":42,"minLevel":24,"maxLevel":24,"weight":12.9},
+      {"speciesId":42,"minLevel":25,"maxLevel":25,"weight":14.7},
+      {"speciesId":42,"minLevel":26,"maxLevel":26,"weight":1.2},
+      {"speciesId":124,"minLevel":22,"maxLevel":22,"weight":1.7},
+      {"speciesId":124,"minLevel":24,"maxLevel":24,"weight":0.8},
+      {"speciesId":124,"minLevel":26,"maxLevel":26,"weight":0.2},
+      {"speciesId":215,"minLevel":22,"maxLevel":22,"weight":0.8},
+      {"speciesId":215,"minLevel":24,"maxLevel":24,"weight":0.4},
+      {"speciesId":215,"minLevel":26,"maxLevel":26,"weight":0.1},
+      {"speciesId":220,"minLevel":21,"maxLevel":21,"weight":5},
+      {"speciesId":220,"minLevel":22,"maxLevel":22,"weight":5},
+      {"speciesId":220,"minLevel":23,"maxLevel":23,"weight":6.7},
+      {"speciesId":220,"minLevel":24,"maxLevel":24,"weight":6.7},
+      {"speciesId":220,"minLevel":25,"maxLevel":25,"weight":1.7},
+      {"speciesId":220,"minLevel":26,"maxLevel":26,"weight":1.7},
+      {"speciesId":225,"minLevel":21,"maxLevel":21,"weight":2.5},
+      {"speciesId":225,"minLevel":22,"maxLevel":22,"weight":2.5},
+      {"speciesId":225,"minLevel":23,"maxLevel":23,"weight":3.3},
+      {"speciesId":225,"minLevel":24,"maxLevel":24,"weight":3.3},
+      {"speciesId":225,"minLevel":25,"maxLevel":25,"weight":0.8},
+      {"speciesId":225,"minLevel":26,"maxLevel":26,"weight":0.8}
+    ]
+  },
+  "ilex-forest": {
+    "sources": [{"area":"ilex-forest-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":10,"minLevel":5,"maxLevel":5,"weight":20},
+      {"speciesId":11,"minLevel":7,"maxLevel":7,"weight":13.3},
+      {"speciesId":13,"minLevel":5,"maxLevel":5,"weight":20},
+      {"speciesId":14,"minLevel":7,"maxLevel":7,"weight":6.7},
+      {"speciesId":16,"minLevel":7,"maxLevel":7,"weight":3.3},
+      {"speciesId":43,"minLevel":5,"maxLevel":5,"weight":10},
+      {"speciesId":43,"minLevel":7,"maxLevel":7,"weight":6.7},
+      {"speciesId":46,"minLevel":6,"maxLevel":6,"weight":5},
+      {"speciesId":48,"minLevel":5,"maxLevel":5,"weight":10},
+      {"speciesId":54,"minLevel":7,"maxLevel":7,"weight":3.3},
+      {"speciesId":163,"minLevel":7,"maxLevel":7,"weight":1.7}
+    ]
+  },
   "mt-moon": {
-    "area": "mt-moon-1f",
-    "version": "yellow",
+    "sources": [{"area":"mt-moon-1f","version":"yellow"}],
     "slots": [
       {"speciesId":27,"minLevel":12,"maxLevel":12,"weight":4},
       {"speciesId":35,"minLevel":11,"maxLevel":11,"weight":1},
@@ -14,9 +99,103 @@
       {"speciesId":74,"minLevel":10,"maxLevel":10,"weight":20}
     ]
   },
+  "mt-mortar": {
+    "sources": [{"area":"mt-mortar-1f","version":"crystal"},{"area":"mt-mortar-lower-cave","version":"crystal"},{"area":"mt-mortar-b1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":14,"maxLevel":14,"weight":20},
+      {"speciesId":20,"minLevel":14,"maxLevel":14,"weight":2.2},
+      {"speciesId":20,"minLevel":15,"maxLevel":15,"weight":2.2},
+      {"speciesId":20,"minLevel":16,"maxLevel":16,"weight":1.7},
+      {"speciesId":20,"minLevel":18,"maxLevel":18,"weight":1.7},
+      {"speciesId":41,"minLevel":13,"maxLevel":13,"weight":10},
+      {"speciesId":41,"minLevel":14,"maxLevel":14,"weight":1.1},
+      {"speciesId":41,"minLevel":15,"maxLevel":15,"weight":11.1},
+      {"speciesId":41,"minLevel":17,"maxLevel":17,"weight":10},
+      {"speciesId":42,"minLevel":13,"maxLevel":13,"weight":3.3},
+      {"speciesId":42,"minLevel":15,"maxLevel":15,"weight":1.7},
+      {"speciesId":42,"minLevel":17,"maxLevel":17,"weight":6.7},
+      {"speciesId":66,"minLevel":14,"maxLevel":14,"weight":4.4},
+      {"speciesId":66,"minLevel":15,"maxLevel":15,"weight":4.4},
+      {"speciesId":66,"minLevel":16,"maxLevel":16,"weight":2.2},
+      {"speciesId":74,"minLevel":13,"maxLevel":13,"weight":10},
+      {"speciesId":74,"minLevel":14,"maxLevel":14,"weight":1.7},
+      {"speciesId":74,"minLevel":16,"maxLevel":16,"weight":1.7},
+      {"speciesId":183,"minLevel":14,"maxLevel":14,"weight":2.2},
+      {"speciesId":183,"minLevel":15,"maxLevel":15,"weight":0.6},
+      {"speciesId":183,"minLevel":16,"maxLevel":16,"weight":1.1}
+    ]
+  },
+  "mt-mortar-upper": {
+    "sources": [{"area":"mt-mortar-upper-cave","version":"crystal"}],
+    "slots": [
+      {"speciesId":20,"minLevel":30,"maxLevel":30,"weight":13.3},
+      {"speciesId":42,"minLevel":30,"maxLevel":30,"weight":8.3},
+      {"speciesId":66,"minLevel":28,"maxLevel":28,"weight":3.3},
+      {"speciesId":67,"minLevel":32,"maxLevel":32,"weight":20},
+      {"speciesId":74,"minLevel":31,"maxLevel":31,"weight":23.3},
+      {"speciesId":75,"minLevel":31,"maxLevel":31,"weight":30.1},
+      {"speciesId":183,"minLevel":28,"maxLevel":28,"weight":1.7}
+    ]
+  },
+  "mt-silver": {
+    "sources": [{"area":"mt-silver-outside","version":"crystal"},{"area":"mt-silver-1f","version":"crystal"},{"area":"mt-silver-2f","version":"crystal"},{"area":"mt-silver-top","version":"crystal"}],
+    "slots": [
+      {"speciesId":24,"minLevel":42,"maxLevel":42,"weight":3.3},
+      {"speciesId":42,"minLevel":40,"maxLevel":40,"weight":0.4},
+      {"speciesId":42,"minLevel":42,"maxLevel":42,"weight":1.7},
+      {"speciesId":42,"minLevel":44,"maxLevel":44,"weight":0.4},
+      {"speciesId":42,"minLevel":45,"maxLevel":45,"weight":1.2},
+      {"speciesId":42,"minLevel":46,"maxLevel":46,"weight":2.1},
+      {"speciesId":42,"minLevel":48,"maxLevel":48,"weight":5},
+      {"speciesId":42,"minLevel":49,"maxLevel":49,"weight":0.8},
+      {"speciesId":42,"minLevel":51,"maxLevel":51,"weight":7.7},
+      {"speciesId":42,"minLevel":53,"maxLevel":53,"weight":0.4},
+      {"speciesId":47,"minLevel":46,"maxLevel":46,"weight":2.5},
+      {"speciesId":47,"minLevel":48,"maxLevel":48,"weight":1.2},
+      {"speciesId":55,"minLevel":45,"maxLevel":45,"weight":0.4},
+      {"speciesId":55,"minLevel":48,"maxLevel":48,"weight":2.5},
+      {"speciesId":61,"minLevel":42,"maxLevel":42,"weight":2.5},
+      {"speciesId":61,"minLevel":44,"maxLevel":44,"weight":0.8},
+      {"speciesId":67,"minLevel":48,"maxLevel":48,"weight":5},
+      {"speciesId":75,"minLevel":43,"maxLevel":43,"weight":7.5},
+      {"speciesId":75,"minLevel":48,"maxLevel":48,"weight":5},
+      {"speciesId":77,"minLevel":42,"maxLevel":42,"weight":5},
+      {"speciesId":78,"minLevel":44,"maxLevel":44,"weight":1.7},
+      {"speciesId":84,"minLevel":41,"maxLevel":41,"weight":0.8},
+      {"speciesId":85,"minLevel":43,"maxLevel":43,"weight":0.8},
+      {"speciesId":95,"minLevel":42,"maxLevel":42,"weight":5},
+      {"speciesId":95,"minLevel":48,"maxLevel":48,"weight":7.5},
+      {"speciesId":114,"minLevel":41,"maxLevel":41,"weight":7.5},
+      {"speciesId":126,"minLevel":45,"maxLevel":45,"weight":2.5},
+      {"speciesId":195,"minLevel":45,"maxLevel":45,"weight":2.5},
+      {"speciesId":200,"minLevel":45,"maxLevel":45,"weight":0.4},
+      {"speciesId":217,"minLevel":44,"maxLevel":44,"weight":7.5},
+      {"speciesId":217,"minLevel":47,"maxLevel":47,"weight":3.3},
+      {"speciesId":217,"minLevel":50,"maxLevel":50,"weight":1.7},
+      {"speciesId":246,"minLevel":15,"maxLevel":15,"weight":1.5},
+      {"speciesId":246,"minLevel":20,"maxLevel":20,"weight":1.7},
+      {"speciesId":247,"minLevel":20,"maxLevel":20,"weight":0.2}
+    ]
+  },
+  "national-park": {
+    "sources": [{"area":"national-park-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":10,"minLevel":10,"maxLevel":10,"weight":3.3},
+      {"speciesId":13,"minLevel":10,"maxLevel":10,"weight":3.3},
+      {"speciesId":16,"minLevel":13,"maxLevel":13,"weight":6.7},
+      {"speciesId":29,"minLevel":12,"maxLevel":12,"weight":20},
+      {"speciesId":32,"minLevel":12,"maxLevel":12,"weight":20},
+      {"speciesId":48,"minLevel":10,"maxLevel":10,"weight":3.3},
+      {"speciesId":54,"minLevel":12,"maxLevel":12,"weight":10},
+      {"speciesId":163,"minLevel":12,"maxLevel":12,"weight":10},
+      {"speciesId":163,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":165,"minLevel":14,"maxLevel":14,"weight":6.7},
+      {"speciesId":167,"minLevel":14,"maxLevel":14,"weight":6.7},
+      {"speciesId":191,"minLevel":14,"maxLevel":14,"weight":6.7}
+    ]
+  },
   "route-1": {
-    "area": "kanto-route-1-area",
-    "version": "yellow",
+    "sources": [{"area":"kanto-route-1-area","version":"yellow"}],
     "slots": [
       {"speciesId":16,"minLevel":2,"maxLevel":2,"weight":10},
       {"speciesId":16,"minLevel":3,"maxLevel":3,"weight":30},
@@ -29,9 +208,52 @@
       {"speciesId":19,"minLevel":4,"maxLevel":4,"weight":5}
     ]
   },
+  "route-26": {
+    "sources": [{"area":"kanto-route-26-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":20,"minLevel":28,"maxLevel":28,"weight":10},
+      {"speciesId":20,"minLevel":30,"maxLevel":30,"weight":10},
+      {"speciesId":24,"minLevel":30,"maxLevel":30,"weight":3.3},
+      {"speciesId":28,"minLevel":28,"maxLevel":28,"weight":20.1},
+      {"speciesId":77,"minLevel":32,"maxLevel":32,"weight":13.3},
+      {"speciesId":84,"minLevel":28,"maxLevel":28,"weight":20},
+      {"speciesId":84,"minLevel":30,"maxLevel":30,"weight":3.3},
+      {"speciesId":164,"minLevel":28,"maxLevel":28,"weight":10},
+      {"speciesId":164,"minLevel":32,"maxLevel":32,"weight":6.7},
+      {"speciesId":195,"minLevel":30,"maxLevel":30,"weight":3.3}
+    ]
+  },
+  "route-27": {
+    "sources": [{"area":"kanto-route-27-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":20,"minLevel":30,"maxLevel":30,"weight":20.1},
+      {"speciesId":24,"minLevel":28,"maxLevel":28,"weight":20},
+      {"speciesId":77,"minLevel":32,"maxLevel":32,"weight":3.3},
+      {"speciesId":84,"minLevel":28,"maxLevel":28,"weight":20},
+      {"speciesId":84,"minLevel":30,"maxLevel":30,"weight":6.7},
+      {"speciesId":85,"minLevel":30,"maxLevel":30,"weight":3.3},
+      {"speciesId":164,"minLevel":28,"maxLevel":28,"weight":10},
+      {"speciesId":164,"minLevel":32,"maxLevel":32,"weight":3.3},
+      {"speciesId":195,"minLevel":28,"maxLevel":28,"weight":10},
+      {"speciesId":195,"minLevel":30,"maxLevel":30,"weight":3.3}
+    ]
+  },
+  "route-28": {
+    "sources": [{"area":"kanto-route-28-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":24,"minLevel":42,"maxLevel":42,"weight":6.7},
+      {"speciesId":42,"minLevel":40,"maxLevel":40,"weight":6.7},
+      {"speciesId":42,"minLevel":42,"maxLevel":42,"weight":3.3},
+      {"speciesId":61,"minLevel":40,"maxLevel":40,"weight":13.3},
+      {"speciesId":77,"minLevel":40,"maxLevel":40,"weight":20},
+      {"speciesId":78,"minLevel":40,"maxLevel":40,"weight":13.3},
+      {"speciesId":84,"minLevel":41,"maxLevel":41,"weight":3.3},
+      {"speciesId":85,"minLevel":43,"maxLevel":43,"weight":3.3},
+      {"speciesId":114,"minLevel":39,"maxLevel":39,"weight":30.1}
+    ]
+  },
   "route-29": {
-    "area": "johto-route-29-area",
-    "version": "crystal",
+    "sources": [{"area":"johto-route-29-area","version":"crystal"}],
     "slots": [
       {"speciesId":16,"minLevel":2,"maxLevel":2,"weight":20.1},
       {"speciesId":16,"minLevel":3,"maxLevel":3,"weight":13.3},
@@ -45,8 +267,7 @@
     ]
   },
   "route-30": {
-    "area": "johto-route-30-area",
-    "version": "crystal",
+    "sources": [{"area":"johto-route-30-area","version":"crystal"}],
     "slots": [
       {"speciesId":10,"minLevel":3,"maxLevel":3,"weight":20},
       {"speciesId":10,"minLevel":4,"maxLevel":4,"weight":13.3},
@@ -62,23 +283,352 @@
       {"speciesId":187,"minLevel":4,"maxLevel":4,"weight":3.3}
     ]
   },
-  "union-cave": {
-    "area": "union-cave-1f",
-    "version": "crystal",
+  "route-31": {
+    "sources": [{"area":"johto-route-31-area","version":"crystal"}],
     "slots": [
-      {"speciesId":19,"minLevel":4,"maxLevel":4,"weight":10},
-      {"speciesId":19,"minLevel":6,"maxLevel":6,"weight":10},
-      {"speciesId":27,"minLevel":6,"maxLevel":6,"weight":20},
-      {"speciesId":41,"minLevel":5,"maxLevel":5,"weight":13.3},
-      {"speciesId":41,"minLevel":7,"maxLevel":7,"weight":5},
-      {"speciesId":74,"minLevel":6,"maxLevel":6,"weight":30},
-      {"speciesId":95,"minLevel":6,"maxLevel":6,"weight":5},
-      {"speciesId":194,"minLevel":5,"maxLevel":5,"weight":6.7}
+      {"speciesId":10,"minLevel":4,"maxLevel":4,"weight":20},
+      {"speciesId":10,"minLevel":5,"maxLevel":5,"weight":13.3},
+      {"speciesId":13,"minLevel":4,"maxLevel":4,"weight":3.3},
+      {"speciesId":16,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":16,"minLevel":5,"maxLevel":5,"weight":6.7},
+      {"speciesId":41,"minLevel":4,"maxLevel":4,"weight":1.7},
+      {"speciesId":60,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":69,"minLevel":5,"maxLevel":5,"weight":6.7},
+      {"speciesId":92,"minLevel":5,"maxLevel":5,"weight":1.7},
+      {"speciesId":163,"minLevel":5,"maxLevel":5,"weight":3.3},
+      {"speciesId":165,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":167,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":187,"minLevel":5,"maxLevel":5,"weight":3.3}
+    ]
+  },
+  "route-32": {
+    "sources": [{"area":"johto-route-32-area","version":"crystal"},{"area":"johto-route-32-area","version":"gold"}],
+    "slots": [
+      {"speciesId":16,"minLevel":7,"maxLevel":7,"weight":1.7},
+      {"speciesId":19,"minLevel":4,"maxLevel":4,"weight":15},
+      {"speciesId":19,"minLevel":5,"maxLevel":5,"weight":15},
+      {"speciesId":19,"minLevel":6,"maxLevel":6,"weight":1.7},
+      {"speciesId":19,"minLevel":8,"maxLevel":8,"weight":0.8},
+      {"speciesId":23,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":41,"minLevel":4,"maxLevel":4,"weight":0.2},
+      {"speciesId":41,"minLevel":6,"maxLevel":6,"weight":1.7},
+      {"speciesId":41,"minLevel":8,"maxLevel":8,"weight":0.8},
+      {"speciesId":69,"minLevel":6,"maxLevel":6,"weight":13.3},
+      {"speciesId":69,"minLevel":7,"maxLevel":7,"weight":10},
+      {"speciesId":92,"minLevel":7,"maxLevel":7,"weight":0.8},
+      {"speciesId":163,"minLevel":7,"maxLevel":7,"weight":0.8},
+      {"speciesId":179,"minLevel":6,"maxLevel":6,"weight":8.3},
+      {"speciesId":187,"minLevel":6,"maxLevel":6,"weight":6.7},
+      {"speciesId":187,"minLevel":7,"maxLevel":7,"weight":1.7},
+      {"speciesId":194,"minLevel":4,"maxLevel":4,"weight":5.7},
+      {"speciesId":194,"minLevel":6,"maxLevel":6,"weight":5},
+      {"speciesId":194,"minLevel":8,"maxLevel":8,"weight":0.8}
+    ]
+  },
+  "route-33": {
+    "sources": [{"area":"johto-route-33-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":6,"maxLevel":6,"weight":30.1},
+      {"speciesId":19,"minLevel":7,"maxLevel":7,"weight":3.3},
+      {"speciesId":21,"minLevel":6,"maxLevel":6,"weight":20},
+      {"speciesId":23,"minLevel":7,"maxLevel":7,"weight":3.3},
+      {"speciesId":41,"minLevel":6,"maxLevel":6,"weight":13.3},
+      {"speciesId":74,"minLevel":6,"maxLevel":6,"weight":20},
+      {"speciesId":187,"minLevel":6,"maxLevel":6,"weight":6.7},
+      {"speciesId":187,"minLevel":7,"maxLevel":7,"weight":3.3}
+    ]
+  },
+  "route-34": {
+    "sources": [{"area":"johto-route-34-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":16,"minLevel":12,"maxLevel":12,"weight":13.3},
+      {"speciesId":19,"minLevel":11,"maxLevel":11,"weight":30},
+      {"speciesId":39,"minLevel":12,"maxLevel":12,"weight":5},
+      {"speciesId":63,"minLevel":10,"maxLevel":10,"weight":10},
+      {"speciesId":96,"minLevel":12,"maxLevel":12,"weight":10},
+      {"speciesId":132,"minLevel":10,"maxLevel":10,"weight":5},
+      {"speciesId":163,"minLevel":12,"maxLevel":12,"weight":6.7},
+      {"speciesId":209,"minLevel":10,"maxLevel":10,"weight":20}
+    ]
+  },
+  "route-35": {
+    "sources": [{"area":"johto-route-35-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":16,"minLevel":14,"maxLevel":14,"weight":20},
+      {"speciesId":39,"minLevel":12,"maxLevel":12,"weight":5},
+      {"speciesId":52,"minLevel":13,"maxLevel":13,"weight":6.7},
+      {"speciesId":58,"minLevel":13,"maxLevel":13,"weight":13.3},
+      {"speciesId":63,"minLevel":10,"maxLevel":10,"weight":10},
+      {"speciesId":96,"minLevel":12,"maxLevel":12,"weight":10},
+      {"speciesId":132,"minLevel":10,"maxLevel":10,"weight":4},
+      {"speciesId":163,"minLevel":14,"maxLevel":14,"weight":10},
+      {"speciesId":193,"minLevel":12,"maxLevel":12,"weight":1},
+      {"speciesId":209,"minLevel":12,"maxLevel":12,"weight":20}
+    ]
+  },
+  "route-36": {
+    "sources": [{"area":"johto-route-36-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":16,"minLevel":4,"maxLevel":4,"weight":30},
+      {"speciesId":16,"minLevel":5,"maxLevel":5,"weight":3.3},
+      {"speciesId":16,"minLevel":6,"maxLevel":6,"weight":3.3},
+      {"speciesId":58,"minLevel":5,"maxLevel":5,"weight":6.7},
+      {"speciesId":69,"minLevel":5,"maxLevel":5,"weight":20},
+      {"speciesId":92,"minLevel":5,"maxLevel":5,"weight":1.7},
+      {"speciesId":163,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":163,"minLevel":5,"maxLevel":5,"weight":5},
+      {"speciesId":165,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":167,"minLevel":4,"maxLevel":4,"weight":10}
+    ]
+  },
+  "route-37": {
+    "sources": [{"area":"johto-route-37-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":16,"minLevel":13,"maxLevel":13,"weight":10},
+      {"speciesId":16,"minLevel":15,"maxLevel":15,"weight":15},
+      {"speciesId":17,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":58,"minLevel":14,"maxLevel":14,"weight":20},
+      {"speciesId":58,"minLevel":16,"maxLevel":16,"weight":6.7},
+      {"speciesId":163,"minLevel":13,"maxLevel":13,"weight":10},
+      {"speciesId":163,"minLevel":15,"maxLevel":15,"weight":6.7},
+      {"speciesId":164,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":167,"minLevel":13,"maxLevel":13,"weight":10},
+      {"speciesId":168,"minLevel":15,"maxLevel":15,"weight":1.7},
+      {"speciesId":234,"minLevel":14,"maxLevel":14,"weight":10},
+      {"speciesId":234,"minLevel":16,"maxLevel":16,"weight":3.3}
+    ]
+  },
+  "route-38": {
+    "sources": [{"area":"johto-route-38-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":17,"minLevel":16,"maxLevel":16,"weight":6.7},
+      {"speciesId":19,"minLevel":16,"maxLevel":16,"weight":20},
+      {"speciesId":20,"minLevel":16,"maxLevel":16,"weight":30.1},
+      {"speciesId":52,"minLevel":16,"maxLevel":16,"weight":13.3},
+      {"speciesId":81,"minLevel":16,"maxLevel":16,"weight":20},
+      {"speciesId":128,"minLevel":13,"maxLevel":13,"weight":3.3},
+      {"speciesId":164,"minLevel":16,"maxLevel":16,"weight":3.3},
+      {"speciesId":241,"minLevel":13,"maxLevel":13,"weight":3.3}
+    ]
+  },
+  "route-39": {
+    "sources": [{"area":"johto-route-39-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":17,"minLevel":16,"maxLevel":16,"weight":6.7},
+      {"speciesId":19,"minLevel":16,"maxLevel":16,"weight":20},
+      {"speciesId":20,"minLevel":16,"maxLevel":16,"weight":30.1},
+      {"speciesId":52,"minLevel":16,"maxLevel":16,"weight":10},
+      {"speciesId":52,"minLevel":18,"maxLevel":18,"weight":3.3},
+      {"speciesId":81,"minLevel":16,"maxLevel":16,"weight":20},
+      {"speciesId":128,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":164,"minLevel":16,"maxLevel":16,"weight":3.3},
+      {"speciesId":241,"minLevel":15,"maxLevel":15,"weight":3.3}
+    ]
+  },
+  "route-42": {
+    "sources": [{"area":"johto-route-42-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":13,"maxLevel":13,"weight":9.9},
+      {"speciesId":19,"minLevel":15,"maxLevel":15,"weight":13.2},
+      {"speciesId":20,"minLevel":15,"maxLevel":15,"weight":6.6},
+      {"speciesId":20,"minLevel":16,"maxLevel":16,"weight":6.6},
+      {"speciesId":21,"minLevel":14,"maxLevel":14,"weight":20},
+      {"speciesId":22,"minLevel":16,"maxLevel":16,"weight":3.3},
+      {"speciesId":23,"minLevel":13,"maxLevel":13,"weight":19.9},
+      {"speciesId":24,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":41,"minLevel":14,"maxLevel":14,"weight":9.9},
+      {"speciesId":42,"minLevel":16,"maxLevel":16,"weight":5.6},
+      {"speciesId":183,"minLevel":15,"maxLevel":15,"weight":1.7}
+    ]
+  },
+  "route-43": {
+    "sources": [{"area":"johto-route-43-area","version":"crystal"},{"area":"johto-route-43-area","version":"gold"}],
+    "slots": [
+      {"speciesId":17,"minLevel":16,"maxLevel":16,"weight":10},
+      {"speciesId":17,"minLevel":17,"maxLevel":17,"weight":7.5},
+      {"speciesId":20,"minLevel":16,"maxLevel":16,"weight":3.3},
+      {"speciesId":20,"minLevel":17,"maxLevel":17,"weight":2.5},
+      {"speciesId":48,"minLevel":15,"maxLevel":15,"weight":5},
+      {"speciesId":48,"minLevel":16,"maxLevel":16,"weight":3.3},
+      {"speciesId":48,"minLevel":17,"maxLevel":17,"weight":1.7},
+      {"speciesId":49,"minLevel":17,"maxLevel":17,"weight":0.8},
+      {"speciesId":83,"minLevel":16,"maxLevel":16,"weight":6.7},
+      {"speciesId":161,"minLevel":15,"maxLevel":15,"weight":10},
+      {"speciesId":162,"minLevel":15,"maxLevel":15,"weight":3.3},
+      {"speciesId":162,"minLevel":17,"maxLevel":17,"weight":1.7},
+      {"speciesId":163,"minLevel":16,"maxLevel":16,"weight":5},
+      {"speciesId":164,"minLevel":17,"maxLevel":17,"weight":3.3},
+      {"speciesId":179,"minLevel":15,"maxLevel":15,"weight":4.2},
+      {"speciesId":180,"minLevel":15,"maxLevel":15,"weight":15},
+      {"speciesId":180,"minLevel":17,"maxLevel":17,"weight":1.7},
+      {"speciesId":203,"minLevel":15,"maxLevel":15,"weight":15}
+    ]
+  },
+  "route-44": {
+    "sources": [{"area":"johto-route-44-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":60,"minLevel":22,"maxLevel":22,"weight":10},
+      {"speciesId":61,"minLevel":24,"maxLevel":24,"weight":1.7},
+      {"speciesId":61,"minLevel":26,"maxLevel":26,"weight":1.7},
+      {"speciesId":69,"minLevel":22,"maxLevel":22,"weight":20},
+      {"speciesId":70,"minLevel":24,"maxLevel":24,"weight":10},
+      {"speciesId":108,"minLevel":22,"maxLevel":22,"weight":20},
+      {"speciesId":108,"minLevel":24,"maxLevel":24,"weight":3.3},
+      {"speciesId":108,"minLevel":26,"maxLevel":26,"weight":3.3},
+      {"speciesId":114,"minLevel":23,"maxLevel":23,"weight":30}
+    ]
+  },
+  "route-45": {
+    "sources": [{"area":"johto-route-45-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":74,"minLevel":23,"maxLevel":23,"weight":30},
+      {"speciesId":75,"minLevel":23,"maxLevel":23,"weight":30},
+      {"speciesId":75,"minLevel":25,"maxLevel":25,"weight":3.3},
+      {"speciesId":75,"minLevel":27,"maxLevel":27,"weight":3.3},
+      {"speciesId":207,"minLevel":24,"maxLevel":24,"weight":20},
+      {"speciesId":227,"minLevel":27,"maxLevel":27,"weight":3.3},
+      {"speciesId":231,"minLevel":20,"maxLevel":20,"weight":1.7},
+      {"speciesId":232,"minLevel":25,"maxLevel":25,"weight":6.7},
+      {"speciesId":232,"minLevel":30,"maxLevel":30,"weight":1.7}
+    ]
+  },
+  "route-46": {
+    "sources": [{"area":"johto-route-46-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":2,"maxLevel":2,"weight":18.3},
+      {"speciesId":19,"minLevel":3,"maxLevel":3,"weight":10},
+      {"speciesId":21,"minLevel":2,"maxLevel":2,"weight":20},
+      {"speciesId":74,"minLevel":2,"maxLevel":2,"weight":30},
+      {"speciesId":74,"minLevel":3,"maxLevel":3,"weight":20},
+      {"speciesId":231,"minLevel":2,"maxLevel":2,"weight":1.7}
+    ]
+  },
+  "ruins-of-alph": {
+    "sources": [{"area":"ruins-of-alph-interior-a","version":"crystal"}],
+    "slots": [
+      {"speciesId":201,"minLevel":5,"maxLevel":5,"weight":100}
+    ]
+  },
+  "ruins-of-alph-outside": {
+    "sources": [{"area":"ruins-of-alph-outside","version":"crystal"}],
+    "slots": [
+      {"speciesId":177,"minLevel":18,"maxLevel":18,"weight":20},
+      {"speciesId":177,"minLevel":20,"maxLevel":20,"weight":29.9},
+      {"speciesId":177,"minLevel":22,"maxLevel":22,"weight":30},
+      {"speciesId":177,"minLevel":24,"maxLevel":24,"weight":10},
+      {"speciesId":194,"minLevel":20,"maxLevel":20,"weight":1.7},
+      {"speciesId":194,"minLevel":22,"maxLevel":22,"weight":1.7},
+      {"speciesId":195,"minLevel":22,"maxLevel":22,"weight":3.3},
+      {"speciesId":235,"minLevel":20,"maxLevel":20,"weight":1.7},
+      {"speciesId":235,"minLevel":22,"maxLevel":22,"weight":1.7}
+    ]
+  },
+  "slowpoke-well": {
+    "sources": [{"area":"slowpoke-well-1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":41,"minLevel":5,"maxLevel":5,"weight":30},
+      {"speciesId":41,"minLevel":6,"maxLevel":6,"weight":30},
+      {"speciesId":41,"minLevel":7,"maxLevel":7,"weight":20},
+      {"speciesId":41,"minLevel":8,"maxLevel":8,"weight":5},
+      {"speciesId":79,"minLevel":6,"maxLevel":6,"weight":10},
+      {"speciesId":79,"minLevel":8,"maxLevel":8,"weight":5}
+    ]
+  },
+  "slowpoke-well-deep": {
+    "sources": [{"area":"slowpoke-well-b1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":41,"minLevel":19,"maxLevel":19,"weight":20},
+      {"speciesId":41,"minLevel":21,"maxLevel":21,"weight":30},
+      {"speciesId":41,"minLevel":23,"maxLevel":23,"weight":30},
+      {"speciesId":42,"minLevel":23,"maxLevel":23,"weight":5},
+      {"speciesId":79,"minLevel":21,"maxLevel":21,"weight":10},
+      {"speciesId":79,"minLevel":23,"maxLevel":23,"weight":5}
+    ]
+  },
+  "sprout-tower": {
+    "sources": [{"area":"sprout-tower-2f","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":3,"maxLevel":3,"weight":30},
+      {"speciesId":19,"minLevel":4,"maxLevel":4,"weight":20},
+      {"speciesId":19,"minLevel":5,"maxLevel":5,"weight":18.3},
+      {"speciesId":19,"minLevel":6,"maxLevel":6,"weight":3.3},
+      {"speciesId":92,"minLevel":3,"maxLevel":3,"weight":10},
+      {"speciesId":92,"minLevel":4,"maxLevel":4,"weight":10},
+      {"speciesId":92,"minLevel":5,"maxLevel":5,"weight":6.7},
+      {"speciesId":92,"minLevel":6,"maxLevel":6,"weight":1.7}
+    ]
+  },
+  "tin-tower": {
+    "sources": [{"area":"bell-tower-2f","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":20,"maxLevel":20,"weight":20},
+      {"speciesId":19,"minLevel":21,"maxLevel":21,"weight":20},
+      {"speciesId":19,"minLevel":22,"maxLevel":22,"weight":23.3},
+      {"speciesId":19,"minLevel":23,"maxLevel":23,"weight":5},
+      {"speciesId":19,"minLevel":24,"maxLevel":24,"weight":5},
+      {"speciesId":92,"minLevel":20,"maxLevel":20,"weight":10},
+      {"speciesId":92,"minLevel":21,"maxLevel":21,"weight":10},
+      {"speciesId":92,"minLevel":22,"maxLevel":22,"weight":6.7}
+    ]
+  },
+  "tohjo-falls": {
+    "sources": [{"area":"tohjo-falls-area","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":20,"maxLevel":20,"weight":5},
+      {"speciesId":20,"minLevel":22,"maxLevel":22,"weight":30},
+      {"speciesId":41,"minLevel":22,"maxLevel":22,"weight":30},
+      {"speciesId":42,"minLevel":24,"maxLevel":24,"weight":20},
+      {"speciesId":79,"minLevel":21,"maxLevel":21,"weight":10},
+      {"speciesId":79,"minLevel":23,"maxLevel":23,"weight":5}
+    ]
+  },
+  "union-cave": {
+    "sources": [{"area":"union-cave-1f","version":"crystal"},{"area":"union-cave-b1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":19,"minLevel":4,"maxLevel":4,"weight":5},
+      {"speciesId":19,"minLevel":6,"maxLevel":6,"weight":7.5},
+      {"speciesId":19,"minLevel":8,"maxLevel":8,"weight":2.5},
+      {"speciesId":27,"minLevel":6,"maxLevel":6,"weight":10},
+      {"speciesId":41,"minLevel":5,"maxLevel":5,"weight":6.7},
+      {"speciesId":41,"minLevel":6,"maxLevel":6,"weight":15},
+      {"speciesId":41,"minLevel":7,"maxLevel":7,"weight":2.5},
+      {"speciesId":41,"minLevel":8,"maxLevel":8,"weight":6.7},
+      {"speciesId":74,"minLevel":6,"maxLevel":6,"weight":15},
+      {"speciesId":74,"minLevel":8,"maxLevel":8,"weight":15},
+      {"speciesId":95,"minLevel":6,"maxLevel":6,"weight":2.5},
+      {"speciesId":95,"minLevel":8,"maxLevel":8,"weight":5},
+      {"speciesId":194,"minLevel":5,"maxLevel":5,"weight":3.3},
+      {"speciesId":194,"minLevel":8,"maxLevel":8,"weight":3.3}
+    ]
+  },
+  "union-cave-deep": {
+    "sources": [{"area":"union-cave-b2f","version":"crystal"}],
+    "slots": [
+      {"speciesId":20,"minLevel":21,"maxLevel":21,"weight":10},
+      {"speciesId":41,"minLevel":22,"maxLevel":22,"weight":43.3},
+      {"speciesId":42,"minLevel":22,"maxLevel":22,"weight":30},
+      {"speciesId":74,"minLevel":20,"maxLevel":20,"weight":5},
+      {"speciesId":95,"minLevel":23,"maxLevel":23,"weight":5},
+      {"speciesId":195,"minLevel":22,"maxLevel":22,"weight":6.7}
+    ]
+  },
+  "victory-road-johto": {
+    "sources": [{"area":"kanto-victory-road-1-1f","version":"crystal"}],
+    "slots": [
+      {"speciesId":28,"minLevel":35,"maxLevel":35,"weight":3.3},
+      {"speciesId":42,"minLevel":34,"maxLevel":34,"weight":16.7},
+      {"speciesId":75,"minLevel":34,"maxLevel":34,"weight":30},
+      {"speciesId":75,"minLevel":36,"maxLevel":36,"weight":3.3},
+      {"speciesId":75,"minLevel":38,"maxLevel":38,"weight":1.7},
+      {"speciesId":75,"minLevel":40,"maxLevel":40,"weight":1.7},
+      {"speciesId":95,"minLevel":32,"maxLevel":32,"weight":6.7},
+      {"speciesId":95,"minLevel":33,"maxLevel":33,"weight":13.3},
+      {"speciesId":111,"minLevel":32,"maxLevel":32,"weight":20},
+      {"speciesId":112,"minLevel":35,"maxLevel":35,"weight":3.3}
     ]
   },
   "viridian-forest": {
-    "area": "viridian-forest-area",
-    "version": "red",
+    "sources": [{"area":"viridian-forest-area","version":"red"}],
     "slots": [
       {"speciesId":10,"minLevel":3,"maxLevel":3,"weight":5},
       {"speciesId":11,"minLevel":4,"maxLevel":4,"weight":5},
@@ -90,6 +640,32 @@
       {"speciesId":14,"minLevel":6,"maxLevel":6,"weight":10},
       {"speciesId":25,"minLevel":3,"maxLevel":3,"weight":4},
       {"speciesId":25,"minLevel":5,"maxLevel":5,"weight":1}
+    ]
+  },
+  "whirl-islands": {
+    "sources": [{"area":"whirl-islands-1f","version":"crystal"},{"area":"whirl-islands-b1f","version":"crystal"},{"area":"whirl-islands-b2f","version":"crystal"},{"area":"whirl-islands-b3f","version":"crystal"}],
+    "slots": [
+      {"speciesId":41,"minLevel":23,"maxLevel":23,"weight":7.5},
+      {"speciesId":41,"minLevel":24,"maxLevel":24,"weight":7.5},
+      {"speciesId":41,"minLevel":25,"maxLevel":25,"weight":7.5},
+      {"speciesId":41,"minLevel":26,"maxLevel":26,"weight":7.5},
+      {"speciesId":42,"minLevel":23,"maxLevel":23,"weight":0.4},
+      {"speciesId":42,"minLevel":25,"maxLevel":25,"weight":1.3},
+      {"speciesId":42,"minLevel":26,"maxLevel":26,"weight":1.7},
+      {"speciesId":42,"minLevel":27,"maxLevel":27,"weight":1.7},
+      {"speciesId":42,"minLevel":28,"maxLevel":28,"weight":1.3},
+      {"speciesId":86,"minLevel":22,"maxLevel":22,"weight":3.3},
+      {"speciesId":86,"minLevel":23,"maxLevel":23,"weight":3.3},
+      {"speciesId":86,"minLevel":24,"maxLevel":24,"weight":5.4},
+      {"speciesId":86,"minLevel":25,"maxLevel":25,"weight":4.2},
+      {"speciesId":86,"minLevel":26,"maxLevel":26,"weight":0.8},
+      {"speciesId":86,"minLevel":27,"maxLevel":27,"weight":0.8},
+      {"speciesId":98,"minLevel":22,"maxLevel":22,"weight":9.2},
+      {"speciesId":98,"minLevel":23,"maxLevel":23,"weight":9.2},
+      {"speciesId":98,"minLevel":24,"maxLevel":24,"weight":10.8},
+      {"speciesId":98,"minLevel":25,"maxLevel":25,"weight":11.6},
+      {"speciesId":98,"minLevel":26,"maxLevel":26,"weight":2.5},
+      {"speciesId":98,"minLevel":27,"maxLevel":27,"weight":2.5}
     ]
   }
 }

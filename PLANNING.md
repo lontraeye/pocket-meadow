@@ -376,7 +376,7 @@ Três por região do jogo, com a mesma escada de nível. Substituem as três atu
 | Rota 30 | johto | `johto-route-30-area` / crystal | 3 | Caterpie 33, Pidgey 17, Hoothoot 15, Ledyba 10, Spinarak 10, Poliwag 7, Weedle 3, Hoppip 3, Zubat 2 · Nv 3–4 |
 | Union Cave | johto | `union-cave-1f` / crystal | 6 | Geodude 30, Rattata 20, Sandshrew 20, Zubat 18, Wooper 7, Onix 5 · Nv 4–7 |
 
-Os pesos do Crystal já são a média dos três períodos. Próximas candidatas, já conferidas na PokéAPI: Rota 22 (Nidoran ♀/♂, Mankey), Rota 24/25 (Oddish, Bellsprout), Rota 31 e Rota 32 (Crystal).
+A lista completa de áreas, a ordem em que abrem e as fontes de cada uma estão no `JORNADA.md` (2026-10-29). Os pesos do Crystal já são a média dos três períodos. Próximas candidatas, já conferidas na PokéAPI: Rota 22 (Nidoran ♀/♂, Mankey), Rota 24/25 (Oddish, Bellsprout), Rota 31 e Rota 32 (Crystal).
 
 #### Pronto quando
 - `npm run seed:regions` gera o snapshot do zero e de novo sem diff.
@@ -1333,6 +1333,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - ~~*9.4 — Arremesso com física:* gesto segurar/girar/soltar; voo 2,5D; anel Nice/Great/Excellent; `POST /miss` gasta bola sem RNG; berry arremessada sem giro; a11y (toque simples / teclado / reduced-motion) sempre acerta `normal`.~~
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
+
+**Jornada (mapeada em 2026-10-29, `JORNADA.md`):** região inicial à escolha, capítulos e marcos por região, ~65 áreas, ferramentas (pesca, Surf, Headbutt, Rock Smash) e o caminho de cada espécie especial. É a próxima frente; a ordem de implementação está na seção 9 de lá.
 
 **Depois (ideias anotadas, ainda sem fase):** ~~animação de evolução~~ (feita em 2026-10-29, 5.8); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); ~~climas no jardim~~ (feito em 2026-10-29, 5.11; felicidade dos Pokémon e máquinas ficam para depois); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 

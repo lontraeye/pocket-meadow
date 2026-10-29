@@ -3,23 +3,24 @@ import { getJson } from '../src/seed/pokeapi.js'
 import {
   type LocationArea,
   type RegionsSnapshot,
-  slotsFromArea,
+  slotsFromSources,
   writeRegionsSnapshot,
 } from '../src/seed/regionTable.js'
 
 const snapshot: RegionsSnapshot = {}
 
 for (const region of regionConfigs) {
-  const area = await getJson<LocationArea>(`/location-area/${region.source.area}`)
-  const slots = slotsFromArea(area, {
-    version: region.source.version,
+  const sources = []
+  for (const source of region.sources) {
+    sources.push({ area: await getJson<LocationArea>(`/location-area/${source.area}`), version: source.version })
+  }
+  const slots = slotsFromSources(sources, {
     name: region.name,
     exclude: region.exclude,
     levelOverride: region.levelOverride,
   })
   snapshot[region.slug] = {
-    area: region.source.area,
-    version: region.source.version,
+    sources: region.sources.map((source) => ({ area: source.area, version: source.version })),
     slots,
   }
   const min = Math.min(...slots.map((slot) => slot.minLevel))

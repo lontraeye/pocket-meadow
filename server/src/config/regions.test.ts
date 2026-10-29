@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { applyRareWeights, rollWild } from '../game/battle.js'
-import { slotsFromArea, type LocationArea, readRegionsSnapshot } from '../seed/regionTable.js'
+import { slotsFromArea, slotsFromSources, type LocationArea, readRegionsSnapshot } from '../seed/regionTable.js'
 import { RARE_WEIGHT_MAX } from './battle.js'
-import { loadRegions, regionConfigs, regionStatus } from './regions.js'
+import { CHAPTER_MIN_LEVEL, loadRegions, regionConfigs, regionStatus } from './regions.js'
 
 const morningOnly = (chance: number, min: number, max: number) => ({
   min_level: min,
@@ -97,6 +97,7 @@ describe('regiões', () => {
     assert.ok(route)
     const status = regionStatus(route, 1)
     assert.deepEqual(Object.keys(status).sort(), [
+      'chapter',
       'gameRegion',
       'minTrainerLevel',
       'name',
@@ -110,16 +111,29 @@ describe('regiões', () => {
     assert.equal('slots' in status, false)
   })
 
-  test('nível 1 abre Rota 1 e Rota 29, nível 3 a floresta e a Rota 30, nível 6 Mt. Moon e Union Cave', () => {
+  test('nível 1 abre a Rota 1 e o capítulo 1 de Johto; nível 3, a floresta e o capítulo 2', () => {
     const open = (level: number) =>
       loadRegions()
         .filter((region) => regionStatus(region, level).unlocked)
         .map((region) => region.slug)
-    assert.deepEqual(open(1), ['route-1', 'route-29'])
-    assert.deepEqual(open(2), ['route-1', 'route-29'])
-    assert.deepEqual(open(3), ['route-1', 'viridian-forest', 'route-29', 'route-30'])
-    assert.deepEqual(open(5), ['route-1', 'viridian-forest', 'route-29', 'route-30'])
-    assert.deepEqual(open(6), ['route-1', 'viridian-forest', 'mt-moon', 'route-29', 'route-30', 'union-cave'])
+    const chapter1 = ['route-29', 'route-46', 'route-30', 'route-31', 'sprout-tower', 'dark-cave-violet']
+    const chapter2 = ['route-32', 'ruins-of-alph', 'union-cave', 'slowpoke-well', 'route-33']
+    assert.deepEqual(open(1), ['route-1', ...chapter1])
+    assert.deepEqual(open(2), ['route-1', ...chapter1])
+    assert.deepEqual(open(3), ['route-1', 'viridian-forest', ...chapter1, ...chapter2])
+    assert.deepEqual(open(6), ['route-1', 'viridian-forest', 'mt-moon', ...chapter1, ...chapter2, 'ilex-forest', 'route-34'])
+  })
+
+  test('em Johto, cada área tem capítulo e o nível dele, e os capítulos vêm em ordem', () => {
+    const johto = loadRegions().filter((region) => region.gameRegion === 'johto')
+    assert.ok(johto.length >= 35)
+    let last = 0
+    for (const region of johto) {
+      assert.ok(region.chapter !== null, region.slug)
+      assert.equal(region.minTrainerLevel, CHAPTER_MIN_LEVEL[region.chapter], region.slug)
+      assert.ok(region.chapter >= last, `${region.slug} fora de ordem`)
+      last = region.chapter
+    }
   })
 
   test('cada região do config está no snapshot, soma 100 e tem slots válidos', () => {
@@ -129,8 +143,7 @@ describe('regiões', () => {
     for (const config of regionConfigs) {
       const entry = snapshot[config.slug]
       assert.ok(entry, config.slug)
-      assert.equal(entry.area, config.source.area)
-      assert.equal(entry.version, config.source.version)
+      assert.deepEqual(entry.sources, config.sources)
       assert.ok(entry.slots.length > 0)
       const tenths = Math.round(entry.slots.reduce((sum, slot) => sum + slot.weight, 0) * 10)
       assert.equal(tenths, 1000, `${config.slug} soma ${tenths / 10}`)
@@ -214,6 +227,65 @@ describe('regiões', () => {
       }),
       [{ speciesId: 16, minLevel: 4, maxLevel: 5, weight: 100 }],
     )
+  })
+
+  test('várias fontes: cada uma pesa igual, mesmo com totais diferentes', () => {
+    const area = (name: string, id: number, chance: number): LocationArea => ({
+      pokemon_encounters: [
+        {
+          pokemon: { name, url: `https://pokeapi.co/api/v2/pokemon/${id}/` },
+          version_details: [{ version: { name: 'crystal' }, encounter_details: [allDay(chance, 5, 5)] }],
+        },
+      ],
+    })
+    // Pidgey 100% num andar e Zubat 100% no outro (com chance 40) → 50/50.
+    assert.deepEqual(
+      slotsFromSources(
+        [
+          { area: area('pidgey', 16, 100), version: 'crystal' },
+          { area: area('zubat', 41, 40), version: 'crystal' },
+        ],
+        { name: 'Exemplo' },
+      ),
+      [
+        { speciesId: 16, minLevel: 5, maxLevel: 5, weight: 50 },
+        { speciesId: 41, minLevel: 5, maxLevel: 5, weight: 50 },
+      ],
+    )
+    // Uma fonte só dá o mesmo que slotsFromArea.
+    assert.deepEqual(
+      slotsFromSources([{ area: sampleArea, version: 'crystal' }], { name: 'Exemplo' }),
+      slotsFromArea(sampleArea, { version: 'crystal', name: 'Exemplo' }),
+    )
+  })
+
+  test('"sem enxame" conta como mato normal; "com enxame" fica de fora', () => {
+    const detail = (chance: number, conditions: string[]) => ({
+      min_level: 3,
+      max_level: 3,
+      chance,
+      method: { name: 'walk' },
+      condition_values: conditions.map((name) => ({ name })),
+    })
+    const area: LocationArea = {
+      pokemon_encounters: [
+        {
+          pokemon: { name: 'geodude', url: 'https://pokeapi.co/api/v2/pokemon/74/' },
+          version_details: [{ version: { name: 'crystal' }, encounter_details: [detail(60, ['swarm-no'])] }],
+        },
+        {
+          pokemon: { name: 'dunsparce', url: 'https://pokeapi.co/api/v2/pokemon/206/' },
+          version_details: [
+            { version: { name: 'crystal' }, encounter_details: [detail(40, ['swarm-no', 'time-day']), detail(90, ['swarm-yes'])] },
+          ],
+        },
+      ],
+    }
+    // Geodude 60 o dia todo; Dunsparce 40 só de dia → média 40/3. Total 73,3.
+    assert.deepEqual(slotsFromArea(area, { version: 'crystal', name: 'Exemplo' }), [
+      { speciesId: 74, minLevel: 3, maxLevel: 3, weight: 81.8 },
+      { speciesId: 206, minLevel: 3, maxLevel: 3, weight: 18.2 },
+    ])
   })
 
   test('área sem walk na versão falha com o nome da região', () => {

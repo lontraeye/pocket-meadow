@@ -319,10 +319,58 @@
     return () => setLiveFight(false)
   })
 
-  const groups = $derived([
-    { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
-    { id: 'johto', title: 'Johto', regions: regions.filter((region) => region.gameRegion === 'johto') },
-  ])
+  // Títulos provisórios dos capítulos (JORNADA.md, seção 5.2), até os marcos
+  // virem do servidor.
+  const CHAPTER_TITLES: Record<number, string> = {
+    1: 'New Bark → Violet',
+    2: 'Ruínas e Azalea',
+    3: 'Ilex e Goldenrod',
+    4: 'Ecruteak',
+    5: 'Costa e Cianwood',
+    6: 'Olivine',
+    7: 'Mahogany',
+    8: 'Blackthorn',
+    9: 'Caminho da Liga',
+    10: 'Fim de jogo',
+  }
+
+  type RegionSection = { key: string; title: string | null; regions: RegionInfo[]; unlocked: boolean; minLevel: number }
+
+  /**
+   * Áreas por capítulo. Os capítulos abertos mostram as áreas; dos fechados,
+   * só o próximo aparece, como um aviso (a lista inteira não cabe no celular).
+   */
+  function sectionsOf(list: RegionInfo[]): { open: RegionSection[]; next: RegionSection | null; later: number } {
+    const sections: RegionSection[] = []
+    for (const region of list) {
+      const key = region.chapter === null ? 'free' : `chapter-${region.chapter}`
+      let section = sections.find((item) => item.key === key)
+      if (!section) {
+        const title =
+          region.chapter === null
+            ? null
+            : region.chapter <= 8
+              ? `Capítulo ${region.chapter} · ${CHAPTER_TITLES[region.chapter] ?? ''}`
+              : (CHAPTER_TITLES[region.chapter] ?? `Capítulo ${region.chapter}`)
+        section = { key, title, regions: [], unlocked: false, minLevel: region.minTrainerLevel }
+        sections.push(section)
+      }
+      section.regions.push(region)
+      section.unlocked ||= region.unlocked
+      section.minLevel = Math.min(section.minLevel, region.minTrainerLevel)
+    }
+    // Sem capítulo (Kanto, por enquanto): tudo à mostra, como antes.
+    const open = sections.filter((section) => section.unlocked || section.title === null)
+    const locked = sections.filter((section) => !section.unlocked && section.title !== null)
+    return { open, next: locked[0] ?? null, later: Math.max(0, locked.length - 1) }
+  }
+
+  const groups = $derived(
+    [
+      { id: 'johto', title: 'Johto', regions: regions.filter((region) => region.gameRegion === 'johto') },
+      { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
+    ].map((group) => ({ ...group, ...sectionsOf(group.regions) })),
+  )
   const roster = $derived(
     game.pokemon
       .filter((mon) => mon.location === 'garden')
@@ -1026,24 +1074,36 @@
         {#each groups as group (group.id)}
           {#if group.regions.length > 0}
             <h3>{group.title}</h3>
-            {#each group.regions as region (region.slug)}
-              <button
-                type="button"
-                class="btn choice"
-                class:btn-primary={region.unlocked && !game.encounter}
-                aria-busy={searching === region.slug}
-                disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
-                onclick={() => search(region.slug)}
-              >
-                <span>{region.name}</span>
-                {#if searching === region.slug}
-                  <small class="waiting"><span class="ball sprite-wait" aria-hidden="true"></span>Procurando…</small>
-                {:else}
-                  <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
-                {/if}
-                {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
-              </button>
+            {#each group.open as section (section.key)}
+              {#if section.title}<h4 class="chapter">{section.title}</h4>{/if}
+              {#each section.regions as region (region.slug)}
+                <button
+                  type="button"
+                  class="btn choice"
+                  class:btn-primary={region.unlocked && !game.encounter}
+                  aria-busy={searching === region.slug}
+                  disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
+                  onclick={() => search(region.slug)}
+                >
+                  <span>{region.name}</span>
+                  {#if searching === region.slug}
+                    <small class="waiting"><span class="ball sprite-wait" aria-hidden="true"></span>Procurando…</small>
+                  {:else}
+                    <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
+                  {/if}
+                  {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
+                </button>
+              {/each}
             {/each}
+            {#if group.next}
+              <p class="next-chapter">
+                <strong>{group.next.title}</strong>
+                <small>
+                  {group.next.regions.length} área{group.next.regions.length === 1 ? '' : 's'} · abre no nível {group.next.minLevel}
+                  {#if group.later > 0}· mais {group.later} capítulo{group.later === 1 ? '' : 's'} depois{/if}
+                </small>
+              </p>
+            {/if}
           {/if}
         {/each}
         {#if regions.length === 0 && !message}
@@ -1426,6 +1486,23 @@
   h3 {
     margin: 0;
     font-size: 1.15rem;
+  }
+
+  h4.chapter {
+    margin: 0.4rem 0 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  .next-chapter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0.4rem 0 0;
+    padding: 0.6rem 0.75rem;
+    border: 2px dashed currentColor;
+    border-radius: 6px;
+    opacity: 0.75;
   }
 
   .hint,

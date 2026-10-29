@@ -57,6 +57,8 @@ export type RegionInfo = {
   slug: string
   name: string
   gameRegion: 'kanto' | 'johto'
+  /** Capítulo da jornada (1 a 8, 9 = Liga, 10 = fim de jogo); null onde ainda não há. */
+  chapter: number | null
   minTrainerLevel: number
   wildLevelRange: [number, number]
   unlocked: boolean

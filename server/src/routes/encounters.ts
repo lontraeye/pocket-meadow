@@ -225,6 +225,9 @@ export function createEncounter(userId: number, region: Region, now: number, for
       name: species.name,
       displayName: species.displayName,
       baseStatTotal: species.baseStatTotal,
+      captureRate: species.captureRate,
+      type1: species.type1,
+      type2: species.type2,
     })
     .from(species)
     .where(eq(species.id, wild.speciesId))
@@ -286,6 +289,9 @@ export function createEncounter(userId: number, region: Region, now: number, for
       isShiny: wild.isShiny,
       expiresAt,
       baseStatTotal: spec.baseStatTotal,
+      captureRate: spec.captureRate,
+      type1: spec.type1,
+      type2: spec.type2,
     }),
   }
 }
