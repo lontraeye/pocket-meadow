@@ -38,7 +38,7 @@ function loginCookie(username: string): { cookie: string; userId: number } {
   const token = randomBytes(32).toString('base64url')
   let userId = 0
   immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     userId = created.userId
     getDb()
       .insert(sessions)
@@ -207,7 +207,7 @@ test('GET /pokedex devolve só o liberado e as contagens', async () => {
   assert.equal(seen?.layer, 'seen')
   assert.equal(seen?.displayName, 'Pidgey')
   assert.equal(seen?.type1, undefined)
-  const starter = body.species.find((row) => row.id === 1)
+  const starter = body.species.find((row) => row.id === 152)
   assert.ok(starter && starter.layer !== 'unknown')
 })
 
@@ -329,23 +329,23 @@ test('GET /pokedex não devolve nome de evolução não vista', async () => {
       evolution?: { id: number; displayName?: string }[]
     }[]
   }
-  const starter = body.species.find((row) => row.id === 1)
+  const starter = body.species.find((row) => row.id === 152)
   assert.ok(starter?.evolution)
-  const unseen = starter.evolution.filter((row) => row.id !== 1)
+  const unseen = starter.evolution.filter((row) => row.id !== 152)
   assert.ok(unseen.length >= 1)
   for (const row of unseen) {
     assert.equal(row.displayName, undefined)
   }
-  const self = starter.evolution.find((row) => row.id === 1)
-  assert.equal(self?.displayName, 'Bulbasaur')
+  const self = starter.evolution.find((row) => row.id === 152)
+  assert.equal(self?.displayName, 'Chikorita')
 })
 
 test('bumpMaxLevelReached sobe e não desce', () => {
   const { userId } = loginCookie('dex-bump')
   immediate(() => {
-    bumpMaxLevelReached(userId, 1, 10)
-    bumpMaxLevelReached(userId, 1, 8)
-    bumpMaxLevelReached(userId, 1, 16)
+    bumpMaxLevelReached(userId, 152, 10)
+    bumpMaxLevelReached(userId, 152, 8)
+    bumpMaxLevelReached(userId, 152, 16)
   })
   const row = getDb()
     .select({ maxLevelReached: pokedexEntries.maxLevelReached })
@@ -361,7 +361,7 @@ test('bumpMaxLevelReached sobe e não desce', () => {
       .set({ level: 18 })
       .where(eq(pokemon.userId, userId))
       .run()
-    bumpMaxLevelReached(userId, 1, 18)
+    bumpMaxLevelReached(userId, 152, 18)
   })
   const again = getDb()
     .select({ maxLevelReached: pokedexEntries.maxLevelReached, energy: trainers.energy })

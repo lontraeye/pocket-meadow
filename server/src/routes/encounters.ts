@@ -5,11 +5,12 @@ import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
-import { type Region, regionBySlug } from '../config/regions.js'
+import { type Region, regionBySlug, regionOpen } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
+import { loadProgress } from '../db/milestones.js'
 import { getDb, immediate } from '../db/client.js'
 import {
   activeEffects,
@@ -203,7 +204,7 @@ export type ForcedWild = { speciesId: number; level: number; isShiny: boolean }
 
 export function createEncounter(userId: number, region: Region, now: number, forced?: ForcedWild) {
   const clock = persistCatchUp(userId, now)
-  if (clock.level < region.minTrainerLevel) return fail('region_locked', 400)
+  if (!regionOpen(region, loadProgress(userId, clock.level))) return fail('region_locked', 400)
   const db = getDb()
   const pending = db
     .select({ id: encounters.id })

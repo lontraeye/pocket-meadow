@@ -1,11 +1,21 @@
-import { CHAPTER_MIN_LEVEL, regionBySlug } from './regions.js'
+import {
+  chapterOpen,
+  LAST_CHAPTER,
+  milestoneConfigs,
+  milestoneOfChapter,
+  type Progress,
+  type Tool,
+  TOOL_NAMES,
+  toolOpen,
+} from './milestones.js'
+import { regionBySlug } from './regions.js'
 
 // Lugares da jornada e ligações (JORNADA.md, seção 11). Lugar = cidade, área
 // (com tabela de encontro: mesmo slug da região) ou água (só pesca e Surf,
 // que ainda não existem). O jogador está num lugar e anda para os vizinhos.
 
 export type PlaceKind = 'town' | 'area' | 'water'
-export type Tool = 'surf'
+export type { Tool }
 
 export type PlaceLink = { to: string; requires?: Tool }
 
@@ -37,14 +47,6 @@ export const CHAPTER_TITLES: Readonly<Record<number, string>> = {
   9: 'Caminho da Liga',
   10: 'Fim de jogo',
 }
-
-/**
- * Ferramenta → capítulo que a libera, até os marcos existirem (JORNADA.md,
- * seção 4: Surf no marco 4 de Johto).
- */
-export const TOOL_CHAPTER: Readonly<Record<Tool, number>> = { surf: 4 }
-
-const TOOL_NAMES: Readonly<Record<Tool, string>> = { surf: 'Surf' }
 
 export const placeConfigs: readonly PlaceConfig[] = [
   // Cap. 1
@@ -185,20 +187,13 @@ export function linksOf(slug: string): PlaceLink[] {
   return out
 }
 
-/** Nível de treinador que abre o capítulo (escada provisória até os marcos). */
-export function chapterOpen(chapter: number, trainerLevel: number): boolean {
-  const min = CHAPTER_MIN_LEVEL[chapter]
-  return min !== undefined && trainerLevel >= min
-}
-
-export function toolOpen(tool: Tool, trainerLevel: number): boolean {
-  return chapterOpen(TOOL_CHAPTER[tool], trainerLevel)
-}
-
 /** Por que o lugar (ou a ligação até ele) está fechado; null = aberto. */
-export function lockReason(place: PlaceConfig, trainerLevel: number, requires?: Tool): string | null {
-  if (!chapterOpen(place.chapter, trainerLevel)) return `Abre no nível ${CHAPTER_MIN_LEVEL[place.chapter]}`
-  if (requires && !toolOpen(requires, trainerLevel)) return `Precisa de ${TOOL_NAMES[requires]}`
+export function lockReason(place: PlaceConfig, progress: Progress, requires?: Tool): string | null {
+  if (!chapterOpen(place.chapter, progress)) {
+    const gate = milestoneOfChapter(place.chapter - 1)
+    return gate ? `Abre no ${gate.name}` : 'Fechado'
+  }
+  if (requires && !toolOpen(requires, progress)) return `Precisa de ${TOOL_NAMES[requires]}`
   return null
 }
 
@@ -208,7 +203,7 @@ export function checkPlaces(): void {
   for (const place of placeConfigs) {
     if (slugs.has(place.slug)) throw new Error(`place ${place.slug} is duplicated`)
     slugs.add(place.slug)
-    if (CHAPTER_MIN_LEVEL[place.chapter] === undefined) throw new Error(`place ${place.slug} has unknown chapter`)
+    if (place.chapter < 1 || place.chapter > LAST_CHAPTER) throw new Error(`place ${place.slug} has unknown chapter`)
     const region = regionBySlug(place.slug)
     if (place.kind === 'area' && !region) throw new Error(`place ${place.slug} is an area without a region`)
     if (place.kind !== 'area' && region) throw new Error(`place ${place.slug} has a region but is ${place.kind}`)
@@ -218,4 +213,9 @@ export function checkPlaces(): void {
     if (!slugs.has(a) || !slugs.has(b)) throw new Error(`link ${a} ↔ ${b} points to an unknown place`)
   }
   if (!slugs.has(START_PLACE)) throw new Error('start place is missing')
+  for (const milestone of milestoneConfigs) {
+    const town = placeBySlug(milestone.town)
+    if (!town || town.kind !== 'town') throw new Error(`milestone ${milestone.key} town is not a town`)
+    if (town.chapter > milestone.chapter) throw new Error(`milestone ${milestone.key} town opens after it`)
+  }
 }

@@ -34,7 +34,7 @@ function loginPlayer(username: string): { cookie: string; userId: number } {
   const token = randomBytes(32).toString('base64url')
   let userId = 0
   immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     userId = created.userId
     getDb()
       .insert(sessions)

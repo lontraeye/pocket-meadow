@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 import { applyRareWeights, rollWild } from '../game/battle.js'
 import { slotsFromArea, slotsFromSources, type LocationArea, readRegionsSnapshot } from '../seed/regionTable.js'
 import { RARE_WEIGHT_MAX } from './battle.js'
-import { CHAPTER_MIN_LEVEL, loadRegions, regionConfigs, regionStatus } from './regions.js'
+import { loadRegions, regionConfigs, regionStatus } from './regions.js'
 
 const morningOnly = (chance: number, min: number, max: number) => ({
   min_level: min,
@@ -95,7 +95,7 @@ describe('regiões', () => {
   test('o status público não leva a tabela de spawn', () => {
     const route = loadRegions().find((region) => region.slug === 'route-1')
     assert.ok(route)
-    const status = regionStatus(route, 1)
+    const status = regionStatus(route, { level: 1, cleared: new Set() })
     assert.deepEqual(Object.keys(status).sort(), [
       'chapter',
       'gameRegion',
@@ -111,26 +111,26 @@ describe('regiões', () => {
     assert.equal('slots' in status, false)
   })
 
-  test('nível 1 abre a Rota 1 e o capítulo 1 de Johto; nível 3, a floresta e o capítulo 2', () => {
-    const open = (level: number) =>
+  test('Johto abre por marco (não por nível); Kanto continua por nível', () => {
+    const open = (level: number, cleared: string[]) =>
       loadRegions()
-        .filter((region) => regionStatus(region, level).unlocked)
+        .filter((region) => regionStatus(region, { level, cleared: new Set(cleared) }).unlocked)
         .map((region) => region.slug)
     const chapter1 = ['route-29', 'route-46', 'route-30', 'route-31', 'sprout-tower', 'dark-cave-violet']
     const chapter2 = ['route-32', 'ruins-of-alph', 'union-cave', 'slowpoke-well', 'route-33']
-    assert.deepEqual(open(1), ['route-1', ...chapter1])
-    assert.deepEqual(open(2), ['route-1', ...chapter1])
-    assert.deepEqual(open(3), ['route-1', 'viridian-forest', ...chapter1, ...chapter2])
-    assert.deepEqual(open(6), ['route-1', 'viridian-forest', 'mt-moon', ...chapter1, ...chapter2, 'ilex-forest', 'route-34'])
+    assert.deepEqual(open(1, []), ['route-1', ...chapter1])
+    // Nível alto sem marco não abre o capítulo 2.
+    assert.deepEqual(open(20, []), ['route-1', 'viridian-forest', 'mt-moon', ...chapter1])
+    assert.deepEqual(open(1, ['violet']), ['route-1', ...chapter1, ...chapter2])
+    assert.deepEqual(open(1, ['violet', 'azalea']), ['route-1', ...chapter1, ...chapter2, 'ilex-forest', 'route-34'])
   })
 
-  test('em Johto, cada área tem capítulo e o nível dele, e os capítulos vêm em ordem', () => {
+  test('em Johto, cada área tem capítulo, e os capítulos vêm em ordem', () => {
     const johto = loadRegions().filter((region) => region.gameRegion === 'johto')
     assert.ok(johto.length >= 35)
     let last = 0
     for (const region of johto) {
       assert.ok(region.chapter !== null, region.slug)
-      assert.equal(region.minTrainerLevel, CHAPTER_MIN_LEVEL[region.chapter], region.slug)
       assert.ok(region.chapter >= last, `${region.slug} fora de ordem`)
       last = region.chapter
     }

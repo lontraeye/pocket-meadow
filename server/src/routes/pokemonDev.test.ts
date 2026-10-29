@@ -32,7 +32,7 @@ function player(username: string): { cookie: string; userId: number } {
   const now = Date.now()
   const token = randomBytes(32).toString('base64url')
   const userId = immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     getDb()
       .insert(sessions)
       .values({ id: hashToken(token), userId: created.userId, createdAt: now, expiresAt: now + authConfig.sessionTtlMs })
@@ -60,7 +60,7 @@ test('sem DEV_TOOLS as rotas de debug da ficha não existem', async () => {
   const { cookie, userId } = player('brock')
   const mon = starterOf(userId)
   for (const action of ['evolve', 'level', 'shiny', 'delete']) {
-    const response = await post(`/pokemon/${mon.id}/dev/${action}`, { toSpeciesId: 2, levels: 1 }, cookie)
+    const response = await post(`/pokemon/${mon.id}/dev/${action}`, { toSpeciesId: 153, levels: 1 }, cookie)
     assert.equal(response.status, 404, action)
   }
   assert.equal(starterOf(userId).speciesId, mon.speciesId)
@@ -72,10 +72,10 @@ test('com DEV_TOOLS: evolui sem o nível, sobe nível, vira shiny e não apaga o
   const mon = starterOf(userId)
   assert.ok(mon.level < 16, 'o inicial ainda não teria nível para evoluir')
 
-  const evolved = await post(`/pokemon/${mon.id}/dev/evolve`, { toSpeciesId: 2 }, cookie)
+  const evolved = await post(`/pokemon/${mon.id}/dev/evolve`, { toSpeciesId: 153 }, cookie)
   assert.equal(evolved.status, 200)
-  assert.equal(((await evolved.json()) as { speciesId: number }).speciesId, 2)
-  assert.equal(starterOf(userId).speciesId, 2)
+  assert.equal(((await evolved.json()) as { speciesId: number }).speciesId, 153)
+  assert.equal(starterOf(userId).speciesId, 153)
 
   const leveled = await post(`/pokemon/${mon.id}/dev/level`, { levels: 3 }, cookie)
   assert.equal(leveled.status, 200)

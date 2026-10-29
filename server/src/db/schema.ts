@@ -139,6 +139,19 @@ export const trainers = sqliteTable('trainers', {
   updatedAt: integer('updated_at').notNull(),
 })
 
+/** Marcos conquistados (JORNADA.md, seção 6): abrem capítulos e ferramentas. */
+export const trainerMilestones = sqliteTable(
+  'trainer_milestones',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    milestoneKey: text('milestone_key').notNull(),
+    clearedAt: integer('cleared_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.milestoneKey] })],
+)
+
 /** Lugares já visitados: Voo, selo "novo" e aviso de chegada. */
 export const trainerPlaces = sqliteTable(
   'trainer_places',

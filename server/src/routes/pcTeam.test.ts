@@ -34,7 +34,7 @@ function player(username: string): { cookie: string; userId: number; starterId: 
   const now = Date.now()
   const token = randomBytes(32).toString('base64url')
   const userId = immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     getDb()
       .insert(sessions)
       .values({ id: hashToken(token), userId: created.userId, createdAt: now, expiresAt: now + authConfig.sessionTtlMs })

@@ -13,10 +13,12 @@ export const trainerConfig = {
   catchXpBase: 10,
   catchXpPerWildLevel: 1,
   starterLevel: 5,
+  // Iniciais de Johto: por enquanto todo mundo começa em New Bark
+  // (JORNADA.md; Kanto volta quando tiver mapa e roteiro).
   starters: {
-    bulbasaur: 1,
-    charmander: 4,
-    squirtle: 7,
+    chikorita: 152,
+    cyndaquil: 155,
+    totodile: 158,
   },
   startingItems: [
     { itemKey: 'seed:oran', quantity: 3 },

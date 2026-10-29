@@ -33,7 +33,7 @@ devRoutes.post('/login', async (c) => {
   const body = (await readObject(c)) ?? {}
   const username = asUsername(body.username)
   if (!username) return c.json({ error: 'invalid_username' }, 400)
-  const starter = body.starter === undefined ? 'bulbasaur' : body.starter
+  const starter = body.starter === undefined ? 'chikorita' : body.starter
   if (!isStarter(starter)) return c.json({ error: 'invalid_starter' }, 400)
   const now = Date.now()
   const token = immediate(() => {

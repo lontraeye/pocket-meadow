@@ -77,6 +77,8 @@ export type PlaceView = {
   /** Por que está fechado (ex.: "Abre no nível 3"); null = aberto. */
   reason: string | null
   visited: boolean
+  /** Dá para voar direto (Voo liberado, cidade visitada). */
+  flyable: boolean
   wildLevelRange: [number, number] | null
   speciesTotal: number
   speciesCaught: number
@@ -86,14 +88,26 @@ export type PlaceView = {
 export type PlacesResponse = {
   current: string
   trainerLevel: number
-  chapter: {
-    number: number
+  canFly: boolean
+  /** Objetivo: o marco do capítulo aberto mais alto (null quando já foi conquistado). */
+  goal: {
+    chapter: number
     title: string
     caught: number
     total: number
-    nextChapter: number | null
-    nextTitle: string | null
-    nextLevel: number | null
+    milestone: {
+      key: string
+      name: string
+      typeLabel: string
+      town: string
+      townName: string
+      needSpecies: number
+      needLevel: number
+      level: number
+      ready: boolean
+      here: boolean
+      grants: string[]
+    } | null
   }
   places: PlaceView[]
   /** Espécies do lugar atual; as não vistas vêm sem id (o "?"). */
@@ -407,7 +421,7 @@ export function errorText(error: ApiError): string {
     case 'invalid_username':
       return `O nome precisa ter de ${error.min} a ${error.max} caracteres: letras, números ou _.`
     case 'invalid_starter':
-      return 'Escolha Bulbasaur, Charmander ou Squirtle.'
+      return 'Escolha Chikorita, Cyndaquil ou Totodile.'
     case 'username_taken':
       return 'Esse nome já está em uso.'
     case 'signup_expired':
@@ -428,6 +442,17 @@ export function errorText(error: ApiError): string {
       return 'Esse lugar fica longe daqui: vá pelos vizinhos.'
     case 'place_not_found':
       return 'Esse lugar não existe.'
+    case 'milestone_not_here':
+      return 'O marco é na cidade dele. Vá até lá.'
+    case 'milestone_level':
+      return 'Ainda falta nível de treinador para esse marco.'
+    case 'milestone_species':
+      return 'Ainda faltam espécies do capítulo.'
+    case 'milestone_cleared':
+      return 'Esse marco já é seu.'
+    case 'milestone_locked':
+    case 'milestone_not_found':
+      return 'Esse marco ainda não está aberto.'
     case 'region_not_found':
       return 'Essa região não existe.'
     case 'species_not_found':

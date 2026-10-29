@@ -10,12 +10,15 @@
   let {
     places,
     current,
+    goalTown,
     selected,
     onSelect,
     onActivate,
   }: {
     places: PlaceView[]
     current: string
+    /** Cidade do marco do momento: ganha uma bandeira. */
+    goalTown: string | null
     selected: string
     onSelect: (slug: string) => void
     /** Toque duplo no mesmo lugar (ex.: viajar direto para o vizinho). */
@@ -84,6 +87,7 @@
       place.kind === 'town' ||
       place.slug === current ||
       place.slug === selected ||
+      place.slug === goalTown ||
       (neighbors.has(place.slug) && place.open)
     )
   }
@@ -132,6 +136,11 @@
           <circle class="dot" r="10" />
         {/if}
         {#if near?.isNew}<circle class="new" cx="11" cy="-11" r="5" />{/if}
+        {#if place.slug === goalTown}
+          <!-- Bandeira do marco. -->
+          <line class="pole" x1="9" y1="-6" x2="9" y2="-30" />
+          <path class="flag" d="M9 -30 L25 -25 L9 -20 Z" />
+        {/if}
         {#if showLabel(place)}
           <text class="label" y="28">{place.name}</text>
         {/if}
@@ -234,6 +243,17 @@
     fill: var(--accent);
     stroke: var(--ink);
     stroke-width: 2;
+  }
+
+  .pole {
+    stroke: var(--ink);
+    stroke-width: 2;
+  }
+
+  .flag {
+    fill: var(--accent);
+    stroke: var(--ink);
+    stroke-width: 1.5;
   }
 
   .label {

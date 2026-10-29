@@ -36,7 +36,7 @@ function loginCookie(username: string): string {
   const now = Date.now()
   const token = randomBytes(32).toString('base64url')
   immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     getDb()
       .insert(sessions)
       .values({

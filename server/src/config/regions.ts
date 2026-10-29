@@ -1,3 +1,4 @@
+import { chapterOpen, type Progress } from './milestones.js'
 import { readRegionsSnapshot, type RegionSlot, type RegionSource } from '../seed/regionTable.js'
 
 export type { RegionSource }
@@ -38,31 +39,13 @@ export type RegionStatus = {
   unlocked: boolean
 }
 
-/**
- * Escada provisória: o nível de treinador que abre cada capítulo, até os
- * marcos entrarem (JORNADA.md, seção 9, parte 2).
- */
-export const CHAPTER_MIN_LEVEL: Readonly<Record<number, number>> = {
-  1: 1,
-  2: 3,
-  3: 6,
-  4: 9,
-  5: 12,
-  6: 15,
-  7: 18,
-  8: 21,
-  9: 24,
-  10: 30,
-}
-
 function crystal(...areas: string[]): RegionSource[] {
   return areas.map((area) => ({ area, version: 'crystal' }))
 }
 
+// Em Johto, a área abre com o capítulo (marcos), não por nível.
 function johto(slug: string, name: string, chapter: number, sources: RegionSource[]): RegionConfig {
-  const minTrainerLevel = CHAPTER_MIN_LEVEL[chapter]
-  if (minTrainerLevel === undefined) throw new Error(`chapter ${chapter} has no level`)
-  return { slug, name, gameRegion: 'johto', chapter, minTrainerLevel, sources }
+  return { slug, name, gameRegion: 'johto', chapter, minTrainerLevel: 1, sources }
 }
 
 // Áreas jogáveis. Kanto e Johto são gameRegion. A tabela de slots fica no
@@ -206,7 +189,12 @@ export function regionBySlug(slug: string): Region | undefined {
   return loadRegions().find((region) => region.slug === slug)
 }
 
-export function regionStatus(region: Region, trainerLevel: number): RegionStatus {
+/** Área com capítulo abre pelos marcos; sem capítulo (Kanto, por enquanto), pelo nível. */
+export function regionOpen(region: Region, progress: Progress): boolean {
+  return region.chapter !== null ? chapterOpen(region.chapter, progress) : progress.level >= region.minTrainerLevel
+}
+
+export function regionStatus(region: Region, progress: Progress): RegionStatus {
   return {
     slug: region.slug,
     name: region.name,
@@ -214,6 +202,6 @@ export function regionStatus(region: Region, trainerLevel: number): RegionStatus
     chapter: region.chapter,
     minTrainerLevel: region.minTrainerLevel,
     wildLevelRange: region.wildLevelRange,
-    unlocked: trainerLevel >= region.minTrainerLevel,
+    unlocked: regionOpen(region, progress),
   }
 }

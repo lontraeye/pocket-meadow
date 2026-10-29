@@ -7,9 +7,9 @@
   let { onSignedIn }: { onSignedIn: () => void } = $props()
 
   const starters = [
-    { key: 'bulbasaur', speciesId: 1, name: 'Bulbasaur' },
-    { key: 'charmander', speciesId: 4, name: 'Charmander' },
-    { key: 'squirtle', speciesId: 7, name: 'Squirtle' },
+    { key: 'chikorita', speciesId: 152, name: 'Chikorita' },
+    { key: 'cyndaquil', speciesId: 155, name: 'Cyndaquil' },
+    { key: 'totodile', speciesId: 158, name: 'Totodile' },
   ]
 
   // O servidor volta para /?auth=<motivo> (server/src/routes/auth.ts).
@@ -22,7 +22,7 @@
   // 'checking': perguntando se há cadastro esperando nome e inicial.
   let mode = $state<'checking' | 'login' | 'signup'>('checking')
   let username = $state('')
-  let starter = $state('charmander')
+  let starter = $state('cyndaquil')
   let message = $state('')
   let pending = $state(false)
   // Entrada sem conta: aparece quando o servidor está com DEV_TOOLS (a rota

@@ -112,38 +112,38 @@ describe('cadastro depois do Google', () => {
   test('sem cadastro pendente, nada feito', async () => {
     assert.equal((await send('/auth/signup')).status, 404)
     assert.equal((await post('/auth/signup', { username: 'ash', starter: 'pikachu' })).status, 400)
-    assert.equal((await post('/auth/signup', { username: 'ash', starter: 'charmander' })).status, 401)
+    assert.equal((await post('/auth/signup', { username: 'ash', starter: 'cyndaquil' })).status, 401)
   })
 
   test('cria a conta ligada ao Google, abre a sessão e consome o cadastro', async () => {
     const cookie = pendingSignup('sub-ash')
     assert.equal((await send('/auth/signup', { headers: { cookie } })).status, 200)
 
-    const response = await post('/auth/signup', { username: 'ash', starter: 'charmander' }, cookie)
+    const response = await post('/auth/signup', { username: 'ash', starter: 'cyndaquil' }, cookie)
     assert.equal(response.status, 201)
     assert.match(response.headers.getSetCookie().join('\n'), new RegExp(`${authConfig.cookieName}=`))
     assert.equal(userBySub('sub-ash')?.username, 'ash')
     const starter = getSqlite()
       .prepare('select species_id from pokemon where user_id = ?')
       .get(userBySub('sub-ash')?.id) as { species_id: number }
-    assert.equal(starter.species_id, 4)
+    assert.equal(starter.species_id, 155)
     const event = getSqlite().prepare(`select event, ip from auth_events order by id desc limit 1`).get()
     assert.deepEqual({ ...(event as object) }, { event: 'register', ip: '203.0.113.7' })
 
     // O mesmo cookie não serve de novo.
-    assert.equal((await post('/auth/signup', { username: 'ash2', starter: 'squirtle' }, cookie)).status, 401)
+    assert.equal((await post('/auth/signup', { username: 'ash2', starter: 'totodile' }, cookie)).status, 401)
   })
 
   test('nome em uso: recusa e o cadastro continua valendo', async () => {
     const cookie = pendingSignup('sub-gary')
-    assert.equal((await post('/auth/signup', { username: 'ASH', starter: 'squirtle' }, cookie)).status, 409)
-    assert.equal((await post('/auth/signup', { username: 'gary', starter: 'squirtle' }, cookie)).status, 201)
+    assert.equal((await post('/auth/signup', { username: 'ASH', starter: 'totodile' }, cookie)).status, 409)
+    assert.equal((await post('/auth/signup', { username: 'gary', starter: 'totodile' }, cookie)).status, 201)
     assert.equal(userBySub('sub-gary')?.username, 'gary')
   })
 
   test('cadastro vencido não cria conta', async () => {
     const cookie = pendingSignup('sub-old', now - 1)
-    assert.equal((await post('/auth/signup', { username: 'old', starter: 'squirtle' }, cookie)).status, 401)
+    assert.equal((await post('/auth/signup', { username: 'old', starter: 'totodile' }, cookie)).status, 401)
     assert.equal(userBySub('sub-old'), undefined)
   })
 })

@@ -25,7 +25,13 @@ const env = { incoming: { socket: { remoteAddress: '203.0.113.7', remotePort: 1,
 type Link = { to: string; open: boolean; reason: string | null; isNew: boolean }
 type View = {
   current: string
-  chapter: { number: number; caught: number; total: number; nextLevel: number | null }
+  canFly: boolean
+  goal: {
+    chapter: number
+    caught: number
+    total: number
+    milestone: { key: string; town: string; needSpecies: number; needLevel: number; ready: boolean; here: boolean } | null
+  }
   places: { slug: string; open: boolean; visited: boolean; links: Link[]; speciesTotal: number }[]
   here: { species: { speciesId: number | null; status: string }[] }
 }
@@ -34,7 +40,7 @@ function player(username: string): { cookie: string; userId: number } {
   const now = Date.now()
   const token = randomBytes(32).toString('base64url')
   const userId = immediate(() => {
-    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
     getDb()
       .insert(sessions)
       .values({ id: hashToken(token), userId: created.userId, createdAt: now, expiresAt: now + authConfig.sessionTtlMs })
@@ -83,17 +89,20 @@ test('começa em New Bark; anda só para vizinhos abertos; avisa a primeira visi
 
   assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'cherrygrove' })), 'place_not_linked')
   let moved = await post('/places/travel', cookie, { to: 'route-29' })
-  assert.deepEqual(await moved.json(), { current: 'route-29', firstVisit: true })
+  assert.deepEqual(await moved.json(), { current: 'route-29', firstVisit: true, flew: false })
   moved = await post('/places/travel', cookie, { to: 'new-bark' })
-  assert.deepEqual(await moved.json(), { current: 'new-bark', firstVisit: false })
+  assert.deepEqual(await moved.json(), { current: 'new-bark', firstVisit: false, flew: false })
 
-  // Violet abre a Rota 32 só no capítulo 2 (nível 3).
+  // Violet só abre a Rota 32 com o marco de Violet (nível alto não basta).
+  getSqlite().prepare(`update trainers set level = 20 where user_id = ?`).run(userId)
   getSqlite().prepare(`update trainers set current_place = 'violet' where user_id = ?`).run(userId)
   assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'route-32' })), 'place_locked')
   places = await view(cookie)
   assert.equal(places.places.find((place) => place.slug === 'route-29')?.visited, true)
-  assert.equal(places.chapter.number, 1)
-  assert.equal(places.chapter.nextLevel, 3)
+  assert.equal(places.goal.chapter, 1)
+  assert.equal(places.goal.milestone?.key, 'violet')
+  assert.equal(places.goal.milestone?.needLevel, 3)
+  assert.equal(places.goal.milestone?.here, true)
 })
 
 test('encontro só onde está; não viaja com encontro pendente; espécies do lugar sem spoiler', async () => {
@@ -113,4 +122,55 @@ test('encontro só onde está; não viaja com encontro pendente; espécies do lu
   places = await view(cookie)
   assert.ok(places.here.species.some((entry) => entry.speciesId === wild.speciesId && entry.status === 'seen'))
   assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-30' })), 'not_here')
+})
+
+/** Marca espécies como capturadas na Pokédex do jogador. */
+function catchAll(userId: number, ids: number[]) {
+  const insert = getSqlite().prepare(
+    `insert into pokedex_entries (user_id, species_id, seen_count, caught_count, first_seen_at)
+     values (?, ?, 1, 1, 1) on conflict(user_id, species_id) do update set caught_count = 1`,
+  )
+  for (const id of ids) insert.run(userId, id)
+}
+
+test('marco: só na cidade, com as espécies e o nível; abre o capítulo seguinte uma vez', async () => {
+  const { cookie, userId } = player('lyra')
+  const claim = () => app.request('/places/milestones/violet/claim', { method: 'POST', headers: { cookie } }, env)
+  assert.equal(await errorOf(await claim()), 'milestone_not_here')
+
+  getSqlite().prepare(`update trainers set current_place = 'violet' where user_id = ?`).run(userId)
+  assert.equal(await errorOf(await claim()), 'milestone_level')
+  getSqlite().prepare(`update trainers set level = 3 where user_id = ?`).run(userId)
+  assert.equal(await errorOf(await claim()), 'milestone_species')
+
+  // Pidgey, Rattata, Sentret, Hoothoot, Hoppip, Zubat: todos do capítulo 1.
+  catchAll(userId, [16, 19, 161, 163, 187, 41])
+  let places = await view(cookie)
+  assert.equal(places.goal.milestone?.ready, true)
+  const ok = await claim()
+  assert.equal(ok.status, 200)
+  assert.deepEqual(await ok.json(), { key: 'violet', opens: 2, grants: [] })
+  assert.equal(await errorOf(await claim()), 'milestone_cleared')
+
+  places = await view(cookie)
+  assert.equal(places.goal.chapter, 2)
+  assert.equal(places.goal.milestone?.key, 'azalea')
+  assert.equal((await post('/places/travel', cookie, { to: 'route-32' })).status, 200)
+})
+
+test('Voo: com o marco de Cianwood, viaja direto para uma cidade visitada', async () => {
+  const { cookie, userId } = player('silver')
+  const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
+  for (const key of ['violet', 'azalea', 'goldenrod', 'ecruteak']) grant.run(userId, key)
+  getSqlite().prepare(`insert into trainer_places (user_id, place_slug, first_visit_at) values (?, 'goldenrod', 1)`).run(userId)
+
+  // Sem Voo, Goldenrod está longe de New Bark.
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'goldenrod' })), 'place_not_linked')
+  grant.run(userId, 'cianwood')
+  const places = await view(cookie)
+  assert.equal(places.canFly, true)
+  const flew = await post('/places/travel', cookie, { to: 'goldenrod' })
+  assert.deepEqual(await flew.json(), { current: 'goldenrod', firstVisit: false, flew: true })
+  // Voo só para cidade visitada: Azalea nunca foi visitada.
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'azalea' })), 'place_not_linked')
 })

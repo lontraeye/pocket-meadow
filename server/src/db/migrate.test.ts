@@ -1063,3 +1063,35 @@ test('a migração places põe todo treinador em New Bark, já visitado', () => 
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração milestones dá a quem já joga os marcos que a escada de nível abria', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-milestones-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  const all = JSON.parse(fs.readFileSync(path.join(drizzleDir, 'meta', '_journal.json'), 'utf8')) as {
+    entries: { tag: string }[]
+  }
+  for (const entry of all.entries) {
+    if (entry.tag === '0019_milestones') break
+    execMigration(db, `${entry.tag}.sql`)
+  }
+  for (const [id, name, level] of [[1, 'ash', 1], [2, 'misty', 7], [3, 'brock', 30]] as const) {
+    db.prepare(`insert into users (username, created_at) values (?, ?)`).run(name, id)
+    db.prepare(
+      `insert into trainers (user_id, level, xp, energy, energy_updated_at, updated_at) values (?, ?, 0, 8, 100, 500)`,
+    ).run(id, level)
+  }
+
+  execMigration(db, '0019_milestones.sql')
+
+  const keys = (user: number) =>
+    (db.prepare(`select milestone_key from trainer_milestones where user_id = ? order by milestone_key`).all(user) as {
+      milestone_key: string
+    }[]).map((row) => row.milestone_key)
+  assert.deepEqual(keys(1), [])
+  assert.deepEqual(keys(2), ['azalea', 'violet'])
+  assert.equal(keys(3).length, 9)
+  db.close()
+  fs.rmSync(file, { force: true })
+})

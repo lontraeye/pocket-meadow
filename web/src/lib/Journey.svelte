@@ -45,7 +45,12 @@
   const isHere = $derived(selected !== null && selected.slug === data?.current)
   const link = $derived(selected && here ? (here.links.find((entry) => entry.to === selected.slug) ?? null) : null)
   const caughtHere = $derived(data?.here.species.filter((entry) => entry.status === 'caught').length ?? 0)
-  const chapterPct = $derived(data && data.chapter.total > 0 ? Math.round((data.chapter.caught / data.chapter.total) * 100) : 0)
+  const goal = $derived(data?.goal ?? null)
+  const mark = $derived(goal?.milestone ?? null)
+  const speciesNeed = $derived(mark ? mark.needSpecies : (goal?.total ?? 0))
+  const goalPct = $derived(goal && speciesNeed > 0 ? Math.min(100, Math.round((goal.caught / speciesNeed) * 100)) : 100)
+  let claiming = $state(false)
+  let celebrate = $state('')
   const pending = $derived(busy || traveling)
 
   async function load() {
@@ -83,6 +88,34 @@
     const open = here?.links.some((entry) => entry.to === slug && entry.open) ?? false
     if (open && !hasEncounter) void travel(slug)
     else select(slug)
+  }
+
+  /** Resgata o marco na cidade dele: abre o próximo capítulo. */
+  async function claim() {
+    if (!mark || claiming) return
+    claiming = true
+    message = ''
+    const name = mark.name
+    try {
+      const response = await api(`/api/places/milestones/${mark.key}/claim`, {})
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        opens?: number
+        grants?: string[]
+      }
+      if (!response.ok) {
+        message = errorText(payload)
+        return
+      }
+      play('catch')
+      await load()
+      const opened = data?.goal.chapter === payload.opens ? data.goal.title : null
+      const grants = payload.grants && payload.grants.length > 0 ? ` Ganhou: ${payload.grants.join(', ')}.` : ''
+      celebrate = `${name} conquistado!${opened ? ` Capítulo ${payload.opens} aberto: ${opened}.` : ''}${grants}`
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      claiming = false
+    }
   }
 
   function kindLabel(place: PlaceView): string {
@@ -124,24 +157,50 @@
 
 <div class="journey">
   {#if data && here && selected}
-    <!-- Objetivo do momento: até os marcos (parte 3), o capítulo aberto. -->
-    <div class="goal panel" aria-label="Objetivo">
-      <p class="goal-title">
-        <span class="goal-name">Cap. {data.chapter.number} · {data.chapter.title}</span>
-        <span title="Espécies do capítulo capturadas">{data.chapter.caught}/{data.chapter.total}</span>
-      </p>
-      <div class="bar" aria-hidden="true"><span style:width="{chapterPct}%"></span></div>
+    <!-- Objetivo do momento: o marco do capítulo (na cidade dele). -->
+    <div class="goal panel" class:ready={mark?.ready} aria-label="Objetivo">
+      {#if mark && goal}
+        <p class="goal-title">
+          <span class="goal-name">{mark.name} · {mark.typeLabel}</span>
+          {#if mark.ready && mark.here}
+            <button type="button" class="btn btn-primary challenge" disabled={claiming || pending} onclick={() => void claim()}>
+              {claiming ? '…' : 'Desafiar'}
+            </button>
+          {:else if mark.ready}
+            <button type="button" class="btn go" onclick={() => select(mark.town)}>Vá até {mark.townName}</button>
+          {/if}
+        </p>
+        <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
+        <p class="goal-meta">
+          <span class:done={goal.caught >= mark.needSpecies}>Espécies do capítulo {Math.min(goal.caught, mark.needSpecies)}/{mark.needSpecies}</span>
+          ·
+          <span class:done={mark.level >= mark.needLevel}>Nv {mark.level}/{mark.needLevel}</span>
+        </p>
+      {:else if goal}
+        <p class="goal-title">
+          <span class="goal-name">Cap. {goal.chapter} · {goal.title}</span>
+          <span>{goal.caught}/{goal.total}</span>
+        </p>
+        <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
+      {/if}
     </div>
 
     <div class="map-wrap">
       <JourneyMap
         places={data.places}
         current={data.current}
+        goalTown={mark?.town ?? null}
         selected={selected.slug}
         onSelect={select}
         onActivate={activate}
       />
       {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
+      {#if celebrate}
+        <button type="button" class="celebrate" onclick={() => (celebrate = '')}>
+          <strong>{celebrate}</strong>
+          <small>Toque para fechar</small>
+        </button>
+      {/if}
     </div>
 
     <section class="panel sheet place" aria-live="polite">
@@ -196,6 +255,10 @@
           </button>
         {:else if link}
           <p class="hint locked">{link.reason}</p>
+        {:else if selected.flyable}
+          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
+            {traveling ? 'Voando…' : `Voar para ${selected.name}`}
+          </button>
         {:else if !selected.open}
           <p class="hint locked">{selected.reason}</p>
         {:else}
@@ -251,10 +314,68 @@
 
   .goal-title {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
     font-weight: 700;
     font-size: 0.95rem;
+  }
+
+  .goal.ready {
+    border-color: var(--selected);
+    box-shadow: inset 0 0 0 2px var(--selected-ring);
+  }
+
+  .goal-title .btn {
+    flex: none;
+    min-height: 36px;
+    padding: 0 0.7rem;
+    font-size: 0.9rem;
+  }
+
+  .challenge {
+    animation: pulse 0.8s steps(2, jump-none) infinite alternate;
+  }
+
+  @keyframes pulse {
+    to {
+      filter: brightness(1.15);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .challenge {
+      animation: none;
+    }
+  }
+
+  .goal-meta {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+
+  .goal-meta .done {
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  .celebrate {
+    position: absolute;
+    inset: 0.5rem;
+    display: grid;
+    place-content: center;
+    gap: 0.4rem;
+    padding: 0.8rem;
+    border: 3px solid var(--selected);
+    background: var(--selected-face);
+    color: var(--ink);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .celebrate strong {
+    font-size: 1.05rem;
   }
 
   .goal-name {
