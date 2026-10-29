@@ -160,11 +160,12 @@ Cada parte é testada antes da próxima, como nas fases do `PLANNING.md`.
 
 1. **Conteúdo:** todas as áreas de andar das seções 5.1 e 5.2 no config, com várias fontes por área e versão por área. Ainda abertas por nível de treinador (uma escada provisória), para o jogo ganhar conteúdo logo. Sem migração.
    - **Johto feito em 2026-10-29:** 39 áreas, do capítulo 1 ao fim de jogo, cada uma com `chapter`. A escada provisória é `CHAPTER_MIN_LEVEL` em `server/src/config/regions.ts` (nível 1, 3, 6, 9, 12, 15, 18, 21, 24 e 30). O config aceita `sources` (média das fontes, cada uma com o mesmo peso); o snapshot guarda `sources` no lugar de `area`/`version`. As Rotas 32 e 43 juntam Crystal e Gold (Mareep, Flaaffy e Girafarig só existem no Gold; Ekans e Farfetch'd, só no Crystal). A condição "sem enxame" da PokéAPI conta como mato normal (antes a Dark Cave ficava vazia). A exploração agrupa Johto por capítulo e mostra só o próximo capítulo fechado. Kanto continua com as 3 áreas de antes até o roteiro de Kanto.
-2. **Região inicial, capítulos e marcos:** escolha no cadastro, iniciais de Johto, marcos com requisitos (sem luta), áreas abrindo por marco, ferramentas derivadas dos marcos, tela de exploração em trilha por capítulo. Pede migração (seção 10).
-3. **Campo de encontro** (5.14), já pensando nas manchas de ferramenta.
-4. **Ferramentas:** pontos de pesca, Surf, Headbutt e Rock Smash, com o snapshot por método.
-5. **Desafio do líder:** luta de treinador com time fixo, usando a simulação da Fase 8.
-6. **Presentes e eventos** da seção 7, e depois as missões (5.15).
+2. **Navegação** (seção 11): lugares e ligações de Johto, posição atual, viagem entre vizinhos, a tela nova (lugar atual, espécies da área, caminhos, mapa) e os feedbacks. Os capítulos ainda abrem pela escada de nível. Pede migração.
+3. **Região inicial, capítulos e marcos:** escolha no cadastro, iniciais de Johto, marcos com requisitos (sem luta) no topo da tela, áreas abrindo por marco, Voo e ferramentas derivadas dos marcos. Reset das contas. Pede migração (seção 10).
+4. **Campo de encontro** (5.14), já pensando nas manchas de ferramenta.
+5. **Ferramentas:** pontos de pesca, Surf, Headbutt e Rock Smash, com o snapshot por método.
+6. **Desafio do líder:** luta de treinador com time fixo, usando a simulação da Fase 8.
+7. **Presentes e eventos** da seção 7, e depois as missões (5.15).
 
 ## 10. Dados e pontos a decidir
 
@@ -183,3 +184,112 @@ Cada parte é testada antes da próxima, como nas fases do `PLANNING.md`.
 - Zona Safári: área comum ou regra própria (bola própria, poucos passos). Sugestão: área comum na primeira versão.
 - Nome e visual dos líderes: genéricos por cidade e tipo, ou personagens próprios do jogo.
 - Recompensa de dinheiro ao vencer um líder, junto com a ideia de dinheiro por vitória que já está anotada.
+
+## 11. Navegação e tela de exploração (alinhado em 2026-10-29)
+
+**O problema:** a exploração é uma lista com todas as áreas abertas. Não há "onde estou", nem "para onde vou", nem objetivo à vista. Tudo amontoado, sem jornada.
+
+**Decidido:**
+1. **O jogador está em um lugar.** Lugar = cidade ou área (rota, caverna, floresta). Só se procura Pokémon onde se está.
+2. **Anda só para os vizinhos** (lugares ligados ao atual no mapa), na hora e sem custo. Lugar bloqueado aparece no caminho, apagado, com o motivo ("abre no marco de Azalea", "precisa de Surf").
+3. **Voo depois:** um marco libera o Voo (Johto: marco 5, Cianwood, como o HM dos jogos). Com ele, o mapa leva direto a qualquer cidade já visitada.
+4. **Tela principal = lugar atual + mapa num botão** (desenho abaixo).
+5. **Jardim e jornada são duas gameplays paralelas.** Ao tocar em Explorar, o jogador volta para o último lugar onde parou (não para New Bark nem para uma lista). O Jardim fica a um toque de qualquer lugar, como um teletransporte, e voltar a explorar retoma do mesmo ponto. Cuidar do jardim (berries, daycare, PC, futura felicidade) não depende de onde se está na jornada.
+
+### 11.1 A tela
+
+```
+┌──────────────────────────────┐
+│ Marco: Violet   ▓▓▓▓░░  4/6   │  ← sempre no topo; toca e abre o que falta
+├──────────────────────────────┤
+│ ROTA 30               Nv 3–4  │
+│ Mato alto até a casa do       │  ← uma linha de texto por lugar (config)
+│ Mr. Pokémon.                  │
+│ Espécies daqui        4/9     │
+│ [Pidgey✓][Caterpie✓][ ? ][?]  │  ← capturada, vista (cinza), não vista (?)
+│ [     Procurar no mato     ]  │
+│ [  Pescar · precisa vara   ]  │  ← pontos de ferramenta (parte 4)
+├──────────────────────────────┤
+│ Caminhos                      │
+│  ▲ Rota 31                    │
+│  ▼ Cherrygrove (cidade)       │
+│                    [ Mapa ]   │
+└──────────────────────────────┘
+```
+
+- **Cidade** não tem mato. Mostra o que existe nela: o marco (ginásio) quando é a cidade do marco, e depois NPCs e missões (seção 8), loja e pesca na costa. Cidade sem nada por enquanto mostra só os caminhos.
+- **Mapa:** os lugares como pontos ligados por linhas, na geografia da região (posição em grade no config), com você marcado, os visitados cheios, os bloqueados apagados e o lugar do marco com uma bandeira. Tocar num vizinho viaja; com Voo, tocar numa cidade visitada também. Primeira versão desenhada em SVG pelo código; a arte do mapa fica com o usuário depois.
+- **Mobile:** a tela cabe em 360×640 sem rolar quando o lugar tem até 8 espécies; os caminhos ficam no dock, perto do polegar.
+
+### 11.2 Feedbacks
+
+- **Marco no topo** com barra e o que falta (ex.: "capture 2 espécies do capítulo · Nv 3 ✓"). Quando tudo está cumprido, vira botão "Desafiar" e pulsa.
+- **Espécies da área:** capturada (sprite), vista (sprite apagado) e não vista ("?"). Contador "4/9". Mostra quantas espécies a área tem, sem dizer a raridade.
+- **Chegada:** ao entrar num lugar novo, um aviso curto ("Rota 31 · 11 espécies aqui · novo!").
+- **Depois da captura:** o destaque mostra "+1 da Rota 30 (5/9)" e o avanço do marco.
+- **Selo "novo"** nos caminhos para lugares que acabaram de abrir e ainda não foram visitados.
+- **Área completa:** todas as espécies dela capturadas ganha um selo no lugar e no mapa (recompensa pequena depois, seção 8).
+
+### 11.3 O mapa de Johto (lugares e ligações)
+
+Na geografia dos jogos. As cidades entram como lugares novos (não têm tabela de encontro). Cap. = capítulo em que o lugar abre.
+
+| Lugar | Tipo | Cap. | Liga com |
+|---|---|---|---|
+| New Bark | cidade | 1 | Rota 29, Rota 27 (Surf) |
+| Rota 29 | área | 1 | New Bark, Cherrygrove, Rota 46 |
+| Rota 46 | área | 1 | Rota 29, Rota 45 |
+| Cherrygrove | cidade | 1 | Rota 29, Rota 30 |
+| Rota 30 | área | 1 | Cherrygrove, Rota 31 |
+| Rota 31 | área | 1 | Rota 30, Violet, Dark Cave (Violet) |
+| Dark Cave (Violet) | área | 1 | Rota 31 |
+| Violet | cidade | 1 | Rota 31, Sprout Tower, Rota 32, Rota 36 |
+| Sprout Tower | área | 1 | Violet |
+| Rota 32 | área | 2 | Violet, Ruins of Alph, Union Cave |
+| Ruins of Alph | área | 2 | Rota 32, Arredores das Ruínas |
+| Union Cave | área | 2 | Rota 32, Rota 33, Union Cave (fundo) |
+| Rota 33 | área | 2 | Union Cave, Azalea |
+| Azalea | cidade | 2 | Rota 33, Slowpoke Well, Ilex Forest |
+| Slowpoke Well | área | 2 | Azalea, Slowpoke Well (fundo) |
+| Ilex Forest | área | 3 | Azalea, Rota 34 |
+| Rota 34 | área | 3 | Ilex Forest, Goldenrod |
+| Goldenrod | cidade | 3 | Rota 34, Rota 35 |
+| Rota 35 | área | 4 | Goldenrod, National Park |
+| National Park | área | 4 | Rota 35, Rota 36 |
+| Rota 36 | área | 4 | National Park, Violet, Rota 37, Arredores das Ruínas |
+| Rota 37 | área | 4 | Rota 36, Ecruteak |
+| Ecruteak | cidade | 4 | Rota 37, Burned Tower, Tin Tower, Rota 38, Rota 42 |
+| Burned Tower | área | 4 | Ecruteak |
+| Rota 38 | área | 5 | Ecruteak, Rota 39 |
+| Rota 39 | área | 5 | Rota 38, Olivine |
+| Arredores das Ruínas | área | 5 | Ruins of Alph, Rota 36 |
+| Olivine | cidade | 5 | Rota 39, Rota 40 (Surf) |
+| Rota 40 / 41 | mar | 5 | Olivine, Whirl Islands, Cianwood (Surf) |
+| Whirl Islands | área | 5 | Rota 40 / 41 |
+| Cianwood | cidade | 5 | Rota 40 / 41 |
+| Rota 42 | área | 6 | Ecruteak, Mt. Mortar, Mahogany |
+| Mt. Mortar | área | 6 | Rota 42, Mt. Mortar (alto) |
+| Mahogany | cidade | 6 | Rota 42, Rota 43, Rota 44 |
+| Mt. Mortar (alto) | área | 7 | Mt. Mortar |
+| Rota 43 | área | 7 | Mahogany, Lake of Rage |
+| Lake of Rage | área (água) | 7 | Rota 43 |
+| Rota 44 | área | 8 | Mahogany, Ice Path |
+| Ice Path | área | 8 | Rota 44, Blackthorn |
+| Blackthorn | cidade | 8 | Ice Path, Rota 45, Dragon's Den, Dark Cave (Blackthorn) |
+| Dark Cave (Blackthorn) | área | 8 | Blackthorn, Dark Cave (Violet) |
+| Dragon's Den | área (água) | 8 | Blackthorn |
+| Rota 45 | área | 8 | Blackthorn, Rota 46 |
+| Rota 27 | área | Liga | New Bark (Surf), Tohjo Falls |
+| Tohjo Falls | área | Liga | Rota 27, Rota 26 |
+| Rota 26 | área | Liga | Tohjo Falls, Victory Road |
+| Victory Road | área | Liga | Rota 26, Indigo Plateau |
+| Indigo Plateau | cidade | Liga | Victory Road, Rota 28 |
+| Union Cave (fundo) | área | Liga | Union Cave (Surf) |
+| Slowpoke Well (fundo) | área | Liga | Slowpoke Well (Surf) |
+| Tin Tower | área | fim | Ecruteak |
+| Rota 28 | área | fim | Indigo Plateau, Mt. Silver |
+| Mt. Silver | área | fim | Rota 28 |
+
+- **O jogador começa em New Bark.** Ligações com lugares de capítulo fechado aparecem apagadas: dá para ver o que vem depois.
+- **Lugar só de água** (Lake of Rage, Dragon's Den, as rotas do mar) fica vazio até a parte 4 (ferramentas). Enquanto isso, não aparece ou aparece como "precisa de Surf".
+- **Dados:** `trainers.current_place` (slug) e `trainer_places` (`user_id`, `place_slug`, `first_visit_at`) para visitados, Voo e o selo "novo". O config de lugares (`places.ts`) tem slug, nome, tipo, capítulo, texto, posição no mapa e vizinhos (com a ferramenta exigida, se houver). As áreas usam o mesmo slug das regiões de hoje. O servidor confere a viagem (vizinho aberto, ou Voo para cidade visitada) e o encontro (só no lugar atual).
