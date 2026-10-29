@@ -33,7 +33,6 @@
   import {
     autoReactionSeed,
     chargedEnergyCost,
-    fastEnergyGain,
     moveCooldownMs,
     mulberry32,
     runBattle,
@@ -1382,16 +1381,7 @@
     return percent > 20 ? 'mid' : 'low'
   }
 
-  // Energia mostrada no próprio botão do carregado: quantos golpes rápidos
-  // faltam (a energia vem só deles) e quanto do botão já encheu.
-  const chargeNeeded = $derived(
-    chargedCost === null ? 0 : Math.ceil(chargedCost / fastEnergyGain(activeFighter.fastMove.power)),
-  )
-  const chargeDone = $derived(
-    chargedCost === null
-      ? 0
-      : Math.min(chargeNeeded, Math.floor(active.energy / fastEnergyGain(activeFighter.fastMove.power))),
-  )
+  // A carga aparece só no enchimento do botão, de baixo para cima.
   const chargeFill = $derived(chargedCost === null ? 0 : Math.min(1, active.energy / chargedCost))
   const chargeReady = $derived(chargedCost !== null && active.energy >= chargedCost)
   const wildPercent = $derived(hpPercent(snap.wild))
@@ -1717,14 +1707,14 @@
         style:--type-ink={typeInk(activeFighter.fastMove.type)}
         class:white-ink={typeInk(activeFighter.fastMove.type) === '#ffffff'}
         disabled={!canAct}
+        aria-label={lockLabel ?? moveLabel(activeFighter.fastMove.name)}
         onclick={() => manual('fast')}
       >
         <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
         <span class="label">
           {#if !lockLabel}<TypeIcon type={activeFighter.fastMove.type} />{/if}
-          {lockLabel ?? 'Rápido'}
+          <span class="move-name">{lockLabel ?? moveLabel(activeFighter.fastMove.name)}</span>
         </span>
-        <small>{lockLabel ? lockLabel : moveLabel(activeFighter.fastMove.name)}</small>
       </button>
       {#if activeFighter.chargedMove && chargedCost !== null}
         <button
@@ -1735,7 +1725,7 @@
           style:--type-ink={typeInk(activeFighter.chargedMove.type)}
           class:white-ink={typeInk(activeFighter.chargedMove.type) === '#ffffff'}
           disabled={!canCharged}
-          aria-label="Carregado: {moveLabel(activeFighter.chargedMove.name)}, {chargeDone} de {chargeNeeded} golpes rápidos"
+          aria-label={lockLabel ?? moveLabel(activeFighter.chargedMove.name)}
           onclick={() => manual('charged')}
         >
           <!-- Cada golpe rápido enche o botão de baixo para cima. -->
@@ -1743,9 +1733,8 @@
           {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
           <span class="label">
             {#if !lockLabel}<TypeIcon type={activeFighter.chargedMove.type} />{/if}
-            {lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}
+            <span class="move-name">{lockLabel ?? moveLabel(activeFighter.chargedMove.name)}</span>
           </span>
-          <small>{lockLabel ? lockLabel : moveLabel(activeFighter.chargedMove.name)}</small>
         </button>
       {/if}
     </div>
@@ -2568,11 +2557,19 @@
 
   .act .label {
     position: relative;
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.35rem;
-    font-size: 1.15rem;
+    max-width: 100%;
+    font-size: 1.05rem;
     white-space: nowrap;
+  }
+
+  .act .move-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Golpe com a cor e o ícone do tipo (Fogo vermelho-laranja, Água azul...). */
@@ -2615,16 +2612,6 @@
     box-shadow:
       inset 0 0 0 2px var(--selected-ring),
       inset 0 -3px 0 color-mix(in srgb, var(--type) 62%, #000);
-  }
-
-  .act small {
-    position: relative;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.8rem;
-    font-weight: 600;
   }
 
   /* Espera até poder golpear de novo: enche da esquerda para a direita. */
