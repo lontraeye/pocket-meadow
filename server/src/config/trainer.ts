@@ -1,4 +1,8 @@
 export const trainerConfig = {
+  // Desligada em 2026-10-29: o freio da energia atrapalhava mais do que
+  // ajudava. Com false, encontro não gasta nem exige energia, e a tela some
+  // com ela. Religar (ou trocar por outro freio) é só voltar para true.
+  energyEnabled: false,
   energyMax: 10,
   // Vitória: 8 + 2 × nível do selvagem. Captura: 10 + nível, somada à vitória.
   // Curva em trainerXpToNext. Ver PLANNING.md, seção 5.1.

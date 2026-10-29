@@ -545,8 +545,10 @@
     {:else}
       <div class="guide-scroll">
         <div class="guide">
-          <h3>Energia</h3>
-          <p>Cada encontro gasta 1 de energia. Ela volta com o tempo, até o máximo.</p>
+          {#if game.trainer.energyEnabled}
+            <h3>Energia</h3>
+            <p>Cada encontro gasta 1 de energia. Ela volta com o tempo, até o máximo.</p>
+          {/if}
           <h3>Encontros</h3>
           <p>Escolha uma região no mapa. O selvagem e o nível já ficam decididos no servidor.</p>
           <h3>Luta</h3>

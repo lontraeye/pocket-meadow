@@ -1,4 +1,5 @@
 // Berries e efeitos (PLANNING.md, seção 5.10).
+import { trainerConfig } from './trainer.js'
 import type { WeatherKey } from './weather.js'
 export const SEED_EXTRA_CHANCE = 0.25
 export const SEED_DROP_CHANCE = 0.1
@@ -43,6 +44,11 @@ export type BerryDef = {
   effect?: BerryEffect
   effectDescription: string
   capture?: CaptureEffect
+}
+
+/** Berry de energia com a energia desligada (trainerConfig.energyEnabled): não se usa na mochila. */
+export function energyBerryOff(berry: { effect?: { kind: string } }): boolean {
+  return berry.effect?.kind === 'energy' && !trainerConfig.energyEnabled
 }
 
 export const berries = {

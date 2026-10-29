@@ -11,6 +11,7 @@ import {
   type RarityBand,
 } from '../config/pokedex.js'
 import { loadRegions } from '../config/regions.js'
+import { trainerConfig } from '../config/trainer.js'
 import { abilitiesFor, learnsetFor, movesByName } from '../seed/traitsData.js'
 import { isFastMove, type LearnEntry, type MoveInfo, type SpeciesAbilities } from './traits.js'
 
@@ -311,7 +312,7 @@ export function rewardPayload(reward: PokedexReward): {
   return {
     items: reward.items.map((item) => ({ itemKey: item.itemKey, quantity: item.quantity })),
     genericCandies: reward.genericCandies,
-    energy: reward.energy,
+    energy: trainerConfig.energyEnabled ? reward.energy : 0,
   }
 }
 

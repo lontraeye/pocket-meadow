@@ -6,7 +6,7 @@ import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/ba
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
 import { type Region, regionBySlug } from '../config/regions.js'
-import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
+import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import {
@@ -205,7 +205,7 @@ export function createEncounter(userId: number, region: Region, now: number, for
     .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .get()
   if (pending) return fail('encounter_pending', 409)
-  if (clock.energy < 1) return fail('no_energy', 400)
+  if (trainerConfig.energyEnabled && clock.energy < 1) return fail('no_energy', 400)
 
   const shinyBonus = takeBonus(userId, 'shiny_boost')
   const rareBonus = takeBonus(userId, 'rare_boost')
@@ -252,7 +252,7 @@ export function createEncounter(userId: number, region: Region, now: number, for
 
   db.update(trainers)
     .set({
-      energy: clock.energy - 1,
+      energy: trainerConfig.energyEnabled ? clock.energy - 1 : clock.energy,
       totalEncounters: sql`${trainers.totalEncounters} + 1`,
       updatedAt: now,
     })

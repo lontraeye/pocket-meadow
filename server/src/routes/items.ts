@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { berryKeyFromItem, getBerry } from '../config/berries.js'
+import { berryKeyFromItem, energyBerryOff, getBerry } from '../config/berries.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { debitItem } from '../db/inventory.js'
@@ -44,7 +44,7 @@ function useItem(
   if (!berryKey) return fail('unknown_item', 400)
   const berry = getBerry(berryKey)
   if (!berry) return fail('unknown_item', 400)
-  if (!berry.effect) return fail('berry_not_usable', 400)
+  if (!berry.effect || energyBerryOff(berry)) return fail('berry_not_usable', 400)
 
   const db = getDb()
   const effectKey = berry.effect.kind === 'energy' ? null : berry.effect.effectKey
