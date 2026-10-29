@@ -6,6 +6,8 @@
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type PlotState } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
+  import WeatherIcon from './WeatherIcon.svelte'
+  import WeatherLayer from './WeatherLayer.svelte'
   import { play, playCry } from './sound'
   import { spriteOpaqueAt, spritesAt, warmSpriteMasks } from './spriteHit'
   import {
@@ -1143,6 +1145,9 @@
       {/each}
     </div>
 
+    <!-- Clima do dia sobre o jardim (véu de cor + chuva/vento/nuvens); não pega toque. -->
+    <WeatherLayer weather={game.weather.key} />
+
     <!-- Zoom: + e − com a barrinha do nível no meio (tocar nela também escolhe). -->
     <div class="zoom" role="group" aria-label="Zoom">
       <button
@@ -1231,11 +1236,21 @@
                 {#each seedRows as row (row.itemKey)}
                   {@const key = row.itemKey.slice(5)}
                   {@const info = game.berries.find((berry) => berry.key === key)}
+                  {@const favorite = info?.favoriteWeather === game.weather.key}
                   <li>
-                    <button type="button" class="btn choice" disabled={plotPending} onclick={() => void plant(key)}>
+                    <button type="button" class="btn choice" class:favorite disabled={plotPending} onclick={() => void plant(key)}>
                       <img src={berryIconSrc(key)} alt="" width="28" height="28" />
                       <span>{itemLabel(row.itemKey, game.berries)} ×{row.quantity}</span>
-                      {#if info}<small>{Math.round(info.growMs / 60000)} min</small>{/if}
+                      {#if info}
+                        <small class="seed-time">
+                          <!-- Clima favorito da semente; hoje bate: cresce mais rápido. -->
+                          <span class="seed-weather" title="Clima favorito">
+                            <WeatherIcon weather={info.favoriteWeather} size={12} />
+                          </span>
+                          {Math.round((favorite ? info.growMs * game.weatherGrowFactor : info.growMs) / 60000)} min
+                          {#if favorite}· −{Math.round((1 - game.weatherGrowFactor) * 100)}% hoje{/if}
+                        </small>
+                      {/if}
                     </button>
                   </li>
                 {/each}
@@ -1306,6 +1321,9 @@
 
   .lawn {
     position: relative;
+    /* Contexto de empilhamento próprio: o clima (WeatherLayer, z-index 5) fica
+       preso ao gramado e não passa por cima do HUD e dos docks (z-index 4). */
+    isolation: isolate;
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -1745,6 +1763,27 @@
   .seed-list span {
     flex: 1;
     min-width: 0;
+  }
+
+  /* Tempo de crescimento com o ícone do clima favorito na frente. */
+  .seed-list .seed-time {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+  }
+
+  .seed-list .seed-weather {
+    flex: none;
+    display: inline-grid;
+  }
+
+  /* Hoje é o clima favorito dela: cresce mais rápido. */
+  .seed-list .choice.favorite {
+    box-shadow:
+      inset 0 0 0 2px var(--accent),
+      inset 0 -3px 0 var(--accent-shade);
   }
 
   .bar {

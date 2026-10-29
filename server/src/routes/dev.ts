@@ -6,6 +6,8 @@ import { ballItemKey, ballList, ballsConfig } from '../config/balls.js'
 import { progressConfig } from '../config/progress.js'
 import { loadRegions } from '../config/regions.js'
 import { trainerConfig } from '../config/trainer.js'
+import { isWeatherKey } from '../config/weather.js'
+import { setDevWeather } from '../game/weather.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { creditItems } from '../db/inventory.js'
@@ -161,6 +163,15 @@ devRoutes.post('/plots/advance', requireUser, async (c) => {
 })
 
 /** Dá algumas de cada pokébola (Master: 3) e das berries novas de captura. */
+// Força o clima do jogador (até reiniciar o servidor); `null` volta ao sorteado.
+devRoutes.post('/weather', requireUser, async (c) => {
+  const body = (await readObject(c)) ?? {}
+  const weather = body.weather
+  if (weather !== null && !isWeatherKey(weather)) return c.json({ error: 'invalid_body' }, 400)
+  setDevWeather(c.get('userId'), weather)
+  return c.json({ weather })
+})
+
 devRoutes.post('/balls', requireUser, (c) => {
   const userId = c.get('userId')
   const now = Date.now()

@@ -132,6 +132,8 @@ export const trainers = sqliteTable('trainers', {
   totalReleases: integer('total_releases').notNull().default(0),
   /** Preferência do treinador: luta com o jogador automático (8.5). */
   battleAuto: integer('battle_auto', { mode: 'boolean' }).notNull().default(false),
+  /** Semente do clima do dia (5.11): sorteada na criação, nunca vai ao front. */
+  weatherSeed: integer('weather_seed').notNull().default(0),
   updatedAt: integer('updated_at').notNull(),
 })
 

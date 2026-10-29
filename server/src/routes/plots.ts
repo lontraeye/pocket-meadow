@@ -5,8 +5,10 @@ import { getBerry, plotSlotsUnlocked, seedKey } from '../config/berries.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { creditItems, debitItem } from '../db/inventory.js'
+import { loadWeather } from '../db/weather.js'
 import { berryPlots } from '../db/schema.js'
 import { planHarvest, planUproot } from '../game/berries.js'
+import { growMsFor } from '../game/weather.js'
 import { unitRoll } from '../game/rng.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
 
@@ -51,7 +53,9 @@ function plant(
   plotIndex: number,
   berryKey: string,
   now: number,
-): Ok<{ planted: { plotIndex: number; berryKey: string; plantedAt: number; readyAt: number } }> | Failure {
+): Ok<{
+  planted: { plotIndex: number; berryKey: string; plantedAt: number; readyAt: number; weatherBoost: boolean }
+}> | Failure {
   const clock = persistCatchUp(userId, now)
   const unlocked = plotSlotsUnlocked(clock.level)
   if (plotIndex < 0 || plotIndex >= unlocked) return fail('plot_locked', 400)
@@ -69,14 +73,17 @@ function plant(
 
   if (!debitItem(userId, seedKey(berry.key), 1)) return fail('no_seed', 400)
 
-  const readyAt = now + berry.growMs
+  // Clima favorito da berry no dia do plantio: cresce mais rápido. Decidido
+  // aqui e gravado no readyAt, então não muda se o clima virar no meio.
+  const weather = loadWeather(userId, now).key
+  const readyAt = now + growMsFor(berry.growMs, berry.favoriteWeather, weather)
   db.insert(berryPlots)
     .values({ userId, plotIndex, berryKey: berry.key, plantedAt: now, readyAt })
     .run()
 
   return {
     ok: true,
-    planted: { plotIndex, berryKey: berry.key, plantedAt: now, readyAt },
+    planted: { plotIndex, berryKey: berry.key, plantedAt: now, readyAt, weatherBoost: berry.favoriteWeather === weather },
   }
 }
 

@@ -896,3 +896,50 @@ test('a migração pokeballs adiciona caught_ball, agitation e estoque de Poké 
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração weather_seed dá uma semente de clima a cada treinador sem mexer no save', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-weather-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+    '0009_battle_started.sql',
+    '0010_battle_setup_json.sql',
+    '0011_won_at.sql',
+    '0012_battle_auto.sql',
+    '0013_encounter_secret_seed.sql',
+    '0014_pokedex_album.sql',
+    '0015_pokeballs.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  for (const [id, name] of [[1, 'ash'], [2, 'misty'], [3, 'brock']] as const) {
+    db.prepare(`insert into users (username, created_at) values (?, ?)`).run(name, id)
+    db.prepare(
+      `insert into trainers (user_id, level, xp, energy, energy_updated_at, updated_at) values (?, ?, ?, 8, 100, 100)`,
+    ).run(id, id * 3, id * 10)
+  }
+  const before = db.prepare(`select user_id, level, xp, energy from trainers order by user_id`).all()
+
+  execMigration(db, '0016_weather_seed.sql')
+
+  assert.deepEqual(db.prepare(`select user_id, level, xp, energy from trainers order by user_id`).all(), before)
+  const seeds = (db.prepare(`select weather_seed from trainers`).all() as { weather_seed: number }[]).map(
+    (row) => row.weather_seed,
+  )
+  for (const seed of seeds) assert.ok(Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff, String(seed))
+  assert.equal(new Set(seeds).size, seeds.length, 'cada treinador com a sua semente')
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})

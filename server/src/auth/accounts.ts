@@ -54,7 +54,13 @@ export function createPlayer(input: {
   if (!user) throw new Error('failed to create user')
 
   db.insert(trainers)
-    .values({ userId: user.id, energy: trainerConfig.energyMax, energyUpdatedAt: now, updatedAt: now })
+    .values({
+      userId: user.id,
+      energy: trainerConfig.energyMax,
+      energyUpdatedAt: now,
+      weatherSeed: randomSeed(),
+      updatedAt: now,
+    })
     .run()
   db.insert(pokemon)
     .values({

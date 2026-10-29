@@ -10,6 +10,9 @@
   import Garden from './lib/Garden.svelte'
   import Modal from './lib/Modal.svelte'
   import Pokedex from './lib/Pokedex.svelte'
+  import WeatherIcon from './lib/WeatherIcon.svelte'
+  import { WEATHER_WITH } from './lib/weather'
+  import type { WeatherKey } from './lib/api'
   import { baseTasks, gameTasks, warmUp } from './lib/preload'
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
   import { formatClockTime, formatCountdown } from './lib/time'
@@ -27,6 +30,8 @@
   let muted = $state(isMuted())
   let volumeLevel = $state(getVolume())
   let configOpen = $state(false)
+  let weatherOpen = $state(false)
+  let reloadedForWeather = 0
   // Ícone com X quando não sai som, seja pelo mudo ou pela barra no zero.
   const silent = $derived(muted || volumeLevel === 0)
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
@@ -147,6 +152,30 @@
     reloadedForNextAt = nextAt
     void loadState()
   })
+
+  // Virou o dia em Brasília com o app aberto: busca o clima novo.
+  $effect(() => {
+    if (!game || phase !== 'play') return
+    const until = game.weather.until
+    if (clock.now() < until) return
+    if (reloadedForWeather === until) return
+    reloadedForWeather = until
+    void loadState()
+  })
+
+  /** Plantas que crescem mais rápido se plantadas hoje. */
+  const weatherBerries = $derived(
+    game ? game.berries.filter((berry) => berry.favoriteWeather === game!.weather.key).map((berry) => berry.name) : [],
+  )
+
+  async function forceWeather(weather: WeatherKey | null) {
+    try {
+      await api('/api/dev/weather', { weather })
+    } catch {
+      return
+    }
+    await loadState()
+  }
 
   async function loadState() {
     let response: Response
@@ -380,6 +409,17 @@
       </div>
       <span class="hud-sep" aria-hidden="true"></span>
       <div class="hud-actions">
+        <!-- Clima de hoje: o jardim já mostra, mas o ícone deixa claro e abre os detalhes. -->
+        <button
+          type="button"
+          class="btn icon-btn"
+          aria-label="Clima: {game.weather.name}"
+          title={game.weather.name}
+          aria-pressed={weatherOpen}
+          onclick={() => (weatherOpen = true)}
+        >
+          <WeatherIcon weather={game.weather.key} />
+        </button>
         <button
           type="button"
           class="btn icon-btn badge-host"
@@ -481,6 +521,45 @@
       >
         <Pokedex {game} onState={loadState} onClose={() => closePokedex()} />
       </div>
+    {/if}
+
+    {#if weatherOpen}
+      <Modal label="Clima" onBackdrop={() => (weatherOpen = false)}>
+        <div class="weather-panel">
+          <header class="config-head">
+            <h2 class="weather-title"><WeatherIcon weather={game.weather.key} size={36} /> {game.weather.name}</h2>
+            <button type="button" class="btn config-close" aria-label="Fechar" onclick={() => (weatherOpen = false)}>
+              ✕
+            </button>
+          </header>
+          <p>Muda à meia-noite · em {formatCountdown(Math.max(0, game.weather.until - clock.now()))}.</p>
+          {#if weatherBerries.length > 0}
+            <p>
+              Crescem {Math.round((1 - game.weatherGrowFactor) * 100)}% mais rápido se plantadas hoje:
+              <b>{weatherBerries.join(', ')}</b>.
+            </p>
+          {:else}
+            <p>Nenhuma planta prefere este clima.</p>
+          {/if}
+          <p class="weather-hint">Cada planta tem um clima favorito: veja na hora de plantar.</p>
+          {#if game.devTools}
+            <div class="weather-dev">
+              {#each ['sunny', 'cloudy', 'rain', 'wind'] as const as key (key)}
+                <button
+                  type="button"
+                  class="btn icon-btn"
+                  aria-label="Forçar {WEATHER_WITH[key]} (teste)"
+                  aria-pressed={game.weather.key === key}
+                  onclick={() => void forceWeather(key)}
+                >
+                  <WeatherIcon weather={key} />
+                </button>
+              {/each}
+              <button type="button" class="btn" onclick={() => void forceWeather(null)}>Sorteado</button>
+            </div>
+          {/if}
+        </div>
+      </Modal>
     {/if}
 
     {#if configOpen}
@@ -1022,6 +1101,40 @@
 
   .badge-host {
     position: relative;
+  }
+
+  .weather-panel {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .weather-panel p {
+    margin: 0;
+  }
+
+  .weather-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .weather-hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+  }
+
+  /* Só em teste: forçar o clima. */
+  .weather-dev {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+  }
+
+  .weather-dev .icon-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
   }
 
   .config {

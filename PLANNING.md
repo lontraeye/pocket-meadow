@@ -803,13 +803,15 @@ Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só vis
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
 - Canteiros de berry ocupam um bloco da grade.
 
-#### Clima no jardim (futuro, anotado em 2026-10-29)
-Vão existir **diferentes climas** no jardim (sol, chuva, nuvem, etc. — lista a fechar). Cada clima:
-- muda o visual do gramado / céu;
-- dá **bônus diferentes para Pokémon** (ex.: XP no jardim/daycare, humor, tipos favorecidos);
-- dá **bônus diferentes para plantas** (ex.: crescimento mais rápido, yield, chance de semente).
-
-Ainda sem fase nem schema. Quando entrar: estado de clima no servidor (timestamp / rotação), efeito em config por clima, e o jardim só espelha. Não confundir com o **clima no combate** (5.18), que é outra ideia.
+#### Clima no jardim (feito em 2026-10-29)
+Um clima por dia, **individual por jogador**, sorteado à **meia-noite de Brasília** (UTC−3 fixo; o Brasil não tem horário de verão desde 2019). Números em `server/src/config/weather.ts`.
+- **Climas e pesos:** Ensolarado 35, Nublado 25, Chuva 25, Ventania 15.
+- **Sorteio sem escrita diária:** cada treinador tem uma `weather_seed` (migração `0016`, sorteada com `crypto` na criação da conta; as contas que já existiam ganharam uma com `random()` na migração). O clima do dia é `mulberry32(seed ⊕ dia)`. Dá para reproduzir e, sem a seed (que nunca vai ao front), não dá para prever os próximos dias pelo código público.
+- **Plantas:** cada berry tem um **clima favorito** (`favoriteWeather` em `berries.ts`): Oran e Lum chuva; Pinap e Razz sol; Nanab e Silver Pinap nublado; Golden Razz vento. **Plantada no clima favorito, cresce em 75% do tempo** (`favoriteGrowFactor`). Decidido no plantio e gravado no `readyAt`: não muda se o clima virar no meio. Na escolha da semente aparece o ícone do favorito e "−25% hoje" quando bate.
+- **Visual:** véu de cor por clima sobre o jardim (sol quente, nublado cinza, chuva fria), pingos em pixel na chuva, riscos e folhas no vento, sombras de nuvem no nublado. Só transparência e `transform` (nada de `filter`, que pesa no celular); com `prefers-reduced-motion`, só o véu.
+- **HUD:** ícone do clima ao lado da Pokédex; o toque abre o painel com o nome, quando muda e as plantas favorecidas hoje. Com o app aberto na virada do dia, o `/state` é buscado de novo.
+- **Dev:** no painel do clima, forçar cada clima ou voltar ao sorteado (`POST /dev/weather`, em memória até reiniciar o servidor).
+- **Futuro (fora desta parte):** bônus de felicidade para alguns Pokémon (depende da feature de felicidade) e máquinas que aproveitam o clima (5.16). Não confundir com o **clima no combate** (5.18), que é outra ideia.
 
 ### 5.12 Pokédex e guia do jogo (Fase 7)
 A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela. Feito em 2026-10-28 (Fase 7).
@@ -1332,7 +1334,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
-**Depois (ideias anotadas, ainda sem fase):** ~~animação de evolução~~ (feita em 2026-10-29, 5.8); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); **climas no jardim** com bônus para Pokémon e plantas (5.11 — anotado em 2026-10-29); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
+**Depois (ideias anotadas, ainda sem fase):** ~~animação de evolução~~ (feita em 2026-10-29, 5.8); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); ~~climas no jardim~~ (feito em 2026-10-29, 5.11; felicidade dos Pokémon e máquinas ficam para depois); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 

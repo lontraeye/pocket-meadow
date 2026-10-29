@@ -8,6 +8,8 @@ import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../co
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
 import { trainerConfig, trainerXpToNext } from '../config/trainer.js'
+import { weatherConfig } from '../config/weather.js'
+import { loadWeather } from '../db/weather.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { countClaimableBlocks } from '../game/pokedex.js'
@@ -178,10 +180,13 @@ function readState(userId: number, now: number) {
     plotSlotsUnlocked: plotSlotsUnlocked(trainer.level),
     nextPlotSlotLevel: nextPlotSlotLevel(trainer.level),
     uprootSeedReturnChance: berryConfig.uprootSeedReturnChance,
+    weather: loadWeather(userId, now),
+    weatherGrowFactor: weatherConfig.favoriteGrowFactor,
     berries: berryList.map((berry) => ({
       key: berry.key,
       name: berry.name,
       growMs: berry.growMs,
+      favoriteWeather: berry.favoriteWeather,
       effectDescription: berry.effectDescription,
       effectKey:
         !berry.effect || berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
