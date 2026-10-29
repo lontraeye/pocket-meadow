@@ -78,6 +78,13 @@
     picked = slug === data?.current ? null : slug
   }
 
+  /** Toque duplo: num vizinho aberto, viaja direto; no resto, só seleciona. */
+  function activate(slug: string) {
+    const open = here?.links.some((entry) => entry.to === slug && entry.open) ?? false
+    if (open && !hasEncounter) void travel(slug)
+    else select(slug)
+  }
+
   function kindLabel(place: PlaceView): string {
     return place.kind === 'town' ? 'Cidade' : place.kind === 'water' ? 'Água' : ''
   }
@@ -127,7 +134,13 @@
     </div>
 
     <div class="map-wrap">
-      <JourneyMap places={data.places} current={data.current} selected={selected.slug} onSelect={select} />
+      <JourneyMap
+        places={data.places}
+        current={data.current}
+        selected={selected.slug}
+        onSelect={select}
+        onActivate={activate}
+      />
       {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
     </div>
 

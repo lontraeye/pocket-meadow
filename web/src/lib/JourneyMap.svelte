@@ -12,12 +12,27 @@
     current,
     selected,
     onSelect,
+    onActivate,
   }: {
     places: PlaceView[]
     current: string
     selected: string
     onSelect: (slug: string) => void
+    /** Toque duplo no mesmo lugar (ex.: viajar direto para o vizinho). */
+    onActivate: (slug: string) => void
   } = $props()
+
+  // Toque duplo pelo intervalo entre dois toques: o dblclick não é confiável no celular.
+  const DOUBLE_TAP_MS = 350
+  let lastTap = { slug: '', at: 0 }
+
+  function tap(slug: string) {
+    const now = performance.now()
+    const double = lastTap.slug === slug && now - lastTap.at < DOUBLE_TAP_MS
+    lastTap = double ? { slug: '', at: 0 } : { slug, at: now }
+    if (double) onActivate(slug)
+    else onSelect(slug)
+  }
 
   const CELL = 56
   const PAD = 48
@@ -100,7 +115,7 @@
         tabindex="0"
         aria-label="{place.name}{place.slug === current ? ' (você está aqui)' : ''}{place.open ? '' : ` · ${place.reason}`}"
         aria-pressed={place.slug === selected}
-        onclick={() => onSelect(place.slug)}
+        onclick={() => tap(place.slug)}
         onkeydown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
