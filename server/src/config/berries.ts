@@ -1,4 +1,5 @@
 // Berries e efeitos (PLANNING.md, seção 5.10).
+import type { WeatherKey } from './weather.js'
 export const SEED_EXTRA_CHANCE = 0.25
 export const SEED_DROP_CHANCE = 0.1
 // Arrancar antes de ficar pronta (clique errado): chance de a semente voltar.
@@ -35,6 +36,8 @@ export type BerryDef = {
   key: string
   name: string
   growMs: number
+  /** Plantada neste clima, cresce mais rápido (weatherConfig.favoriteGrowFactor). */
+  favoriteWeather: WeatherKey
   yield: readonly [number, number]
   /** Ausente = só captura (ou sem uso pela Mochila). */
   effect?: BerryEffect
@@ -47,6 +50,7 @@ export const berries = {
     key: 'oran',
     name: 'Oran',
     growMs: 30 * 60 * 1000,
+    favoriteWeather: 'rain',
     yield: [2, 3],
     effect: { kind: 'energy', amount: 2 },
     effectDescription: '+2 de energia',
@@ -56,6 +60,7 @@ export const berries = {
     key: 'pinap',
     name: 'Pinap',
     growMs: 2 * 60 * 60 * 1000,
+    favoriteWeather: 'sunny',
     yield: [1, 2],
     effectDescription: 'Só na captura: +3 doces da linha se capturar',
     capture: { candyOnCatch: 3, description: 'Se capturar, +3 doces da linha' },
@@ -64,6 +69,7 @@ export const berries = {
     key: 'razz',
     name: 'Razz',
     growMs: 4 * 60 * 60 * 1000,
+    favoriteWeather: 'sunny',
     yield: [1, 2],
     effect: { kind: 'charges', effectKey: 'rare_boost', multiplier: 2, charges: 1 },
     effectDescription: 'Próximo encontro com raros dobrados',
@@ -73,6 +79,7 @@ export const berries = {
     key: 'nanab',
     name: 'Nanab',
     growMs: 6 * 60 * 60 * 1000,
+    favoriteWeather: 'cloudy',
     yield: [1, 2],
     effect: { kind: 'timed', effectKey: 'daycare_boost', multiplier: 2, durationMs: 2 * 60 * 60 * 1000 },
     effectDescription: 'Daycare ×2 de XP por 2 h',
@@ -82,6 +89,7 @@ export const berries = {
     key: 'lum',
     name: 'Lum',
     growMs: 12 * 60 * 60 * 1000,
+    favoriteWeather: 'rain',
     yield: [1, 1],
     effect: { kind: 'charges', effectKey: 'shiny_boost', multiplier: 4, charges: 1 },
     effectDescription: 'Próximo encontro com shiny ×4',
@@ -91,6 +99,7 @@ export const berries = {
     key: 'golden-razz',
     name: 'Golden Razz',
     growMs: 24 * 60 * 60 * 1000,
+    favoriteWeather: 'wind',
     yield: [1, 1],
     effectDescription: 'Só na captura: chance ×2,5 e acalma (−1)',
     capture: {
@@ -103,6 +112,7 @@ export const berries = {
     key: 'silver-pinap',
     name: 'Silver Pinap',
     growMs: 18 * 60 * 60 * 1000,
+    favoriteWeather: 'cloudy',
     yield: [1, 1],
     effectDescription: 'Só na captura: chance ×1,8 e +5 doces se capturar',
     capture: {

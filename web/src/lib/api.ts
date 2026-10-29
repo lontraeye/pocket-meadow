@@ -203,10 +203,14 @@ export type CaptureBerryInfo = {
   description: string
 }
 
+export type WeatherKey = 'sunny' | 'cloudy' | 'rain' | 'wind'
+
 export type BerryInfo = {
   key: string
   name: string
   growMs: number
+  /** Plantada neste clima, cresce mais rápido (GameState.weatherGrowFactor). */
+  favoriteWeather: WeatherKey
   effectDescription: string
   effectKey: string | null
   /** false = só captura (ex.: Pinap). */
@@ -238,6 +242,10 @@ export type GameState = {
   gardenMaxVisible: number
   plotSlotsUnlocked: number
   nextPlotSlotLevel: number | null
+  /** Clima de hoje (5.11): muda à meia-noite de Brasília (`until`). */
+  weather: { key: WeatherKey; name: string; until: number }
+  /** Plantar no clima favorito: tempo de crescimento × isto. */
+  weatherGrowFactor: number
   berries: BerryInfo[]
   balls: BallsConfig
   uprootSeedReturnChance: number
