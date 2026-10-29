@@ -57,6 +57,8 @@
   let toolsOpen = $state(false)
   let query = $state('')
   let pickedId = $state<number | null>(null)
+  /** Tocou numa vaga vazia sem ninguém escolhido: o próximo toque escolhe quem entra. */
+  let filling = $state(false)
   let many = $state(false)
   let marked = $state<number[]>([])
   let confirmRelease = $state(false)
@@ -157,6 +159,13 @@
       openId = mon.id
       return
     }
+    // Vaga vazia escolhida antes: quem for tocado (fora do time) entra.
+    if (filling && mon.teamSlot === null) {
+      filling = false
+      void move(mon, 'team')
+      return
+    }
+    filling = false
     // Com alguém escolhido, tocar num do time põe naquela vaga (ou troca).
     if (picked && picked.id !== mon.id && mon.teamSlot !== null) {
       void move(picked, 'team', mon.teamSlot)
@@ -166,7 +175,16 @@
   }
 
   function tapEmptySlot() {
-    if (picked && !many) void move(picked, 'team')
+    if (many) return
+    play('tap')
+    message = ''
+    if (picked && placeOf(picked) !== 'team') {
+      void move(picked, 'team')
+      return
+    }
+    // Sem ninguém escolhido (ou escolhido do próprio time): pede quem entra.
+    pickedId = null
+    filling = !filling
   }
 
   async function send(path: string, body: unknown): Promise<boolean> {
@@ -218,6 +236,7 @@
 
   function startMany() {
     pickedId = null
+    filling = false
     marked = []
     confirmRelease = false
     many = true
@@ -284,9 +303,9 @@
           <button
             type="button"
             class="tile empty"
-            class:target={picked !== null && placeOf(picked) !== 'team' && !many}
-            aria-label="Vaga {slot + 1} vazia"
-            disabled={pending || picked === null || many}
+            class:target={(picked !== null && placeOf(picked) !== 'team' && !many) || filling}
+            aria-label="Vaga {slot + 1} vazia: pôr alguém no time"
+            disabled={pending || many}
             onclick={tapEmptySlot}
           >
             <span aria-hidden="true">+</span>
@@ -395,15 +414,18 @@
         <button type="button" class="btn" disabled={pending} onclick={keepStrongest}>Menos o mais forte</button>
         <button type="button" class="btn" onclick={stopMany}>Cancelar</button>
       </div>
+    {:else if filling}
+      <p class="hint">Escolha quem vai para o time (no PC ou no jardim).</p>
+      <div class="row">
+        <button type="button" class="btn" onclick={() => (filling = false)}>Cancelar</button>
+        <button type="button" class="btn" onclick={onClose}>Sair</button>
+      </div>
     {:else if picked}
       <p class="picked-line">
         <span><strong>{nameOf(picked)}</strong> · Nv {picked.level} · {PLACE_NAME[placeOf(picked)]}</span>
-        <small>{placeOf(picked) === 'team' ? 'toque em outra vaga para trocar' : 'toque numa vaga do time para pôr ali'}</small>
+        <small>{placeOf(picked) === 'team' ? 'toque em outra vaga para trocar' : 'toque numa vaga do time para pôr no time'}</small>
       </p>
       <div class="row">
-        {#if placeOf(picked) !== 'team'}
-          <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void move(picked, 'team')}>→ Time</button>
-        {/if}
         {#if placeOf(picked) !== 'pc'}
           <button type="button" class="btn" disabled={pending} onclick={() => void move(picked, 'pc')}>→ PC</button>
         {/if}
@@ -411,11 +433,12 @@
           <button type="button" class="btn" disabled={pending} onclick={() => void move(picked, 'garden')}>→ Jardim</button>
         {/if}
         <button type="button" class="btn" onclick={() => (openId = picked.id)}>Ficha</button>
+        <button type="button" class="btn" onclick={onClose}>Sair</button>
       </div>
     {:else}
       <div class="row">
         <button type="button" class="btn" onclick={startMany}>Selecionar</button>
-        <button type="button" class="btn" onclick={onClose}>Voltar</button>
+        <button type="button" class="btn" onclick={onClose}>Sair</button>
       </div>
     {/if}
   </div>
