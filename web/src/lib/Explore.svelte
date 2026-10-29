@@ -1051,7 +1051,7 @@
       <section class="panel sheet">
         <h2>Time {roster.length}/{game.trainer.teamMax} <small class="pick">toque em quem abre</small></h2>
         {#if roster.length === 0}
-          <p class="hint">Seu time está vazio. Monte o time na Coleção.</p>
+          <p class="hint">Seu time está vazio. Monte o time no PC.</p>
         {:else}
           <div class="roster">
             {#each roster as mon (mon.id)}

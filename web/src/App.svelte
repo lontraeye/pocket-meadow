@@ -5,7 +5,6 @@
   import { takeLegacyBattleAuto } from './lib/battlePersist'
   import AuthForm from './lib/AuthForm.svelte'
   import Bag from './lib/Bag.svelte'
-  import Collection from './lib/Collection.svelte'
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import PcBox from './lib/PcBox.svelte'
@@ -39,11 +38,11 @@
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
   let progress = $state({ done: 0, total: 0 })
   let offline = $state(false)
-  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare' | 'bag' | 'pc'>('meadow')
+  let screen = $state<'meadow' | 'explore' | 'daycare' | 'bag' | 'pc'>('meadow')
   /** De onde o PC foi aberto (Voltar volta para lá). */
-  let pcReturn = $state<'collection' | 'explore'>('collection')
+  let pcReturn = $state<'meadow' | 'explore'>('meadow')
 
-  function openPc(from: 'collection' | 'explore') {
+  function openPc(from: 'meadow' | 'explore') {
     pcReturn = from
     screen = 'pc'
   }
@@ -503,8 +502,6 @@
       <div class="world">
         {#if screen === 'explore'}
           <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} onOpenPc={() => openPc('explore')} />
-        {:else if screen === 'collection'}
-          <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} onOpenPc={() => openPc('collection')} />
         {:else if screen === 'pc'}
           <PcBox {game} onClose={() => (screen = pcReturn)} onState={loadState} />
         {:else if screen === 'daycare'}
@@ -517,7 +514,7 @@
 
     {#if screen === 'meadow'}
       <div class="docks">
-        <button type="button" class="btn" onclick={() => (screen = 'collection')}>Coleção</button>
+        <button type="button" class="btn" onclick={() => openPc('meadow')}>PC</button>
         <button type="button" class="btn badge-host" onclick={() => (screen = 'daycare')}>
           Daycare
           {#if ready && ready.daycareFullCount > 0}
