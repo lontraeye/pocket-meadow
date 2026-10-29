@@ -85,6 +85,8 @@
   let notice = $state('')
   let appliedThrow = $state<number | null>(null)
   let battleAuto = $state(untrack(() => game.trainer.battleAuto))
+  /** A luta saiu do campo: ao voltar para a jornada, abre no campo. */
+  let fromField = $state(false)
   let prefsBusy = false
   const ballStorageKey = 'pocket-meadow-last-ball'
   let selectedBall = $state(
@@ -971,7 +973,11 @@
       busy={pending}
       {searching}
       hasEncounter={game.encounter !== null}
-      onEngage={(slug, slot) => search(slug, () => api(`/api/field/${slot}/engage`, {}))}
+      startOnField={fromField}
+      onEngage={(slug, slot) => {
+        fromField = true
+        search(slug, () => api(`/api/field/${slot}/engage`, {}))
+      }}
       onGarden={onClose}
       {onOpenPc}
     >

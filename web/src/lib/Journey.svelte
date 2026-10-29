@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, type Snippet } from 'svelte'
+  import { onMount, type Snippet, untrack } from 'svelte'
   import { api, errorText, type ApiError, type FieldResponse, type PlacesResponse, type PlaceView } from './api'
   import { connection } from './connection.svelte'
   import FieldView from './FieldView.svelte'
@@ -11,11 +11,11 @@
   import { showdownSrc } from './sprites'
 
   /**
-   * Exploração como jornada (JORNADA.md, seção 11). Numa rota, a tela é o
-   * campo de encontro: os Pokémon da área andando, e você escolhe quem
-   * enfrentar. Na cidade (ou pelo botão Mapa), é o mapa: tocar num lugar mostra
-   * ele no painel de baixo, e num vizinho aberto dá para ir. Volta sempre ao
-   * último lugar visitado.
+   * Exploração como jornada (JORNADA.md, seção 11). Abre no mapa: tocar num
+   * lugar mostra ele no painel de baixo, e num vizinho aberto dá para ir. Numa
+   * rota, "Abrir o campo" mostra os Pokémon da área andando, e você escolhe
+   * quem enfrentar; depois da luta, volta para o campo. Volta sempre ao último
+   * lugar visitado.
    */
   let {
     busy,
@@ -25,6 +25,7 @@
     onGarden,
     onOpenPc,
     extras,
+    startOnField = false,
   }: {
     /** Outra ação em andamento na exploração (procura, luta). */
     busy: boolean
@@ -38,6 +39,8 @@
     onOpenPc: () => void
     /** Efeitos, treino de arremesso e testes: ficam no painel "Mais". */
     extras?: Snippet
+    /** Voltando de uma luta do campo: abre no campo em vez do mapa. */
+    startOnField?: boolean
   } = $props()
 
   let data = $state<PlacesResponse | null>(null)
@@ -48,8 +51,8 @@
   let picked = $state<string | null>(null)
   let moreOpen = $state(false)
   let arrivalTimer = 0
-  /** Numa rota: o campo (ao abrir a exploração) ou o mapa (ao chegar e para viajar). */
-  let view = $state<'field' | 'map'>('field')
+  /** Numa rota: o mapa (ao abrir e ao chegar) ou o campo (pelo botão, ou de volta da luta). */
+  let view = $state<'field' | 'map'>(untrack(() => startOnField) ? 'field' : 'map')
   let field = $state<FieldResponse | null>(null)
   let spawnSlot = $state<number | null>(null)
 
