@@ -1,0 +1,5 @@
+# Config vazio de propósito para o `npm run phone`.
+# Sem ele, o cloudflared lê ~/.cloudflared/config.yml (de outro túnel), cujas
+# regras de ingress terminam em http_status:404, e o túnel rápido responde 404
+# para tudo. Com este arquivo, vale só o --url do script.
+no-autoupdate: true

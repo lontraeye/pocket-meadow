@@ -40,6 +40,10 @@ export default defineConfig({
     },
   },
   server: {
+    // Celular de verdade sem deploy: `npm run phone` abre um túnel do
+    // cloudflared (https://<algo>.trycloudflare.com) para este servidor, e o
+    // Vite recusa hosts que não conhece. Entra pelo login de teste (DEV_TOOLS).
+    allowedHosts: ['.trycloudflare.com'],
     fs: {
       allow: [path.resolve(root, '..')],
     },

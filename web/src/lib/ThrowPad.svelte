@@ -1,27 +1,31 @@
 <script lang="ts">
   import {
     accumulateSpin,
+    beginFlight,
+    beginGuaranteedFlight,
     blendSpinRate,
     decaySpinRate,
     agitationOffset,
-    beginFlight,
-    beginGuaranteedFlight,
-    flightHitsTarget,
-    hitTest,
     isSimpleTap,
     isSpinning,
     qualityFromRing,
+    releaseVelocity,
     ringColorFor,
     ringFracAt,
-    sampleVelocity,
     shouldLaunch,
     spinTurns,
     stepFlight,
+    throwUnit,
+    throwSpeed,
     THROW_PHYSICS,
     type FlightState,
     type PointerSample,
     type SpinState,
+    type TargetCircle,
+    type ThrowOutcome,
     type ThrowQuality,
+    type ThrowReading,
+    type ThrowScene,
   } from './throwPhysics'
   import { prefersReducedMotion } from './highlights'
   import { play } from './sound'
@@ -39,11 +43,14 @@
     catchChance = 0,
     /** Elemento do palco do selvagem (para mira e anel). */
     stageEl = null as HTMLElement | null,
+    /** Treino (dev): mostra o resultado e não gasta nada nem chama o servidor. */
+    practice = false,
     onBallHit,
     onBallMiss,
     onBerryHit,
     onBerryMiss,
     onSpinChange,
+    onReading,
   }: {
     mode: AimMode
     spriteSrc: string
@@ -53,11 +60,14 @@
     agitation?: number
     catchChance?: number
     stageEl?: HTMLElement | null
+    practice?: boolean
     onBallHit: (quality: ThrowQuality, curve: boolean) => void
     onBallMiss: () => void
     onBerryHit: () => void
     onBerryMiss: () => void
     onSpinChange?: (spinning: boolean) => void
+    /** Leitura de cada arremesso (laboratório de dev). */
+    onReading?: (reading: ThrowReading) => void
   } = $props()
 
   let btnEl = $state<HTMLButtonElement | null>(null)
@@ -67,7 +77,7 @@
   let holdX = $state(0)
   let holdY = $state(0)
   let holdAngle = $state(0)
-  let flight = $state<FlightState | null>(null)
+  let flight = $state.raw<FlightState | null>(null)
   /** Bola congelada no alvo enquanto o texto Nice/Curva aparece. */
   let impactHold = $state<{
     x: number
@@ -78,6 +88,7 @@
   } | null>(null)
   let ringOn = $state(false)
   let ringFrac = $state(1)
+  let ringTarget = $state.raw<TargetCircle | null>(null)
   let floatLabel = $state<{ text: string; good: boolean; id: number; x: number; y: number } | null>(null)
   let floatSeq = 0
 
@@ -96,6 +107,8 @@
   let spinRaf = 0
   let lastSpinT = 0
   let lastSpinAcc = 0
+  /** Leitura do arremesso em voo (completa no resultado). */
+  let pendingReading: ThrowReading | null = null
 
   const blocked = $derived(disabled || busy || flying || impactHold !== null)
   const ringColor = $derived(ringColorFor(catchChance))
@@ -155,15 +168,42 @@
     }, 1100)
   }
 
-  function targetCircle(): { cx: number; cy: number; radius: number } | null {
+  type StageBox = { midX: number; groundY: number; body: number }
+  /**
+   * Medida do palco guardada do toque até o fim do arremesso. Ler o
+   * getBoundingClientRect a cada quadro força o navegador a refazer o layout
+   * no meio da animação (engasgos no celular); o palco não se move nesse meio
+   * tempo, e a agitação é calculada, não medida.
+   */
+  let boxCache: StageBox | null = null
+
+  function measureStage() {
+    boxCache = null
+    boxCache = stageBox()
+  }
+
+  /** Medidas do palco: meio, chão (pés) e altura do corpo. */
+  function stageBox(): StageBox | null {
+    if (boxCache) return boxCache
     if (!stageEl) return null
     const r = stageEl.getBoundingClientRect()
     // O palco da captura tem a altura do sprite + 36 px (estrelas em cima e o
     // chão a 12 px da base, no Explore): o alvo é o meio do corpo, não o do palco.
-    const body = Math.max(24, r.height - 36)
-    const radius = Math.max(22, body * THROW_PHYSICS.targetRadiusFrac * 1.5)
+    return { midX: r.left + r.width / 2, groundY: r.bottom - 12, body: Math.max(24, r.height - 36) }
+  }
+
+  function targetCircle(): TargetCircle | null {
+    const box = stageBox()
+    if (!box) return null
+    const radius = Math.max(22, box.body * THROW_PHYSICS.hitRadiusFrac)
     const off = agitationOffset(agitation, performance.now())
-    return { cx: r.left + r.width / 2 + off.x, cy: r.bottom - 12 - body / 2 + off.y, radius }
+    return { cx: box.midX + off.x, cy: box.groundY - box.body / 2 + off.y, radius }
+  }
+
+  function sceneFrom(x0: number, y0: number): ThrowScene | null {
+    const box = stageBox()
+    if (!box) return null
+    return { x0, y0, vanishX: box.midX, groundY: box.groundY }
   }
 
   function startRing() {
@@ -171,6 +211,7 @@
     ringOn = true
     const tick = () => {
       ringFrac = ringFracAt(performance.now())
+      ringTarget = targetCircle()
       ringRaf = requestAnimationFrame(tick)
     }
     ringRaf = requestAnimationFrame(tick)
@@ -178,6 +219,7 @@
 
   function stopRing() {
     ringOn = false
+    ringTarget = null
     if (ringRaf) cancelAnimationFrame(ringRaf)
     ringRaf = 0
   }
@@ -196,43 +238,32 @@
     resetHold()
     flight = null
     flying = false
-    aimAtThrow = null
+    boxCache = null
   }
 
-  /** Mira congelada no arremesso — hit alinhado ao pouso (agitação não “rouba” acerto). */
-  let aimAtThrow: { cx: number; cy: number; radius: number } | null = null
-
-  function runFlight(next: FlightState, guaranteeHit: boolean, aim: { cx: number; cy: number; radius: number } | null = null) {
+  function runFlight(next: FlightState) {
     // O voo leva a rotação daqui em diante (spinAngle/spinSpeed do FlightState).
     stopSpin()
     flying = true
     holding = false
     flight = next
-    aimAtThrow = aim
     lastRaf = performance.now()
     const loop = (now: number) => {
-      const dt = Math.min(40, now - lastRaf)
+      // Tempo real: com teto baixo, um quadro atrasado deixava a bola em câmera
+      // lenta por um instante (engasgo). O stepFlight já divide em passos de 4 ms.
+      const dt = Math.min(120, now - lastRaf)
       lastRaf = now
       const cur = flight
       if (!cur) return
-      const stepped = stepFlight(cur, dt)
+      // Alvo vivo: o acerto é testado onde o Pokémon está quando a bola chega.
+      const live = targetCircle()
+      const stepped = live ? stepFlight(cur, dt, live) : { ...cur, done: true }
       flight = stepped
-      // Contato no meio do voo = acerto (como no GO), sem esperar o pouso.
-      if (!guaranteeHit) {
-        const live = targetCircle()
-        if (
-          (aimAtThrow && hitTest(stepped.x, stepped.y, aimAtThrow)) ||
-          (live && hitTest(stepped.x, stepped.y, live))
-        ) {
-          finishFlight(stepped, guaranteeHit)
-          return
-        }
-      }
       if (!stepped.done) {
         raf = requestAnimationFrame(loop)
         return
       }
-      finishFlight(stepped, guaranteeHit)
+      finishFlight(stepped)
     }
     raf = requestAnimationFrame(loop)
   }
@@ -244,36 +275,41 @@
     }
   }
 
-  function finishFlight(state: FlightState, guaranteeHit: boolean) {
+  function report(outcome: ThrowOutcome | null, quality: ThrowQuality | null) {
+    if (!pendingReading) return
+    const reading: ThrowReading = {
+      ...pendingReading,
+      result: outcome === null ? 'over' : outcome.kind === 'hit' ? 'hit' : outcome.why,
+      distRatio: outcome?.kind === 'hit' ? outcome.distRatio : null,
+      quality,
+    }
+    pendingReading = null
+    onReading?.(reading)
+  }
+
+  const MISS_TEXT = { short: 'Curto!', over: 'Passou!', wide: 'Errou!' } as const
+
+  function finishFlight(state: FlightState) {
     stopRing()
-    const live = targetCircle()
-    const aim = aimAtThrow
-    const target = aim ?? live
-    const hit =
-      guaranteeHit ||
-      (aim ? flightHitsTarget(state, aim) || hitTest(state.x, state.y, aim) : false) ||
-      (live ? flightHitsTarget(state, live) || hitTest(state.x, state.y, live) : false)
+    // O texto do resultado ainda usa a medida; a próxima leitura já mede de novo.
+    queueMicrotask(() => {
+      if (!holding && !flying) boxCache = null
+    })
+    const outcome = state.outcome
     const curve = mode === 'ball' && state.curveDir !== 0
     flying = false
     flight = null
-    aimAtThrow = null
 
-    if (mode === 'berry') {
-      if (hit) {
-        play('hit')
-        onBerryHit()
-      } else {
-        play('tap')
-        showFloat('Errou!', false)
-        onBerryMiss()
-      }
-      return
-    }
-
-    if (!hit) {
+    if (outcome?.kind !== 'hit') {
+      report(outcome, null)
       play('tap')
-      showFloat('Errou!', false)
-      // Deixa o "Errou!" aparecer antes do debit (sem mudar de tela).
+      showFloat(outcome ? MISS_TEXT[outcome.why] : 'Errou!', false)
+      if (practice) return
+      if (mode === 'berry') {
+        onBerryMiss()
+        return
+      }
+      // Deixa o texto aparecer antes do debit (sem mudar de tela).
       clearFeedbackTimer()
       feedbackTimer = window.setTimeout(() => {
         feedbackTimer = 0
@@ -283,66 +319,66 @@
     }
 
     play('hit')
-    let quality: ThrowQuality = 'normal'
-    if (!guaranteeHit && target) {
-      const dist = Math.hypot(state.x - target.cx, state.y - target.cy)
-      quality = qualityFromRing(dist, target.radius, ringFracAt(performance.now()))
+    if (mode === 'berry') {
+      report(outcome, null)
+      if (practice) showFloat('Acertou!', true)
+      else onBerryHit()
+      return
     }
+
+    const quality: ThrowQuality = state.guaranteed
+      ? 'normal'
+      : qualityFromRing(outcome.distRatio, ringFracAt(performance.now()))
+    report(outcome, quality)
     // Um texto só: dois seguidos fariam o segundo apagar o primeiro.
     const labels = [
       quality === 'nice' ? 'Nice!' : quality === 'great' ? 'Great!' : quality === 'excellent' ? 'Excellent!' : null,
       curve ? 'Curva!' : null,
     ].filter((text): text is string => text !== null)
 
-    if (labels.length === 0) {
+    if (labels.length === 0 && !practice) {
       onBallHit(quality, curve)
       return
     }
 
     // Congela a bola no alvo e só então vai à cena — senão a tela some no mesmo frame.
-    impactHold = {
-      x: state.x,
-      y: state.y,
-      scale: state.scale,
-      spinAngle: state.spinAngle,
-      curve,
-    }
-    showFloat(labels.join(' · '), true)
+    impactHold = { x: state.x, y: state.y, scale: state.scale, spinAngle: state.spinAngle, curve }
+    showFloat(labels.length > 0 ? labels.join(' · ') : 'Acertou!', true)
     clearFeedbackTimer()
     feedbackTimer = window.setTimeout(() => {
       feedbackTimer = 0
       impactHold = null
-      onBallHit(quality, curve)
+      if (!practice) onBallHit(quality, curve)
     }, THROW_PHYSICS.feedbackHoldMs)
   }
 
+  /** Teclado e movimento reduzido: força ideal no centro, sempre acerta. */
   function launchGuaranteed() {
+    measureStage()
     const btn = btnEl?.getBoundingClientRect()
     const target = targetCircle()
+    const scene = btn ? sceneFrom(btn.left + btn.width / 2, btn.top + btn.height / 2) : null
+    play('tap')
     // Sem animação (ou sem onde mirar): acerta direto, sem voo.
-    if (!btn || !target || prefersReducedMotion()) {
-      play('tap')
+    if (!scene || !target || prefersReducedMotion()) {
+      if (practice) return
       if (mode === 'berry') onBerryHit()
       else onBallHit('normal', false)
       return
     }
-    play('tap')
     startRing()
-    const x0 = btn.left + btn.width / 2
-    const y0 = btn.top + btn.height / 2
-    runFlight(beginGuaranteedFlight({ x0, y0, targetX: target.cx, targetY: target.cy }), true, target)
+    pendingReading = null
+    runFlight(beginGuaranteedFlight({ scene, target }))
   }
 
   function onPointerDown(e: PointerEvent) {
     if (blocked || e.button !== 0) return
+    e.preventDefault()
     if (prefersReducedMotion()) {
-      e.preventDefault()
       launchGuaranteed()
       return
     }
-    e.preventDefault()
-    const btn = btnEl?.getBoundingClientRect()
-    if (!btn) return
+    measureStage()
     pointerId = e.pointerId
     btnEl?.setPointerCapture(e.pointerId)
     startT = e.timeStamp
@@ -367,10 +403,15 @@
     if (!holding || e.pointerId !== pointerId) return
     holdX = e.clientX
     holdY = e.clientY
-    samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY })
-    if (samples.length > 24) samples = samples.slice(-24)
+    // No celular o navegador junta vários toques num evento só: os agrupados
+    // dão a trajetória inteira, e a velocidade fica bem mais estável.
+    const batch = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : []
+    for (const ev of batch.length > 0 ? batch : [e]) {
+      samples.push({ t: ev.timeStamp, x: ev.clientX, y: ev.clientY })
+      if (mode === 'ball') spin = accumulateSpin(spin, ev.clientX, ev.clientY)
+    }
+    if (samples.length > 64) samples = samples.slice(-64)
     if (mode === 'ball') {
-      spin = accumulateSpin(spin, e.clientX, e.clientY)
       // Velocidade do giro do dedo desde o último movimento; a bola guarda a maior
       // e perde aos poucos (spinLoop), em vez de parar quando o dedo para.
       const dtS = (e.timeStamp - lastSpinT) / 1000
@@ -390,40 +431,53 @@
     const drag = Math.hypot(e.clientX - startX, e.clientY - startY)
     const duration = e.timeStamp - startT
     samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY })
-    const { vx, vy } = sampleVelocity(samples, e.timeStamp)
-
-    if (isSimpleTap(drag, duration) || prefersReducedMotion()) {
-      resetHold()
-      launchGuaranteed()
-      return
-    }
-
-    if (!shouldLaunch(vy)) {
-      returnToHand()
-      return
-    }
-
-    const curveDir: -1 | 0 | 1 =
-      mode === 'ball' && spinning ? (spin.direction === 0 ? 1 : spin.direction) : 0
-    play('tap')
+    const { vx, vy } = releaseVelocity(samples, e.timeStamp)
     const target = targetCircle()
+    const scene = sceneFrom(e.clientX, e.clientY)
+    const unit = scene && target ? throwUnit(scene, target) : 400
+    const turns = spinTurns(spin)
+    const curving = mode === 'ball' && spinning
+    const reading: ThrowReading = {
+      power: throwSpeed(vx, vy, unit) / THROW_PHYSICS.idealSpeed,
+      angleDeg: vy < 0 ? (Math.atan2(vx, -vy) * 180) / Math.PI : 0,
+      unitPx: Math.round(unit),
+      curve: curving,
+      turns,
+      result: 'weak',
+      distRatio: null,
+      quality: null,
+    }
+
+    // Toque sem arrastar não lança: a bola fica na mão (teclado e movimento
+    // reduzido continuam com o lançamento garantido).
+    if (isSimpleTap(drag, duration)) {
+      returnToHand()
+      onReading?.({ ...reading, result: 'tap' })
+      return
+    }
+    if (!scene || !target || !shouldLaunch(vy, unit)) {
+      returnToHand()
+      onReading?.(reading)
+      return
+    }
+
+    const curveDir: -1 | 0 | 1 = curving ? (spin.direction === 0 ? 1 : spin.direction) : 0
+    play('tap')
     const next = beginFlight({
-      x0: e.clientX,
-      y0: e.clientY,
+      scene,
+      target,
       vx,
       vy,
       curveDir,
-      spinning: mode === 'ball' && spinning,
-      turns: spinTurns(spin),
-      targetX: target?.cx ?? e.clientX,
-      targetY: target?.cy ?? e.clientY - 300,
-      targetRadius: target?.radius,
+      spinning: curving,
+      turns,
       spinAngle: holdAngle,
       spinRate,
     })
     holding = false
     pointerId = null
-    runFlight(next, false, target)
+    pendingReading = reading
+    runFlight(next)
   }
 
   function onPointerCancel(e: PointerEvent) {
@@ -491,16 +545,14 @@
     width="60"
     height="60"
     draggable="false"
-    style:left="{holdX}px"
-    style:top="{holdY}px"
-    style:transform="translate(-50%, -50%) rotate({holdAngle}rad) scale({spinning ? 1.08 : 1})"
+    style:transform="translate({holdX}px, {holdY}px) translate(-50%, -50%) rotate({holdAngle}rad) scale({spinning ? 1.08 : 1})"
   />
   {#if spinning}{@render sparkles(holdX, holdY, 1)}{/if}
 {/if}
 
 <!-- Bola acelerada e pronta para a curva: estrelinhas piscando em volta (não giram com ela). -->
 {#snippet sparkles(x: number, y: number, scale: number)}
-  <div class="sparkles" style:left="{x}px" style:top="{y}px" style:--s={scale} aria-hidden="true">
+  <div class="sparkles" style:transform="translate({x}px, {y}px)" style:--s={scale} aria-hidden="true">
     {#each [0, 1, 2, 3, 4] as n (n)}
       <span class="spark" style:--i={n}>
         <svg viewBox="0 0 12 12" width="10" height="10"><path fill="#ffe66d" d="M6 0l1.5 4.2H12L8.2 6.8 9.7 11 6 8.4 2.3 11l1.5-4.2L0 4.2h4.5z" /></svg>
@@ -510,6 +562,14 @@
 {/snippet}
 
 {#if flying && flight}
+  <!-- Sombra no chão, embaixo da bola: é ela que mostra a altura e onde vai cair. -->
+  <span
+    class="fly-shadow"
+    style:transform="translate({flight.shadowX}px, {flight.shadowY}px) translate(-50%, -50%) scale({flight.scale})"
+    style:opacity={Math.max(0.12, 0.45 - (flight.shadowY - flight.y) / 400)}
+    aria-hidden="true"
+  ></span>
+  <!-- Depois de passar do Pokémon, some aos poucos (está atrás dele). -->
   <img
     class="fly-ball"
     src={spriteSrc}
@@ -517,10 +577,10 @@
     width="60"
     height="60"
     draggable="false"
-    style:left="{flight.x}px"
-    style:top="{flight.y}px"
-    style:transform="translate(-50%, -50%) rotate({flight.spinAngle}rad) scale({flight.scale})"
-    style:opacity={0.55 + 0.45 * (1 - flight.depth)}
+    style:transform="translate({flight.x}px, {flight.y}px) translate(-50%, -50%) rotate({flight.spinAngle}rad) scale({flight.scale})"
+    style:opacity={flight.depth <= 1
+      ? 1
+      : Math.max(0, 1 - (flight.depth - 1) / Math.max(0.1, THROW_PHYSICS.maxDepth - 1))}
   />
   {#if flight.curveDir !== 0}{@render sparkles(flight.x, flight.y, flight.scale)}{/if}
 {:else if impactHold}
@@ -531,20 +591,17 @@
     width="60"
     height="60"
     draggable="false"
-    style:left="{impactHold.x}px"
-    style:top="{impactHold.y}px"
-    style:transform="translate(-50%, -50%) rotate({impactHold.spinAngle}rad) scale({impactHold.scale})"
+    style:transform="translate({impactHold.x}px, {impactHold.y}px) translate(-50%, -50%) rotate({impactHold.spinAngle}rad) scale({impactHold.scale})"
   />
   {#if impactHold.curve}{@render sparkles(impactHold.x, impactHold.y, impactHold.scale)}{/if}
 {/if}
 
-{#if ringOn && stageEl}
-  {@const target = targetCircle()}
+{#if ringOn && ringTarget}
+  {@const target = ringTarget}
   {#if target}
     <div
       class="aim-ring"
-      style:left="{target.cx}px"
-      style:top="{target.cy}px"
+      style:transform="translate({target.cx}px, {target.cy}px) translate(-50%, -50%)"
       style:width="{target.radius * 2 * ringFrac}px"
       style:height="{target.radius * 2 * ringFrac}px"
       style:--ring={ringColor}
@@ -651,9 +708,26 @@
       0 0 16px color-mix(in srgb, #e8c547 70%, transparent);
   }
 
+  /* Bola, sombra, estrelinhas e anel andam por transform a partir do canto
+     (left/top fixos): mudar left/top a cada quadro refaz o layout e engasga. */
+  .fly-shadow {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 39;
+    will-change: transform, opacity;
+    width: 40px;
+    height: 12px;
+    border-radius: 50%;
+    background: #000;
+    pointer-events: none;
+  }
+
   .hold-ball,
   .fly-ball {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 40;
     pointer-events: none;
     image-rendering: pixelated;
@@ -664,7 +738,10 @@
      tempo; no voo encolhem junto com a bola (--s). */
   .sparkles {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 41;
+    will-change: transform;
     width: 0;
     height: 0;
     pointer-events: none;
@@ -705,12 +782,13 @@
 
   .aim-ring {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 35;
     box-sizing: border-box;
     border: 3px solid var(--ring, #e8c547);
     border-radius: 50%;
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 55%, transparent);
-    transform: translate(-50%, -50%);
     pointer-events: none;
     opacity: 0.92;
   }
