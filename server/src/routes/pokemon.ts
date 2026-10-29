@@ -84,6 +84,60 @@ pokemonRoutes.post('/:id/moves', requireUser, async (c) => {
   return c.json(result.moves)
 })
 
+// ---- Debug da ficha (só DEV_TOOLS; em produção respondem 404) -------------
+
+// Evolui sem conferir o nível. Mesmo caminho da evolução normal (golpes,
+// Pokédex, XP de treinador), só sem a trava.
+pokemonRoutes.post('/:id/dev/evolve', requireUser, async (c) => {
+  if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  const toSpeciesId = body?.toSpeciesId
+  if (typeof toSpeciesId !== 'number' || !Number.isInteger(toSpeciesId)) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const result = immediate(() => evolveOne(c.get('userId'), id, toSpeciesId, Date.now(), true))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.evolution)
+})
+
+// Sobe `levels` níveis (XP zera no nível novo), com os golpes de nível.
+pokemonRoutes.post('/:id/dev/level', requireUser, async (c) => {
+  if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  const levels = body?.levels
+  if (typeof levels !== 'number' || !Number.isInteger(levels) || levels < 1 || levels > progressConfig.levelCap) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const result = immediate(() => devLevelUp(c.get('userId'), id, levels, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.level)
+})
+
+// Liga/desliga o shiny.
+pokemonRoutes.post('/:id/dev/shiny', requireUser, (c) => {
+  if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const result = immediate(() => devToggleShiny(c.get('userId'), id, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.shiny)
+})
+
+// Apaga do roster sem dar doces. Mesmas travas do soltar: fora do daycare e
+// nunca o último.
+pokemonRoutes.post('/:id/dev/delete', requireUser, (c) => {
+  if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const result = immediate(() => devDelete(c.get('userId'), id, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json({ deleted: id })
+})
+
 pokemonRoutes.patch('/:id', requireUser, async (c) => {
   const id = parseId(c.req.param('id'))
   if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
@@ -93,6 +147,83 @@ pokemonRoutes.patch('/:id', requireUser, async (c) => {
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json(result.pokemon)
 })
+
+function devLevelUp(
+  userId: number,
+  id: number,
+  levels: number,
+  now: number,
+): Ok<{ level: { level: number; levelsGained: number; learnedMove: MoveView | null } }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({
+      speciesId: pokemon.speciesId,
+      level: pokemon.level,
+      location: pokemon.location,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
+    })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (mon.location === 'daycare') return fail('in_daycare', 400)
+  const level = Math.min(progressConfig.levelCap, mon.level + levels)
+  db.update(pokemon)
+    .set({ level, xp: 0 })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  bumpMaxLevelReached(userId, mon.speciesId, level)
+  const learnedMove =
+    level > mon.level && mon.fastMove
+      ? applyLevelMovesToPokemon({
+          userId,
+          pokemonId: id,
+          speciesId: mon.speciesId,
+          fromLevel: mon.level,
+          toLevel: level,
+          chargedMove: mon.chargedMove,
+        }).learned
+      : null
+  return { ok: true, level: { level, levelsGained: level - mon.level, learnedMove } }
+}
+
+function devToggleShiny(userId: number, id: number, now: number): Ok<{ shiny: { isShiny: boolean } }> | Failure {
+  const db = getDb()
+  const mon = db
+    .select({ isShiny: pokemon.isShiny, speciesId: pokemon.speciesId, level: pokemon.level })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  const isShiny = !mon.isShiny
+  db.update(pokemon)
+    .set({ isShiny })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  // Pokédex: virar shiny conta como shiny capturado (como seria na captura).
+  if (isShiny) markCaught(userId, mon.speciesId, true, now, mon.level)
+  return { ok: true, shiny: { isShiny } }
+}
+
+function devDelete(userId: number, id: number, now: number): { ok: true } | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const owned = db
+    .select({ id: pokemon.id, location: pokemon.location })
+    .from(pokemon)
+    .where(eq(pokemon.userId, userId))
+    .all()
+  const mon = owned.find((row) => row.id === id)
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (mon.location === 'daycare') return fail('in_daycare', 400)
+  if (owned.length <= 1) return fail('last_pokemon', 400)
+  db.delete(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  return { ok: true }
+}
 
 function errorBody(result: Failure): { error: string; pokemonId?: number; min?: number } {
   return {
@@ -303,6 +434,8 @@ function evolveOne(
   id: number,
   toSpeciesId: number,
   now: number,
+  /** Dev: evolui sem conferir o nível mínimo (nem a evolução por troca). */
+  force = false,
 ): Ok<{ evolution: EvolutionResult }> | Failure {
   const clock = persistCatchUp(userId, now)
   const db = getDb()
@@ -332,8 +465,10 @@ function evolveOne(
     .get()
   if (!row) return fail('evolution_not_found', 404)
 
-  const block = evolutionBlock(mon.level, row.minLevel)
-  if (!block.ok) return fail(block.error, 400, { min: block.min })
+  if (!force) {
+    const block = evolutionBlock(mon.level, row.minLevel)
+    if (!block.ok) return fail(block.error, 400, { min: block.min })
+  }
 
   const next = db
     .select({

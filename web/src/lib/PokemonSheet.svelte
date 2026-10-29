@@ -10,6 +10,7 @@
     type OwnedPokemon,
     type RegionInfo,
   } from './api'
+  import EvolutionScene from './EvolutionScene.svelte'
   import Highlights from './Highlights.svelte'
   import {
     evolveHighlightCards,
@@ -44,22 +45,34 @@
   let confirmRelease = $state(false)
   /** Espécie de destino esperando confirmação: evoluir sorteia os golpes de novo. */
   let confirmEvolve = $state<number | null>(null)
+  /** Cena de evolução aberta (o pedido ao servidor corre dentro dela). */
+  let evolving = $state<{
+    fromSpeciesId: number
+    toSpeciesId: number
+    shiny: boolean
+    name: string
+    toName: string
+    /** Debug: evolução forçada (sem nível), pela rota de dev. */
+    force: boolean
+  } | null>(null)
+  let confirmDelete = $state(false)
   let popping = $state(false)
   let message = $state('')
   let pending = $state(false)
   let seenSpecies = $state(0)
   let highlightCards = $state<HighlightCard[]>([])
   let regionsCache = $state<RegionInfo[] | null>(null)
+  /** Troca livre de golpe (aba Debug): só com o servidor em DEV_TOOLS (a rota também exige). */
   let swapping = $state<'fast' | 'charged' | null>(null)
-  /** Troca livre de golpe: só com o servidor em DEV_TOOLS (a rota também exige). */
-  const canSwapMoves = $derived(game.devTools)
 
-  type SheetTab = 'perfil' | 'golpes' | 'treino'
-  const sheetTabs: { key: SheetTab; label: string }[] = [
+  type SheetTab = 'perfil' | 'golpes' | 'treino' | 'debug'
+  // Debug só em teste (DEV_TOOLS): forçar evolução, nível, shiny, golpes, sono, apagar.
+  const sheetTabs = $derived<{ key: SheetTab; label: string }[]>([
     { key: 'perfil', label: 'Perfil' },
     { key: 'golpes', label: 'Golpes' },
     { key: 'treino', label: 'Treino' },
-  ]
+    ...(game.devTools ? [{ key: 'debug' as const, label: 'Debug' }] : []),
+  ])
   let tab = $state<SheetTab>('perfil')
 
   const rules = $derived(game.progression)
@@ -103,6 +116,7 @@
     useGeneric = false
     confirmRelease = false
     confirmEvolve = null
+    confirmDelete = false
     swapping = null
     void current
   })
@@ -218,29 +232,69 @@
     }
   }
 
-  async function evolve(toSpeciesId: number) {
-    const fromName = mon.nickname ?? mon.displayName
+  type EvolvePayload = ApiError & {
+    displayName?: string
+    trainerXpGained?: number
+    trainer?: { level: number; levelsGained: number }
+    levelRewards?: { itemKey: string; quantity: number }[]
+    newMoves?: { fast: MoveView | null; charged: MoveView | null } | null
+  }
+  /** Resposta do servidor guardada até a cena acabar (os destaques vêm depois dela). */
+  let evolvePayload: EvolvePayload | null = null
+
+  /** Abre a cena de evolução; o pedido ao servidor sai de dentro dela (requestEvolve). */
+  function evolve(toSpeciesId: number, force = false) {
     const option = mon.evolutions.find((row) => row.toSpeciesId === toSpeciesId)
-    pending = true
     message = ''
+    pending = true
+    evolvePayload = null
+    evolving = {
+      fromSpeciesId: mon.speciesId,
+      toSpeciesId,
+      shiny: mon.isShiny,
+      name: mon.nickname ?? mon.displayName,
+      toName: option?.displayName ?? 'a evolução',
+      force,
+    }
+  }
+
+  async function requestEvolve(toSpeciesId: number, force: boolean): Promise<boolean> {
     try {
-      const response = await api(`/api/pokemon/${mon.id}/evolve`, { toSpeciesId })
-      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
-        displayName?: string
-        trainerXpGained?: number
-        trainer?: { level: number; levelsGained: number }
-        levelRewards?: { itemKey: string; quantity: number }[]
-        newMoves?: { fast: MoveView | null; charged: MoveView | null } | null
-      }
+      const path = force ? `/api/pokemon/${mon.id}/dev/evolve` : `/api/pokemon/${mon.id}/evolve`
+      const response = await api(path, { toSpeciesId })
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as EvolvePayload
       if (!response.ok) {
         message = errorText(payload)
-        return
+        return false
       }
+      evolvePayload = payload
+      return true
+    } catch {
+      message = 'Sem conexão com o servidor.'
+      return false
+    }
+  }
+
+  /** Fim da cena: atualiza o estado e mostra os destaques (golpes novos, XP de treinador...). */
+  async function afterEvolve(evolved: boolean) {
+    const scene = evolving
+    evolving = null
+    const payload = evolvePayload
+    evolvePayload = null
+    if (!evolved || !scene || !payload) {
+      pending = false
+      return
+    }
+    // A cena já mostrou a troca: sem o "pop" do retrato quando o estado chegar.
+    seenSpecies = scene.toSpeciesId
+    const option = mon.evolutions.find((row) => row.toSpeciesId === scene.toSpeciesId)
+    const fromName = scene.name
+    try {
       const regions = await loadRegions()
       await onState()
       highlightCards = evolveHighlightCards({
         fromName,
-        toName: payload.displayName ?? option?.displayName ?? 'evolução',
+        toName: payload.displayName ?? option?.displayName ?? scene.toName,
         trainerXpGained: Number(payload.trainerXpGained ?? 0),
         trainer: {
           level: Number(payload.trainer?.level ?? game.trainer.level),
@@ -340,6 +394,21 @@
     }
   }
 
+  // ---- Debug (DEV_TOOLS) ----
+
+  async function devLevel(levels: number) {
+    if (await send(`/api/pokemon/${mon.id}/dev/level`, { levels })) message = `+${levels} nível(is) (teste).`
+  }
+
+  async function devShiny() {
+    if (await send(`/api/pokemon/${mon.id}/dev/shiny`, {})) message = mon.isShiny ? 'Agora é shiny (teste).' : 'Não é mais shiny (teste).'
+  }
+
+  async function devDelete() {
+    confirmDelete = false
+    if (await send(`/api/pokemon/${mon.id}/dev/delete`, {})) onClose()
+  }
+
   async function setMove(slot: 'fast' | 'charged', move: string) {
     const current = slot === 'fast' ? mon.fastMove.name : mon.chargedMove?.name
     if (move === current) {
@@ -381,6 +450,18 @@
   <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
     {#if highlightCards.length > 0}
       <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
+    {/if}
+    {#if evolving}
+      {@const scene = evolving}
+      <EvolutionScene
+        fromSpeciesId={scene.fromSpeciesId}
+        toSpeciesId={scene.toSpeciesId}
+        shiny={scene.shiny}
+        name={scene.name}
+        toName={scene.toName}
+        run={() => requestEvolve(scene.toSpeciesId, scene.force)}
+        onDone={(evolved) => void afterEvolve(evolved)}
+      />
     {/if}
     <div class="head">
       <div class="title-row">
@@ -529,27 +610,7 @@
             <p class="hint effect">{mon.fastMove.effectText}</p>
           {/if}
         </div>
-        {#if canSwapMoves}
-          <button type="button" class="btn" disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
-            Trocar
-          </button>
-        {/if}
       </div>
-      {#if canSwapMoves && swapping === 'fast'}
-        <div class="coins picks">
-          {#each mon.availableMoves.fast as move (move.name)}
-            <button
-              type="button"
-              class="btn"
-              class:btn-primary={move.name === mon.fastMove.name}
-              disabled={pending}
-              onclick={() => void setMove('fast', move.name)}
-            >
-              {move.displayName}
-            </button>
-          {/each}
-        </div>
-      {/if}
       <div class="move">
         <div>
           <p class="slot">Golpe carregado</p>
@@ -568,18 +629,72 @@
             {/if}
           {/if}
         </div>
-        {#if canSwapMoves}
-          <button
-            type="button"
-            class="btn"
-            disabled={pending || mon.availableMoves.charged.length === 0}
-            onclick={() => (swapping = swapping === 'charged' ? null : 'charged')}
-          >
-            Trocar
-          </button>
-        {/if}
       </div>
-      {#if canSwapMoves && swapping === 'charged'}
+    </div>
+
+    {:else if tab === 'debug' && game.devTools}
+    <p class="hint">Só em teste (DEV_TOOLS). Nada disto existe em produção.</p>
+
+    {#if mon.evolutions.length > 0}
+      <div class="block">
+        <h3>Forçar evolução</h3>
+        {#each mon.evolutions as option (option.toSpeciesId)}
+          <button type="button" class="btn" disabled={pending || inDaycare} onclick={() => evolve(option.toSpeciesId, true)}>
+            {inDaycare ? 'Está no daycare' : `→ ${option.displayName} (sem nível)`}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    <div class="block">
+      <h3>Nível</h3>
+      <div class="coins">
+        {#each [1, 5, 10] as levels (levels)}
+          <button type="button" class="btn" disabled={pending || inDaycare || atCap} onclick={() => void devLevel(levels)}>
+            +{levels}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="block">
+      <h3>Shiny</h3>
+      <button type="button" class="btn" disabled={pending} onclick={() => void devShiny()}>
+        {mon.isShiny ? 'Tirar shiny' : 'Tornar shiny'}
+      </button>
+    </div>
+
+    <div class="block">
+      <h3>Trocar golpes</h3>
+      <div class="coins">
+        <button type="button" class="btn" class:btn-primary={swapping === 'fast'} disabled={pending} onclick={() => (swapping = swapping === 'fast' ? null : 'fast')}>
+          Rápido
+        </button>
+        <button
+          type="button"
+          class="btn"
+          class:btn-primary={swapping === 'charged'}
+          disabled={pending || mon.availableMoves.charged.length === 0}
+          onclick={() => (swapping = swapping === 'charged' ? null : 'charged')}
+        >
+          Carregado
+        </button>
+      </div>
+      {#if swapping === 'fast'}
+        <div class="coins picks">
+          {#each mon.availableMoves.fast as move (move.name)}
+            <button
+              type="button"
+              class="btn"
+              class:btn-primary={move.name === mon.fastMove.name}
+              disabled={pending}
+              onclick={() => void setMove('fast', move.name)}
+            >
+              {move.displayName}
+            </button>
+          {/each}
+        </div>
+      {:else if swapping === 'charged'}
         <div class="coins picks">
           {#each mon.availableMoves.charged as move (move.name)}
             <button
@@ -593,6 +708,26 @@
             </button>
           {/each}
         </div>
+      {/if}
+    </div>
+
+    {#if dev}
+      <div class="block">
+        <h3>Jardim</h3>
+        <button type="button" class="btn" onclick={dev.toggle}>{dev.asleep ? 'Acordar' : 'Dormir'}</button>
+      </div>
+    {/if}
+
+    <div class="block">
+      <h3>Apagar</h3>
+      {#if confirmDelete}
+        <p class="hint">Some do roster sem dar doces. Não dá para desfazer.</p>
+        <button type="button" class="btn danger" disabled={pending} onclick={() => void devDelete()}>Apagar mesmo</button>
+        <button type="button" class="btn" disabled={pending} onclick={() => (confirmDelete = false)}>Cancelar</button>
+      {:else}
+        <button type="button" class="btn danger" disabled={pending || lastOne || inDaycare} onclick={() => (confirmDelete = true)}>
+          {lastOne ? 'É o último Pokémon' : inDaycare ? 'Está no daycare' : 'Apagar do roster'}
+        </button>
       {/if}
     </div>
 
@@ -685,9 +820,6 @@
       {/if}
     </div>
 
-    {#if dev}
-      <button type="button" class="btn" onclick={dev.toggle}>{dev.asleep ? 'Acordar (teste)' : 'Dormir (teste)'}</button>
-    {/if}
     {/if}
   </div>
 
