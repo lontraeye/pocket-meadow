@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
   import { connection } from './connection.svelte'
@@ -1328,7 +1329,7 @@
             {#if activeCaptureBerry}
               <img src={berryIconSrc(activeCaptureBerry.key)} alt="" width="28" height="28" />
             {:else}
-              <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
+              <svg class="bag-icon" viewBox="0 0 12 12" width={snapIconSize(24)} height={snapIconSize(24)} aria-hidden="true" shape-rendering="crispEdges">
                 <path d="M4 1h4v1h1v2h2v7H1V4h2V2h1zm0 1v2h4V2zM2 5v5h8V5zm2 1h4v1H4z" />
               </svg>
             {/if}
@@ -1396,7 +1397,7 @@
         <button type="button" class="tool" aria-label="Outro Pokémon" onclick={pickPracticeMon}>
           <span class="icon-slot">
             <!-- Duas setas em roda (trocar), em pixels. -->
-            <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
+            <svg class="bag-icon" viewBox="0 0 12 12" width={snapIconSize(24)} height={snapIconSize(24)} aria-hidden="true" shape-rendering="crispEdges">
               <path d="M3 2h6v1h1v3H9V4H8V3H3zM1 6h1v2h1v1h6v1H3V9H2V8H1zM2 5h3v1H2zM7 6h3v1H7z" />
             </svg>
           </span>

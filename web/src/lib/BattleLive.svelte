@@ -354,6 +354,10 @@
   const canSwitch = $derived(
     status === 'live' && !active.fainted && !snap.wild.fainted && switchWait <= 0,
   )
+  const fastText = $derived(lockLabel ?? moveLabel(activeFighter.fastMove.name))
+  const chargedText = $derived(
+    lockLabel ?? (activeFighter.chargedMove ? moveLabel(activeFighter.chargedMove.name) : ''),
+  )
 
   // Ao ligar/desligar o Auto, zera o atraso de reação pendente.
   $effect(() => {
@@ -430,6 +434,15 @@
   function moveLabel(name: string): string {
     const text = name.replace(/[-_]/g, ' ')
     return text.charAt(0).toUpperCase() + text.slice(1)
+  }
+
+  /**
+   * Tamanho do nome no botão pela maior palavra (as outras quebram linha):
+   * "Thunderbolt" não cabe inteiro na fonte cheia num botão de 360px.
+   */
+  function nameFit(text: string): 'full' | 'small' | 'tiny' {
+    const longest = Math.max(...text.split(' ').map((word) => word.length))
+    return longest > 11 ? 'tiny' : longest > 8 ? 'small' : 'full'
   }
 
   // ---- Simulação ao vivo -------------------------------------------------
@@ -1713,7 +1726,7 @@
         <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
         <span class="label">
           {#if !lockLabel}<TypeIcon type={activeFighter.fastMove.type} />{/if}
-          <span class="move-name">{lockLabel ?? moveLabel(activeFighter.fastMove.name)}</span>
+          <span class="move-name {nameFit(fastText)}">{fastText}</span>
         </span>
       </button>
       {#if activeFighter.chargedMove && chargedCost !== null}
@@ -1733,7 +1746,7 @@
           {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
           <span class="label">
             {#if !lockLabel}<TypeIcon type={activeFighter.chargedMove.type} />{/if}
-            <span class="move-name">{lockLabel ?? moveLabel(activeFighter.chargedMove.name)}</span>
+            <span class="move-name {nameFit(chargedText)}">{chargedText}</span>
           </span>
         </button>
       {/if}
@@ -2563,13 +2576,28 @@
     gap: 0.35rem;
     max-width: 100%;
     font-size: 1.05rem;
-    white-space: nowrap;
   }
 
+  /* Nome do golpe: quebra entre palavras (até 2 linhas) e encolhe quando a
+     maior palavra não cabe (nameFit). */
   .act .move-name {
+    display: -webkit-box;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    line-height: 1.15;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .act .move-name.small {
+    font-size: 0.85rem;
+  }
+
+  .act .move-name.tiny {
+    font-size: 0.72rem;
   }
 
   /* Golpe com a cor e o ícone do tipo (Fogo vermelho-laranja, Água azul...). */

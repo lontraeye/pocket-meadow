@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { snapIconSize } from './lib/pixelSnap.svelte'
   import { onMount } from 'svelte'
   import { api, type GameState } from './lib/api'
   import { takeLegacyBattleAuto } from './lib/battlePersist'
@@ -60,6 +61,8 @@
   })
 
   // Ícones 12×12 do HUD (X = pixel aceso), no traço do alto-falante.
+  // Tamanho alinhado aos pixels da tela (escala do Windows, zoom): ver pixelSnap.
+  const hudIcon = $derived(snapIconSize(24))
   const DEX_ICON = [
     '.XXXXXXXXXX.',
     'X..........X',
@@ -75,20 +78,20 @@
     '.XXXXXXXXXX.',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
-  // Mochila: alça, aba com fecho e bolso na frente.
+  // Mochila: alça, topo arredondado e bolso com aba e fivela na frente.
   const BAG_ICON = [
     '....XXXX....',
     '...X....X...',
-    '.XXXXXXXXXX.',
-    'X..........X',
-    'X..........X',
-    'XXXXXXXXXXXX',
-    'X....XX....X',
-    'X..XXXXXX..X',
-    'X..X....X..X',
-    'X..XXXXXX..X',
-    'X..........X',
-    '.XXXXXXXXXX.',
+    '..XXXXXXXX..',
+    '.X.X....X.X.',
+    '.X.X....X.X.',
+    '.X.XXXXXX.X.',
+    '.X.X.XX.X.X.',
+    '.X.X....X.X.',
+    '.X.XXXXXX.X.',
+    '.X........X.',
+    '.X........X.',
+    '..XXXXXXXX..',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
   const GEAR_ICON = [
@@ -440,7 +443,7 @@
           title="Pokédex"
           onclick={togglePokedex}
         >
-          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+          <svg class="hud-icon" viewBox="0 0 12 12" width={hudIcon} height={hudIcon} aria-hidden="true">
             {#each DEX_ICON as px (`${px.x},${px.y}`)}
               <rect x={px.x} y={px.y} width="1" height="1" />
             {/each}
@@ -458,7 +461,7 @@
           aria-pressed={screen === 'bag'}
           onclick={() => (screen = 'bag')}
         >
-          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+          <svg class="hud-icon" viewBox="0 0 12 12" width={hudIcon} height={hudIcon} aria-hidden="true">
             {#each BAG_ICON as px (`${px.x},${px.y}`)}
               <rect x={px.x} y={px.y} width="1" height="1" />
             {/each}
@@ -472,7 +475,7 @@
           aria-pressed={configOpen}
           onclick={() => (configOpen = true)}
         >
-          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+          <svg class="hud-icon" viewBox="0 0 12 12" width={hudIcon} height={hudIcon} aria-hidden="true">
             {#each GEAR_ICON as px (`${px.x},${px.y}`)}
               <rect x={px.x} y={px.y} width="1" height="1" />
             {/each}
@@ -598,7 +601,7 @@
             <strong>{muted ? '—' : `${Math.round(volumeLevel * 100)}%`}</strong>
           </label>
           <button type="button" class="btn mute-toggle" aria-pressed={muted} onclick={onMute}>
-            <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            <svg class="hud-icon" viewBox="0 0 12 12" width={hudIcon} height={hudIcon} aria-hidden="true">
               <rect x="1" y="4" width="2" height="4" />
               <rect x="3" y="3" width="1" height="6" />
               <rect x="4" y="2" width="1" height="8" />
@@ -1090,12 +1093,10 @@
     flex: none;
   }
 
-  /* 24px = 12×2: escala inteira, senão o SVG deixa pixels de larguras diferentes. */
+  /* Tamanho vem do snapIconSize (escala inteira na tela), não do CSS. */
   .hud-icon {
     display: block;
     flex: none;
-    width: 24px;
-    height: 24px;
     fill: currentColor;
     shape-rendering: crispEdges;
     image-rendering: pixelated;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
   import {
     api,
@@ -542,7 +543,7 @@
           onclick={() => void toggleFavorite()}
         >
           <!-- 24×24 nativo (Pixelarticons): escala só em múltiplo inteiro pra não amassar o pixel. -->
-          <svg class="pixel-star" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" shape-rendering="crispEdges">
+          <svg class="pixel-star" viewBox="0 0 24 24" width={snapIconSize(24, 24)} height={snapIconSize(24, 24)} aria-hidden="true" shape-rendering="crispEdges">
             {#if mon.isFavorite}
               <rect x="11" y="1" width="2" height="1" />
               <rect x="11" y="2" width="2" height="1" />
@@ -1123,11 +1124,10 @@
   }
 
   /* Contorno = Pixelarticons (MIT); cheia = mesmo traço. Sempre 24 CSS px (= grade). */
+  /* Tamanho vem do snapIconSize (escala inteira na tela), não do CSS. */
   .pixel-star {
     display: block;
     flex: none;
-    width: 24px;
-    height: 24px;
     fill: currentColor;
     overflow: visible;
   }

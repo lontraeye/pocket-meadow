@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
@@ -1159,7 +1160,7 @@
         onclick={toggleLabels}
       >
         <!-- Olho em pixels (grade 12×12), retângulos como o +/−. -->
-        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true" shape-rendering="crispEdges">
+        <svg viewBox="0 0 12 12" width={snapIconSize(14)} height={snapIconSize(14)} aria-hidden="true" shape-rendering="crispEdges">
           {#if showLabels}
             <rect x="3" y="3" width="6" height="1" />
             <rect x="2" y="4" width="1" height="1" /><rect x="9" y="4" width="1" height="1" />
