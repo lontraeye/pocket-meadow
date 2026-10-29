@@ -87,6 +87,8 @@
   const HP_TRAIL_HOLD_MS = 90
   const HP_TRAIL_MS = 280
   const FLOAT_MS = 1000
+  /** Golpe que não afeta: o aviso aparece quando o golpe chegaria. */
+  const IMMUNE_NOTE_DELAY_MS = 280
   // Voo da bola dos golpes especiais (o impacto espera ela chegar).
   const PROJ_FAST_MS = 260
   const PROJ_CHARGED_MS = 380
@@ -997,6 +999,17 @@
             hurtSteps(defenderSide === 'player' ? setup.team[allySlot]! : wildFighter, defenderSide),
           )
         }
+      } else if (move) {
+        // Dano 0: o alvo é imune (tipo ou habilidade). Sem impacto nem tremor,
+        // só o aviso, no tempo em que o golpe chegaria.
+        scheduleHit({
+          side: defenderSide,
+          damage: 0,
+          effectiveness: event.effectiveness,
+          charged,
+          critical: false,
+          delayMs: reduced ? 0 : IMMUNE_NOTE_DELAY_MS,
+        })
       }
       if (event.fainted && ended) endingFaint = true
     } else if (event.kind === 'heal' || event.kind === 'drain') {
@@ -1060,8 +1073,11 @@
   }
 
   function applyHitJuice(hit: PendingHit) {
-    play('hit')
-    bumpJuice(hit.side, hit.charged)
+    // Imune: sem tremor, flash nem som de acerto, só o aviso.
+    if (hit.damage > 0) {
+      play('hit')
+      bumpJuice(hit.side, hit.charged)
+    }
     spawnDamage(hit.side, hit.damage, hit.effectiveness, hit.charged, hit.critical)
   }
 
@@ -1206,8 +1222,12 @@
     critical = false,
   ) {
     floaterId += 1
+    // Acertou e não tirou nada: imunidade de tipo (Normal em Fantasma) ou de
+    // habilidade (Levitate, Flash Fire...). Avisa em vez de mostrar "-0".
+    const immune = damage === 0
     let note: string | undefined
-    if (critical) note = 'Crítico!'
+    if (immune) note = 'Não afeta!'
+    else if (critical) note = 'Crítico!'
     else if (effectiveness > 1) note = 'Super eficaz!'
     else if (effectiveness > 0 && effectiveness < 1) note = 'Pouco eficaz'
     floaters = [
@@ -1215,7 +1235,7 @@
       {
         id: floaterId,
         side,
-        text: `-${damage}`,
+        text: immune ? 'Imune' : `-${damage}`,
         heal: false,
         born: performance.now(),
         charged,
