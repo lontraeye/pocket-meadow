@@ -2,14 +2,14 @@
   import { onMount, type Snippet } from 'svelte'
   import { api, errorText, type ApiError, type PlacesResponse, type PlaceView } from './api'
   import { connection } from './connection.svelte'
-  import PlaceMap from './PlaceMap.svelte'
+  import JourneyMap from './JourneyMap.svelte'
   import { play } from './sound'
   import { showdownSrc } from './sprites'
 
   /**
-   * Exploração como jornada (JORNADA.md, seção 11): o lugar onde você está,
-   * as espécies dele, o botão de procurar e os caminhos para os vizinhos. O
-   * mapa abre num botão. Volta sempre ao último lugar visitado.
+   * Exploração como jornada (JORNADA.md, seção 11): o mapa é a tela. Tocar
+   * num lugar mostra ele no painel de baixo; onde você está, dá para procurar;
+   * num vizinho aberto, dá para ir. Volta sempre ao último lugar visitado.
    */
   let {
     busy,
@@ -21,12 +21,12 @@
   }: {
     /** Outra ação em andamento na exploração (procura, luta). */
     busy: boolean
-    /** Slug da área sendo procurada agora (spinner no botão). */
+    /** Slug da área sendo procurada agora (texto no botão). */
     searching: string | null
     hasEncounter: boolean
     onSearch: (regionSlug: string) => void
     onGarden: () => void
-    /** O que a exploração põe embaixo do lugar (efeitos, treino, testes). */
+    /** Efeitos, treino de arremesso e testes: ficam no painel "Mais". */
     extras?: Snippet
   } = $props()
 
@@ -35,11 +35,15 @@
   let traveling = $state(false)
   let message = $state('')
   let arrival = $state('')
-  let mapOpen = $state(false)
+  let picked = $state<string | null>(null)
+  let moreOpen = $state(false)
   let arrivalTimer = 0
 
-  const here = $derived(data ? (data.places.find((place) => place.slug === data!.current) ?? null) : null)
   const bySlug = $derived(new Map((data?.places ?? []).map((place) => [place.slug, place])))
+  const here = $derived(data ? (bySlug.get(data.current) ?? null) : null)
+  const selected = $derived<PlaceView | null>((picked ? bySlug.get(picked) : null) ?? here)
+  const isHere = $derived(selected !== null && selected.slug === data?.current)
+  const link = $derived(selected && here ? (here.links.find((entry) => entry.to === selected.slug) ?? null) : null)
   const caughtHere = $derived(data?.here.species.filter((entry) => entry.status === 'caught').length ?? 0)
   const chapterPct = $derived(data && data.chapter.total > 0 ? Math.round((data.chapter.caught / data.chapter.total) * 100) : 0)
   const pending = $derived(busy || traveling)
@@ -68,8 +72,14 @@
     if (failed && !connection.offline) void load()
   })
 
+  function select(slug: string) {
+    play('tap')
+    message = ''
+    picked = slug === data?.current ? null : slug
+  }
+
   function kindLabel(place: PlaceView): string {
-    return place.kind === 'town' ? 'cidade' : place.kind === 'water' ? 'água' : ''
+    return place.kind === 'town' ? 'Cidade' : place.kind === 'water' ? 'Água' : ''
   }
 
   async function travel(slug: string) {
@@ -85,7 +95,7 @@
         message = errorText(payload)
         return
       }
-      mapOpen = false
+      picked = null
       await load()
       if (payload.firstVisit && target) {
         arrival =
@@ -105,129 +115,121 @@
   }
 </script>
 
-<div class="scroll">
-  {#if data && here}
+<div class="journey">
+  {#if data && here && selected}
     <!-- Objetivo do momento: até os marcos (parte 3), o capítulo aberto. -->
-    <section class="panel sheet goal" aria-label="Objetivo">
-      <p class="goal-title">Capítulo {data.chapter.number} · {data.chapter.title}</p>
-      <div class="bar" aria-hidden="true"><span style:width="{chapterPct}%"></span></div>
-      <p class="goal-meta">
-        Espécies do capítulo {data.chapter.caught}/{data.chapter.total}
-        {#if data.chapter.nextLevel !== null}
-          · próximo capítulo no Nv {data.chapter.nextLevel}
-        {/if}
+    <div class="goal panel" aria-label="Objetivo">
+      <p class="goal-title">
+        <span class="goal-name">Cap. {data.chapter.number} · {data.chapter.title}</span>
+        <span title="Espécies do capítulo capturadas">{data.chapter.caught}/{data.chapter.total}</span>
       </p>
-    </section>
+      <div class="bar" aria-hidden="true"><span style:width="{chapterPct}%"></span></div>
+    </div>
 
-    <section class="panel sheet place">
+    <div class="map-wrap">
+      <JourneyMap places={data.places} current={data.current} selected={selected.slug} onSelect={select} />
       {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
+    </div>
+
+    <section class="panel sheet place" aria-live="polite">
       <div class="place-head">
-        <h2>{here.name}</h2>
-        {#if here.wildLevelRange}<small>Nv {here.wildLevelRange[0]}–{here.wildLevelRange[1]}</small>{/if}
+        <h2>
+          {selected.name}
+          {#if kindLabel(selected)}<small class="kind">{kindLabel(selected)}</small>{/if}
+        </h2>
+        {#if selected.wildLevelRange}<small>Nv {selected.wildLevelRange[0]}–{selected.wildLevelRange[1]}</small>{/if}
       </div>
-      <p class="blurb">{here.blurb}</p>
 
-      {#if here.kind === 'area'}
-        <p class="species-head">Espécies daqui <strong>{caughtHere}/{data.here.species.length}</strong></p>
-        <ul class="species" aria-label="Espécies daqui">
-          {#each data.here.species as entry, index (entry.speciesId ?? `unknown-${index}`)}
-            <li class={entry.status} title={entry.displayName ?? 'Ainda não vista'}>
-              {#if entry.speciesId !== null}
-                <img src={showdownSrc(entry.speciesId, false)} alt={entry.displayName ?? ''} loading="lazy" />
-                {#if entry.status === 'caught'}<span class="tick" aria-label="capturada">✓</span>{/if}
-              {:else}
-                <span class="unknown" aria-label="Ainda não vista">?</span>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-        <button
-          type="button"
-          class="btn btn-primary search"
-          aria-busy={searching === here.slug}
-          disabled={pending || hasEncounter}
-          onclick={() => onSearch(here.slug)}
-        >
-          {searching === here.slug ? 'Procurando…' : 'Procurar no mato'}
-        </button>
-      {:else if here.kind === 'water'}
-        <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
-      {:else}
-        <p class="hint">Cidade: nada para procurar aqui por enquanto.</p>
-      {/if}
-      {#if message}<p class="alert" role="alert">{message}</p>{/if}
-    </section>
-
-    <section class="panel sheet ways" aria-label="Caminhos">
-      <h3>Caminhos</h3>
-      {#each here.links as link (link.to)}
-        {@const target = bySlug.get(link.to)}
-        {#if target}
+      {#if isHere}
+        <p class="blurb">{selected.blurb}</p>
+        {#if selected.kind === 'area'}
+          <div class="species-row">
+            <span class="count">{caughtHere}/{data.here.species.length}</span>
+            <ul class="species" aria-label="Espécies daqui">
+              {#each data.here.species as entry, index (entry.speciesId ?? `unknown-${index}`)}
+                <li class={entry.status} title={entry.displayName ?? 'Ainda não vista'}>
+                  {#if entry.speciesId !== null}
+                    <img src={showdownSrc(entry.speciesId, false)} alt={entry.displayName ?? ''} loading="lazy" />
+                    {#if entry.status === 'caught'}<span class="tick" aria-label="capturada">✓</span>{/if}
+                  {:else}
+                    <span class="unknown" aria-label="Ainda não vista">?</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
           <button
             type="button"
-            class="btn way"
-            disabled={pending || !link.open || hasEncounter}
-            aria-busy={traveling}
-            onclick={() => void travel(link.to)}
+            class="btn btn-primary"
+            aria-busy={searching === selected.slug}
+            disabled={pending || hasEncounter}
+            onclick={() => onSearch(selected.slug)}
           >
-            <span class="way-name">
-              → {target.name}
-              {#if kindLabel(target)}<small class="kind">{kindLabel(target)}</small>{/if}
-            </span>
-            {#if !link.open}
-              <small class="why">{link.reason}</small>
-            {:else if link.isNew}
-              <small class="new">novo</small>
-            {:else if target.speciesTotal > 0}
-              <small>{target.speciesCaught}/{target.speciesTotal}</small>
-            {/if}
+            {searching === selected.slug ? 'Procurando…' : 'Procurar no mato'}
           </button>
+        {:else if selected.kind === 'water'}
+          <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
+        {:else}
+          <p class="hint">Nada para procurar na cidade por enquanto. Toque num lugar do mapa.</p>
         {/if}
-      {/each}
-      {#if hasEncounter}<p class="hint">Termine o encontro antes de sair daqui.</p>{/if}
+      {:else}
+        <p class="blurb">{selected.blurb}</p>
+        {#if selected.speciesTotal > 0 && selected.visited}
+          <p class="hint">{selected.speciesCaught}/{selected.speciesTotal} espécies capturadas</p>
+        {/if}
+        {#if link?.open}
+          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
+            {traveling ? 'Indo…' : `Ir para ${selected.name}`}
+          </button>
+        {:else if link}
+          <p class="hint locked">{link.reason}</p>
+        {:else if !selected.open}
+          <p class="hint locked">{selected.reason}</p>
+        {:else}
+          <p class="hint">Longe daqui: vá pelos lugares vizinhos (ligados ao seu).</p>
+        {/if}
+      {/if}
+      {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
+      {#if message}<p class="alert" role="alert">{message}</p>{/if}
     </section>
-
-    {@render extras?.()}
   {:else}
     <section class="panel sheet">
       <p class="hint">{failed ? 'Sem conexão: o mapa abre quando voltar.' : 'Olhando o mapa…'}</p>
     </section>
   {/if}
-</div>
 
-<div class="dock">
-  <div class="pair">
-    <button type="button" class="btn" disabled={!data} onclick={() => (mapOpen = true)}>Mapa</button>
-    <button type="button" class="btn" onclick={onGarden}>Jardim</button>
+  <div class="dock">
+    <div class="pair">
+      <button type="button" class="btn" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}>Mais</button>
+      <button type="button" class="btn" onclick={onGarden}>Jardim</button>
+    </div>
   </div>
 </div>
 
-{#if mapOpen && data}
-  <PlaceMap
-    places={data.places}
-    current={data.current}
-    pending={pending || hasEncounter}
-    onTravel={(slug) => void travel(slug)}
-    onClose={() => (mapOpen = false)}
-  />
+{#if moreOpen}
+  <div class="more" role="dialog" aria-modal="true" aria-label="Mais">
+    <button type="button" class="more-dismiss" aria-label="Fechar" onclick={() => (moreOpen = false)}></button>
+    <div class="more-panel">
+      {@render extras?.()}
+      <button type="button" class="btn" onclick={() => (moreOpen = false)}>Fechar</button>
+    </div>
+  </div>
 {/if}
 
 <style>
-  /* Mesmo layout da exploração (o CSS da Explore é escopado). */
-  .scroll {
+  .journey {
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.45rem;
     min-height: 0;
-    overflow: auto;
-    padding-right: 10px;
-    scrollbar-gutter: stable;
   }
 
   .goal {
     display: grid;
-    gap: 0.3rem;
+    flex: none;
+    gap: 0.2rem;
+    padding: 0.35rem 0.55rem;
   }
 
   .goal p {
@@ -235,16 +237,22 @@
   }
 
   .goal-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
     font-weight: 700;
+    font-size: 0.95rem;
   }
 
-  .goal-meta {
-    font-size: 0.85rem;
-    color: var(--ink-soft);
+  .goal-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .bar {
-    height: 10px;
+    height: 8px;
     background: #00000022;
     box-shadow: inset 0 0 0 var(--px) #00000033;
   }
@@ -256,9 +264,35 @@
     box-shadow: inset 0 calc(var(--px) * -2) 0 var(--accent-shade);
   }
 
+  .map-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 96px;
+  }
+
+  .arrival {
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    max-width: calc(100% - 1rem);
+    margin: 0;
+    padding: 0.35rem 0.6rem;
+    transform: translateX(-50%);
+    background: var(--selected-face);
+    border: 2px solid var(--selected);
+    font-weight: 700;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+
   .place {
     display: grid;
-    gap: 0.45rem;
+    flex: none;
+    gap: 0.35rem;
   }
 
   .place-head {
@@ -269,42 +303,57 @@
   }
 
   .place-head h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
   }
 
-  .blurb,
-  .species-head {
-    margin: 0;
-  }
-
-  .blurb {
+  .kind {
     color: var(--ink-soft);
+    font-size: 0.8rem;
   }
 
-  .arrival {
+  /* Uma linha só: o mapa precisa do espaço no celular. */
+  .blurb {
     margin: 0;
-    padding: 0.35rem 0.5rem;
-    background: var(--selected-face);
-    border: 2px solid var(--selected);
+    overflow: hidden;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .species-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .count {
+    flex: none;
     font-weight: 700;
-    font-size: 0.9rem;
   }
 
   .species {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-    gap: 0.35rem;
+    display: flex;
+    gap: 0.3rem;
     margin: 0;
-    padding: 0;
+    padding: 0 0 2px;
+    overflow-x: auto;
     list-style: none;
+    scrollbar-width: thin;
   }
 
   .species li {
     position: relative;
     display: grid;
+    flex: none;
     place-items: center;
-    aspect-ratio: 1;
+    width: 38px;
+    height: 38px;
     border: 2px solid var(--panel-edge);
     background: var(--inlay-face);
     box-shadow: inset 0 2px 0 var(--inlay-shade);
@@ -327,59 +376,28 @@
     position: absolute;
     right: 2px;
     bottom: 0;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--primary);
   }
 
   .unknown {
-    font-size: 1.3rem;
     font-weight: 700;
     color: var(--ink-soft);
   }
 
-  .search {
+  .place .btn {
     width: 100%;
-  }
-
-  .ways {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .ways h3 {
-    margin: 0;
-    font-size: 1rem;
-  }
-
-  .way {
-    justify-content: space-between;
-    width: 100%;
-    text-align: left;
-  }
-
-  .way-name {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.4rem;
-  }
-
-  .kind,
-  .why {
-    color: var(--ink-soft);
-    font-size: 0.8rem;
-  }
-
-  .new {
-    padding: 1px 5px;
-    background: var(--primary);
-    color: #fff;
-    font-size: 0.75rem;
   }
 
   .hint {
     margin: 0;
     color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  .locked {
+    font-weight: 700;
   }
 
   .alert {
@@ -389,7 +407,6 @@
   .dock {
     display: grid;
     flex: none;
-    gap: 0.35rem;
   }
 
   .pair {
@@ -398,7 +415,39 @@
     gap: 0.35rem;
   }
 
-  .dock .btn {
+  .pair .btn {
+    width: 100%;
+  }
+
+  .more {
+    position: fixed;
+    z-index: 45;
+    inset: 0;
+    display: grid;
+    align-items: end;
+    padding: 0.5rem calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem)
+      calc(env(safe-area-inset-left) + 0.5rem);
+  }
+
+  .more-dismiss {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: #00000055;
+    cursor: default;
+  }
+
+  .more-panel {
+    position: relative;
+    display: grid;
+    gap: 0.45rem;
+    max-height: 80dvh;
+    overflow: auto;
+    justify-self: center;
+    width: min(100%, 520px);
+  }
+
+  .more-panel .btn {
     width: 100%;
   }
 </style>

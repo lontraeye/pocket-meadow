@@ -197,30 +197,29 @@ Cada parte é testada antes da próxima, como nas fases do `PLANNING.md`.
 4. **Tela principal = lugar atual + mapa num botão** (desenho abaixo).
 5. **Jardim e jornada são duas gameplays paralelas.** Ao tocar em Explorar, o jogador volta para o último lugar onde parou (não para New Bark nem para uma lista). O Jardim fica a um toque de qualquer lugar, como um teletransporte, e voltar a explorar retoma do mesmo ponto. Cuidar do jardim (berries, daycare, PC, futura felicidade) não depende de onde se está na jornada.
 
-### 11.1 A tela
+### 11.1 A tela (o mapa é a tela, revisto em 2026-10-29)
+
+A primeira versão (lugar + lista de caminhos + mapa num botão) ainda parecia menu. Agora a exploração é o próprio mapa:
 
 ```
 ┌──────────────────────────────┐
-│ Marco: Violet   ▓▓▓▓░░  4/6   │  ← sempre no topo; toca e abre o que falta
+│ Cap. 1 · New Bark → Violet 0/18│  ← objetivo numa linha, com barra
 ├──────────────────────────────┤
-│ ROTA 30               Nv 3–4  │
-│ Mato alto até a casa do       │  ← uma linha de texto por lugar (config)
-│ Mr. Pokémon.                  │
-│ Espécies daqui        4/9     │
-│ [Pidgey✓][Caterpie✓][ ? ][?]  │  ← capturada, vista (cinza), não vista (?)
-│ [     Procurar no mato     ]  │
-│ [  Pescar · precisa vara   ]  │  ← pontos de ferramenta (parte 4)
+│   [Cherrygrove]──(Rota 29)◉──[New Bark] │  ← mapa: toca para selecionar;
+│                              │     você desliza até o lugar novo
 ├──────────────────────────────┤
-│ Caminhos                      │
-│  ▲ Rota 31                    │
-│  ▼ Cherrygrove (cidade)       │
-│                    [ Mapa ]   │
+│ ROTA 29               Nv 2–3  │  ← painel do lugar selecionado
+│ Grama baixa e Pokémon tran…   │
+│ 0/5 [?][?][?][?][?]           │  ← só onde você está
+│ [     Procurar no mato     ]  │  ← ou "Ir para…", ou o motivo do bloqueio
+├──────────────────────────────┤
+│ [ Mais ]         [ Jardim ]   │  ← Mais: treino, efeitos, testes
 └──────────────────────────────┘
 ```
 
-- **Cidade** não tem mato. Mostra o que existe nela: o marco (ginásio) quando é a cidade do marco, e depois NPCs e missões (seção 8), loja e pesca na costa. Cidade sem nada por enquanto mostra só os caminhos.
-- **Mapa:** os lugares como pontos ligados por linhas, na geografia da região (posição em grade no config), com você marcado, os visitados cheios, os bloqueados apagados e o lugar do marco com uma bandeira. Tocar num vizinho viaja; com Voo, tocar numa cidade visitada também. Primeira versão desenhada em SVG pelo código; a arte do mapa fica com o usuário depois.
-- **Mobile:** a tela cabe em 360×640 sem rolar quando o lugar tem até 8 espécies; os caminhos ficam no dock, perto do polegar.
+- **Mapa:** os lugares na geografia, ligados por linhas. As ligações do lugar atual em azul; fechadas tracejadas; vizinho novo com um ponto amarelo; cidades com telhado. Abre centrado em você e acompanha a viagem. Desenho provisório em SVG; a arte fica com o usuário depois.
+- **Painel:** o lugar selecionado (no começo, onde você está). Onde você está: espécies e procurar. Vizinho aberto: "Ir para…". Fechado: o motivo. Longe: "vá pelos vizinhos".
+- **Mobile:** tudo cabe em 360×640 sem rolar; o mapa encolhe primeiro.
 
 ### 11.2 Feedbacks
 
