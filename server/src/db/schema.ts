@@ -139,6 +139,32 @@ export const trainers = sqliteTable('trainers', {
   updatedAt: integer('updated_at').notNull(),
 })
 
+/**
+ * Campo de encontro (PLANNING.md 5.14): os Pokémon andando no gramado de cada
+ * área, por jogador. Sorteados e salvos antes de aparecer (sem rerolar); quem
+ * é enfrentado sai e outro entra na vaga.
+ */
+export const fieldSpawns = sqliteTable(
+  'field_spawns',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    regionSlug: text('region_slug').notNull(),
+    slot: integer('slot').notNull(),
+    speciesId: integer('species_id')
+      .notNull()
+      .references(() => species.id),
+    level: integer('level').notNull(),
+    isShiny: integer('is_shiny', { mode: 'boolean' }).notNull().default(false),
+    /** Semente do encontro: o sorteio do selvagem saiu dela (replay da seção 7). */
+    rngSeed: integer('rng_seed').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('uq_field_spawns_slot').on(table.userId, table.regionSlug, table.slot)],
+)
+
 /** Marcos conquistados (JORNADA.md, seção 6): abrem capítulos e ferramentas. */
 export const trainerMilestones = sqliteTable(
   'trainer_milestones',

@@ -1,21 +1,27 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte'
-  import { api, errorText, type ApiError, type PlacesResponse, type PlaceView } from './api'
+  import { api, errorText, type ApiError, type FieldResponse, type PlacesResponse, type PlaceView } from './api'
   import { connection } from './connection.svelte'
+  import FieldView from './FieldView.svelte'
   import JourneyMap from './JourneyMap.svelte'
+  import TypeIcon from './TypeIcon.svelte'
+  import { typeColor, typeInk } from './typeStyle'
+  import { typeLabelPt } from './typesPt'
   import { play } from './sound'
   import { showdownSrc } from './sprites'
 
   /**
-   * Exploração como jornada (JORNADA.md, seção 11): o mapa é a tela. Tocar
-   * num lugar mostra ele no painel de baixo; onde você está, dá para procurar;
-   * num vizinho aberto, dá para ir. Volta sempre ao último lugar visitado.
+   * Exploração como jornada (JORNADA.md, seção 11). Numa rota, a tela é o
+   * campo de encontro: os Pokémon da área andando, e você escolhe quem
+   * enfrentar. Na cidade (ou pelo botão Mapa), é o mapa: tocar num lugar mostra
+   * ele no painel de baixo, e num vizinho aberto dá para ir. Volta sempre ao
+   * último lugar visitado.
    */
   let {
     busy,
     searching,
     hasEncounter,
-    onSearch,
+    onEngage,
     onGarden,
     extras,
   }: {
@@ -24,7 +30,8 @@
     /** Slug da área sendo procurada agora (texto no botão). */
     searching: string | null
     hasEncounter: boolean
-    onSearch: (regionSlug: string) => void
+    /** Enfrenta o Pokémon da vaga do campo. */
+    onEngage: (regionSlug: string, slot: number) => void
     onGarden: () => void
     /** Efeitos, treino de arremesso e testes: ficam no painel "Mais". */
     extras?: Snippet
@@ -38,6 +45,10 @@
   let picked = $state<string | null>(null)
   let moreOpen = $state(false)
   let arrivalTimer = 0
+  /** Numa rota: o campo (padrão) ou o mapa (para viajar). */
+  let view = $state<'field' | 'map'>('field')
+  let field = $state<FieldResponse | null>(null)
+  let spawnSlot = $state<number | null>(null)
 
   const bySlug = $derived(new Map((data?.places ?? []).map((place) => [place.slug, place])))
   const here = $derived(data ? (bySlug.get(data.current) ?? null) : null)
@@ -54,6 +65,32 @@
   let claiming = $state(false)
   let celebrate = $state('')
   const pending = $derived(busy || traveling)
+  const hasField = $derived(here !== null && here.kind === 'area' && here.open)
+  const showField = $derived(hasField && view === 'field')
+  const spawn = $derived(field?.spawns.find((entry) => entry.slot === spawnSlot) ?? null)
+
+  async function loadField() {
+    if (!hasField) {
+      field = null
+      return
+    }
+    try {
+      const response = await api('/api/field')
+      if (!response.ok) {
+        field = null
+        return
+      }
+      field = (await response.json()) as FieldResponse
+      if (spawnSlot !== null && !field.spawns.some((entry) => entry.slot === spawnSlot)) spawnSlot = null
+    } catch {
+      field = null
+    }
+  }
+
+  function engage() {
+    if (!spawn || !field || pending || hasEncounter) return
+    onEngage(field.regionSlug, spawn.slot)
+  }
 
   async function load() {
     try {
@@ -64,6 +101,7 @@
       }
       data = (await response.json()) as PlacesResponse
       failed = false
+      await loadField()
     } catch {
       failed = true
     }
@@ -138,6 +176,9 @@
         return
       }
       picked = null
+      spawnSlot = null
+      // Chegou numa rota: abre no campo.
+      view = 'field'
       await load()
       if (payload.firstVisit && target) {
         arrival =
@@ -185,7 +226,14 @@
       {/if}
     </div>
 
-    <div class="map-wrap">
+    {#if showField}
+      <div class="field-head">
+        <strong>{here.name}</strong>
+        {#if here.wildLevelRange}<small>Nv {here.wildLevelRange[0]}–{here.wildLevelRange[1]}</small>{/if}
+        <small class="field-count" title="Espécies daqui capturadas">{caughtHere}/{data.here.species.length} espécies</small>
+      </div>
+    {/if}
+    <div class="map-wrap" class:hidden={showField}>
       <JourneyMap
         places={data.places}
         current={data.current}
@@ -194,7 +242,7 @@
         onSelect={select}
         onActivate={activate}
       />
-      {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
+      {#if arrival && !showField}<p class="arrival" role="status">{arrival}</p>{/if}
       {#if celebrate}
         <button type="button" class="celebrate" onclick={() => (celebrate = '')}>
           <strong>{celebrate}</strong>
@@ -203,6 +251,45 @@
       {/if}
     </div>
 
+    {#if showField}
+      <div class="map-wrap">
+        {#if field}
+          <FieldView spawns={field.spawns} selected={spawnSlot} onSelect={(slot) => (spawnSlot = slot)} />
+        {:else}
+          <p class="hint field-wait">Olhando o mato…</p>
+        {/if}
+        {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
+      </div>
+      <section class="panel sheet place" aria-live="polite">
+        {#if spawn}
+          <div class="place-head">
+            <h2>
+              {spawn.displayName}
+              {#if spawn.isShiny}<small class="shiny">shiny ✦</small>{/if}
+            </h2>
+            <small>Nv {spawn.level}</small>
+          </div>
+          <div class="types">
+            {#each [spawn.type1, spawn.type2].filter((type): type is string => Boolean(type)) as type (type)}
+              <span class="type" style:--type={typeColor(type)} style:--type-ink={typeInk(type)}><TypeIcon {type} size={12} />{typeLabelPt(type)}</span>
+            {/each}
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary"
+            aria-busy={searching === field?.regionSlug}
+            disabled={pending || hasEncounter}
+            onclick={engage}
+          >
+            {searching === field?.regionSlug ? 'Indo…' : 'Batalhar'}
+          </button>
+        {:else}
+          <p class="hint">Toque num Pokémon do campo para ver e batalhar.</p>
+        {/if}
+        {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
+        {#if message}<p class="alert" role="alert">{message}</p>{/if}
+      </section>
+    {:else}
     <section class="panel sheet place" aria-live="polite">
       <div class="place-head">
         <h2>
@@ -230,15 +317,7 @@
               {/each}
             </ul>
           </div>
-          <button
-            type="button"
-            class="btn btn-primary"
-            aria-busy={searching === selected.slug}
-            disabled={pending || hasEncounter}
-            onclick={() => onSearch(selected.slug)}
-          >
-            {searching === selected.slug ? 'Procurando…' : 'Procurar no mato'}
-          </button>
+          <button type="button" class="btn btn-primary" onclick={() => (view = 'field')}>Abrir o campo</button>
         {:else if selected.kind === 'water'}
           <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
         {:else}
@@ -268,6 +347,7 @@
       {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
       {#if message}<p class="alert" role="alert">{message}</p>{/if}
     </section>
+    {/if}
   {:else}
     <section class="panel sheet">
       <p class="hint">{failed ? 'Sem conexão: o mapa abre quando voltar.' : 'Olhando o mapa…'}</p>
@@ -275,7 +355,12 @@
   {/if}
 
   <div class="dock">
-    <div class="pair">
+    <div class="pair" class:three={hasField}>
+      {#if hasField}
+        <button type="button" class="btn" onclick={() => (view = view === 'field' ? 'map' : 'field')}>
+          {view === 'field' ? 'Mapa' : 'Campo'}
+        </button>
+      {/if}
       <button type="button" class="btn" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}>Mais</button>
       <button type="button" class="btn" onclick={onGarden}>Jardim</button>
     </div>
@@ -547,6 +632,56 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.35rem;
+  }
+
+  .pair.three {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .map-wrap.hidden {
+    display: none;
+  }
+
+  .field-head {
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0 0.15rem;
+  }
+
+  .field-head strong {
+    font-size: 1.15rem;
+  }
+
+  .field-count {
+    margin-left: auto;
+    color: var(--ink-soft);
+  }
+
+  .field-wait {
+    margin: auto;
+  }
+
+  .shiny {
+    color: var(--accent-shade);
+    font-size: 0.8rem;
+  }
+
+  .types {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 2px 6px;
+    background: var(--type);
+    color: var(--type-ink);
+    font-size: 0.75rem;
+    font-weight: 700;
   }
 
   .pair .btn {

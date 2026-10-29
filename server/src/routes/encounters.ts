@@ -202,7 +202,19 @@ encounterRoutes.post('/:id/release', requireUser, (c) => {
 /** Só para a rota de teste (/dev/encounter): fixa espécie, nível e shiny no lugar do sorteio. */
 export type ForcedWild = { speciesId: number; level: number; isShiny: boolean }
 
-export function createEncounter(userId: number, region: Region, now: number, forced?: ForcedWild) {
+/**
+ * Opções do campo de encontro: a semente já sorteada com o Pokémon do
+ * gramado (o replay continua batendo) e o "visto", que já contou ao aparecer.
+ */
+export type EncounterOptions = { rngSeed?: number; countSeen?: boolean }
+
+export function createEncounter(
+  userId: number,
+  region: Region,
+  now: number,
+  forced?: ForcedWild,
+  options: EncounterOptions = {},
+) {
   const clock = persistCatchUp(userId, now)
   if (!regionOpen(region, loadProgress(userId, clock.level))) return fail('region_locked', 400)
   const db = getDb()
@@ -216,7 +228,7 @@ export function createEncounter(userId: number, region: Region, now: number, for
 
   const shinyBonus = takeBonus(userId, 'shiny_boost')
   const rareBonus = takeBonus(userId, 'rare_boost')
-  const rngSeed = randomSeed()
+  const rngSeed = options.rngSeed ?? randomSeed()
   const rng = mulberry32(rngSeed)
   const wild =
     forced ??
@@ -269,20 +281,7 @@ export function createEncounter(userId: number, region: Region, now: number, for
     .where(eq(trainers.userId, userId))
     .run()
 
-  db.insert(pokedexEntries)
-    .values({
-      userId,
-      speciesId: spec.id,
-      seenCount: 1,
-      caughtCount: 0,
-      firstSeenAt: now,
-      shinyCaught: false,
-    })
-    .onConflictDoUpdate({
-      target: [pokedexEntries.userId, pokedexEntries.speciesId],
-      set: { seenCount: sql`${pokedexEntries.seenCount} + 1` },
-    })
-    .run()
+  if (options.countSeen !== false) markSeen(userId, spec.id, now)
 
   return {
     ok: true as const,
@@ -1043,7 +1042,26 @@ function throwBall(
 }
 
 /** Lê o multiplicador sem consumir cargas (tela de decisão). */
-function peekBonus(userId: number, effectKey: string): number {
+/** Pokédex: a espécie foi vista (no encontro, ou ao aparecer no campo). */
+export function markSeen(userId: number, speciesId: number, now: number): void {
+  getDb()
+    .insert(pokedexEntries)
+    .values({
+      userId,
+      speciesId,
+      seenCount: 1,
+      caughtCount: 0,
+      firstSeenAt: now,
+      shinyCaught: false,
+    })
+    .onConflictDoUpdate({
+      target: [pokedexEntries.userId, pokedexEntries.speciesId],
+      set: { seenCount: sql`${pokedexEntries.seenCount} + 1` },
+    })
+    .run()
+}
+
+export function peekBonus(userId: number, effectKey: string): number {
   const rows = getDb()
     .select()
     .from(activeEffects)

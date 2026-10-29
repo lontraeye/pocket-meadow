@@ -141,6 +141,13 @@
       "when": 1793320000000,
       "tag": "0019_milestones",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793330000000,
+      "tag": "0020_field_spawns",
+      "breakpoints": true
     }
   ]
 }

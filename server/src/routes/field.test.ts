@@ -1,0 +1,125 @@
+import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { after, before, test } from 'node:test'
+import { Hono } from 'hono'
+import { createPlayer } from '../auth/accounts.js'
+import { hashToken } from '../auth/session.js'
+import { authConfig } from '../config/auth.js'
+import { battleConfig } from '../config/battle.js'
+import { regionBySlug } from '../config/regions.js'
+import { getDb, getSqlite, immediate } from '../db/client.js'
+import { migrateDatabase } from '../db/migrate.js'
+import { sessions } from '../db/schema.js'
+import { rollWild } from '../game/battle.js'
+import { mulberry32 } from '../game/rng.js'
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pocket-meadow-field-'))
+process.env.DATABASE_PATH = path.join(dir, 'meadow.sqlite')
+const { fieldRoutes } = await import('./field.js')
+const { placeRoutes } = await import('./places.js')
+
+const app = new Hono().route('/field', fieldRoutes).route('/places', placeRoutes)
+const env = { incoming: { socket: { remoteAddress: '203.0.113.7', remotePort: 1, remoteFamily: 'IPv4' } } }
+
+type Spawn = { id: number; slot: number; speciesId: number; level: number; isShiny: boolean; displayName: string }
+
+function player(username: string): { cookie: string; userId: number } {
+  const now = Date.now()
+  const token = randomBytes(32).toString('base64url')
+  const userId = immediate(() => {
+    const created = createPlayer({ username, googleSub: null, starter: 'chikorita', now })
+    getDb()
+      .insert(sessions)
+      .values({ id: hashToken(token), userId: created.userId, createdAt: now, expiresAt: now + authConfig.sessionTtlMs })
+      .run()
+    return created.userId
+  })
+  return { cookie: `${authConfig.cookieName}=${token}`, userId }
+}
+
+const post = (url: string, cookie: string, body: unknown = {}) =>
+  app.request(url, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) }, env)
+const field = (cookie: string) => app.request('/field', { headers: { cookie } }, env)
+const spawnsOf = async (cookie: string) => ((await (await field(cookie)).json()) as { spawns: Spawn[] }).spawns
+const errorOf = async (response: Response) => ((await response.json()) as { error: string }).error
+
+before(() => migrateDatabase())
+after(() => {
+  getSqlite().close()
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('cidade não tem campo; na rota aparecem 4 da área, já vistos, e o campo fica salvo', async () => {
+  const { cookie, userId } = player('ethan')
+  assert.equal(await errorOf(await field(cookie)), 'no_field_here')
+
+  await post('/places/travel', cookie, { to: 'route-29' })
+  const spawns = await spawnsOf(cookie)
+  assert.equal(spawns.length, battleConfig.fieldSize)
+  assert.deepEqual(
+    spawns.map((spawn) => spawn.slot),
+    [0, 1, 2, 3],
+  )
+  const region = regionBySlug('route-29')!
+  for (const spawn of spawns) {
+    const slot = region.slots.find((entry) => entry.speciesId === spawn.speciesId)
+    assert.ok(slot, `${spawn.speciesId} não é da Rota 29`)
+    assert.ok(region.slots.some((entry) => entry.speciesId === spawn.speciesId && spawn.level >= entry.minLevel && spawn.level <= entry.maxLevel))
+  }
+  const seen = getSqlite()
+    .prepare(`select species_id from pokedex_entries where user_id = ? and seen_count > 0`)
+    .all(userId) as { species_id: number }[]
+  for (const spawn of spawns) assert.ok(seen.some((row) => row.species_id === spawn.speciesId))
+
+  // Sair e voltar: os mesmos.
+  await post('/places/travel', cookie, { to: 'new-bark' })
+  await post('/places/travel', cookie, { to: 'route-29' })
+  assert.deepEqual(
+    (await spawnsOf(cookie)).map((spawn) => spawn.id),
+    spawns.map((spawn) => spawn.id),
+  )
+})
+
+test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e repõe a vaga', async () => {
+  const { cookie } = player('kris')
+  await post('/places/travel', cookie, { to: 'route-29' })
+  const before = await spawnsOf(cookie)
+  const target = before[1]!
+
+  const engaged = await post('/field/1/engage', cookie)
+  assert.equal(engaged.status, 201)
+  const encounter = (await engaged.json()) as { id: number; speciesId: number; level: number; isShiny: boolean }
+  assert.equal(encounter.speciesId, target.speciesId)
+  assert.equal(encounter.level, target.level)
+
+  const after = await spawnsOf(cookie)
+  assert.equal(after.length, battleConfig.fieldSize)
+  assert.notEqual(after.find((spawn) => spawn.slot === 1)?.id, target.id)
+  assert.deepEqual(
+    after.filter((spawn) => spawn.slot !== 1).map((spawn) => spawn.id),
+    before.filter((spawn) => spawn.slot !== 1).map((spawn) => spawn.id),
+  )
+
+  // Replay (seção 7): a semente do encontro sorteia o mesmo selvagem.
+  const row = getSqlite().prepare(`select rng_seed from encounters where id = ?`).get(encounter.id) as { rng_seed: number }
+  const replay = rollWild(mulberry32(row.rng_seed), { slots: regionBySlug('route-29')!.slots, shinyRate: battleConfig.shinyRate })
+  assert.equal(replay.speciesId, target.speciesId)
+  assert.equal(replay.level, target.level)
+
+  // Com encontro pendente, não dá para enfrentar outro (e a vaga não é gasta).
+  const other = after.find((spawn) => spawn.slot === 2)!
+  assert.equal(await errorOf(await post('/field/2/engage', cookie)), 'encounter_pending')
+  assert.equal((await spawnsOf(cookie)).find((spawn) => spawn.slot === 2)?.id, other.id)
+})
+
+test('vaga inexistente e área fechada são recusadas', async () => {
+  const { cookie, userId } = player('silver')
+  await post('/places/travel', cookie, { to: 'route-29' })
+  assert.equal(await errorOf(await post('/field/9/engage', cookie)), 'spawn_not_found')
+  // Lugar salvo numa área de capítulo fechado (ex.: veio de um config antigo).
+  getSqlite().prepare(`update trainers set current_place = 'route-32' where user_id = ?`).run(userId)
+  assert.equal(await errorOf(await field(cookie)), 'region_locked')
+})

@@ -85,6 +85,20 @@ export type PlaceView = {
   links: { to: string; open: boolean; reason: string | null; isNew: boolean }[]
 }
 
+/** Pokémon andando no campo de encontro (GET /field). */
+export type FieldSpawn = {
+  id: number
+  slot: number
+  speciesId: number
+  level: number
+  isShiny: boolean
+  displayName: string
+  type1: string
+  type2: string | null
+}
+
+export type FieldResponse = { regionSlug: string; spawns: FieldSpawn[] }
+
 export type PlacesResponse = {
   current: string
   trainerLevel: number
@@ -441,6 +455,10 @@ export function errorText(error: ApiError): string {
       return 'Esse lugar fica longe daqui: vá pelos vizinhos.'
     case 'place_not_found':
       return 'Esse lugar não existe.'
+    case 'no_field_here':
+      return 'Aqui não tem mato para procurar.'
+    case 'spawn_not_found':
+      return 'Esse Pokémon já saiu do campo.'
     case 'milestone_not_here':
       return 'O marco é na cidade dele. Vá até lá.'
     case 'milestone_level':

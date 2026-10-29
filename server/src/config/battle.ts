@@ -7,6 +7,8 @@ export const BATTLE_XP_DIV = 5
 export const BATTLE_XP_LEVEL_EXP = 2.5
 
 export const battleConfig = {
+  /** Pokémon andando no campo de encontro de cada área (PLANNING.md 5.14). */
+  fieldSize: 4,
   shinyRate: 1 / 512,
   encounterTtlMs: 30 * 60 * 1000,
   /** Prazo para decidir a captura depois da vitória (8.4). */

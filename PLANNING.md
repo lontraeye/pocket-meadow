@@ -910,7 +910,11 @@ Antes de decidir:
 - Como fica `winChance` (seção 5.5): vira resultado da simulação ou continua como base para equilibrar.
 - A ordem do PRNG (seção 7) passa a ter um número variável de rolagens na batalha. A captura teria que vir de um ponto fixo, por exemplo um segundo PRNG derivado da seed, para o replay continuar simples.
 
-### 5.14 Campo de encontro com escolha (ideia, ainda sem fase)
+### 5.14 Campo de encontro com escolha (feito em 2026-10-29)
+
+**Como ficou:** ao entrar numa rota, a exploração abre direto no campo (nas cidades fica o mapa). O campo é **vivo**: `battleConfig.fieldSize` (4) Pokémon da área andando num gramado, com os sprites PMD do jardim. Tocar num mostra espécie, nível e tipos, e "Batalhar" cria o encontro com ele. Quem é enfrentado sai e outro entra na vaga. O campo fica salvo por jogador e por área (`field_spawns`, migração `0020`): sair e voltar mostra os mesmos, sem rerolar. Cada Pokémon é sorteado com a tabela da área (raridade decide quem aparece; escolher é livre) e já **conta como visto** ao aparecer. A semente de cada um vai para o encontro, então o replay da seção 7 continua batendo. Razz e Lum valem no sorteio do campo (lidos sem gastar) e a carga é gasta quando o encontro começa. Rotas: `GET /field` (o campo do lugar atual) e `POST /field/:slot/engage`. Tela: `FieldView.svelte` dentro do `Journey.svelte`; o dock tem Mapa, Mais e Jardim.
+
+Ideia original, para referência:
 Hoje, gastar 1 de energia dá exatamente um Pokémon. A ideia é gastar a energia e abrir um **mini gramado gerado na hora**, com 3 ou 4 Pokémon da região andando nele. O jogador toca no que interessa e esse vira o encontro. Exemplo: aparecem Pidgey e Rattata. Mesmo que o Pidgey seja mais raro ali, quem não gosta dele pode escolher o Rattata.
 
 - Os candidatos saem do mesmo sorteio da seção 5.3, um após o outro, com a seed do encontro. A raridade continua valendo: ela decide o que aparece no campo, não o que o jogador escolhe.

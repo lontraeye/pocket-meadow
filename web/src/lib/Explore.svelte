@@ -966,7 +966,7 @@
       busy={pending}
       {searching}
       hasEncounter={game.encounter !== null}
-      onSearch={(slug) => search(slug)}
+      onEngage={(slug, slot) => search(slug, () => api(`/api/field/${slot}/engage`, {}))}
       onGarden={onClose}
     >
       {#snippet extras()}
