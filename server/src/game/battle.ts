@@ -60,9 +60,24 @@ export function battleXp(baseExperience: number, wildLevel: number, fighterLevel
   return Math.floor(raw) + 1
 }
 
-export function fighterXp(baseExperience: number, wildLevel: number, fighterLevel: number, teamSize: number): number {
-  if (teamSize < 1) throw new Error('team size must be >= 1')
-  return Math.floor(battleXp(baseExperience, wildLevel, fighterLevel) / teamSize)
+/** Divide o XP pelo número de quem recebe (entrou e não desmaiou). Exp Share (futuro) muda o conjunto. */
+export function fighterXp(
+  baseExperience: number,
+  wildLevel: number,
+  fighterLevel: number,
+  sharerCount: number,
+): number {
+  if (sharerCount < 1) throw new Error('sharer count must be >= 1')
+  return Math.floor(battleXp(baseExperience, wildLevel, fighterLevel) / sharerCount)
+}
+
+/**
+ * Quem recebe XP/EVs na vitória: entrou em campo e terminou de pé.
+ * Quem ficou na pokébola ou desmaiou não entra. Exp Share (item futuro) amplia isso.
+ */
+export function battleXpSharers(enteredSlots: readonly number[], faintedSlots: readonly number[]): number[] {
+  const fainted = new Set(faintedSlots)
+  return [...enteredSlots].filter((slot) => !fainted.has(slot)).sort((a, b) => a - b)
 }
 
 // Raro = espécie cuja soma dos slots fica até RARE_WEIGHT_MAX. A soma é por

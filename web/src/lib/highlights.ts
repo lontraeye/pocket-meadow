@@ -43,10 +43,8 @@ export function battleHighlightCards(input: {
   nameOf: (pokemonId: number) => string
   canEvolve: (fighter: BattleOutcome['fighters'][number]) => boolean
   regions: RegionInfo[]
-  berries: BerryInfo[]
-  balls?: BallInfo[]
 }): HighlightCard[] {
-  const { battle, nameOf, canEvolve, regions, berries, balls } = input
+  const { battle, nameOf, canEvolve, regions } = input
   const cards: HighlightCard[] = []
 
   if (!battle.won) {
@@ -57,20 +55,10 @@ export function battleHighlightCards(input: {
     cards.push(captureHighlightCard('escaped'))
   }
 
+  // XP já aparece na luta (barra azul). Aqui só novidades: golpe novo / pode evoluir.
   for (const fighter of battle.fighters) {
     if (fighter.xpGained <= 0 && fighter.levelsGained <= 0) continue
     const name = nameOf(fighter.pokemonId)
-    const detail =
-      fighter.levelsGained > 0
-        ? `+${fighter.xpGained} XP · subiu para Nv ${fighter.level}`
-        : `+${fighter.xpGained} XP`
-    cards.push({
-      id: `xp-${fighter.pokemonId}`,
-      title: name,
-      detail,
-      tone: 'good',
-      ...(fighter.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
-    })
     if (fighter.learnedMove) cards.push(learnedMoveCard(name, fighter.learnedMove))
     if (canEvolve(fighter)) {
       cards.push({
@@ -81,18 +69,8 @@ export function battleHighlightCards(input: {
     }
   }
 
+  // Semente / itens de nível já passam no painel da luta; aqui só XP de treinador e regiões.
   cards.push(...trainerCards(battle.trainer, battle.trainerXpGained, regions))
-
-  if (battle.seedDrop) {
-    cards.push({
-      id: 'seed',
-      title: 'Semente ganha',
-      detail: itemLabel(battle.seedDrop.itemKey, berries),
-      iconSrc: berryIconSrc(battle.seedDrop.berryKey),
-      tone: 'good',
-    })
-  }
-  cards.push(...rewardCards(battle.levelRewards ?? [], berries, balls))
 
   return cards
 }

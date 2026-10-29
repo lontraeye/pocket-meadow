@@ -229,6 +229,17 @@
     return { x: 0, y: -lift, drift: 1 }
   }
 
+  /** Y do nome: logo acima do topo do quadro Idle (px a partir do chão). */
+  function tagAnchorY(walker: Walker, look: GardenLook): number {
+    const gap = Math.max(4, 4 * scale)
+    if (look.kind === 'pmd') {
+      const sheet = look.anims.Idle
+      const ground = groundAt(sheet, walker.dir, 0)
+      return -(ground.y * pmdScale + gap)
+    }
+    return -(showdownSize * scale + gap)
+  }
+
   function inPlay(col: number, row: number): boolean {
     return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
   }
@@ -254,6 +265,7 @@
     id: number
     speciesId: number
     displayName: string
+    level: number
     isShiny: boolean
     col: number
     row: number
@@ -458,6 +470,8 @@
 
   // O zoom escolhido fica no aparelho, como o volume: volta igual depois do F5.
   const zoomKey = 'pm-garden-zoom'
+  /** Nomes/níveis sobre os Pokémon: ligado por padrão; o olho guarda a escolha. */
+  const labelsKey = 'pm-garden-labels'
 
   function loadZoom(): number | null {
     try {
@@ -474,6 +488,32 @@
     } catch {
       // Sem armazenamento (aba anônima, bloqueado): só não lembra.
     }
+  }
+
+  function loadLabels(): boolean {
+    try {
+      const value = localStorage.getItem(labelsKey)
+      if (value === '0') return false
+      if (value === '1') return true
+    } catch {
+      /* sem storage */
+    }
+    return true
+  }
+
+  function saveLabels(on: boolean) {
+    try {
+      localStorage.setItem(labelsKey, on ? '1' : '0')
+    } catch {
+      /* sem storage */
+    }
+  }
+
+  let showLabels = $state(loadLabels())
+
+  function toggleLabels() {
+    showLabels = !showLabels
+    saveLabels(showLabels)
   }
 
   /** Ponto do evento em px do gramado. */
@@ -678,6 +718,7 @@
         id: mon.id,
         speciesId: mon.speciesId,
         displayName: mon.nickname ?? mon.displayName,
+        level: mon.level,
         isShiny: mon.isShiny,
         col: spot.col,
         row: spot.row,
@@ -1054,10 +1095,15 @@
           style:top="{spot.y + halfH}px"
           style:--size="{showdownSize * scale}px"
           style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
-          aria-label={walker.displayName}
+          aria-label={`${walker.displayName}, nível ${walker.level}`}
           data-walker={walker.id}
           onclick={(event) => pickMon(event, walker)}
         >
+          {#if showLabels}
+            <span class="mon-tag" style:top="{tagAnchorY(walker, look)}px" aria-hidden="true">
+              {walker.displayName} Lv {walker.level}
+            </span>
+          {/if}
           {#if look.kind === 'pmd'}
             <PmdSprite
               speciesId={walker.speciesId}
@@ -1099,6 +1145,31 @@
 
     <!-- Zoom: + e − com a barrinha do nível no meio (tocar nela também escolhe). -->
     <div class="zoom" role="group" aria-label="Zoom">
+      <button
+        type="button"
+        class="zoom-btn"
+        aria-pressed={showLabels}
+        aria-label={showLabels ? 'Ocultar nomes e níveis' : 'Mostrar nomes e níveis'}
+        title={showLabels ? 'Ocultar nomes' : 'Mostrar nomes'}
+        onclick={toggleLabels}
+      >
+        <!-- Olho em pixels (grade 12×12), retângulos como o +/−. -->
+        <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true" shape-rendering="crispEdges">
+          {#if showLabels}
+            <rect x="3" y="3" width="6" height="1" />
+            <rect x="2" y="4" width="1" height="1" /><rect x="9" y="4" width="1" height="1" />
+            <rect x="1" y="5" width="1" height="2" /><rect x="10" y="5" width="1" height="2" />
+            <rect x="2" y="7" width="1" height="1" /><rect x="9" y="7" width="1" height="1" />
+            <rect x="3" y="8" width="6" height="1" />
+            <rect x="5" y="5" width="2" height="2" />
+          {:else}
+            <rect x="1" y="5" width="10" height="1" />
+            <rect x="2" y="2" width="1" height="1" /><rect x="3" y="3" width="1" height="1" />
+            <rect x="4" y="4" width="1" height="1" /><rect x="7" y="6" width="1" height="1" />
+            <rect x="8" y="7" width="1" height="1" /><rect x="9" y="8" width="1" height="1" />
+          {/if}
+        </svg>
+      </button>
       <button
         type="button"
         class="zoom-btn"
@@ -1433,6 +1504,31 @@
 
   .mon:focus-visible {
     outline: none;
+  }
+
+  /* Nome + nível numa linha: branco com contorno preto (lê no claro e no escuro).
+     Sem overflow:hidden — senão a borda do text-shadow corta nas laterais. */
+  .mon-tag {
+    position: absolute;
+    left: 0;
+    z-index: 2;
+    transform: translate(-50%, -100%);
+    padding: 0.05rem 0.12rem;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.25;
+    white-space: nowrap;
+    text-shadow:
+      0 var(--px) 0 #000,
+      0 calc(var(--px) * -1) 0 #000,
+      var(--px) 0 0 #000,
+      calc(var(--px) * -1) 0 0 #000,
+      var(--px) var(--px) 0 #000,
+      calc(var(--px) * -1) var(--px) 0 #000,
+      var(--px) calc(var(--px) * -1) 0 #000,
+      calc(var(--px) * -1) calc(var(--px) * -1) 0 #000;
+    pointer-events: none;
   }
 
   /* Só o fallback do Showdown; a sombra do PMD fica no PmdSprite. */

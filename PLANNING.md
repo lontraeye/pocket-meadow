@@ -417,16 +417,16 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   ```
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
 - **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
-- **Vitória**: cada Pokémon que lutou ganha XP pela fórmula abaixo, **dividido pelo tamanho do time**. O treinador ganha XP normalmente, e o encontro segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
+- **Vitória**: só quem **entrou em campo e não desmaiou** ganha XP (e EVs). Quem ficou na pokébola não conta. O XP é **dividido entre esses**. O treinador ganha XP normalmente, e o encontro segue para a captura. Mandar gente a mais só custa XP se ela entrar de fato; lutar só com um deixa o XP inteiro nele. **Exp Share** (item) fica para depois e deve ampliar quem recebe sem exigir entrada.
 - **XP de batalha**, igual aos jogos a partir da Geração 5. O BST decide a luta (poder, acima), e o `base_experience` decide a recompensa:
   ```
   b  = base_experience do selvagem (PokéAPI)
   L  = nível do selvagem
-  Lp = nível de quem lutou (calculado para cada Pokémon do time)
+  Lp = nível de quem recebe (cada um que entrou e não desmaiou)
   xp = floor( (b * L / BATTLE_XP_DIV) * ((2L + 10) / (L + Lp + 10)) ^ BATTLE_XP_LEVEL_EXP ) + 1
-  ganho = floor(xp / tamanho do time)                 // BATTLE_XP_DIV inicial: 5; BATTLE_XP_LEVEL_EXP: 2.5
+  ganho = floor(xp / N)   // N = quantos recebem; BATTLE_XP_DIV inicial: 5; BATTLE_XP_LEVEL_EXP: 2.5
   ```
-  O fator de nível dá mais XP por vencer alguém mais forte e quase nada por vencer alguém bem mais fraco. No time, o Pokémon de nível mais baixo ganha mais, o que ajuda a puxar quem ficou para trás. Exemplos com os valores iniciais:
+  O fator de nível dá mais XP por vencer alguém mais forte e quase nada por vencer alguém bem mais fraco. No time, o Pokémon de nível mais baixo ganha mais, o que ajuda a puxar quem ficou para trás. Exemplos com os valores iniciais (N = 1):
 
   | Selvagem | Quem venceu | XP | O nível pede |
   |---|---|---|---|

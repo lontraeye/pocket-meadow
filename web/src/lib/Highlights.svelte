@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { HighlightCard } from './highlights'
+  import Modal from './Modal.svelte'
   import { play } from './sound'
 
   let {
@@ -51,19 +52,21 @@
 </script>
 
 {#if current}
-  <button type="button" class="stack" onclick={advance} aria-label="Próximo destaque">
-    <div class="card" class:good={current.tone === 'good'} class:bad={current.tone === 'bad'}>
-      {#if current.iconSrc}
-        <img src={current.iconSrc} alt="" width="36" height="36" />
-      {/if}
-      <strong>{current.title}</strong>
-      {#if current.detail}<span>{current.detail}</span>{/if}
-    </div>
-    <small class="hint">{last ? 'Toque para continuar' : `${index + 1}/${cards.length} · toque`}</small>
-  </button>
-  {#if !last}
-    <button type="button" class="btn-link skip" onclick={skipAll}>Pular destaques</button>
-  {/if}
+  <Modal label="Destaque" onBackdrop={advance}>
+    <button type="button" class="stack" onclick={advance} aria-label="Próximo destaque">
+      <div class="card" class:good={current.tone === 'good'} class:bad={current.tone === 'bad'}>
+        {#if current.iconSrc}
+          <img src={current.iconSrc} alt="" width="36" height="36" />
+        {/if}
+        <strong>{current.title}</strong>
+        {#if current.detail}<span>{current.detail}</span>{/if}
+      </div>
+      <small class="hint">{last ? 'Toque para continuar' : `${index + 1}/${cards.length} · toque`}</small>
+    </button>
+    {#if !last}
+      <button type="button" class="btn-link skip" onclick={skipAll}>Pular destaques</button>
+    {/if}
+  </Modal>
 {/if}
 
 <style>
@@ -71,7 +74,6 @@
     display: grid;
     gap: 0.4rem;
     width: 100%;
-    min-height: 88px;
     margin: 0;
     padding: 0;
     border: 0;
@@ -121,7 +123,10 @@
   }
 
   .skip {
-    justify-self: center;
+    display: grid;
+    place-items: center;
+    width: 100%;
     min-height: 44px;
+    margin-top: 0.35rem;
   }
 </style>
