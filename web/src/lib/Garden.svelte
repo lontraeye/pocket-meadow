@@ -1380,10 +1380,9 @@
     bottom: calc(4.1rem + env(safe-area-inset-bottom));
     display: grid;
     justify-items: center;
-    gap: 0.15rem;
-    padding: 0.2rem;
-    background: #1d1a1466;
-    box-shadow: inset 0 0 0 var(--px) #ffffff22;
+    gap: 0.25rem;
+    padding: 0;
+    background: none;
     pointer-events: auto;
     cursor: default;
   }
@@ -1391,8 +1390,9 @@
   .zoom-btn {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 0;
     background: none;
@@ -1403,7 +1403,7 @@
 
   .zoom-btn svg {
     fill: currentColor;
-    filter: drop-shadow(0 var(--px) 0 #0006);
+    filter: drop-shadow(0 1px 0 #000);
   }
 
   .zoom-btn:disabled {
@@ -1417,11 +1417,12 @@
     outline-offset: 1px;
   }
 
-  /* Área de toque larga; a barrinha visível é o ::before, fina, no meio. */
+  /* Área de toque; a barrinha visível é o ::before, fina, no meio. */
   .zoom-track {
     position: relative;
-    width: 44px;
-    height: 64px;
+    box-sizing: border-box;
+    width: 32px;
+    height: 48px;
     padding: 0;
     border: 0;
     background: none;
@@ -1432,18 +1433,19 @@
   .zoom-track::before {
     content: '';
     position: absolute;
-    left: calc(50% - 2px);
-    top: 0;
-    bottom: 0;
-    width: 4px;
+    left: calc(50% - 1px);
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
     background: #ffffff40;
   }
 
   .zoom-fill {
     position: absolute;
-    left: calc(50% - 2px);
-    bottom: 0;
-    width: 4px;
+    left: calc(50% - 1px);
+    bottom: 3px;
+    width: 2px;
+    max-height: calc(100% - 6px);
     background: #fff;
     transition: height 0.12s steps(3, end);
   }

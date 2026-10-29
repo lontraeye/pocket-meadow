@@ -385,21 +385,6 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
   const wild = loadWildSpecies(encounter.row.speciesId)
   const team = loadRewardTeamFromSetup(userId, setup)
 
-  if (abandoned) {
-    return applyBattleOutcome({
-      userId,
-      clock,
-      encounter: encounter.row,
-      team,
-      wild,
-      won: false,
-      enteredSlots: [],
-      faintedSlots: [],
-      now,
-      log: [{ t: 0, kind: 'end', result: 'lose' }],
-    })
-  }
-
   let result: BattleResult
   try {
     result = runManualEncounterBattle(setup, encounter.row.rngSeed, inputs)
@@ -415,23 +400,41 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
     throw error
   }
 
+  // Desmaio (win/lose) vale mesmo se o relógio de parede já passou do limite:
+  // senão um finish atrasado (linger / rede) transformava vitória em derrota.
+  const decidedByFaint = result.result === 'win' || result.result === 'lose'
+  if (abandoned && !decidedByFaint) {
+    return applyBattleOutcome({
+      userId,
+      clock,
+      encounter: encounter.row,
+      team,
+      wild,
+      won: false,
+      enteredSlots: result.enteredSlots,
+      faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+      now,
+      log: result.log.length > 0 ? result.log : [{ t: 0, kind: 'end', result: 'lose' }],
+    })
+  }
+
   const elapsed = now - startedAt
-  if (isFinishTooEarly(elapsed, result.durationMs)) {
+  if (!abandoned && isFinishTooEarly(elapsed, result.durationMs)) {
     return fail('finish_too_early', 400)
   }
 
-      return applyBattleOutcome({
-        userId,
-        clock,
-        encounter: encounter.row,
-        team,
-        wild,
-        won: result.result === 'win',
-        enteredSlots: result.enteredSlots,
-        faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
-        now,
-        log: result.log,
-      })
+  return applyBattleOutcome({
+    userId,
+    clock,
+    encounter: encounter.row,
+    team,
+    wild,
+    won: result.result === 'win',
+    enteredSlots: result.enteredSlots,
+    faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+    now,
+    log: result.log,
+  })
 }
 
 type RewardTeamRow = TeamBattleRow & { slot: number }

@@ -792,6 +792,14 @@ Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só vis
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
 - Canteiros de berry ocupam um bloco da grade.
 
+#### Clima no jardim (futuro, anotado em 2026-10-29)
+Vão existir **diferentes climas** no jardim (sol, chuva, nuvem, etc. — lista a fechar). Cada clima:
+- muda o visual do gramado / céu;
+- dá **bônus diferentes para Pokémon** (ex.: XP no jardim/daycare, humor, tipos favorecidos);
+- dá **bônus diferentes para plantas** (ex.: crescimento mais rápido, yield, chance de semente).
+
+Ainda sem fase nem schema. Quando entrar: estado de clima no servidor (timestamp / rotação), efeito em config por clima, e o jardim só espelha. Não confundir com o **clima no combate** (5.18), que é outra ideia.
+
 ### 5.12 Pokédex e guia do jogo (Fase 7)
 A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela. Feito em 2026-10-28 (Fase 7).
 
@@ -1313,7 +1321,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
-**Depois (ideias anotadas, ainda sem fase):** **animação de evolução** (5.8 / coleção — anotado em 2026-10-28); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
+**Depois (ideias anotadas, ainda sem fase):** **animação de evolução** (5.8 / coleção — anotado em 2026-10-28); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); **climas no jardim** com bônus para Pokémon e plantas (5.11 — anotado em 2026-10-29); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 

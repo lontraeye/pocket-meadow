@@ -17,6 +17,7 @@
   import { bindAudioUnlock, getVolume, isMuted, play, setVolume, toggleMute, warmCries } from './lib/sound'
   import { registerServiceWorker } from './lib/pwa'
   import { connection } from './lib/connection.svelte'
+  import { xpToNext } from './lib/progression'
 
   /** Sem conexão no jogo: de quanto em quanto tempo tenta o /state de novo. */
   const RECONNECT_MS = 5_000
@@ -45,6 +46,16 @@
   let pokedexHistoryPushed = $state(false)
 
   const claimable = $derived(game?.pokedex.claimable ?? 0)
+
+  /** Progresso visual até o próximo Nv (só a barra do HUD). */
+  const trainerXpPct = $derived.by(() => {
+    if (!game) return 0
+    const { level, xp } = game.trainer
+    if (level >= game.progression.levelCap) return 100
+    const need = xpToNext(level, game.progression)
+    if (need <= 0) return 0
+    return Math.min(100, Math.max(0, (xp / need) * 100))
+  })
 
   // Ícones 12×12 do HUD (X = pixel aceso), no traço do alto-falante.
   const DEX_ICON = [
@@ -347,69 +358,78 @@
       <p class="offline-banner" role="status">Sem conexão · tentando de novo</p>
     {/if}
     <header class="panel hud">
-      <div class="level" aria-label="Nível de treinador">
-        <small>Nv</small>{game.trainer.level}
-      </div>
-      <button
-        type="button"
-        class="energy"
-        aria-label="Energia"
-        onclick={() => (energyDetail = !energyDetail)}
-      >
-        <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
-        <div class="pips" aria-hidden="true">
-          {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
-            <span class="pip" class:full={i < game.trainer.energy}></span>
-          {/each}
+      <div class="hud-trainer">
+        <div class="level-wrap" aria-label="Nível de treinador {game.trainer.level}">
+          <span class="level-tab">Nv</span>
+          <div class="level">{game.trainer.level}</div>
+          <div class="level-xp" aria-hidden="true">
+            <span style:width="{trainerXpPct}%"></span>
+          </div>
         </div>
-        <span class="timer">{energyCaption()}</span>
-      </button>
-      <button
-        type="button"
-        class="btn icon-btn badge-host"
-        aria-label="Pokédex"
-        aria-pressed={pokedexOpen}
-        title="Pokédex"
-        onclick={togglePokedex}
-      >
-        <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
-          {#each DEX_ICON as px (`${px.x},${px.y}`)}
-            <rect x={px.x} y={px.y} width="1" height="1" />
-          {/each}
-        </svg>
-        {#if claimable > 0}
-          <span class="dot" aria-hidden="true"></span>
-          <span class="sr-only">{claimable === 1 ? '1 recompensa para resgatar' : `${claimable} recompensas para resgatar`}</span>
-        {/if}
-      </button>
-      <button
-        type="button"
-        class="btn icon-btn"
-        aria-label="Mochila"
-        title="Mochila"
-        aria-pressed={screen === 'bag'}
-        onclick={() => (screen = 'bag')}
-      >
-        <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
-          {#each BAG_ICON as px (`${px.x},${px.y}`)}
-            <rect x={px.x} y={px.y} width="1" height="1" />
-          {/each}
-        </svg>
-      </button>
-      <button
-        type="button"
-        class="btn icon-btn"
-        aria-label="Configurações"
-        title="Configurações"
-        aria-pressed={configOpen}
-        onclick={() => (configOpen = true)}
-      >
-        <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
-          {#each GEAR_ICON as px (`${px.x},${px.y}`)}
-            <rect x={px.x} y={px.y} width="1" height="1" />
-          {/each}
-        </svg>
-      </button>
+        <button
+          type="button"
+          class="energy"
+          aria-label="Energia"
+          onclick={() => (energyDetail = !energyDetail)}
+        >
+          <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
+          <div class="pips" aria-hidden="true">
+            {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
+              <span class="pip" class:full={i < game.trainer.energy}></span>
+            {/each}
+          </div>
+          <span class="timer">{energyCaption()}</span>
+        </button>
+      </div>
+      <span class="hud-sep" aria-hidden="true"></span>
+      <div class="hud-actions">
+        <button
+          type="button"
+          class="btn icon-btn badge-host"
+          aria-label="Pokédex"
+          aria-pressed={pokedexOpen}
+          title="Pokédex"
+          onclick={togglePokedex}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each DEX_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+          {#if claimable > 0}
+            <span class="dot" aria-hidden="true"></span>
+            <span class="sr-only">{claimable === 1 ? '1 recompensa para resgatar' : `${claimable} recompensas para resgatar`}</span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="btn icon-btn"
+          aria-label="Mochila"
+          title="Mochila"
+          aria-pressed={screen === 'bag'}
+          onclick={() => (screen = 'bag')}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each BAG_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="btn icon-btn"
+          aria-label="Configurações"
+          title="Configurações"
+          aria-pressed={configOpen}
+          onclick={() => (configOpen = true)}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each GEAR_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+        </button>
+      </div>
     </header>
     {#if screen === 'meadow' && showReadyBanner && ready?.summary}
       <div class="ready-banner panel" role="status">
@@ -793,28 +813,124 @@
     padding: 0.35rem 0.4rem;
   }
 
-  /* Botões dentro do HUD: borda mais leve para não colar na moldura do painel. */
-  .hud .btn {
-    box-shadow: none;
+  .hud-trainer {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1;
+    min-width: 0;
+    /* Desktop: ações à esquerda; o DOM fica perfil → ações pro empilhar no celular. */
+    order: 2;
+  }
+
+  .hud-sep {
+    flex: none;
+    align-self: stretch;
+    width: 1px;
+    margin: 0.15rem 0;
+    background: var(--panel-shade);
+    order: 1;
+  }
+
+  .hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: none;
+    order: 0;
+  }
+
+  /* Ícones do HUD (Pokédex / mochila / config): quadrado com borda e sombra. */
+  .hud .icon-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: var(--px) solid var(--panel-edge);
+    background: var(--panel-face);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 -2px 0 var(--panel-shade);
+    color: var(--ink);
+  }
+
+  .hud .icon-btn:active:not(:disabled) {
+    background: var(--paper);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 2px 0 #00000022;
+    transform: translateY(var(--px));
+  }
+
+  .hud .icon-btn[aria-pressed='true'] {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--selected-face);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 -2px 0 var(--primary-shade);
+  }
+
+  /* Etiqueta “Nv” em cima do quadrado, tipo aba de pasta / marcador. */
+  .level-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: none;
+    width: 44px;
+  }
+
+  .level-tab {
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    margin: 0 0 calc(var(--px) * -1);
+    padding: 0 4px;
+    height: 11px;
+    border: var(--px) solid var(--ink);
+    border-bottom: 0;
+    background: var(--accent);
+    color: var(--ink);
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    box-shadow: 1px 0 0 #000;
   }
 
   .level {
     display: grid;
     place-items: center;
-    min-width: 44px;
+    box-sizing: border-box;
+    width: 44px;
     height: 44px;
+    border: var(--px) solid var(--accent);
     background: var(--ink);
     color: var(--accent);
     font-size: 1.3rem;
     font-weight: 700;
     line-height: 1;
-    box-shadow: inset 0 calc(var(--px) * -2) 0 #00000055;
-    flex: none;
+    text-align: center;
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 calc(var(--px) * -2) 0 #00000055;
   }
 
-  .level small {
-    font-size: 0.55rem;
-    color: #fff;
+  .level-xp {
+    width: 100%;
+    height: 4px;
+    margin-top: 2px;
+    background: #00000044;
+  }
+
+  .level-xp > span {
+    display: block;
+    height: 100%;
+    background: var(--grass-side);
   }
 
   .energy {
@@ -840,13 +956,14 @@
   }
 
   .pips {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 14px);
+    display: flex;
     gap: 3px;
+    width: 100%;
   }
 
   .pip {
+    flex: 1 1 0;
+    min-width: 0;
     height: 14px;
     background: #00000022;
     box-shadow: inset 0 0 0 var(--px) #00000033;
@@ -869,14 +986,7 @@
   }
 
   .icon-btn {
-    min-width: 44px;
     flex: none;
-    padding-left: 0.45rem;
-    padding-right: 0.45rem;
-  }
-
-  .icon-btn[aria-pressed='true'] {
-    color: var(--primary);
   }
 
   /* 24px = 12×2: escala inteira, senão o SVG deixa pixels de larguras diferentes. */
@@ -1030,21 +1140,35 @@
     box-shadow: inset 0 -3px 0 var(--accent-shade);
   }
 
-  /* Celular: nível e energia numa linha; ícones embaixo. */
+  /* Celular: perfil em cima; ações embaixo à esquerda. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;
       row-gap: 0.45rem;
     }
 
-    .energy {
-      flex-basis: calc(100% - 44px - 0.5rem);
+    .hud-trainer {
+      order: 0;
+      flex: 1 1 100%;
+    }
+
+    .hud-sep {
+      order: 1;
+      width: 100%;
+      height: 1px;
+      margin: 0;
+    }
+
+    .hud-actions {
+      order: 2;
     }
 
     .hud .icon-btn {
       flex: none;
       width: 48px;
+      height: 48px;
       min-width: 48px;
+      min-height: 48px;
     }
   }
 
