@@ -78,3 +78,98 @@ export function isWholeTeam(userId: number, ids: readonly number[]): boolean {
   const set = new Set(current)
   return ids.every((id) => set.has(id))
 }
+
+export type Place = 'team' | 'garden' | 'pc'
+
+export type MoveError = 'pokemon_not_found' | 'in_daycare' | 'last_in_team' | 'team_full' | 'invalid_slot'
+
+function setInPc(userId: number, id: number, inPc: boolean): void {
+  getDb()
+    .update(pokemon)
+    .set({ inPc })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+}
+
+/**
+ * Move um Pokémon entre time, jardim e PC (tela do PC). Para o time, `slot`
+ * diz a vaga: vaga ocupada troca os dois de lugar (quem sai do time vai para
+ * onde o outro estava); sem vaga, entra no fim. Dentro do time, reordena.
+ */
+export function movePokemon(
+  userId: number,
+  id: number,
+  to: Place,
+  slot?: number,
+): { ok: true } | { ok: false; error: MoveError } {
+  const mon = getDb()
+    .select({ location: pokemon.location, inPc: pokemon.inPc, teamSlot: pokemon.teamSlot })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return { ok: false, error: 'pokemon_not_found' }
+  if (mon.location === 'daycare') return { ok: false, error: 'in_daycare' }
+  const from: Place = mon.teamSlot !== null ? 'team' : mon.inPc ? 'pc' : 'garden'
+
+  if (to !== 'team') {
+    if (from === 'team') {
+      const left = leaveTeam(userId, [id])
+      if (!left.ok) return left
+    }
+    setInPc(userId, id, to === 'pc')
+    return { ok: true }
+  }
+
+  const team = teamIds(userId)
+  const max = trainerConfig.teamMax
+  if (slot !== undefined && (!Number.isInteger(slot) || slot < 0 || slot >= max)) {
+    return { ok: false, error: 'invalid_slot' }
+  }
+  if (from === 'team') {
+    // Reordenar: troca com quem está na vaga (ou vai para o fim).
+    const at = team.indexOf(id)
+    const target = slot === undefined ? team.length - 1 : Math.min(slot, team.length - 1)
+    const next = [...team]
+    next[at] = next[target]!
+    next[target] = id
+    writeTeam(userId, next)
+    return { ok: true }
+  }
+
+  if (from === 'pc') setInPc(userId, id, false)
+  if (slot !== undefined && slot < team.length) {
+    const out = team[slot]!
+    const next = [...team]
+    next[slot] = id
+    writeTeam(userId, next)
+    // Quem saiu do time vai para onde o outro estava.
+    if (from === 'pc') setInPc(userId, out, true)
+    return { ok: true }
+  }
+  if (team.length >= max) return { ok: false, error: 'team_full' }
+  writeTeam(userId, [...team, id])
+  return { ok: true }
+}
+
+/** Vários de uma vez para o jardim ou para o PC (sai do time; o time não esvazia). */
+export function moveMany(
+  userId: number,
+  ids: readonly number[],
+  to: 'garden' | 'pc',
+): { ok: true } | { ok: false; error: MoveError; pokemonId?: number } {
+  const rows = getDb()
+    .select({ id: pokemon.id, location: pokemon.location })
+    .from(pokemon)
+    .where(eq(pokemon.userId, userId))
+    .all()
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  for (const id of ids) {
+    const row = byId.get(id)
+    if (!row) return { ok: false, error: 'pokemon_not_found', pokemonId: id }
+    if (row.location === 'daycare') return { ok: false, error: 'in_daycare', pokemonId: id }
+  }
+  const left = leaveTeam(userId, ids)
+  if (!left.ok) return left
+  for (const id of ids) setInPc(userId, id, to === 'pc')
+  return { ok: true }
+}

@@ -13,6 +13,7 @@ import { plotRoutes } from './routes/plots.js'
 import { pokedexRoutes } from './routes/pokedex.js'
 import { pokemonRoutes } from './routes/pokemon.js'
 import { fieldRoutes } from './routes/field.js'
+import { pcRoutes } from './routes/pc.js'
 import { placeRoutes } from './routes/places.js'
 import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
@@ -68,6 +69,7 @@ app.route('/trainer', trainerRoutes)
 app.route('/regions', regionRoutes)
 app.route('/places', placeRoutes)
 app.route('/field', fieldRoutes)
+app.route('/pc', pcRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/pokedex', pokedexRoutes)

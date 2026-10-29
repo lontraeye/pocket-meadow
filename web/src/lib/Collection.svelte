@@ -6,7 +6,12 @@
   import { play } from './sound'
   import { showdownSrc } from './sprites'
 
-  let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
+  let {
+    game,
+    onClose,
+    onState,
+    onOpenPc,
+  }: { game: GameState; onClose: () => void; onState: () => Promise<void>; onOpenPc: () => void } = $props()
 
   type Filter = 'all' | 'team' | 'pc' | 'favorite' | 'shiny' | 'duplicate' | 'daycare'
   type Sort = 'recent' | 'level' | 'dex' | 'name'
@@ -295,7 +300,10 @@
       <button type="button" class="btn" onclick={keepStrongest}>Menos o mais forte</button>
       <button type="button" class="btn" onclick={() => { selecting = false; picked = [] }}>Cancelar</button>
     {:else}
-      <button type="button" class="btn" onclick={() => (selecting = true)}>Selecionar</button>
+      <div class="row">
+        <button type="button" class="btn" onclick={() => (selecting = true)}>Selecionar</button>
+        <button type="button" class="btn" onclick={onOpenPc}>Abrir o PC</button>
+      </div>
       <button type="button" class="btn" onclick={onClose}>Jardim</button>
     {/if}
   </div>
@@ -526,6 +534,12 @@
 
   .dock .btn {
     width: 100%;
+  }
+
+  .dock .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
   }
 
   ul {

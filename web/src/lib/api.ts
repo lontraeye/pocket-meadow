@@ -488,6 +488,10 @@ export function errorText(error: ApiError): string {
       return 'Espere a luta terminar.'
     case 'invalid_team':
       return 'O time mudou. Abra o encontro de novo.'
+    case 'team_full':
+      return 'O time está cheio: toque numa vaga para trocar.'
+    case 'invalid_slot':
+      return 'Essa vaga do time não existe.'
     case 'last_in_team':
       return 'O time precisa de pelo menos um Pokémon.'
     case 'in_pc':

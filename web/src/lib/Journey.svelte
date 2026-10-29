@@ -23,6 +23,7 @@
     hasEncounter,
     onEngage,
     onGarden,
+    onOpenPc,
     extras,
   }: {
     /** Outra ação em andamento na exploração (procura, luta). */
@@ -33,6 +34,8 @@
     /** Enfrenta o Pokémon da vaga do campo. */
     onEngage: (regionSlug: string, slot: number) => void
     onGarden: () => void
+    /** Abre o PC (nas cidades, como um Centro Pokémon). */
+    onOpenPc: () => void
     /** Efeitos, treino de arremesso e testes: ficam no painel "Mais". */
     extras?: Snippet
   } = $props()
@@ -326,7 +329,7 @@
         {:else if selected.kind === 'water'}
           <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
         {:else}
-          <p class="hint">Nada para procurar na cidade por enquanto. Toque num lugar do mapa.</p>
+          <button type="button" class="btn" onclick={onOpenPc}>Usar o PC</button>
         {/if}
       {:else}
         <p class="blurb">{selected.blurb}</p>

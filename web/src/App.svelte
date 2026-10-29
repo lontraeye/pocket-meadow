@@ -8,6 +8,7 @@
   import Collection from './lib/Collection.svelte'
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
+  import PcBox from './lib/PcBox.svelte'
   import Garden from './lib/Garden.svelte'
   import Modal from './lib/Modal.svelte'
   import Pokedex from './lib/Pokedex.svelte'
@@ -38,7 +39,14 @@
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
   let progress = $state({ done: 0, total: 0 })
   let offline = $state(false)
-  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare' | 'bag'>('meadow')
+  let screen = $state<'meadow' | 'explore' | 'collection' | 'daycare' | 'bag' | 'pc'>('meadow')
+  /** De onde o PC foi aberto (Voltar volta para lá). */
+  let pcReturn = $state<'collection' | 'explore'>('collection')
+
+  function openPc(from: 'collection' | 'explore') {
+    pcReturn = from
+    screen = 'pc'
+  }
   let game = $state<GameState | null>(null)
   let energyDetail = $state(false)
   let dismissedReady = $state<string[]>([])
@@ -494,9 +502,11 @@
     {#if screen !== 'meadow'}
       <div class="world">
         {#if screen === 'explore'}
-          <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+          <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} onOpenPc={() => openPc('explore')} />
         {:else if screen === 'collection'}
-          <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} />
+          <Collection {game} onClose={() => (screen = 'meadow')} onState={loadState} onOpenPc={() => openPc('collection')} />
+        {:else if screen === 'pc'}
+          <PcBox {game} onClose={() => (screen = pcReturn)} onState={loadState} />
         {:else if screen === 'daycare'}
           <Daycare {game} onClose={() => (screen = 'meadow')} onState={loadState} />
         {:else if screen === 'bag'}

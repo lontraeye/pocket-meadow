@@ -43,7 +43,12 @@
   import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
   import { simConfig, type BattleInput } from './sim'
 
-  let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
+  let {
+    game,
+    onClose,
+    onState,
+    onOpenPc,
+  }: { game: GameState; onClose: () => void; onState: () => Promise<void>; onOpenPc: () => void } = $props()
 
   type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result' | 'practice'
   type Result =
@@ -968,6 +973,7 @@
       hasEncounter={game.encounter !== null}
       onEngage={(slug, slot) => search(slug, () => api(`/api/field/${slot}/engage`, {}))}
       onGarden={onClose}
+      {onOpenPc}
     >
       {#snippet extras()}
         <section class="panel sheet">
