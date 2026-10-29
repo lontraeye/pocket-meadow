@@ -48,7 +48,7 @@
   let picked = $state<string | null>(null)
   let moreOpen = $state(false)
   let arrivalTimer = 0
-  /** Numa rota: o campo (padrão) ou o mapa (para viajar). */
+  /** Numa rota: o campo (ao abrir a exploração) ou o mapa (ao chegar e para viajar). */
   let view = $state<'field' | 'map'>('field')
   let field = $state<FieldResponse | null>(null)
   let spawnSlot = $state<number | null>(null)
@@ -180,8 +180,8 @@
       }
       picked = null
       spawnSlot = null
-      // Chegou numa rota: abre no campo.
-      view = 'field'
+      // Chegou: fica no mapa, olhando o lugar; o campo abre pelo botão.
+      view = 'map'
       await load()
       if (payload.firstVisit && target) {
         arrival =
@@ -348,6 +348,8 @@
           </button>
         {:else if !selected.open}
           <p class="hint locked">{selected.reason}</p>
+        {:else if data.flyReason && selected.kind === 'town' && selected.visited}
+          <p class="hint locked">{data.flyReason}</p>
         {:else}
           <p class="hint">Longe daqui: vá pelos lugares vizinhos (ligados ao seu).</p>
         {/if}

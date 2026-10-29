@@ -65,6 +65,8 @@ export type RegionInfo = {
 }
 
 /** Lugar da jornada (JORNADA.md, seção 11), como o GET /places manda. */
+export type PlaceTool = 'oldRod' | 'goodRod' | 'superRod' | 'headbutt' | 'surf' | 'rockSmash' | 'fly'
+
 export type PlaceView = {
   slug: string
   name: string
@@ -82,7 +84,8 @@ export type PlaceView = {
   wildLevelRange: [number, number] | null
   speciesTotal: number
   speciesCaught: number
-  links: { to: string; open: boolean; reason: string | null; isNew: boolean }[]
+  /** Ferramenta que a ligação pede (null = só andar). */
+  links: { to: string; requires: PlaceTool | null; open: boolean; reason: string | null; isNew: boolean }[]
 }
 
 /** Pokémon andando no campo de encontro (GET /field). */
@@ -103,6 +106,8 @@ export type PlacesResponse = {
   current: string
   trainerLevel: number
   canFly: boolean
+  /** Voo ganho, mas sem Pokémon que voe no time: o motivo. */
+  flyReason: string | null
   /** Objetivo: o marco do capítulo aberto mais alto (null quando já foi conquistado). */
   goal: {
     chapter: number

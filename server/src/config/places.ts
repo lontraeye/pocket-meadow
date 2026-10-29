@@ -5,8 +5,7 @@ import {
   milestoneOfChapter,
   type Progress,
   type Tool,
-  TOOL_NAMES,
-  toolOpen,
+  toolBlock,
 } from './milestones.js'
 import { regionBySlug } from './regions.js'
 
@@ -165,7 +164,7 @@ const linkList: readonly [string, string, Tool?][] = [
   ['blackthorn', 'route-45'],
   ['blackthorn', 'dragons-den'],
   ['blackthorn', 'dark-cave-blackthorn'],
-  ['dark-cave-blackthorn', 'dark-cave-violet'],
+  ['dark-cave-blackthorn', 'dark-cave-violet', 'rockSmash'],
   ['route-27', 'tohjo-falls'],
   ['tohjo-falls', 'route-26'],
   ['route-26', 'victory-road-johto'],
@@ -193,8 +192,7 @@ export function lockReason(place: PlaceConfig, progress: Progress, requires?: To
     const gate = milestoneOfChapter(place.chapter - 1)
     return gate ? `Abre no ${gate.name}` : 'Fechado'
   }
-  if (requires && !toolOpen(requires, progress)) return `Precisa de ${TOOL_NAMES[requires]}`
-  return null
+  return requires ? toolBlock(requires, progress) : null
 }
 
 /** Confere o config no boot: slugs únicos, ligações válidas, área com tabela. */

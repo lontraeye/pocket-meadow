@@ -22,10 +22,11 @@ const { encounterRoutes } = await import('./encounters.js')
 const app = new Hono().route('/places', placeRoutes).route('/encounters', encounterRoutes)
 const env = { incoming: { socket: { remoteAddress: '203.0.113.7', remotePort: 1, remoteFamily: 'IPv4' } } }
 
-type Link = { to: string; open: boolean; reason: string | null; isNew: boolean }
+type Link = { to: string; requires: string | null; open: boolean; reason: string | null; isNew: boolean }
 type View = {
   current: string
   canFly: boolean
+  flyReason: string | null
   goal: {
     chapter: number
     caught: number
@@ -48,6 +49,17 @@ function player(username: string): { cookie: string; userId: number } {
     return created.userId
   })
   return { cookie: `${authConfig.cookieName}=${token}`, userId }
+}
+
+/** Põe no time uma cópia do inicial com outra espécie. */
+function addToTeam(userId: number, speciesId: number, slot: number): void {
+  getSqlite()
+    .prepare(
+      `insert into pokemon (user_id, species_id, level, xp, caught_at, original_species_id, location, in_pc, team_slot)
+       select user_id, ?, level, 0, caught_at, ?, 'garden', 0, ?
+       from pokemon where user_id = ? limit 1`,
+    )
+    .run(speciesId, speciesId, slot, userId)
 }
 
 const post = (url: string, cookie: string, body: unknown) =>
@@ -84,7 +96,7 @@ test('começa em New Bark; anda só para vizinhos abertos; avisa a primeira visi
   let places = await view(cookie)
   assert.equal(places.current, 'new-bark')
   const links = places.places.find((place) => place.slug === 'new-bark')!.links
-  assert.deepEqual(links.find((link) => link.to === 'route-29'), { to: 'route-29', open: true, reason: null, isNew: true })
+  assert.deepEqual(links.find((link) => link.to === 'route-29'), { to: 'route-29', requires: null, open: true, reason: null, isNew: true })
   assert.equal(links.find((link) => link.to === 'route-27')?.open, false)
 
   assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'cherrygrove' })), 'place_not_linked')
@@ -154,10 +166,39 @@ test('Voo: com o marco de Cianwood, viaja direto para uma cidade visitada', asyn
   // Sem Voo, Goldenrod está longe de New Bark.
   assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'goldenrod' })), 'place_not_linked')
   grant.run(userId, 'cianwood')
-  const places = await view(cookie)
+  // Voo ganho, mas o time não tem Pokémon Voador.
+  let places = await view(cookie)
+  assert.equal(places.canFly, false)
+  assert.equal(places.flyReason, 'Voo: precisa de um Pokémon do tipo Voador no time')
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'goldenrod' })), 'place_not_linked')
+  addToTeam(userId, 16, 1) // Pidgey
+  places = await view(cookie)
   assert.equal(places.canFly, true)
+  assert.equal(places.flyReason, null)
   const flew = await post('/places/travel', cookie, { to: 'goldenrod' })
   assert.deepEqual(await flew.json(), { current: 'goldenrod', firstVisit: false, flew: true })
   // Voo só para cidade visitada: Azalea nunca foi visitada.
   assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'azalea' })), 'place_not_linked')
+})
+
+test('Surf: abre no marco de Ecruteak e pede um Pokémon de Água no time', async () => {
+  const { cookie, userId } = player('surfer')
+  const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
+  for (const key of ['violet', 'azalea', 'goldenrod']) grant.run(userId, key)
+  getSqlite().prepare(`update trainers set current_place = 'olivine' where user_id = ?`).run(userId)
+  const seaLink = async () =>
+    (await view(cookie)).places.find((place) => place.slug === 'olivine')!.links.find((link) => link.to === 'sea-routes-40-41')!
+
+  // Capítulo 5 ainda fechado: o motivo é o marco do capítulo.
+  assert.equal((await seaLink()).reason, 'Abre no Marco de Ecruteak')
+  grant.run(userId, 'ecruteak')
+  const link = await seaLink()
+  assert.equal(link.open, false)
+  assert.equal(link.requires, 'surf')
+  assert.equal(link.reason, 'Surf: precisa de um Pokémon do tipo Água no time')
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'sea-routes-40-41' })), 'place_locked')
+
+  addToTeam(userId, 158, 1) // Totodile
+  assert.equal((await seaLink()).open, true)
+  assert.equal((await post('/places/travel', cookie, { to: 'sea-routes-40-41' })).status, 200)
 })

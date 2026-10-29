@@ -8,6 +8,7 @@ import {
   milestoneOfChapter,
   type Progress,
   TOOL_NAMES,
+  toolBlock,
   toolOpen,
 } from '../config/milestones.js'
 import { CHAPTER_TITLES, linksOf, lockReason, placeBySlug, placeConfigs, START_PLACE } from '../config/places.js'
@@ -79,7 +80,7 @@ function canFlyTo(slug: string, visited: ReadonlySet<string>, progress: Progress
     place !== undefined &&
     place.kind === 'town' &&
     visited.has(slug) &&
-    toolOpen('fly', progress) &&
+    toolBlock('fly', progress) === null &&
     lockReason(place, progress) === null
   )
 }
@@ -179,7 +180,8 @@ function placesView(userId: number, now: number) {
     const region = regionBySlug(slug)
     return region ? [...new Set(region.slots.map((slot) => slot.speciesId))] : []
   }
-  const flyOpen = toolOpen('fly', progress)
+  const flyBlock = toolBlock('fly', progress)
+  const flyOpen = flyBlock === null
 
   const places = placeConfigs.map((place) => {
     const region = regionBySlug(place.slug)
@@ -203,7 +205,13 @@ function placesView(userId: number, now: number) {
       links: linksOf(place.slug).map((link) => {
         const target = placeBySlug(link.to)!
         const why = lockReason(target, progress, link.requires)
-        return { to: link.to, open: why === null, reason: why, isNew: why === null && !visited.has(link.to) }
+        return {
+          to: link.to,
+          requires: link.requires ?? null,
+          open: why === null,
+          reason: why,
+          isNew: why === null && !visited.has(link.to),
+        }
       }),
     }
   })
@@ -233,6 +241,8 @@ function placesView(userId: number, now: number) {
     current: here,
     trainerLevel: clock.level,
     canFly: flyOpen,
+    /** Voo ganho, mas sem Pokémon Voador no time: o motivo. */
+    flyReason: toolOpen('fly', progress) ? flyBlock : null,
     goal: goalView(progress, here, statusOf),
     places,
     here: { species: hereSpecies },

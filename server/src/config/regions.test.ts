@@ -95,7 +95,7 @@ describe('regiões', () => {
   test('o status público não leva a tabela de spawn', () => {
     const route = loadRegions().find((region) => region.slug === 'route-1')
     assert.ok(route)
-    const status = regionStatus(route, { level: 1, cleared: new Set() })
+    const status = regionStatus(route, { level: 1, cleared: new Set(), teamTypes: new Set() })
     assert.deepEqual(Object.keys(status).sort(), [
       'chapter',
       'gameRegion',
@@ -114,7 +114,7 @@ describe('regiões', () => {
   test('Johto abre por marco (não por nível); Kanto continua por nível', () => {
     const open = (level: number, cleared: string[]) =>
       loadRegions()
-        .filter((region) => regionStatus(region, { level, cleared: new Set(cleared) }).unlocked)
+        .filter((region) => regionStatus(region, { level, cleared: new Set(cleared), teamTypes: new Set() }).unlocked)
         .map((region) => region.slug)
     const chapter1 = ['route-29', 'route-46', 'route-30', 'route-31', 'sprout-tower', 'dark-cave-violet']
     const chapter2 = ['route-32', 'ruins-of-alph', 'union-cave', 'slowpoke-well', 'route-33']
