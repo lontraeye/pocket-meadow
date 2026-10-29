@@ -75,19 +75,20 @@
     '.XXXXXXXXXX.',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
+  // Mochila: alça, aba com fecho e bolso na frente.
   const BAG_ICON = [
-    '..XXXXXXXX..',
-    '.X........X.',
-    'X.XX....XX.X',
+    '....XXXX....',
+    '...X....X...',
+    '.XXXXXXXXXX.',
     'X..........X',
-    'X.XXXXXXXX.X',
-    'X.X......X.X',
-    'X.X......X.X',
-    'X.X......X.X',
-    'X.XXXXXXXX.X',
     'X..........X',
-    '.X........X.',
-    '..XXXXXXXX..',
+    'XXXXXXXXXXXX',
+    'X....XX....X',
+    'X..XXXXXX..X',
+    'X..X....X..X',
+    'X..XXXXXX..X',
+    'X..........X',
+    '.XXXXXXXXXX.',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
   const GEAR_ICON = [
