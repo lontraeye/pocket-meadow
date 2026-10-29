@@ -1380,7 +1380,8 @@
     bottom: calc(4.1rem + env(safe-area-inset-bottom));
     display: grid;
     justify-items: center;
-    gap: 0.25rem;
+    /* Os botões já têm 44px de toque; o ícone pequeno no meio dá o respiro. */
+    gap: 0;
     padding: 0;
     background: none;
     pointer-events: auto;
@@ -1391,8 +1392,8 @@
     display: grid;
     place-items: center;
     box-sizing: border-box;
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border: 0;
     background: none;
@@ -1421,7 +1422,7 @@
   .zoom-track {
     position: relative;
     box-sizing: border-box;
-    width: 32px;
+    width: 44px;
     height: 48px;
     padding: 0;
     border: 0;
