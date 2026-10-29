@@ -7,16 +7,17 @@
   import { play, playCry } from './sound'
   import { gardenSprite, pmdAnim, showdownSrc } from './sprites'
 
-  // Tempos da cena de captura (ajustáveis). Com o resultado, ~6,5 s; o toque
-  // pula a qualquer momento.
+  // Tempos da cena (ajustáveis). Captura, com as 3 chacoalhadas, ~6,5 s.
+  // Fuga na 1ª ou na 2ª acaba antes. O toque pula a qualquer momento.
   const THROW_MS = 650 // arco girando até o Pokémon
   const HIT_MS = 260 // bate nele e ricocheteia na diagonal, para cima e para a esquerda
   const ABSORB_MS = 480 // ele fica branco e encolhe para dentro da bola
   const DROP_MS = 520 // a bola cai no chão com um quique
   const REST_MS = 450 // parada antes da primeira chacoalhada
   const SHAKE_MS = 420
-  const SHAKE_GAPS_MS = [550, 700] // pausas depois da 1ª e da 2ª chacoalhada
-  const DECIDE_MS = 850 // suspense depois da 3ª, antes do resultado
+  const SHAKE_GAPS_MS = [550, 700] // pausas depois da 1ª e da 2ª chacoalhada, se ela aguentou
+  const BREAK_MS = 180 // a bola quebra no fim dessa chacoalhada, sem esperar as outras
+  const DECIDE_MS = 850 // suspense depois da 3ª, antes do clique ou da fuga
   const CATCH_MS = 1100
   const ESCAPE_MS = 900
   const SHAKES = 3
@@ -31,7 +32,11 @@
   }: {
     encounter: PendingEncounter
     /** Resultado do lançamento, já decidido pelo servidor (8.4). */
-    throwResult: { caught: boolean; catchChance: number | null }
+    /**
+     * Resultado já decidido. `shakes` é quantas chacoalhadas a bola aguenta
+     * (1, 2 ou 3). Captura é sempre 3. Sem o campo, espera as três.
+     */
+    throwResult: { caught: boolean; catchChance: number | null; shakes?: number }
     time?: number
     /** Sprite da bola usada (seção 5.6). */
     ballSrc?: string
@@ -60,6 +65,8 @@
     }
     const caught = throwResult.caught
     const speciesId = encounter.speciesId
+    const asked = throwResult.shakes
+    const wobbles = caught ? SHAKES : asked === 1 || asked === 2 ? asked : SHAKES
     const timers: number[] = []
     // Cada passo agenda o próximo; o toque para pular cancela tudo.
     const then = (ms: number, fn: () => void) => {
@@ -70,26 +77,29 @@
       )
     }
 
+    function reveal() {
+      if (caught) {
+        phase = 'celebrate'
+        play('catch')
+        playCry(speciesId)
+        then(CATCH_MS, finish)
+        return
+      }
+      phase = 'escape'
+      play('escape')
+      then(ESCAPE_MS, finish)
+    }
+
     function shake(index: number) {
       phase = 'shake'
       shakeIndex = index
       play('shake')
-      if (index + 1 < SHAKES) {
+      if (index + 1 < wobbles) {
         then(SHAKE_MS + SHAKE_GAPS_MS[index]!, () => shake(index + 1))
         return
       }
-      then(SHAKE_MS + DECIDE_MS, () => {
-        if (caught) {
-          phase = 'celebrate'
-          play('catch')
-          playCry(speciesId)
-          then(CATCH_MS, finish)
-        } else {
-          phase = 'escape'
-          play('escape')
-          then(ESCAPE_MS, finish)
-        }
-      })
+      // Na 3ª ainda há suspense (pode ser o clique). Antes disso, a bola abre nessa chacoalhada.
+      then(SHAKE_MS + (wobbles === SHAKES ? DECIDE_MS : BREAK_MS), reveal)
     }
 
     const fromHit = untrack(() => skipThrow)

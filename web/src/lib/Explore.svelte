@@ -1211,7 +1211,11 @@
         {#key lastThrow.throwNumber}
           <BattleScene
             {encounter}
-            throwResult={{ caught: lastThrow.caught, catchChance: lastThrow.catchChance }}
+            throwResult={{
+              caught: lastThrow.caught,
+              catchChance: lastThrow.catchChance,
+              shakes: lastThrow.shakes,
+            }}
             ballSrc={ballIconSrc(thrownBallSprite)}
             skipThrow
             {time}

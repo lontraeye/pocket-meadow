@@ -102,6 +102,8 @@ export type ThrowOutcome = {
   caught: boolean
   fled: boolean
   catchChance: number
+  /** Chacoalhadas antes do desfecho. 3 = passou todas. */
+  shakes: 1 | 2 | 3
   throwNumber: number
   agitation: number
   status: 'caught' | 'escaped' | 'pending'

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { battleConfig } from '../config/battle.js'
 import { catchChance } from './battle.js'
-import { rollThrow, throwRngAt } from './throwCapture.js'
+import { catchShakeBands, catchShakeCount, rollThrow, throwRngAt } from './throwCapture.js'
 
 test('mesma seed + mesmo número de lançamentos → mesmos resultados', () => {
   const seed = 42
@@ -101,6 +101,34 @@ test('bola e berry mudam só a chance; a sequência RNG continua a mesma', () =>
   assert.equal(rngAt1(), rngAfterMiss())
 })
 
+test('a chacoalhada sai da mesma rolagem, em faixas fixas', () => {
+  assert.equal(catchShakeCount(0.9, 0.5), 3)
+  assert.equal(catchShakeCount(0.1, 0.2), 3)
+  assert.equal(catchShakeCount(0.1, catchShakeBands.second), 2)
+  assert.equal(catchShakeCount(0.1, 0.5), 2)
+  assert.equal(catchShakeCount(0.1, catchShakeBands.first), 1)
+  assert.equal(catchShakeCount(0.1, 0.95), 1)
+  assert.equal(catchShakeCount(1, 0.99), 3)
+})
+
+test('chance alta só escapa na primeira; chance baixa pode quebrar em qualquer uma', () => {
+  let highEscape = 0
+  const low = { 1: 0, 2: 0, 3: 0 }
+  for (let seed = 1; seed <= 4000; seed += 1) {
+    const easy = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: 200, fleeChance: 0 })
+    if (easy.caught) assert.equal(easy.shakes, 3)
+    else {
+      highEscape += 1
+      assert.equal(easy.shakes, 1)
+    }
+    const hard = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: 3, fleeChance: 0 })
+    if (hard.caught) assert.equal(hard.shakes, 3)
+    else low[hard.shakes] += 1
+  }
+  assert.ok(highEscape > 0)
+  assert.ok(low[1] > 0 && low[2] > 0 && low[3] > 0)
+})
+
 test('Master Ball: chance 1 e ainda consome a rolagem de captura', () => {
   const roll = rollThrow({
     encounterSeed: 7,
@@ -111,6 +139,7 @@ test('Master Ball: chance 1 e ainda consome a rolagem de captura', () => {
   assert.equal(roll.catchChance, 1)
   assert.equal(roll.caught, true)
   assert.equal(roll.fled, false)
+  assert.equal(roll.shakes, 3)
 })
 
 test('qualidade e curva mudam só a chance; a sequência RNG continua a mesma', () => {
