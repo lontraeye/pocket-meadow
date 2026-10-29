@@ -5,6 +5,9 @@
     type BattleOutcome,
     type BattleStart,
     type OwnedPokemon,
+    itemLabel,
+    type BallInfo,
+    type BerryInfo,
     type PendingEncounter,
     type ProgressionRules,
   } from './api'
@@ -139,6 +142,8 @@
     encounter,
     team,
     progression,
+    berries,
+    balls,
     battleAuto = false,
     initialInputs = [],
     resumeElapsedMs = 0,
@@ -152,6 +157,9 @@
     team: OwnedPokemon[]
     /** Regras de XP (enchimento pós-vitória e teto de nível). */
     progression: ProgressionRules
+    /** Nomes das sementes/itens no painel pós-luta. */
+    berries: BerryInfo[]
+    balls: BallInfo[]
     /** Preferência do treinador (servidor); a tela só espelha e pede troca. */
     battleAuto?: boolean
     initialInputs?: BattleInput[]
@@ -762,14 +770,6 @@
     return t * (2 - t)
   }
 
-  function prettyKey(key: string): string {
-    return key
-      .split(/[-_:]/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
-  }
-
   function tweenXp(fromXp: number, toXp: number, need: number, level: number): Promise<void> {
     if (reduced || fromXp === toXp) {
       xpOverride = { level, xp: toXp, need }
@@ -844,11 +844,10 @@
       }
       // Reserva do “dinheiro” / itens (semente e recompensas de nível por enquanto).
       if (outcome.seedDrop) {
-        const berry = prettyKey(outcome.seedDrop.berryKey)
-        steps.push({ kind: 'text', line: `Encontrou Semente de ${berry}!` })
+        steps.push({ kind: 'text', line: `Encontrou ${itemLabel(outcome.seedDrop.itemKey, berries, balls)}!` })
       }
       for (const reward of outcome.levelRewards ?? []) {
-        const label = prettyKey(reward.itemKey.replace(/^(seed|berry|ball):/, ''))
+        const label = itemLabel(reward.itemKey, berries, balls)
         steps.push({
           kind: 'text',
           line:
@@ -922,9 +921,11 @@
       }
       if (response.ok) {
         const outcome = (await response.json()) as BattleOutcome
+        // O servidor já fechou a luta: o save sai agora, não depois do painel
+        // (que espera toque e pode ficar aberto até o F5).
+        clearSavedBattle(encounterId)
         await linger
         await runRecap(outcome)
-        clearSavedBattle(encounterId)
         onFinished(outcome, team)
         return
       }
@@ -1747,7 +1748,7 @@
           {/if}
         </button>
       {:else}
-        <div class="party" role="listbox" aria-label="Escolher Pokémon">
+        <div class="party" role="group" aria-label="Escolher Pokémon">
           <div class="party-list">
             {#each setup.team as fighter, slot (slot)}
               {@const side = snap.team[slot]!}
@@ -1759,7 +1760,6 @@
                   type="button"
                   class="chip"
                   class:down={side.fainted}
-                  role="option"
                   disabled={side.fainted || !canSwitch}
                   aria-label="Trocar para {nameOf(fighter)}"
                   onclick={() => swap(slot)}

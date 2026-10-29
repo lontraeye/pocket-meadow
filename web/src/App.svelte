@@ -17,7 +17,6 @@
   import { bindAudioUnlock, getVolume, isMuted, play, setVolume, toggleMute, warmCries } from './lib/sound'
   import { registerServiceWorker } from './lib/pwa'
   import { connection } from './lib/connection.svelte'
-  import { xpToNext } from './lib/progression'
 
   /** Sem conexão no jogo: de quanto em quanto tempo tenta o /state de novo. */
   const RECONNECT_MS = 5_000
@@ -50,9 +49,7 @@
   /** Progresso visual até o próximo Nv (só a barra do HUD). */
   const trainerXpPct = $derived.by(() => {
     if (!game) return 0
-    const { level, xp } = game.trainer
-    if (level >= game.progression.levelCap) return 100
-    const need = xpToNext(level, game.progression)
+    const { xp, xpToNext: need } = game.trainer
     if (need <= 0) return 0
     return Math.min(100, Math.max(0, (xp / need) * 100))
   })

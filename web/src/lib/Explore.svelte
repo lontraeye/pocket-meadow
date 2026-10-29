@@ -1078,6 +1078,8 @@
           {encounter}
           team={fightTeam}
           progression={game.progression}
+          berries={game.berries}
+          balls={game.balls.list}
           {battleAuto}
           initialInputs={fightInputs}
           resumeElapsedMs={fightResumeMs}
