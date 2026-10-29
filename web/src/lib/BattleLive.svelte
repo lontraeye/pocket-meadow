@@ -58,6 +58,7 @@
     type SpriteBody,
   } from './sprites'
   import { formatCountdown } from './time'
+  import { snapPixelScale } from './pixelSnap.svelte'
   import TypeIcon from './TypeIcon.svelte'
   import { TYPE_COLORS, typeColor, typeInk } from './typeStyle'
   import { xpToNext } from './progression'
@@ -390,7 +391,10 @@
 
   // Corpo medido de cada lado (escala 1), para alinhar os efeitos ao sprite.
   // O seu Pokémon olha ↗ (linha 3) e o selvagem ↙ (linha 7), como nos PmdSprite.
-  const spriteScale = 2
+  // Escala do sprite em pixels inteiros da tela (escala do Windows, zoom):
+  // senão o desenho sai com pixels de tamanhos diferentes.
+  const spriteScale = $derived(snapPixelScale(2))
+  const chipScale = $derived(snapPixelScale(1))
   let wildBody = $state<SpriteBody | null>(null)
   let allyBody = $state<SpriteBody | null>(null)
   $effect(() => {
@@ -1604,7 +1608,7 @@
               shiny={wildLook.shinySheet}
               anim={wildView.anim}
               dir={7}
-              scale={2}
+              scale={spriteScale}
               time={wildView.time}
               shadow={wildLook.shadow}
             />
@@ -1651,7 +1655,7 @@
               shiny={allyLook.shinySheet}
               anim={switchFx ? 'Idle' : allyView.anim}
               dir={3}
-              scale={2}
+              scale={spriteScale}
               time={switchFx ? idleTime : allyView.time}
               shadow={allyLook.shadow}
             />
@@ -1813,7 +1817,7 @@
                           shiny={look.shinySheet}
                           anim="Idle"
                           dir={0}
-                          scale={1}
+                          scale={chipScale}
                           time={idleTime}
                           shadow={0}
                         />
