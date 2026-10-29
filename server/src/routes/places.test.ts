@@ -30,7 +30,7 @@ type View = {
     chapter: number
     caught: number
     total: number
-    milestone: { key: string; town: string; needSpecies: number; needLevel: number; ready: boolean; here: boolean } | null
+    milestone: { key: string; town: string; needLevel: number; ready: boolean; here: boolean } | null
   }
   places: { slug: string; open: boolean; visited: boolean; links: Link[]; speciesTotal: number }[]
   here: { species: { speciesId: number | null; status: string }[] }
@@ -124,16 +124,7 @@ test('encontro só onde está; não viaja com encontro pendente; espécies do lu
   assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-30' })), 'not_here')
 })
 
-/** Marca espécies como capturadas na Pokédex do jogador. */
-function catchAll(userId: number, ids: number[]) {
-  const insert = getSqlite().prepare(
-    `insert into pokedex_entries (user_id, species_id, seen_count, caught_count, first_seen_at)
-     values (?, ?, 1, 1, 1) on conflict(user_id, species_id) do update set caught_count = 1`,
-  )
-  for (const id of ids) insert.run(userId, id)
-}
-
-test('marco: só na cidade, com as espécies e o nível; abre o capítulo seguinte uma vez', async () => {
+test('marco: só na cidade e com o nível; abre o capítulo seguinte uma vez', async () => {
   const { cookie, userId } = player('lyra')
   const claim = () => app.request('/places/milestones/violet/claim', { method: 'POST', headers: { cookie } }, env)
   assert.equal(await errorOf(await claim()), 'milestone_not_here')
@@ -141,10 +132,6 @@ test('marco: só na cidade, com as espécies e o nível; abre o capítulo seguin
   getSqlite().prepare(`update trainers set current_place = 'violet' where user_id = ?`).run(userId)
   assert.equal(await errorOf(await claim()), 'milestone_level')
   getSqlite().prepare(`update trainers set level = 3 where user_id = ?`).run(userId)
-  assert.equal(await errorOf(await claim()), 'milestone_species')
-
-  // Pidgey, Rattata, Sentret, Hoothoot, Hoppip, Zubat: todos do capítulo 1.
-  catchAll(userId, [16, 19, 161, 163, 187, 41])
   let places = await view(cookie)
   assert.equal(places.goal.milestone?.ready, true)
   const ok = await claim()

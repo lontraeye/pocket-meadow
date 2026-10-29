@@ -101,7 +101,6 @@ export type PlacesResponse = {
       typeLabel: string
       town: string
       townName: string
-      needSpecies: number
       needLevel: number
       level: number
       ready: boolean
@@ -446,8 +445,6 @@ export function errorText(error: ApiError): string {
       return 'O marco é na cidade dele. Vá até lá.'
     case 'milestone_level':
       return 'Ainda falta nível de treinador para esse marco.'
-    case 'milestone_species':
-      return 'Ainda faltam espécies do capítulo.'
     case 'milestone_cleared':
       return 'Esse marco já é seu.'
     case 'milestone_locked':

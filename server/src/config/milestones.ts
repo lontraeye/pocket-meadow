@@ -1,7 +1,7 @@
 // Marcos de Johto (JORNADA.md, seção 6): um por capítulo. Cada marco fecha o
-// capítulo dele e abre o seguinte. Pede um nível de treinador e um número de
-// espécies do capítulo capturadas, e é resgatado na cidade do marco. A luta
-// contra o líder entra numa parte depois, sem mudar o resto.
+// capítulo dele e abre o seguinte. Por enquanto pede só o nível de treinador
+// (as missões entram depois) e é resgatado na cidade do marco. A luta contra
+// o líder entra numa parte depois, sem mudar o resto.
 
 export type Tool = 'surf' | 'fly'
 
@@ -15,16 +15,14 @@ export type MilestoneConfig = {
   /** Tipo do ginásio, só para o texto. */
   typeLabel: string
   minLevel: number
-  /** Espécies das áreas do capítulo, capturadas. */
-  species: number
   /** Ferramentas que o marco libera. */
   grants?: readonly Tool[]
 }
 
 export const milestoneConfigs: readonly MilestoneConfig[] = [
-  { key: 'violet', chapter: 1, town: 'violet', name: 'Marco de Violet', typeLabel: 'Voador', minLevel: 3, species: 6 },
-  { key: 'azalea', chapter: 2, town: 'azalea', name: 'Marco de Azalea', typeLabel: 'Inseto', minLevel: 6, species: 8 },
-  { key: 'goldenrod', chapter: 3, town: 'goldenrod', name: 'Marco de Goldenrod', typeLabel: 'Normal', minLevel: 9, species: 8 },
+  { key: 'violet', chapter: 1, town: 'violet', name: 'Marco de Violet', typeLabel: 'Voador', minLevel: 3 },
+  { key: 'azalea', chapter: 2, town: 'azalea', name: 'Marco de Azalea', typeLabel: 'Inseto', minLevel: 6 },
+  { key: 'goldenrod', chapter: 3, town: 'goldenrod', name: 'Marco de Goldenrod', typeLabel: 'Normal', minLevel: 9 },
   {
     key: 'ecruteak',
     chapter: 4,
@@ -32,7 +30,6 @@ export const milestoneConfigs: readonly MilestoneConfig[] = [
     name: 'Marco de Ecruteak',
     typeLabel: 'Fantasma',
     minLevel: 12,
-    species: 12,
     grants: ['surf'],
   },
   {
@@ -42,13 +39,12 @@ export const milestoneConfigs: readonly MilestoneConfig[] = [
     name: 'Marco de Cianwood',
     typeLabel: 'Lutador',
     minLevel: 15,
-    species: 6,
     grants: ['fly'],
   },
-  { key: 'olivine', chapter: 6, town: 'olivine', name: 'Marco de Olivine', typeLabel: 'Aço', minLevel: 18, species: 6 },
-  { key: 'mahogany', chapter: 7, town: 'mahogany', name: 'Marco de Mahogany', typeLabel: 'Gelo', minLevel: 21, species: 8 },
-  { key: 'blackthorn', chapter: 8, town: 'blackthorn', name: 'Marco de Blackthorn', typeLabel: 'Dragão', minLevel: 24, species: 10 },
-  { key: 'league', chapter: 9, town: 'indigo-plateau', name: 'Liga de Johto', typeLabel: 'Liga', minLevel: 30, species: 8 },
+  { key: 'olivine', chapter: 6, town: 'olivine', name: 'Marco de Olivine', typeLabel: 'Aço', minLevel: 18 },
+  { key: 'mahogany', chapter: 7, town: 'mahogany', name: 'Marco de Mahogany', typeLabel: 'Gelo', minLevel: 21 },
+  { key: 'blackthorn', chapter: 8, town: 'blackthorn', name: 'Marco de Blackthorn', typeLabel: 'Dragão', minLevel: 24 },
+  { key: 'league', chapter: 9, town: 'indigo-plateau', name: 'Liga de Johto', typeLabel: 'Liga', minLevel: 30 },
 ]
 
 /** Capítulos que existem: 1 a 9 fecham com marco; o 10 (fim de jogo) abre com a Liga. */

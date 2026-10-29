@@ -132,18 +132,6 @@ function chapterSpecies(chapter: number): Set<number> {
   return ids
 }
 
-function caughtSet(userId: number): Set<number> {
-  return new Set(
-    getDb()
-      .select({ speciesId: pokedexEntries.speciesId, caught: pokedexEntries.caughtCount })
-      .from(pokedexEntries)
-      .where(eq(pokedexEntries.userId, userId))
-      .all()
-      .filter((row) => row.caught > 0)
-      .map((row) => row.speciesId),
-  )
-}
-
 function claimMilestone(
   userId: number,
   key: string,
@@ -157,10 +145,6 @@ function claimMilestone(
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
   if (clock.level < milestone.minLevel) return fail('milestone_level', 400)
-  const caught = caughtSet(userId)
-  const ids = chapterSpecies(milestone.chapter)
-  const have = [...ids].filter((id) => caught.has(id)).length
-  if (have < Math.min(milestone.species, ids.size)) return fail('milestone_species', 400)
 
   getDb().insert(trainerMilestones).values({ userId, milestoneKey: key, clearedAt: now }).run()
   return {
@@ -278,10 +262,9 @@ function goalView(progress: Progress, here: string, statusOf: (id: number) => Sp
           typeLabel: open.typeLabel,
           town: open.town,
           townName: placeBySlug(open.town)?.name ?? open.town,
-          needSpecies: Math.min(open.species, ids.size),
           needLevel: open.minLevel,
           level: progress.level,
-          ready: caught >= Math.min(open.species, ids.size) && progress.level >= open.minLevel,
+          ready: progress.level >= open.minLevel,
           here: here === open.town,
           grants: (open.grants ?? []).map((tool) => TOOL_NAMES[tool]),
         }

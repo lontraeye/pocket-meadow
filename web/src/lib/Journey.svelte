@@ -47,8 +47,10 @@
   const caughtHere = $derived(data?.here.species.filter((entry) => entry.status === 'caught').length ?? 0)
   const goal = $derived(data?.goal ?? null)
   const mark = $derived(goal?.milestone ?? null)
-  const speciesNeed = $derived(mark ? mark.needSpecies : (goal?.total ?? 0))
-  const goalPct = $derived(goal && speciesNeed > 0 ? Math.min(100, Math.round((goal.caught / speciesNeed) * 100)) : 100)
+  // Por enquanto o marco pede só o nível (as missões entram depois).
+  const goalPct = $derived(
+    mark ? Math.min(100, Math.round((mark.level / mark.needLevel) * 100)) : goal && goal.total > 0 ? Math.round((goal.caught / goal.total) * 100) : 100,
+  )
   let claiming = $state(false)
   let celebrate = $state('')
   const pending = $derived(busy || traveling)
@@ -172,9 +174,7 @@
         </p>
         <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
         <p class="goal-meta">
-          <span class:done={goal.caught >= mark.needSpecies}>Espécies do capítulo {Math.min(goal.caught, mark.needSpecies)}/{mark.needSpecies}</span>
-          ·
-          <span class:done={mark.level >= mark.needLevel}>Nv {mark.level}/{mark.needLevel}</span>
+          <span class:done={mark.ready}>Nível de treinador {Math.min(mark.level, mark.needLevel)}/{mark.needLevel}</span>
         </p>
       {:else if goal}
         <p class="goal-title">
