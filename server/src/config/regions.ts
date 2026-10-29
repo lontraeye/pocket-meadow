@@ -1,7 +1,14 @@
 import { chapterOpen, type Progress } from './milestones.js'
-import { readRegionsSnapshot, type RegionSlot, type RegionSource } from '../seed/regionTable.js'
+import {
+  FIELD_METHODS,
+  type FieldMethod,
+  readRegionsSnapshot,
+  type RegionSlot,
+  type RegionSource,
+} from '../seed/regionTable.js'
 
-export type { RegionSource }
+export type { FieldMethod, RegionSource }
+export { FIELD_METHODS }
 
 export type GameRegion = 'kanto' | 'johto'
 
@@ -25,7 +32,10 @@ export type Region = {
   chapter: number | null
   minTrainerLevel: number
   sources: readonly RegionSource[]
+  /** Mato (vazio em lugar só de água). */
   slots: readonly RegionSlot[]
+  /** Pesca, Surf, árvores e pedras: só os métodos que a área tem. */
+  methods: Readonly<Partial<Record<FieldMethod, readonly RegionSlot[]>>>
   wildLevelRange: readonly [number, number]
 }
 
@@ -102,6 +112,8 @@ export const regionConfigs: readonly RegionConfig[] = [
   johto('route-38', 'Rota 38', 5, crystal('johto-route-38-area')),
   johto('route-39', 'Rota 39', 5, crystal('johto-route-39-area')),
   johto('ruins-of-alph-outside', 'Arredores das Ruínas', 5, crystal('ruins-of-alph-outside')),
+  // Mar: sem mato, só pesca e Surf.
+  johto('sea-routes-40-41', 'Rotas 40 e 41', 5, crystal('johto-sea-route-40-area', 'johto-sea-route-41-area')),
   johto(
     'whirl-islands',
     'Whirl Islands',
@@ -115,11 +127,13 @@ export const regionConfigs: readonly RegionConfig[] = [
   // Crystal + Gold: o Crystal não tem Girafarig nem Flaaffy, e o Gold não tem Farfetch'd.
   johto('route-43', 'Rota 43', 7, [...crystal('johto-route-43-area'), { area: 'johto-route-43-area', version: 'gold' }]),
   johto('mt-mortar-upper', 'Mt. Mortar (alto)', 7, crystal('mt-mortar-upper-cave')),
+  johto('lake-of-rage', 'Lake of Rage', 7, crystal('lake-of-rage-area')),
   // Cap. 8 — Blackthorn
   johto('ice-path', 'Ice Path', 8, crystal('ice-path-1f', 'ice-path-b1f', 'ice-path-b2f', 'ice-path-b3f')),
   johto('dark-cave-blackthorn', 'Dark Cave (Blackthorn)', 8, crystal('dark-cave-blackthorn-city-entrance')),
   johto('route-44', 'Rota 44', 8, crystal('johto-route-44-area')),
   johto('route-45', 'Rota 45', 8, crystal('johto-route-45-area')),
+  johto('dragons-den', "Dragon's Den", 8, crystal('dragons-den-area')),
   // Liga — caminho da Liga (as Rotas 26/27 e a Victory Road são "kanto" na PokéAPI)
   johto('route-26', 'Rota 26', 9, crystal('kanto-route-26-area')),
   johto('route-27', 'Rota 27', 9, crystal('kanto-route-27-area')),
@@ -158,7 +172,9 @@ function assembleRegions(): readonly Region[] {
     if (slugs.has(config.slug)) throw new Error(`region ${config.slug} is duplicated in the config`)
     slugs.add(config.slug)
     const entry = snapshot[config.slug]
-    if (!entry || !Array.isArray(entry.slots) || entry.slots.length === 0 || !Array.isArray(entry.sources)) {
+    const methods = entry?.methods ?? {}
+    const any = (entry?.slots.length ?? 0) + Object.values(methods).reduce((sum, slots) => sum + slots.length, 0)
+    if (!entry || !Array.isArray(entry.slots) || any === 0 || !Array.isArray(entry.sources)) {
       throw new Error(`region ${config.slug} is missing from snapshots/regions.json; run npm run seed:regions`)
     }
     if (sourcesKey(entry.sources) !== sourcesKey(config.sources)) {
@@ -174,7 +190,9 @@ function assembleRegions(): readonly Region[] {
       minTrainerLevel: config.minTrainerLevel,
       sources: config.sources,
       slots: entry.slots,
-      wildLevelRange: wildLevelRange(entry.slots),
+      methods,
+      // Nível do mato; no lugar só de água, de tudo.
+      wildLevelRange: wildLevelRange(entry.slots.length > 0 ? entry.slots : Object.values(methods).flat()),
     }
   })
 }
@@ -187,6 +205,40 @@ export function loadRegions(): readonly Region[] {
 
 export function regionBySlug(slug: string): Region | undefined {
   return loadRegions().find((region) => region.slug === slug)
+}
+
+/** Maior nível do mato em cada capítulo: teto dos métodos (a Super Vara dá nível 40 no jogo original). */
+function chapterCaps(): Map<number, number> {
+  const caps = new Map<number, number>()
+  for (const region of loadRegions()) {
+    if (region.chapter === null || region.slots.length === 0) continue
+    const max = Math.max(...region.slots.map((slot) => slot.maxLevel))
+    caps.set(region.chapter, Math.max(caps.get(region.chapter) ?? 0, max))
+  }
+  return caps
+}
+
+let caps: Map<number, number> | undefined
+
+/**
+ * Tabela de um método na área, com o nível limitado ao do capítulo: pescar
+ * não pode dar um Pokémon muito acima do mato em volta. Sem o método: [].
+ */
+export function methodSlots(region: Region, method: FieldMethod): readonly RegionSlot[] {
+  const slots = region.methods[method] ?? []
+  caps ??= chapterCaps()
+  const cap = region.chapter !== null ? caps.get(region.chapter) : undefined
+  if (cap === undefined) return slots
+  return slots.map((slot) =>
+    slot.maxLevel <= cap ? slot : { ...slot, minLevel: Math.min(slot.minLevel, cap), maxLevel: cap },
+  )
+}
+
+/** Espécies da área por qualquer método (mato, água, árvore, pedra), sem repetir. */
+export function regionSpecies(region: Region): number[] {
+  const ids = new Set(region.slots.map((slot) => slot.speciesId))
+  for (const slots of Object.values(region.methods)) for (const slot of slots) ids.add(slot.speciesId)
+  return [...ids]
 }
 
 /** Área com capítulo abre pelos marcos; sem capítulo (Kanto, por enquanto), pelo nível. */

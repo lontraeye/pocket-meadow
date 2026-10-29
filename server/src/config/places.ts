@@ -10,8 +10,8 @@ import {
 import { regionBySlug } from './regions.js'
 
 // Lugares da jornada e ligações (JORNADA.md, seção 11). Lugar = cidade, área
-// (com tabela de encontro: mesmo slug da região) ou água (só pesca e Surf,
-// que ainda não existem). O jogador está num lugar e anda para os vizinhos.
+// (com tabela de encontro: mesmo slug da região) ou água (região sem mato:
+// só pesca e Surf). O jogador está num lugar e anda para os vizinhos.
 
 export type PlaceKind = 'town' | 'area' | 'water'
 export type { Tool }
@@ -204,7 +204,8 @@ export function checkPlaces(): void {
     if (place.chapter < 1 || place.chapter > LAST_CHAPTER) throw new Error(`place ${place.slug} has unknown chapter`)
     const region = regionBySlug(place.slug)
     if (place.kind === 'area' && !region) throw new Error(`place ${place.slug} is an area without a region`)
-    if (place.kind !== 'area' && region) throw new Error(`place ${place.slug} has a region but is ${place.kind}`)
+    if (place.kind === 'town' && region) throw new Error(`place ${place.slug} has a region but is a town`)
+    if (place.kind === 'water' && region && region.slots.length > 0) throw new Error(`place ${place.slug} is water with grass`)
     if (region && region.chapter !== place.chapter) throw new Error(`place ${place.slug} chapter differs from its region`)
   }
   for (const [a, b] of linkList) {

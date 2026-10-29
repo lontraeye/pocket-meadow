@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
-  import type { FieldSpawn } from './api'
+  import type { FieldSpawn, FieldSpot } from './api'
   import { prefersReducedMotion } from './highlights'
   import { snapPixelScale, snapToDevice } from './pixelSnap.svelte'
   import PmdSprite from './PmdSprite.svelte'
@@ -10,17 +10,30 @@
    * Campo de encontro (PLANNING.md 5.14): os Pokémon da área andando num
    * gramado. Cada um vai até um ponto, para um pouco e escolhe outro. Tocar
    * seleciona; quem enfrenta é o painel de baixo. Só visual: quem aparece e o
-   * nível já vieram do servidor.
+   * nível já vieram do servidor. As manchas (água, árvore, pedra) ficam na
+   * faixa de cima, e os Pokémon andam abaixo delas.
    */
   let {
     spawns,
     selected,
     onSelect,
+    spots = [],
+    selectedSpot = null,
+    onSelectSpot = () => {},
   }: {
     spawns: FieldSpawn[]
     selected: number | null
     onSelect: (slot: number) => void
+    spots?: FieldSpot[]
+    selectedSpot?: FieldSpot['kind'] | null
+    onSelectSpot?: (kind: FieldSpot['kind']) => void
   } = $props()
+
+  const SPOT_NAMES: Record<FieldSpot['kind'], string> = { water: 'Água', tree: 'Árvore', rock: 'Pedra' }
+  // Água à esquerda; árvore e pedra à direita.
+  const SPOT_X: Record<FieldSpot['kind'], number> = { water: 0.04, tree: 0.62, rock: 0.82 }
+  // Com manchas, os Pokémon andam só abaixo delas.
+  const top = $derived(spots.length > 0 ? 0.42 : 0.28)
 
   type Walker = { x: number; y: number; tx: number; ty: number; dir: number; moving: boolean; until: number }
 
@@ -37,7 +50,8 @@
   let clock = $state(0)
 
   function spot(): { x: number; y: number } {
-    return { x: 0.12 + Math.random() * 0.76, y: 0.28 + Math.random() * 0.6 }
+    const from = untrack(() => top)
+    return { x: 0.12 + Math.random() * 0.76, y: from + Math.random() * (0.88 - from) }
   }
 
   // Direções do PMD: 0 sul, 1 sudeste, 2 leste... 7 sudoeste.
@@ -124,6 +138,43 @@
 </script>
 
 <div class="field" role="group" aria-label="Pokémon no campo" bind:clientWidth={fieldW} bind:clientHeight={fieldH}>
+  {#each spots as entry (entry.kind)}
+    {@const open = entry.actions.some((action) => action.open)}
+    <button
+      type="button"
+      class="spot {entry.kind}"
+      class:locked={!open}
+      class:picked={entry.kind === selectedSpot}
+      style:left="{SPOT_X[entry.kind] * 100}%"
+      aria-label="{SPOT_NAMES[entry.kind]}{open ? '' : ' (fechada)'}"
+      aria-pressed={entry.kind === selectedSpot}
+      onclick={() => onSelectSpot(entry.kind)}
+    >
+      {#if entry.kind === 'water'}
+        <span class="pond" aria-hidden="true"><i></i><i></i></span>
+      {:else if entry.kind === 'tree'}
+        <svg viewBox="0 0 16 20" width="48" height="60" aria-hidden="true" shape-rendering="crispEdges">
+          <rect x="6" y="13" width="4" height="7" fill="#7a4a24" />
+          <rect x="2" y="3" width="12" height="10" fill="#2f7a2f" />
+          <rect x="4" y="1" width="8" height="2" fill="#2f7a2f" />
+          <rect x="0" y="5" width="2" height="6" fill="#2f7a2f" />
+          <rect x="14" y="5" width="2" height="6" fill="#2f7a2f" />
+          <rect x="4" y="4" width="3" height="2" fill="#56a447" />
+          <rect x="9" y="7" width="2" height="2" fill="#56a447" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 16 12" width="44" height="33" aria-hidden="true" shape-rendering="crispEdges">
+          <rect x="3" y="2" width="10" height="9" fill="#8a8a92" />
+          <rect x="1" y="5" width="14" height="6" fill="#8a8a92" />
+          <rect x="5" y="0" width="6" height="2" fill="#8a8a92" />
+          <rect x="4" y="3" width="3" height="2" fill="#b4b4bc" />
+          <rect x="9" y="6" width="1" height="4" fill="#5c5c64" />
+          <rect x="1" y="10" width="14" height="1" fill="#5c5c64" />
+        </svg>
+      {/if}
+      {#if !open}<span class="lock" aria-hidden="true">🔒</span>{/if}
+    </button>
+  {/each}
   {#each ordered as spawn (spawn.id)}
     {@const walker = walkers[spawn.id]}
     {@const look = gardenSprite(spawn.speciesId, spawn.isShiny)}
@@ -182,6 +233,100 @@
       ),
       var(--grass, #8fc25a);
     box-shadow: inset 0 3px 0 #00000022;
+  }
+
+  /* Manchas na faixa de cima do campo. */
+  .spot {
+    position: absolute;
+    top: 6px;
+    display: grid;
+    place-items: end center;
+    height: 36%;
+    min-height: 56px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .spot.water {
+    width: 52%;
+  }
+
+  .spot.tree,
+  .spot.rock {
+    width: 16%;
+    min-width: 48px;
+  }
+
+  .spot.locked > :not(.lock) {
+    opacity: 0.5;
+    filter: grayscale(0.5);
+  }
+
+  .spot.picked,
+  .spot:focus-visible {
+    outline: 3px solid var(--selected, #fff);
+    outline-offset: 1px;
+  }
+
+  .pond {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #4f8fe0;
+    border: 3px solid #2d5fa8;
+    border-radius: 40% 46% 42% 38%;
+    box-shadow: inset 0 4px 0 #ffffff33;
+    overflow: hidden;
+  }
+
+  /* Duas marolas que vão e voltam. */
+  .pond i {
+    position: absolute;
+    width: 22%;
+    height: 3px;
+    background: #cfe4ff;
+    animation: ripple 2.4s ease-in-out infinite alternate;
+  }
+
+  .pond i:first-child {
+    left: 18%;
+    top: 34%;
+  }
+
+  .pond i:last-child {
+    left: 54%;
+    top: 62%;
+    animation-delay: -1.2s;
+  }
+
+  @keyframes ripple {
+    from {
+      transform: translateX(-6px);
+      opacity: 0.4;
+    }
+    to {
+      transform: translateX(6px);
+      opacity: 0.9;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pond i {
+      animation: none;
+    }
+  }
+
+  .lock {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    font-size: 13px;
+    line-height: 1;
+    filter: drop-shadow(0 1px 0 #0008);
   }
 
   /* O botão é o ponto do chão (sem tamanho): o sprite se apoia nele. */

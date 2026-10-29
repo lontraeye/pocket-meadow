@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 import { applyRareWeights, rollWild } from '../game/battle.js'
 import { slotsFromArea, slotsFromSources, type LocationArea, readRegionsSnapshot } from '../seed/regionTable.js'
 import { RARE_WEIGHT_MAX } from './battle.js'
-import { loadRegions, regionConfigs, regionStatus } from './regions.js'
+import { loadRegions, methodSlots, regionBySlug, regionConfigs, regionSpecies, regionStatus } from './regions.js'
 
 const morningOnly = (chance: number, min: number, max: number) => ({
   min_level: min,
@@ -144,19 +144,24 @@ describe('regiões', () => {
       const entry = snapshot[config.slug]
       assert.ok(entry, config.slug)
       assert.deepEqual(entry.sources, config.sources)
-      assert.ok(entry.slots.length > 0)
-      const tenths = Math.round(entry.slots.reduce((sum, slot) => sum + slot.weight, 0) * 10)
-      assert.equal(tenths, 1000, `${config.slug} soma ${tenths / 10}`)
-      for (const slot of entry.slots) {
-        assert.ok(slot.speciesId >= 1 && slot.speciesId <= 251)
-        assert.ok(slot.weight > 0)
-        assert.ok(slot.minLevel <= slot.maxLevel)
+      // Mato e cada método: tabela que existe soma 100. Só água pode ficar sem mato.
+      const tables = [entry.slots, ...Object.values(entry.methods ?? {})].filter((table) => table.length > 0)
+      assert.ok(tables.length > 0, config.slug)
+      for (const table of tables) {
+        const tenths = Math.round(table.reduce((sum, slot) => sum + slot.weight, 0) * 10)
+        assert.equal(tenths, 1000, `${config.slug} soma ${tenths / 10}`)
+        for (const slot of table) {
+          assert.ok(slot.speciesId >= 1 && slot.speciesId <= 251)
+          assert.ok(slot.weight > 0)
+          assert.ok(slot.minLevel <= slot.maxLevel)
+        }
       }
       const region = regions.find((item) => item.slug === config.slug)
       assert.ok(region)
+      const levels = entry.slots.length > 0 ? entry.slots : tables.flat()
       assert.deepEqual(region.wildLevelRange, [
-        Math.min(...entry.slots.map((slot) => slot.minLevel)),
-        Math.max(...entry.slots.map((slot) => slot.maxLevel)),
+        Math.min(...levels.map((slot) => slot.minLevel)),
+        Math.max(...levels.map((slot) => slot.maxLevel)),
       ])
     }
   })
@@ -320,4 +325,18 @@ describe('regiões', () => {
       assert.deepEqual(wild, expected[index])
     }
   })
+})
+
+test('métodos: o nível fica no teto do capítulo (a Super Vara do Lake of Rage não dá nível 40)', () => {
+  const lake = regionBySlug('lake-of-rage')!
+  assert.equal(lake.slots.length, 0)
+  const capped = methodSlots(lake, 'superRod')
+  const walkMax = Math.max(
+    ...loadRegions()
+      .filter((region) => region.chapter === lake.chapter)
+      .flatMap((region) => region.slots.map((slot) => slot.maxLevel)),
+  )
+  assert.ok(capped.length > 0)
+  for (const slot of capped) assert.ok(slot.maxLevel <= walkMax && slot.minLevel <= slot.maxLevel)
+  assert.ok(regionSpecies(lake).includes(130), 'Gyarados no Lake of Rage')
 })

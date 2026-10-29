@@ -1,4 +1,4 @@
-import { loadRegions } from './regions.js'
+import { loadRegions, regionSpecies } from './regions.js'
 import { speciesSeed } from './seed.js'
 import { readSpeciesSnapshot } from '../seed/apply.js'
 
@@ -90,7 +90,7 @@ function versioned(base: string): string {
 export function obtainableSpeciesIds(): Set<number> {
   const wild = new Set<number>()
   for (const region of loadRegions()) {
-    for (const slot of region.slots) wild.add(slot.speciesId)
+    for (const id of regionSpecies(region)) wild.add(id)
   }
   const obtainable = new Set(wild)
   const edges = readSpeciesSnapshot()
@@ -116,7 +116,9 @@ export function albumBlocks(input: {
 }): readonly AlbumBlockDef[] {
   const blocks: AlbumBlockDef[] = []
   for (const region of loadRegions()) {
+    // O bloco da área conta o mato (a pesca e o resto ficam fora, por enquanto).
     const ids = [...new Set(region.slots.map((slot) => slot.speciesId))].sort((a, b) => a - b)
+    if (ids.length === 0) continue
     blocks.push({
       key: versioned(`region:${region.slug}`),
       kind: 'region',

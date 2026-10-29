@@ -10,7 +10,8 @@ import {
   type PokedexReward,
   type RarityBand,
 } from '../config/pokedex.js'
-import { loadRegions } from '../config/regions.js'
+import { TOOL_NAMES } from '../config/milestones.js'
+import { type FieldMethod, loadRegions, methodSlots } from '../config/regions.js'
 import { trainerConfig } from '../config/trainer.js'
 import { abilitiesFor, learnsetFor, movesByName } from '../seed/traitsData.js'
 import { isFastMove, type LearnEntry, type MoveInfo, type SpeciesAbilities } from './traits.js'
@@ -102,10 +103,19 @@ export type DexSpeciesView = {
 
 function locationsFor(speciesId: number): DexLocation[] {
   const out: DexLocation[] = []
-  for (const region of loadRegions()) {
-    const total = region.slots.reduce((sum, slot) => sum + slot.weight, 0)
+  // Cada tabela conta à parte: o mato e cada método (pesca, Surf, árvore, pedra).
+  const tables = loadRegions().flatMap((region) => [
+    { region, name: region.name, slots: region.slots },
+    ...(Object.keys(region.methods) as FieldMethod[]).map((method) => ({
+      region,
+      name: `${region.name} (${TOOL_NAMES[method]})`,
+      slots: methodSlots(region, method),
+    })),
+  ])
+  for (const { region, name, slots } of tables) {
+    const total = slots.reduce((sum, slot) => sum + slot.weight, 0)
     if (total <= 0) continue
-    const mine = region.slots.filter((slot) => slot.speciesId === speciesId)
+    const mine = slots.filter((slot) => slot.speciesId === speciesId)
     if (mine.length === 0) continue
     const weight = mine.reduce((sum, slot) => sum + slot.weight, 0)
     const fraction = weight / total
@@ -117,7 +127,7 @@ function locationsFor(speciesId: number): DexLocation[] {
     }
     out.push({
       regionSlug: region.slug,
-      regionName: region.name,
+      regionName: name,
       minLevel,
       maxLevel,
       rarity: rarityBand(fraction),

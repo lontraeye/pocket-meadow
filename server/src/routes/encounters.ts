@@ -225,6 +225,8 @@ export function createEncounter(
     .get()
   if (pending) return fail('encounter_pending', 409)
   if (trainerConfig.energyEnabled && clock.energy < 1) return fail('no_energy', 400)
+  // Lugar só de água: sem mato para procurar (vem pela mancha, já sorteado).
+  if (!forced && region.slots.length === 0) return fail('no_grass', 400)
 
   const shinyBonus = takeBonus(userId, 'shiny_boost')
   const rareBonus = takeBonus(userId, 'rare_boost')

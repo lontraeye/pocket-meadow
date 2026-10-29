@@ -123,3 +123,53 @@ test('vaga inexistente e área fechada são recusadas', async () => {
   getSqlite().prepare(`update trainers set current_place = 'route-32' where user_id = ?`).run(userId)
   assert.equal(await errorOf(await field(cookie)), 'region_locked')
 })
+
+type Spot = { kind: string; actions: { method: string; label: string; open: boolean; reason: string | null }[] }
+const spotsOf = async (cookie: string) => ((await (await field(cookie)).json()) as { spots: Spot[] }).spots
+
+test('manchas: árvore e água aparecem fechadas sem marco; com a ferramenta, sorteiam da tabela do método', async () => {
+  const { cookie, userId } = player('fisher')
+  getSqlite().prepare(`update trainers set current_place = 'route-30' where user_id = ?`).run(userId)
+  let spots = await spotsOf(cookie)
+  assert.deepEqual(
+    spots.map((spot) => spot.kind),
+    ['water', 'tree'],
+  )
+  const fish = spots[0]!.actions.find((entry) => entry.label === 'Pescar')!
+  assert.equal(fish.method, 'oldRod')
+  assert.equal(fish.reason, 'Vara Velha abre no Marco de Azalea')
+  assert.equal(await errorOf(await post('/field/use', cookie, { method: 'oldRod' })), 'tool_locked')
+  assert.equal(await errorOf(await post('/field/use', cookie, { method: 'rockSmash' })), 'spot_not_found')
+
+  const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
+  for (const key of ['violet', 'azalea']) grant.run(userId, key)
+  spots = await spotsOf(cookie)
+  assert.equal(spots[0]!.actions[0]!.open, true)
+  // Surf ainda fechado (marco de Ecruteak).
+  assert.equal(spots[0]!.actions.find((entry) => entry.method === 'surf')?.open, false)
+
+  const used = await post('/field/use', cookie, { method: 'headbutt' })
+  assert.equal(used.status, 201)
+  const row = getSqlite()
+    .prepare(`select species_id as speciesId, region_slug as regionSlug from encounters where user_id = ? and status = 'pending'`)
+    .get(userId) as { speciesId: number; regionSlug: string }
+  assert.equal(row.regionSlug, 'route-30')
+  const tree = regionBySlug('route-30')!.methods.headbutt!
+  assert.ok(tree.some((slot) => slot.speciesId === row.speciesId), `${row.speciesId} não é da árvore`)
+  // Com encontro em andamento, não usa outra mancha.
+  assert.equal(await errorOf(await post('/field/use', cookie, { method: 'oldRod' })), 'encounter_pending')
+})
+
+test('lugar só de água: sem ninguém no mato, só a mancha de água', async () => {
+  const { cookie, userId } = player('sailor')
+  const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
+  for (const key of ['violet', 'azalea', 'goldenrod', 'ecruteak']) grant.run(userId, key)
+  getSqlite().prepare(`update trainers set current_place = 'sea-routes-40-41' where user_id = ?`).run(userId)
+  const response = (await (await field(cookie)).json()) as { spawns: Spawn[]; spots: Spot[] }
+  assert.equal(response.spawns.length, 0)
+  assert.deepEqual(
+    response.spots.map((spot) => spot.kind),
+    ['water', 'rock'],
+  )
+})
+

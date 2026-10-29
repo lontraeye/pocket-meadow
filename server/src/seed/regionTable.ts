@@ -22,9 +22,26 @@ export type RegionSource = {
   version: string
 }
 
+/** Métodos fora do mato (JORNADA.md, seção 4): cada um com a tabela dele. */
+export const FIELD_METHODS = ['oldRod', 'goodRod', 'superRod', 'surf', 'headbutt', 'rockSmash'] as const
+export type FieldMethod = (typeof FIELD_METHODS)[number]
+
+/** Nomes da PokéAPI de cada método; o Headbutt junta as árvores comuns e raras. */
+const API_METHODS: Readonly<Record<'walk' | FieldMethod, readonly string[]>> = {
+  walk: ['walk'],
+  oldRod: ['old-rod'],
+  goodRod: ['good-rod'],
+  superRod: ['super-rod'],
+  surf: ['surf'],
+  headbutt: ['headbutt-low', 'headbutt-normal', 'headbutt-high'],
+  rockSmash: ['rock-smash'],
+}
+
 export type RegionSnapshotEntry = {
   sources: RegionSource[]
+  /** Mato; vazio em lugar só de água. */
   slots: RegionSlot[]
+  methods?: Partial<Record<FieldMethod, RegionSlot[]>>
 }
 
 export type RegionsSnapshot = Record<string, RegionSnapshotEntry>
@@ -48,6 +65,10 @@ export type LocationArea = {
 export type RegionTableOptions = {
   version: string
   name: string
+  /** Padrão: o mato. */
+  method?: 'walk' | FieldMethod
+  /** Sem encontro nenhum dá tabela vazia em vez de erro. */
+  allowEmpty?: boolean
   exclude?: readonly number[]
   levelOverride?: readonly [number, number]
 }
@@ -144,12 +165,19 @@ export function slotsFromSources(
   options: Omit<RegionTableOptions, 'version'>,
 ): RegionSlot[] {
   if (sources.length === 0) throw new Error(`${options.name} has no sources`)
+  // Média só entre as fontes que têm o método (um andar sem água não dilui a pesca).
+  const tables = sources
+    .map((source) => [...rawSlotsFromArea(source.area, { ...options, version: source.version, allowEmpty: true }).values()])
+    .filter((raw) => raw.length > 0)
+  if (tables.length === 0) {
+    if (options.allowEmpty) return []
+    throw new Error(`${options.name} has no ${options.method ?? 'walk'} encounters`)
+  }
   const merged = new Map<string, RawSlot>()
-  for (const source of sources) {
-    const raw = [...rawSlotsFromArea(source.area, { ...options, version: source.version }).values()]
+  for (const raw of tables) {
     const total = raw.reduce((sum, slot) => sum + slot.chance, 0)
     for (const slot of raw) {
-      addChance(merged, slot.speciesId, slot.minLevel, slot.maxLevel, slot.chance / total / sources.length)
+      addChance(merged, slot.speciesId, slot.minLevel, slot.maxLevel, slot.chance / total / tables.length)
     }
   }
   return normalizeWeights([...merged.values()], options.name)
@@ -163,6 +191,7 @@ function rawSlotsFromArea(area: LocationArea, options: RegionTableOptions): Map<
   }
 
   const periodTables = PERIODS.map(() => new Map<string, RawSlot>())
+  const methods = API_METHODS[options.method ?? 'walk']
 
   for (const encounter of area.pokemon_encounters) {
     const speciesId = idFromUrl(encounter.pokemon.url)
@@ -170,7 +199,7 @@ function rawSlotsFromArea(area: LocationArea, options: RegionTableOptions): Map<
     for (const version of encounter.version_details) {
       if (version.version.name !== options.version) continue
       for (const detail of version.encounter_details) {
-        if (detail.method.name !== 'walk') continue
+        if (!methods.includes(detail.method.name)) continue
         if (!(detail.chance > 0)) continue
         if (detail.max_level < detail.min_level) {
           throw new Error(`${options.name} has an inverted level range for species ${speciesId}`)
@@ -208,8 +237,8 @@ function rawSlotsFromArea(area: LocationArea, options: RegionTableOptions): Map<
     addChance(merged, sample.speciesId, minLevel, maxLevel, chance / PERIODS.length)
   }
 
-  if (merged.size === 0) {
-    throw new Error(`${options.name} has no walk encounters in ${options.version}`)
+  if (merged.size === 0 && !options.allowEmpty) {
+    throw new Error(`${options.name} has no ${options.method ?? 'walk'} encounters in ${options.version}`)
   }
 
   return merged
@@ -232,15 +261,31 @@ export function writeRegionsSnapshot(snapshot: RegionsSnapshot): void {
     .map((slug) => {
       const entry = snapshot[slug]
       if (!entry) throw new Error(`missing snapshot entry ${slug}`)
-      const lines = [...entry.slots].sort(compareSlots).map((slot) => `      ${JSON.stringify(slot)}`)
-      return [
-        `  ${JSON.stringify(slug)}: {`,
-        `    "sources": ${JSON.stringify(entry.sources)},`,
-        `    "slots": [`,
-        lines.join(',\n'),
-        `    ]`,
-        `  }`,
-      ].join('\n')
+      const table = (slots: readonly RegionSlot[], indent: string) =>
+        slots.length === 0
+          ? '[]'
+          : [
+              '[',
+              [...slots]
+                .sort(compareSlots)
+                .map((slot) => `${indent}  ${JSON.stringify(slot)}`)
+                .join(',\n'),
+              `${indent}]`,
+            ].join('\n')
+      const methods = FIELD_METHODS.filter((method) => (entry.methods?.[method]?.length ?? 0) > 0)
+      const lines = [`  ${JSON.stringify(slug)}: {`, `    "sources": ${JSON.stringify(entry.sources)},`]
+      if (methods.length === 0) {
+        lines.push(`    "slots": ${table(entry.slots, '    ')}`)
+      } else {
+        lines.push(`    "slots": ${table(entry.slots, '    ')},`, `    "methods": {`)
+        methods.forEach((method, index) => {
+          const comma = index < methods.length - 1 ? ',' : ''
+          lines.push(`      ${JSON.stringify(method)}: ${table(entry.methods![method]!, '      ')}${comma}`)
+        })
+        lines.push(`    }`)
+      }
+      lines.push(`  }`)
+      return lines.join('\n')
     })
   fs.mkdirSync(path.dirname(regionsSnapshotPath), { recursive: true })
   fs.writeFileSync(regionsSnapshotPath, `{\n${blocks.join(',\n')}\n}\n`)

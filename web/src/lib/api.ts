@@ -100,7 +100,13 @@ export type FieldSpawn = {
   type2: string | null
 }
 
-export type FieldResponse = { regionSlug: string; spawns: FieldSpawn[] }
+/** Mancha do campo (água, árvore, pedra) e o que dá para fazer nela. */
+export type FieldSpot = {
+  kind: 'water' | 'tree' | 'rock'
+  actions: { method: PlaceTool; label: string; open: boolean; reason: string | null }[]
+}
+
+export type FieldResponse = { regionSlug: string; spawns: FieldSpawn[]; spots: FieldSpot[] }
 
 export type PlacesResponse = {
   current: string

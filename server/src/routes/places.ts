@@ -12,7 +12,7 @@ import {
   toolOpen,
 } from '../config/milestones.js'
 import { CHAPTER_TITLES, linksOf, lockReason, placeBySlug, placeConfigs, START_PLACE } from '../config/places.js'
-import { regionBySlug } from '../config/regions.js'
+import { regionBySlug, regionSpecies } from '../config/regions.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
@@ -128,7 +128,8 @@ function chapterSpecies(chapter: number): Set<number> {
   const ids = new Set<number>()
   for (const place of placeConfigs) {
     if (place.chapter !== chapter) continue
-    for (const slot of regionBySlug(place.slug)?.slots ?? []) ids.add(slot.speciesId)
+    const region = regionBySlug(place.slug)
+    for (const id of region ? regionSpecies(region) : []) ids.add(id)
   }
   return ids
 }
@@ -178,7 +179,7 @@ function placesView(userId: number, now: number) {
   }
   const speciesIn = (slug: string): number[] => {
     const region = regionBySlug(slug)
-    return region ? [...new Set(region.slots.map((slot) => slot.speciesId))] : []
+    return region ? regionSpecies(region) : []
   }
   const flyBlock = toolBlock('fly', progress)
   const flyOpen = flyBlock === null
