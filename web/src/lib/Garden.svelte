@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { snapIconSize } from './pixelSnap.svelte'
+  import { snapIconSize, snapPixelScale, snapToDevice } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
@@ -296,7 +296,9 @@
 
   const tileW = $derived(baseTileW * scale)
   const tileH = $derived(baseTileH * scale)
-  const pmdScale = $derived(2 * scale)
+  // Escala do sprite em pixels inteiros da tela (escala do Windows, zoom do
+  // navegador): senão os pixels saem de tamanhos diferentes.
+  const pmdScale = $derived(snapPixelScale(2 * scale))
   const halfW = $derived(tileW / 2)
   const halfH = $derived(tileH / 2)
 
@@ -1041,7 +1043,7 @@
       class="stage"
       style:width="{stageW}px"
       style:height="{stageH}px"
-      style:transform="translate({panX}px, {panY}px)"
+      style:transform="translate({snapToDevice(panX)}px, {snapToDevice(panY)}px)"
     >
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
@@ -1094,8 +1096,8 @@
         <button
           class="mon"
           class:selected={selectedId === walker.id}
-          style:left="{spot.x}px"
-          style:top="{spot.y + halfH}px"
+          style:left="{snapToDevice(spot.x)}px"
+          style:top="{snapToDevice(spot.y + halfH)}px"
           style:--size="{showdownSize * scale}px"
           style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
           aria-label={`${walker.displayName}, nível ${walker.level}`}

@@ -2,6 +2,7 @@
   import { onMount, untrack } from 'svelte'
   import type { FieldSpawn } from './api'
   import { prefersReducedMotion } from './highlights'
+  import { snapPixelScale, snapToDevice } from './pixelSnap.svelte'
   import PmdSprite from './PmdSprite.svelte'
   import { gardenSprite, loadPmd } from './sprites'
 
@@ -24,7 +25,11 @@
   type Walker = { x: number; y: number; tx: number; ty: number; dir: number; moving: boolean; until: number }
 
   const SPEED = 0.07 // fração do campo por segundo
-  const SCALE = 2
+  // Escala e posição em pixels inteiros da tela (escala do Windows, zoom):
+  // senão o sprite sai com pixels de tamanhos diferentes.
+  const scale = $derived(snapPixelScale(2))
+  let fieldW = $state(0)
+  let fieldH = $state(0)
   const reduced = prefersReducedMotion()
 
   // Posição de cada um pelo id (um novo na vaga começa em outro lugar).
@@ -118,7 +123,7 @@
   )
 </script>
 
-<div class="field" role="group" aria-label="Pokémon no campo">
+<div class="field" role="group" aria-label="Pokémon no campo" bind:clientWidth={fieldW} bind:clientHeight={fieldH}>
   {#each ordered as spawn (spawn.id)}
     {@const walker = walkers[spawn.id]}
     {@const look = gardenSprite(spawn.speciesId, spawn.isShiny)}
@@ -127,12 +132,13 @@
         type="button"
         class="mon"
         class:picked={spawn.slot === selected}
-        style:left="{walker.x * 100}%"
-        style:top="{walker.y * 100}%"
+        style:left="{snapToDevice(walker.x * fieldW)}px"
+        style:top="{snapToDevice(walker.y * fieldH)}px"
         aria-label="{spawn.displayName}{spawn.isShiny ? ' (shiny)' : ''}, nível {spawn.level}"
         aria-pressed={spawn.slot === selected}
         onclick={() => onSelect(spawn.slot)}
       >
+        <span class="hit" aria-hidden="true"></span>
         {#if spawn.slot === selected}<span class="ring" aria-hidden="true"></span>{/if}
         {#if look.kind === 'pmd'}
           <span class="anchor">
@@ -141,7 +147,7 @@
               shiny={look.shinySheet}
               anim={walker.moving ? 'Walk' : 'Idle'}
               dir={walker.dir}
-              scale={SCALE}
+              {scale}
               time={clock}
               shadow={look.shadow}
             />
@@ -178,57 +184,65 @@
     box-shadow: inset 0 3px 0 #00000022;
   }
 
+  /* O botão é o ponto do chão (sem tamanho): o sprite se apoia nele. */
   .mon {
     position: absolute;
-    width: 64px;
-    height: 64px;
+    width: 0;
+    height: 0;
     margin: 0;
     padding: 0;
     border: 0;
     background: none;
-    transform: translate(-50%, -85%);
     cursor: pointer;
     touch-action: manipulation;
   }
 
+  /* Alvo de toque em volta do sprite (maior que ele). */
+  .hit {
+    position: absolute;
+    left: -32px;
+    top: -60px;
+    width: 64px;
+    height: 72px;
+  }
+
   .anchor {
     position: absolute;
-    left: 50%;
-    bottom: 10px;
+    left: 0;
+    top: 0;
     width: 0;
     height: 0;
   }
 
   .gif {
     position: absolute;
-    left: 50%;
-    bottom: 6px;
+    left: -28px;
+    bottom: -4px;
     width: 56px;
-    transform: translateX(-50%);
     image-rendering: pixelated;
   }
 
   .ring {
     position: absolute;
-    left: 50%;
-    bottom: 2px;
+    left: -23px;
+    top: -8px;
     width: 46px;
     height: 16px;
-    transform: translateX(-50%);
+    box-sizing: border-box;
     border: 3px solid var(--selected, #fff);
     border-radius: 50%;
   }
 
   .sparkle {
     position: absolute;
-    top: 4px;
-    right: 6px;
+    top: -58px;
+    left: 14px;
     color: #fff3a0;
     text-shadow: 0 0 2px #000;
     font-size: 14px;
   }
 
-  .mon:focus-visible {
+  .mon:focus-visible .hit {
     outline: 3px solid var(--selected);
   }
 </style>

@@ -24,3 +24,18 @@ export function snapIconSize(cssSize: number, grid = 12): number {
   const perPixel = Math.max(1, Math.round((cssSize * dpr) / grid))
   return (perPixel * grid) / dpr
 }
+
+/**
+ * Escala de sprite em pixel (PMD) com número inteiro de pixels da tela por
+ * pixel do desenho. Ex.: escala 2 em 125% vira 2,4 (3 pixels de tela).
+ */
+export function snapPixelScale(scale: number): number {
+  const dpr = ratio.current
+  return Math.max(1, Math.round(scale * dpr)) / dpr
+}
+
+/** Posição em CSS alinhada a um pixel da tela (sem cair entre dois). */
+export function snapToDevice(px: number): number {
+  const dpr = ratio.current
+  return Math.round(px * dpr) / dpr
+}
