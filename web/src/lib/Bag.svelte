@@ -52,7 +52,7 @@
 
   function oranDisabled(itemKey: string): string {
     const berry = berryOf(itemKey)
-    if (berry?.key === 'oran' && energyFull()) return 'Energia já está cheia'
+    if (berry?.key === 'oran' && game.trainer.energyEnabled && energyFull()) return 'Energia já está cheia'
     return ''
   }
 

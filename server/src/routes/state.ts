@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballList, ballsConfig } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
-import { berryConfig, berryList, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
+import { berryConfig, berryList, energyBerryOff, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
 import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
@@ -187,10 +187,11 @@ function readState(userId: number, now: number) {
       name: berry.name,
       growMs: berry.growMs,
       favoriteWeather: berry.favoriteWeather,
-      effectDescription: berry.effectDescription,
+      // Sem energia, a Oran só serve na captura.
+      effectDescription: energyBerryOff(berry) ? (berry.capture?.description ?? '') : berry.effectDescription,
       effectKey:
         !berry.effect || berry.effect.kind === 'energy' ? null : berry.effect.effectKey,
-      bagUsable: berry.effect !== undefined,
+      bagUsable: berry.effect !== undefined && !energyBerryOff(berry),
       capture: berry.capture
         ? {
             catchMult: berry.capture.catchMult ?? null,
@@ -239,6 +240,7 @@ function readState(userId: number, now: number) {
       level: trainer.level,
       xp: trainer.xp,
       xpToNext: trainerXpToNext(trainer.level),
+      energyEnabled: trainerConfig.energyEnabled,
       energy: trainer.energy,
       energyMax: trainerConfig.energyMax,
       energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),

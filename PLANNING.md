@@ -305,6 +305,7 @@ Só pelo Google, sem senha (desde 2026-10-27; o cadastro por senha nunca teve co
 - Com essa curva, vencer e capturar um selvagem por volta do nível 4 rende 30 XP e completa o nível 2. Cerca de cinco encontros assim na Rota 1 abrem a Floresta Verde (nível 3). A Rota 30 (nível 6) pede mais algumas dezenas.
 
 ### 5.2 Energia
+- **Desligada em 2026-10-29** (`trainerConfig.energyEnabled = false`): o freio atrapalhava mais do que ajudava no loop atual. Encontro não exige nem gasta energia; o HUD mostra o XP de treinador no lugar; a Oran só serve na captura; a energia das recompensas do álbum não é dada. Os dados (`trainers.energy`) continuam no banco. No futuro: outro freio de progresso, ou a energia de volta com um máximo bem maior.
 - Cada encontro custa 1 de energia.
 - Regenera 1 a cada `ENERGY_REGEN_MS` (inicial: 15 min), até `ENERGY_MAX` (inicial: 10).
 - Calculada por timestamp (ver seção 6).

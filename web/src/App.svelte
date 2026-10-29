@@ -144,7 +144,7 @@
   )
 
   $effect(() => {
-    if (!game || phase !== 'play') return
+    if (!game || phase !== 'play' || !game.trainer.energyEnabled) return
     const nextAt = game.trainer.energyNextAt
     if (nextAt === null) return
     if (clock.now() < nextAt) return
@@ -392,20 +392,31 @@
             <span style:width="{trainerXpPct}%"></span>
           </div>
         </div>
-        <button
-          type="button"
-          class="energy"
-          aria-label="Energia"
-          onclick={() => (energyDetail = !energyDetail)}
-        >
-          <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
-          <div class="pips" aria-hidden="true">
-            {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
-              <span class="pip" class:full={i < game.trainer.energy}></span>
-            {/each}
+        {#if game.trainer.energyEnabled}
+          <button
+            type="button"
+            class="energy"
+            aria-label="Energia"
+            onclick={() => (energyDetail = !energyDetail)}
+          >
+            <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
+            <div class="pips" aria-hidden="true">
+              {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
+                <span class="pip" class:full={i < game.trainer.energy}></span>
+              {/each}
+            </div>
+            <span class="timer">{energyCaption()}</span>
+          </button>
+        {:else}
+          <!-- Energia desligada: o lugar dela mostra o XP de treinador. -->
+          <div class="energy trainer-progress">
+            <span class="label">Treinador</span>
+            <div class="pips" aria-hidden="true">
+              <span class="pip xp-bar"><span style:width="{trainerXpPct}%"></span></span>
+            </div>
+            <span class="timer">XP {game.trainer.xp}/{game.trainer.xpToNext}</span>
           </div>
-          <span class="timer">{energyCaption()}</span>
-        </button>
+        {/if}
       </div>
       <span class="hud-sep" aria-hidden="true"></span>
       <div class="hud-actions">
@@ -1046,6 +1057,19 @@
   }
 
   .pip.full {
+    background: var(--accent);
+    box-shadow:
+      inset 0 calc(var(--px) * -2) 0 var(--accent-shade),
+      inset 0 var(--px) 0 #fff3a0;
+  }
+
+  .trainer-progress {
+    cursor: default;
+  }
+
+  .xp-bar > span {
+    display: block;
+    height: 100%;
     background: var(--accent);
     box-shadow:
       inset 0 calc(var(--px) * -2) 0 var(--accent-shade),

@@ -258,6 +258,8 @@ export type GameState = {
     xp: number
     /** Curva do treinador (não é a dos Pokémon). */
     xpToNext: number
+    /** false = energia desligada (config do servidor): encontro não gasta e a tela some com ela. */
+    energyEnabled: boolean
     energy: number
     energyMax: number
     energyNextAt: number | null

@@ -371,6 +371,8 @@
       { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
     ].map((group) => ({ ...group, ...sectionsOf(group.regions) })),
   )
+  /** Sem energia para um encontro (só quando a energia está ligada no servidor). */
+  const noEnergy = $derived(game.trainer.energyEnabled && game.trainer.energy < 1)
   const roster = $derived(
     game.pokemon
       .filter((mon) => mon.location === 'garden')
@@ -1006,10 +1008,12 @@
     <div class="scroll">
       <section class="panel sheet">
         <h2>Para onde?</h2>
-        <p class="hint">
-          Cada encontro gasta 1 de energia. Energia {game.trainer.energy}/{game.trainer.energyMax}.
-          {#if game.trainer.energy < 1}Sem energia no momento.{/if}
-        </p>
+        {#if game.trainer.energyEnabled}
+          <p class="hint">
+            Cada encontro gasta 1 de energia. Energia {game.trainer.energy}/{game.trainer.energyMax}.
+            {#if game.trainer.energy < 1}Sem energia no momento.{/if}
+          </p>
+        {/if}
         {#if game.effects.length > 0}
           <div class="chips" aria-label="Efeitos ativos">
             {#each game.effects as effect (effect.id)}
@@ -1025,7 +1029,9 @@
           </div>
         {/if}
         {#if game.devTools}
-          <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+          {#if game.trainer.energyEnabled}
+            <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+          {/if}
           <button type="button" class="btn choice" disabled={pending} onclick={() => void grantBalls()}>
             Ganhar bolas (teste)
           </button>
@@ -1048,7 +1054,7 @@
               type="submit"
               class="btn"
               aria-busy={searching === 'dev'}
-              disabled={pending || !devSpecies.trim() || game.trainer.energy < 1 || game.encounter !== null}
+              disabled={pending || !devSpecies.trim() || noEnergy || game.encounter !== null}
             >
               Encontro de teste
             </button>
@@ -1068,7 +1074,7 @@
         {:else}
           <button type="button" class="btn choice" disabled={pending} onclick={startPractice}>
             Treinar arremesso
-            <small>Não gasta bola nem energia</small>
+            <small>{game.trainer.energyEnabled ? 'Não gasta bola nem energia' : 'Não gasta bola'}</small>
           </button>
         {/if}
         {#each groups as group (group.id)}
@@ -1082,7 +1088,7 @@
                   class="btn choice"
                   class:btn-primary={region.unlocked && !game.encounter}
                   aria-busy={searching === region.slug}
-                  disabled={pending || !region.unlocked || game.trainer.energy < 1 || game.encounter !== null}
+                  disabled={pending || !region.unlocked || noEnergy || game.encounter !== null}
                   onclick={() => search(region.slug)}
                 >
                   <span>{region.name}</span>
@@ -1429,7 +1435,7 @@
       <section class="panel sheet wild">
         {#if result.kind === 'fled'}
           <h2>Fugiu</h2>
-          <p>O encontro acabou. A energia não volta.</p>
+          <p>O encontro acabou.{game.trainer.energyEnabled ? ' A energia não volta.' : ''}</p>
         {:else if encounter}
           {@render wild(encounter)}
           {#if result.battle.caught}

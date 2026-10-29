@@ -167,7 +167,7 @@ pokedexRoutes.post('/blocks/:key/claim', requireUser, async (c) => {
 
     let energy = trainer.energy
     let energyUpdatedAt = trainer.energyUpdatedAt
-    if (block.reward.energy > 0) {
+    if (trainerConfig.energyEnabled && block.reward.energy > 0) {
       const next = Math.min(trainerConfig.energyMax, trainer.energy + block.reward.energy)
       if (next !== trainer.energy) {
         energy = next
