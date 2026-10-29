@@ -244,6 +244,7 @@
         selected={selected.slug}
         onSelect={select}
         onActivate={activate}
+        visible={!showField}
       />
       {#if arrival && !showField}<p class="arrival" role="status">{arrival}</p>{/if}
       {#if celebrate}

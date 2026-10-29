@@ -14,6 +14,7 @@
     selected,
     onSelect,
     onActivate,
+    visible = true,
   }: {
     places: PlaceView[]
     current: string
@@ -23,6 +24,8 @@
     onSelect: (slug: string) => void
     /** Toque duplo no mesmo lugar (ex.: viajar direto para o vizinho). */
     onActivate: (slug: string) => void
+    /** Escondido atrás do campo: centraliza de novo quando volta a aparecer. */
+    visible?: boolean
   } = $props()
 
   // Toque duplo pelo intervalo entre dois toques: o dblclick não é confiável no celular.
@@ -89,17 +92,28 @@
   const py = (place: PlaceView) => (place.y - minY) * CELL + PAD
 
   let scroller = $state<HTMLDivElement | null>(null)
-  let first = true
+  /** Lugar em que o mapa centralizou por último ('' = precisa centralizar na hora). */
+  let centeredOn = ''
 
-  // Centraliza em você ao abrir (na hora) e a cada viagem (deslizando).
-  $effect(() => {
+  function center(smooth: boolean) {
     const place = here
     const el = scroller
     if (!place || !el) return
     const left = px(place) - el.clientWidth / 2
     const top = py(place) - el.clientHeight / 2
-    el.scrollTo({ left, top, behavior: first ? 'instant' : 'smooth' })
-    first = false
+    el.scrollTo({ left, top, behavior: smooth ? 'smooth' : 'instant' })
+    centeredOn = place.slug
+  }
+
+  // Abre sempre em você (na hora); a cada viagem, desliza até o lugar novo.
+  // O mapa pode ser arrastado à vontade; o botão do canto volta para você.
+  $effect(() => {
+    const slug = current
+    if (!visible || !scroller) {
+      centeredOn = ''
+      return
+    }
+    if (slug !== centeredOn) center(centeredOn !== '')
   })
 
   function showLabel(place: PlaceView): boolean {
@@ -180,6 +194,13 @@
     {/if}
   </svg>
 </div>
+  <button type="button" class="recenter" aria-label="Voltar para onde você está" onclick={() => center(true)}>
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="8" cy="8" r="4.5" fill="none" stroke="currentColor" stroke-width="2" />
+      <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+      <path d="M8 0v3M8 13v3M0 8h3M13 8h3" stroke="currentColor" stroke-width="2" />
+    </svg>
+  </button>
   {#if legend.length > 0}
     <ul class="legend" aria-label="Legenda do mapa">
       <li><span class="swatch water"></span>Água</li>
@@ -324,6 +345,27 @@
     stroke: var(--paper);
     stroke-width: 4px;
     pointer-events: none;
+  }
+
+  .recenter {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    color: var(--primary);
+    background: var(--paper);
+    border: 2px solid var(--panel-edge);
+    box-shadow: 0 2px 0 #00000033;
+    cursor: pointer;
+  }
+
+  .recenter:active {
+    transform: translateY(1px);
+    box-shadow: none;
   }
 
   .legend {
