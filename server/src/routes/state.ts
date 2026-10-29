@@ -7,7 +7,7 @@ import { berryConfig, berryList, nextPlotSlotLevel, plotSlotsUnlocked } from '..
 import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
-import { trainerConfig } from '../config/trainer.js'
+import { trainerConfig, trainerXpToNext } from '../config/trainer.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { countClaimableBlocks } from '../game/pokedex.js'
@@ -233,6 +233,7 @@ function readState(userId: number, now: number) {
     trainer: {
       level: trainer.level,
       xp: trainer.xp,
+      xpToNext: trainerXpToNext(trainer.level),
       energy: trainer.energy,
       energyMax: trainerConfig.energyMax,
       energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),

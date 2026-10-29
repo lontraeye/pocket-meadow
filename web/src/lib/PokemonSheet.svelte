@@ -67,8 +67,11 @@
   const generic = $derived(game.trainer.genericCandies)
   const atCap = $derived(mon.level >= rules.levelCap || mon.xpToNext === null)
   const room = $derived(atCap ? 0 : Math.min(dosesToCap(mon.level, mon.xp, rules), rules.feedMax))
-  const affordable = $derived(useGeneric ? Math.floor(generic / rules.genericPerCandy) : chainCandies)
+  const genericDoses = $derived(Math.floor(generic / rules.genericPerCandy))
+  const affordable = $derived(useGeneric ? genericDoses : chainCandies)
   const maxDoses = $derived(Math.min(room, affordable))
+  /** Tem doce de algum tipo (a troca linha↔genérico precisa ficar visível mesmo se o tipo atual zerou). */
+  const anyCandy = $derived(chainCandies >= 1 || genericDoses >= 1)
   const preview = $derived(maxDoses > 0 ? previewFeed(mon.level, mon.xp, Math.min(doses, maxDoses), rules) : null)
   const yield_ = $derived(releaseYield(mon.level, mon.isShiny, rules))
   const lastOne = $derived(game.pokemon.length <= 1)
@@ -97,6 +100,7 @@
     nickname = mon.nickname ?? ''
     editingNick = false
     doses = 1
+    useGeneric = false
     confirmRelease = false
     confirmEvolve = null
     swapping = null
@@ -376,9 +380,7 @@
   <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
   <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
     {#if highlightCards.length > 0}
-      <div class="highlights">
-        <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
-      </div>
+      <Highlights cards={highlightCards} onDone={() => (highlightCards = [])} />
     {/if}
     <div class="head">
       <div class="title-row">
@@ -599,26 +601,42 @@
       <h3>Alimentar</h3>
       {#if atCap}
         <p class="hint">Nível máximo.</p>
-      {:else if maxDoses < 1}
+      {:else if !anyCandy}
         <p class="hint">Sem doces para isso.</p>
       {:else}
         <div class="coins">
-          <button type="button" class="btn" class:btn-primary={!useGeneric} aria-pressed={!useGeneric} onclick={() => (useGeneric = false)}>
+          <button
+            type="button"
+            class="btn"
+            class:btn-primary={!useGeneric}
+            aria-pressed={!useGeneric}
+            onclick={() => (useGeneric = false)}
+          >
             Da linha
           </button>
-          <button type="button" class="btn" class:btn-primary={useGeneric} aria-pressed={useGeneric} onclick={() => (useGeneric = true)}>
+          <button
+            type="button"
+            class="btn"
+            class:btn-primary={useGeneric}
+            aria-pressed={useGeneric}
+            onclick={() => (useGeneric = true)}
+          >
             Genérico
           </button>
         </div>
-        <div class="stepper">
-          <button type="button" class="btn" disabled={pending || doses <= 1} onclick={() => (doses = Math.max(1, doses - 1))} aria-label="Menos uma dose">−</button>
-          <span>{Math.min(doses, maxDoses)}</span>
-          <button type="button" class="btn" disabled={pending || doses >= maxDoses} onclick={() => (doses = Math.min(maxDoses, doses + 1))} aria-label="Mais uma dose">+</button>
-        </div>
-        {#if preview}
-          <p class="preview">+{Math.min(doses, maxDoses) * rules.candyXp} XP → Nv {preview.level}</p>
+        {#if maxDoses < 1}
+          <p class="hint">Sem doces desse tipo.</p>
+        {:else}
+          <div class="stepper">
+            <button type="button" class="btn" disabled={pending || doses <= 1} onclick={() => (doses = Math.max(1, doses - 1))} aria-label="Menos uma dose">−</button>
+            <span>{Math.min(doses, maxDoses)}</span>
+            <button type="button" class="btn" disabled={pending || doses >= maxDoses} onclick={() => (doses = Math.min(maxDoses, doses + 1))} aria-label="Mais uma dose">+</button>
+          </div>
+          {#if preview}
+            <p class="preview">+{Math.min(doses, maxDoses) * rules.candyXp} XP → Nv {preview.level}</p>
+          {/if}
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void feed()}>Alimentar</button>
         {/if}
-        <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void feed()}>Alimentar</button>
       {/if}
     </div>
 
@@ -714,10 +732,6 @@
     border: 0;
     background: #1a1208aa;
     cursor: pointer;
-  }
-
-  .highlights {
-    margin-bottom: 0.5rem;
   }
 
   .sheet {

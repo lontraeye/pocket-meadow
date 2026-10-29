@@ -246,6 +246,8 @@ export type GameState = {
   trainer: {
     level: number
     xp: number
+    /** Curva do treinador (não é a dos Pokémon). */
+    xpToNext: number
     energy: number
     energyMax: number
     energyNextAt: number | null

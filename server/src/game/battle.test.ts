@@ -6,6 +6,7 @@ import { trainerCatchXp, trainerWinXp, trainerXpToNext } from '../config/trainer
 import {
   applyRareWeights,
   battleXp,
+  battleXpSharers,
   catchChance,
   fighterXp,
   power,
@@ -165,7 +166,7 @@ describe('batalha', () => {
 })
 
 describe('xp', () => {
-  test('o XP de batalha segue os exemplos da seção 5.5 e divide pelo time', () => {
+  test('o XP de batalha segue os exemplos da seção 5.5 e divide por quem recebe', () => {
     assert.equal(battleXp(50, 3, 5), 23)
     assert.equal(battleXp(50, 3, 30), 3)
     assert.equal(battleXp(112, 4, 5), 79)
@@ -177,6 +178,14 @@ describe('xp', () => {
     assert.equal(xpToNext(30), 1643)
     assert.equal(xpToNext(6), 146)
     assert.equal(xpToNext(10), 316)
+  })
+
+  test('só quem entrou e não desmaiou divide o XP', () => {
+    assert.deepEqual(battleXpSharers([0, 1], []), [0, 1])
+    assert.deepEqual(battleXpSharers([0, 1], [0]), [1])
+    assert.deepEqual(battleXpSharers([0], [0]), [])
+    // Bench (slot 2 nunca entrou) não aparece, mesmo sem KO.
+    assert.deepEqual(battleXpSharers([0], [1]), [0])
   })
 
   test('level up reaproveita xpToNext e pode subir mais de um nível', () => {

@@ -1,6 +1,16 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
-  import { api, type BattleOutcome, type BattleStart, type OwnedPokemon, type PendingEncounter } from './api'
+  import {
+    api,
+    type BattleOutcome,
+    type BattleStart,
+    type OwnedPokemon,
+    itemLabel,
+    type BallInfo,
+    type BerryInfo,
+    type PendingEncounter,
+    type ProgressionRules,
+  } from './api'
   import { clearSavedBattle, saveBattleProgress } from './battlePersist'
   import {
     FX_FLYING_RATE,
@@ -38,14 +48,18 @@
   import {
     battleAnimChoice,
     gardenSprite,
+    groundAt,
+    loadPmd,
     pmdAnim,
     pmdBody,
     pmdHasAnim,
+    preloadPmd,
     showdownSrc,
     type PmdAnimName,
     type SpriteBody,
   } from './sprites'
   import { formatCountdown } from './time'
+  import { xpToNext } from './progression'
 
   // Luta ao vivo (8.3). A tela re-simula `runBattle({ untilMs })` com os inputs
   // do jogador, mas só quando algo pode ter mudado: um toque (input novo) ou o
@@ -63,6 +77,12 @@
   const CHARGED_BANNER_MS = 550
   const FAINT_SLOW_MS = 1100
   const FAINT_LINGER_MS = 900
+  // Pós-vitória: a barra azul enche antes de sair da luta.
+  const XP_FILL_MS = 850
+  const XP_LEVEL_PAUSE_MS = 420
+  // Troca: volta pra pokébola e o próximo aparece.
+  const SWITCH_OUT_MS = 280
+  const SWITCH_IN_MS = 320
   const HP_TRAIL_HOLD_MS = 90
   const HP_TRAIL_MS = 280
   const FLOAT_MS = 1000
@@ -121,6 +141,9 @@
     start,
     encounter,
     team,
+    progression,
+    berries,
+    balls,
     battleAuto = false,
     initialInputs = [],
     resumeElapsedMs = 0,
@@ -132,6 +155,11 @@
     encounter: PendingEncounter
     /** Pokémon do time (para nome, apelido e shiny); a ordem não importa. */
     team: OwnedPokemon[]
+    /** Regras de XP (enchimento pós-vitória e teto de nível). */
+    progression: ProgressionRules
+    /** Nomes das sementes/itens no painel pós-luta. */
+    berries: BerryInfo[]
+    balls: BallInfo[]
     /** Preferência do treinador (servidor); a tela só espelha e pede troca. */
     battleAuto?: boolean
     initialInputs?: BattleInput[]
@@ -196,7 +224,33 @@
     color: string
     big: boolean
   }
-  type Status = 'live' | 'finishing' | 'offline'
+  type Status = 'live' | 'finishing' | 'celebrating' | 'offline'
+  type XpHud = {
+    level: number
+    xp: number
+    need: number | null
+  }
+  /** Segura o sprite antigo no recall; depois some e o novo faz send-out. */
+  type SwitchFx = {
+    phase: 'out' | 'in'
+    holdSpeciesId: number
+    holdShiny: boolean
+    token: number
+  }
+  type RecapStep =
+    | { kind: 'text'; line: string }
+    | {
+        kind: 'xp'
+        line: string
+        pokemonId: number
+        xpGained: number
+        endLevel: number
+        endXp: number
+        levelsGained: number
+        /** Só anima a barra se for o que está em campo. */
+        animate: boolean
+      }
+    | { kind: 'level'; line: string }
 
   const { setup, seed, timeLimit, encounterId } = untrack(() => ({
     setup: start.setup,
@@ -216,6 +270,17 @@
   let liveFx = $state.raw<LiveFx[]>([])
   let allyPose = $state.raw<Pose | null>(null)
   let wildPose = $state.raw<Pose | null>(null)
+  /** Durante o brinde de XP, sobrescreve a barra azul do plate. */
+  let xpOverride = $state.raw<XpHud | null>(null)
+  let recapLine = $state('')
+  let recapHint = $state(false)
+  let recapBusy = $state(false)
+  let recapAdvance: (() => void) | null = null
+  let switchFx = $state.raw<SwitchFx | null>(null)
+  let switchToken = 0
+  let switchTimers: number[] = []
+  /** Lista de troca: um botão abre; some e mostra os candidatos. */
+  let partyOpen = $state(false)
   // Instante (ms de luta) do último golpe/entrada do jogador: base da barra de espera.
   let cdFrom = $state(0)
   let shakeToken = $state(0)
@@ -276,6 +341,11 @@
 
   const elapsed = $derived(elapsedAt(clock))
   const snap = $derived(sim.snapshot)
+  // No desmaio (win/lose/timeout) o timer congela na duração da luta — não segue
+  // durante o linger/recap (senão o relógio de parede podia marcar abandon).
+  const displayElapsed = $derived(
+    snap.result !== null || status !== 'live' ? Math.min(timeLimit, sim.durationMs) : elapsed,
+  )
   const active = $derived(snap.team[snap.activeSlot] ?? snap.team[0]!)
   const activeFighter = $derived(setup.team[snap.activeSlot] ?? setup.team[0]!)
   const wildFighter = setup.wild
@@ -289,8 +359,13 @@
   const lockLabel = $derived(
     active.status === 'sleep' ? 'Dormindo' : active.status === 'freeze' ? 'Congelado' : null,
   )
+  const switchWait = $derived(Math.max(0, snap.switchReadyAt - elapsed))
   const canAct = $derived(
     status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0 && !allyLocked,
+  )
+  // Troca: o servidor só exige o cooldown de switch (não o do golpe nem sleep/freeze).
+  const canSwitch = $derived(
+    status === 'live' && !active.fainted && !snap.wild.fainted && switchWait <= 0,
   )
 
   // Ao ligar/desligar o Auto, zera o atraso de reação pendente.
@@ -301,13 +376,24 @@
   const canCharged = $derived(
     canAct && chargedCost !== null && active.energy >= chargedCost && activeFighter.chargedMove !== null,
   )
-  const switchWait = $derived(Math.max(0, snap.switchReadyAt - elapsed))
-  const remaining = $derived(Math.max(0, timeLimit - elapsed))
+  const remaining = $derived(Math.max(0, timeLimit - displayElapsed))
 
   const allyMon = $derived(monOf(active.fighterId))
   const allyShiny = $derived(allyMon?.isShiny ?? false)
-  const allyLook = $derived(gardenSprite(active.speciesId, allyShiny))
+  // No recall, segura o sprite que está saindo; no send-out, o ativo novo.
+  const allyShowSpecies = $derived(
+    switchFx?.phase === 'out' ? switchFx.holdSpeciesId : active.speciesId,
+  )
+  const allyShowShiny = $derived(switchFx?.phase === 'out' ? switchFx.holdShiny : allyShiny)
+  const allyLook = $derived(gardenSprite(allyShowSpecies, allyShowShiny))
   const wildLook = $derived(gardenSprite(encounter.speciesId, encounter.isShiny))
+  const switchCss = $derived(
+    !switchFx
+      ? ''
+      : switchFx.phase === 'out'
+        ? `recall-${switchFx.token % 2}`
+        : `sendout-${switchFx.token % 2}`,
+  )
 
   // Corpo medido de cada lado (escala 1), para alinhar os efeitos ao sprite.
   // O seu Pokémon olha ↗ (linha 3) e o selvagem ↙ (linha 7), como nos PmdSprite.
@@ -367,16 +453,26 @@
     if (resync) {
       allyPose = null
       wildPose = null
+      clearSwitchTimers()
+      switchFx = null
     }
     const startAt = resync ? next.log.length : seen
+    const prevActive = primed ? sim.snapshot.activeSlot : null
     let slot = 0
     let from = 0
+    let switchStarted = false
     for (let i = 0; i < next.log.length; i += 1) {
       const event = next.log[i]!
       if (event.kind === 'enter' && event.side === 'player') {
+        const changed = prevActive !== null && prevActive !== event.slot && !switchStarted
+        if (i >= startAt && changed && event.t >= e - FX_STALE_MS) {
+          const fromFaint = sim.snapshot.team[prevActive]?.fainted === true
+          beginSwitchFx(prevActive, fromFaint)
+          switchStarted = true
+        }
         slot = event.slot
         from = event.t
-        if (i >= startAt) allyPose = null
+        if (i >= startAt && !switchStarted) allyPose = null
       }
       if (event.kind === 'move' && event.side === 'player') from = event.t
       // Só pula o efeito de evento velho de verdade (a aba ficou em segundo
@@ -392,6 +488,9 @@
     cdFrom = from
     sim = next
     nextEventAt = nextEventFor(next, e)
+    // Fim por desmaio: dispara o finish na hora (não espera o próximo quadro),
+    // e o timer já congela via displayElapsed.
+    if (next.snapshot.result !== null && status === 'live') void finish()
   }
 
   /**
@@ -436,11 +535,79 @@
     push(action)
   }
 
+  function openParty() {
+    if (!canSwitch || status !== 'live') return
+    play('tap')
+    // Garante Idle na abertura da lista (rede lenta / time que ainda não baixou).
+    for (const fighter of setup.team) {
+      const mon = monOf(fighter.id)
+      const look = gardenSprite(fighter.speciesId, mon?.isShiny ?? false)
+      if (look.kind === 'pmd') preloadPmd(fighter.speciesId, look.shinySheet)
+    }
+    partyOpen = true
+  }
+
+  function closeParty() {
+    partyOpen = false
+  }
+
   function swap(slot: number) {
     const side = snap.team[slot]
-    if (!canAct || !side || side.fainted || slot === snap.activeSlot || switchWait > 0) return
+    if (!canSwitch || !side || side.fainted || slot === snap.activeSlot) return
     play('tap')
+    partyOpen = false
     push('switch', slot)
+  }
+
+  // Fecha a lista se a troca deixar de estar disponível (CD, fim, etc.).
+  $effect(() => {
+    if (!canSwitch && partyOpen) partyOpen = false
+  })
+
+  function clearSwitchTimers() {
+    for (const id of switchTimers) window.clearTimeout(id)
+    switchTimers = []
+  }
+
+  function beginSwitchFx(prevSlot: number, fromFaint: boolean) {
+    if (reduced) {
+      switchFx = null
+      return
+    }
+    clearSwitchTimers()
+    switchToken += 1
+    const token = switchToken
+    const prev = setup.team[prevSlot]!
+    const mon = monOf(prev.id)
+    if (fromFaint) {
+      // Desmaio já tirou o anterior: só a entrada do próximo.
+      allyPose = null
+      switchFx = { phase: 'in', holdSpeciesId: 0, holdShiny: false, token }
+      switchTimers.push(
+        window.setTimeout(() => {
+          if (switchFx?.token === token) switchFx = null
+        }, SWITCH_IN_MS),
+      )
+      return
+    }
+    switchFx = {
+      phase: 'out',
+      holdSpeciesId: prev.speciesId,
+      holdShiny: mon?.isShiny ?? false,
+      token,
+    }
+    allyPose = null
+    switchTimers.push(
+      window.setTimeout(() => {
+        if (switchFx?.token !== token) return
+        switchFx = { phase: 'in', holdSpeciesId: 0, holdShiny: false, token }
+        switchTimers.push(
+          window.setTimeout(() => {
+            if (switchFx?.token === token) switchFx = null
+          }, SWITCH_IN_MS),
+        )
+      }, SWITCH_OUT_MS),
+    )
   }
 
   function toggleAuto() {
@@ -525,10 +692,21 @@
   onMount(() => {
     persist()
     void loadBattleFx()
+    // Preview da lista de troca: Idle de frente de todo o time (não só o ativo).
+    for (const fighter of setup.team) {
+      const mon = monOf(fighter.id)
+      const look = gardenSprite(fighter.speciesId, mon?.isShiny ?? false)
+      if (look.kind === 'pmd') void loadPmd(fighter.speciesId, look.shinySheet)
+      else {
+        const img = new Image()
+        img.src = showdownSrc(fighter.speciesId, mon?.isShiny ?? false)
+      }
+    }
     frame = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(frame)
       window.clearTimeout(flashClear)
+      clearSwitchTimers()
     }
   })
 
@@ -583,9 +761,148 @@
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
+  function needAt(level: number): number | null {
+    if (level >= progression.levelCap) return null
+    return xpToNext(level, progression)
+  }
+
+  function easeOut(t: number): number {
+    return t * (2 - t)
+  }
+
+  function tweenXp(fromXp: number, toXp: number, need: number, level: number): Promise<void> {
+    if (reduced || fromXp === toXp) {
+      xpOverride = { level, xp: toXp, need }
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => {
+      const born = performance.now()
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - born) / XP_FILL_MS)
+        const xp = fromXp + (toXp - fromXp) * easeOut(t)
+        xpOverride = { level, xp, need }
+        if (t < 1) {
+          requestAnimationFrame(tick)
+          return
+        }
+        xpOverride = { level, xp: toXp, need }
+        resolve()
+      }
+      requestAnimationFrame(tick)
+    })
+  }
+
+  /** Avança só com toque — sem auto-passar. */
+  function waitRecap(): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false
+      recapAdvance = () => {
+        if (settled) return
+        settled = true
+        recapAdvance = null
+        recapHint = false
+        resolve()
+      }
+      recapHint = true
+    })
+  }
+
+  function onRecapTap() {
+    if (status !== 'celebrating' || recapBusy) return
+    recapAdvance?.()
+  }
+
+  function buildRecapSteps(outcome: BattleOutcome): RecapStep[] {
+    const steps: RecapStep[] = []
+    const onFieldId = activeFighter.id
+    if (outcome.won) {
+      steps.push({ kind: 'text', line: `${encounter.displayName} desmaiou!` })
+    } else {
+      steps.push({ kind: 'text', line: 'Seu time foi derrotado…' })
+    }
+    if (outcome.won) {
+      for (const fighter of outcome.fighters) {
+        if (fighter.xpGained <= 0 && fighter.levelsGained <= 0) continue
+        const mon = monOf(fighter.pokemonId)
+        const name = mon ? (mon.nickname ?? mon.displayName) : 'Pokémon'
+        steps.push({
+          kind: 'xp',
+          line: `${name} ganhou ${fighter.xpGained} de XP!`,
+          pokemonId: fighter.pokemonId,
+          xpGained: fighter.xpGained,
+          endLevel: fighter.level,
+          endXp: fighter.xp,
+          levelsGained: fighter.levelsGained,
+          animate: fighter.pokemonId === onFieldId,
+        })
+        if (fighter.levelsGained > 0) {
+          steps.push({
+            kind: 'level',
+            line: `${name} subiu para o Nv. ${fighter.level}!`,
+          })
+        }
+      }
+      // Reserva do “dinheiro” / itens (semente e recompensas de nível por enquanto).
+      if (outcome.seedDrop) {
+        steps.push({ kind: 'text', line: `Encontrou ${itemLabel(outcome.seedDrop.itemKey, berries, balls)}!` })
+      }
+      for (const reward of outcome.levelRewards ?? []) {
+        const label = itemLabel(reward.itemKey, berries, balls)
+        steps.push({
+          kind: 'text',
+          line:
+            reward.quantity > 1 ? `Recebeu ${reward.quantity}× ${label}!` : `Recebeu ${label}!`,
+        })
+      }
+    }
+    return steps
+  }
+
+  async function playXpBar(step: Extract<RecapStep, { kind: 'xp' }>) {
+    const mon = monOf(step.pokemonId)
+    if (!mon || !step.animate) return
+    let level = mon.level
+    let xp = mon.xp
+    xpOverride = { level, xp, need: needAt(level) }
+    while (level < step.endLevel) {
+      const need = needAt(level)
+      if (need === null) break
+      await tweenXp(xp, need, need, level)
+      level += 1
+      xp = 0
+      xpOverride = { level, xp: 0, need: needAt(level) }
+      await sleep(reduced ? 80 : XP_LEVEL_PAUSE_MS)
+    }
+    const need = needAt(step.endLevel)
+    if (need !== null) await tweenXp(xp, step.endXp, need, step.endLevel)
+    else xpOverride = { level: step.endLevel, xp: step.endXp, need: null }
+  }
+
+  /** Painel pós-luta no lugar dos botões: desmaio → XP → itens. */
+  async function runRecap(outcome: BattleOutcome) {
+    status = 'celebrating'
+    const steps = buildRecapSteps(outcome)
+    if (steps.length === 0) return
+    for (const step of steps) {
+      recapLine = step.line
+      if (step.kind === 'xp') {
+        recapBusy = true
+        recapHint = false
+        await playXpBar(step)
+        recapBusy = false
+      } else if (step.kind === 'level') {
+        play('levelup')
+      }
+      // Só avança no toque; durante a barra o toque fica bloqueado.
+      await waitRecap()
+    }
+  }
+
   async function finish() {
     if (status !== 'live') return
     status = 'finishing'
+    recapLine = '…'
+    recapHint = false
     // Deixa a animação de desmaio aparecer antes de trocar de tela (só visual).
     const lingerMs =
       !reduced && sim.snapshot.result !== null && sim.snapshot.result !== 'timeout'
@@ -604,8 +921,11 @@
       }
       if (response.ok) {
         const outcome = (await response.json()) as BattleOutcome
-        await linger
+        // O servidor já fechou a luta: o save sai agora, não depois do painel
+        // (que espera toque e pode ficar aberto até o F5).
         clearSavedBattle(encounterId)
+        await linger
+        await runRecap(outcome)
         onFinished(outcome, team)
         return
       }
@@ -1081,6 +1401,17 @@
   const allyPercent = $derived(hpPercent(active))
   const shakePx = $derived(shakeHard ? SHAKE_PX_CHARGED : SHAKE_PX_FAST)
   const shakeMs = $derived(shakeHard ? SHAKE_CHARGED_MS : SHAKE_FAST_MS)
+  // Barra azul: durante a luta fica parada; no brinde pós-vitória anima.
+  const xpHud = $derived.by((): XpHud | null => {
+    if (xpOverride) return xpOverride
+    const mon = monOf(activeFighter.id)
+    if (!mon) return null
+    return { level: mon.level, xp: mon.xp, need: mon.xpToNext }
+  })
+  const showRecap = $derived(status === 'finishing' || status === 'celebrating')
+  const xpFill = $derived(
+    xpHud && xpHud.need && xpHud.need > 0 ? Math.min(100, (xpHud.xp / xpHud.need) * 100) : 0,
+  )
 
   // Rastro da barra: ao perder vida, a parte perdida espera um instante e
   // desce. O valor anterior é lido com untrack: se fosse dependência, o
@@ -1280,32 +1611,34 @@
 
     <div class="slot ally" bind:this={allySlotEl} style:--dx="22px" style:--dy="-16px">
       <div
-        class="body {allyView.css}"
-        class:down={active.fainted}
+        class="body {allyView.css} {switchCss}"
+        class:down={active.fainted && switchFx?.phase !== 'out'}
         class:hit-flash={flashSide === 'player'}
         class:type-glow={chargedFx?.side === 'player'}
-        class:tone-burn={active.status === 'burn'}
-        class:tone-freeze={active.status === 'freeze'}
+        class:tone-burn={active.status === 'burn' && switchFx?.phase !== 'out'}
+        class:tone-freeze={active.status === 'freeze' && switchFx?.phase !== 'out'}
         class:zapped={clock < zapUntil.player}
-        class:asleep={active.status === 'sleep'}
+        class:asleep={active.status === 'sleep' && switchFx?.phase !== 'out'}
         style:--glow={chargedFx?.side === 'player' ? chargedFx.color : 'transparent'}
       >
         {#if allyLook.kind === 'pmd'}
           <div class="anchor">
             <PmdSprite
-              speciesId={active.speciesId}
+              speciesId={allyShowSpecies}
               shiny={allyLook.shinySheet}
-              anim={allyView.anim}
+              anim={switchFx ? 'Idle' : allyView.anim}
               dir={3}
               scale={2}
-              time={allyView.time}
+              time={switchFx ? idleTime : allyView.time}
               shadow={allyLook.shadow}
             />
           </div>
         {:else}
-          <img class="gif flip" src={showdownSrc(active.speciesId, allyShiny)} alt="" />
+          <img class="gif flip" src={showdownSrc(allyShowSpecies, allyShowShiny)} alt="" />
         {/if}
-        {#if active.status === 'sleep' && !reduced}<span class="zzz" aria-hidden="true">Zzz</span>{/if}
+        {#if active.status === 'sleep' && !reduced && switchFx?.phase !== 'out'}
+          <span class="zzz" aria-hidden="true">Zzz</span>
+        {/if}
       </div>
       {#each floaters.filter((f) => f.side === 'player') as f (f.id)}
         <span
@@ -1328,16 +1661,31 @@
     <div class="plate ally-plate">
       <span class="who">
         <b>{nameOf(activeFighter)}{#if allyShiny} ★{/if}</b>
-        {#if statusSeal(active.status)}
+        {#if status === 'live' && statusSeal(active.status)}
           {@const seal = statusSeal(active.status)!}
           <span class="seal {seal.tone}" class:pop={!reduced}>{seal.code}</span>
         {/if}
-        {#if active.confused}<span class="seal conf" class:pop={!reduced}>CNF</span>{/if}
-        <small>Nv {activeFighter.level}</small>
+        {#if status === 'live' && active.confused}<span class="seal conf" class:pop={!reduced}>CNF</span>{/if}
+        <small>Nv {xpHud?.level ?? activeFighter.level}</small>
       </span>
-      <span role="progressbar" aria-label="HP do seu Pokémon" aria-valuemin="0" aria-valuemax={active.maxHp} aria-valuenow={active.hp}>
-        {@render bar(allyPercent, allyTrail, hpTone(allyPercent))}
-      </span>
+      <div class="bars">
+        <span role="progressbar" aria-label="HP do seu Pokémon" aria-valuemin="0" aria-valuemax={active.maxHp} aria-valuenow={active.hp}>
+          {@render bar(allyPercent, allyTrail, hpTone(allyPercent))}
+        </span>
+        {#if xpHud && xpHud.need !== null}
+          <span
+            class="xp-track"
+            class:pulse={status === 'celebrating'}
+            role="progressbar"
+            aria-label="XP do seu Pokémon"
+            aria-valuemin="0"
+            aria-valuemax={xpHud.need}
+            aria-valuenow={Math.round(xpHud.xp)}
+          >
+            <span class="xp-fill" style:transform="scaleX({xpFill / 100})"></span>
+          </span>
+        {/if}
+      </div>
       <small class="hp-text">{active.hp}/{active.maxHp}</small>
     </div>
   </div>
@@ -1345,56 +1693,110 @@
   {#if status === 'offline'}
     <p class="note bad" role="alert">Sem conexão. A luta está guardada.</p>
     <button type="button" class="btn btn-primary retry" onclick={retryFinish}>Tentar de novo</button>
-  {:else if status === 'finishing'}
-    <p class="note">Contando o resultado…</p>
-  {/if}
-
-  <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha. -->
-  <div class="moves" class:solo={!activeFighter.chargedMove}>
-    <button type="button" class="btn act" disabled={!canAct} onclick={() => manual('fast')}>
-      <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
-      <span class="label">{lockLabel ?? 'Rápido'}</span>
-      <small>{lockLabel ? lockLabel : moveLabel(activeFighter.fastMove.name)}</small>
+  {:else if showRecap}
+    <!-- No lugar dos golpes/troca: caixa de texto da pós-luta (estilo jogos). -->
+    <button
+      type="button"
+      class="recap"
+      onclick={onRecapTap}
+      disabled={status === 'finishing' || recapBusy}
+      aria-live="polite"
+      aria-label={recapLine}
+    >
+      <p>{recapLine}</p>
+      {#if recapHint && !recapBusy}<small>Toque</small>{/if}
     </button>
-    {#if activeFighter.chargedMove && chargedCost !== null}
-      <button
-        type="button"
-        class="btn act charged"
-        class:ready={chargeReady}
-        disabled={!canCharged}
-        aria-label="Carregado: {moveLabel(activeFighter.chargedMove.name)}, {chargeDone} de {chargeNeeded} golpes rápidos"
-        onclick={() => manual('charged')}
-      >
-        <!-- Cada golpe rápido enche o botão de baixo para cima. -->
-        <span class="charge" style:transform="scaleY({chargeFill})" aria-hidden="true"></span>
-        {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
-        <span class="label">{lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}</span>
-        <small>{lockLabel ? lockLabel : moveLabel(activeFighter.chargedMove.name)}</small>
+  {:else}
+    <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha. -->
+    <div class="moves" class:solo={!activeFighter.chargedMove}>
+      <button type="button" class="btn act" disabled={!canAct} onclick={() => manual('fast')}>
+        <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
+        <span class="label">{lockLabel ?? 'Rápido'}</span>
+        <small>{lockLabel ? lockLabel : moveLabel(activeFighter.fastMove.name)}</small>
       </button>
-    {/if}
-  </div>
-
-  {#if setup.team.length > 1}
-    <div class="party" aria-label="Trocar de Pokémon">
-      {#each setup.team as fighter, slot (slot)}
-        {@const side = snap.team[slot]!}
-        {@const here = slot === snap.activeSlot}
+      {#if activeFighter.chargedMove && chargedCost !== null}
         <button
           type="button"
-          class="chip"
-          class:on={here}
-          disabled={!canAct || side.fainted || here || switchWait > 0}
-          aria-label="Trocar para {nameOf(fighter)}"
-          onclick={() => swap(slot)}
+          class="btn act charged"
+          class:ready={chargeReady}
+          disabled={!canCharged}
+          aria-label="Carregado: {moveLabel(activeFighter.chargedMove.name)}, {chargeDone} de {chargeNeeded} golpes rápidos"
+          onclick={() => manual('charged')}
         >
-          <span class="chip-name">{nameOf(fighter)}</span>
-          <span class="chip-meta">
-            {#if side.fainted}Caiu{:else if here}Em campo{:else if switchWait > 0}{Math.ceil(switchWait / 1000)}s{:else}Trocar{/if}
-          </span>
-          {@render bar(hpPercent(side), hpPercent(side), hpTone(hpPercent(side)))}
+          <!-- Cada golpe rápido enche o botão de baixo para cima. -->
+          <span class="charge" style:transform="scaleY({chargeFill})" aria-hidden="true"></span>
+          {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
+          <span class="label">{lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}</span>
+          <small>{lockLabel ? lockLabel : moveLabel(activeFighter.chargedMove.name)}</small>
         </button>
-      {/each}
+      {/if}
     </div>
+
+    {#if setup.team.length > 1}
+      {#if !partyOpen}
+        <button
+          type="button"
+          class="btn party-toggle"
+          disabled={!canSwitch}
+          aria-expanded="false"
+          onclick={openParty}
+        >
+          {#if switchWait > 0}
+            Trocar ({Math.ceil(switchWait / 1000)}s)
+          {:else}
+            Trocar Pokémon
+          {/if}
+        </button>
+      {:else}
+        <div class="party" role="group" aria-label="Escolher Pokémon">
+          <div class="party-list">
+            {#each setup.team as fighter, slot (slot)}
+              {@const side = snap.team[slot]!}
+              {@const here = slot === snap.activeSlot}
+              {@const mon = monOf(fighter.id)}
+              {@const look = gardenSprite(fighter.speciesId, mon?.isShiny ?? false)}
+              {#if !here}
+                <button
+                  type="button"
+                  class="chip"
+                  class:down={side.fainted}
+                  disabled={side.fainted || !canSwitch}
+                  aria-label="Trocar para {nameOf(fighter)}"
+                  onclick={() => swap(slot)}
+                >
+                  <span class="chip-sprite" aria-hidden="true">
+                    {#if look.kind === 'pmd'}
+                      <!-- Caixa baixa + overflow: corta a folga transparente em cima do quadro. -->
+                      <span class="chip-anchor">
+                        <PmdSprite
+                          speciesId={fighter.speciesId}
+                          shiny={look.shinySheet}
+                          anim="Idle"
+                          dir={0}
+                          scale={1}
+                          time={idleTime}
+                          shadow={0}
+                        />
+                      </span>
+                    {:else}
+                      <img src={showdownSrc(fighter.speciesId, mon?.isShiny ?? false)} alt="" />
+                    {/if}
+                  </span>
+                  <span class="chip-info">
+                    <span class="chip-name">{nameOf(fighter)}</span>
+                    <span class="chip-meta">
+                      {#if side.fainted}Caiu{:else}Nv {fighter.level}{/if}
+                    </span>
+                    {@render bar(hpPercent(side), hpPercent(side), hpTone(hpPercent(side)))}
+                  </span>
+                </button>
+              {/if}
+            {/each}
+          </div>
+          <button type="button" class="btn-link party-cancel" onclick={closeParty}>Cancelar</button>
+        </div>
+      {/if}
+    {/if}
   {/if}
 </div>
 
@@ -1800,6 +2202,39 @@
     font-weight: 600;
   }
 
+  /* HP + XP colados, como no HUD clássico. */
+  .bars {
+    display: grid;
+    gap: 0;
+  }
+
+  .xp-track {
+    position: relative;
+    display: block;
+    height: 4px;
+    overflow: hidden;
+    background: #00000028;
+    box-shadow: inset 0 0 0 var(--px) var(--ink);
+  }
+
+  .xp-track.pulse {
+    box-shadow:
+      inset 0 0 0 var(--px) var(--ink),
+      0 0 0 1px #4aa3e055;
+  }
+
+  .xp-fill {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    background: #4aa3e0;
+    box-shadow: inset 0 calc(var(--px) * -1) 0 #2f7bb0;
+    will-change: transform;
+  }
+
   .seal {
     flex: 0 0 auto;
     padding: 0.05rem 0.25rem;
@@ -1882,8 +2317,9 @@
     will-change: transform;
   }
 
+  /* Branco: lê contra vida verde, amarela (--accent) e vermelha. */
   .hp-trail {
-    background: #ffd27a;
+    background: #fff8e8;
     transition: transform 0.28s linear;
   }
 
@@ -1993,6 +2429,42 @@
     width: 100%;
   }
 
+  .recap {
+    display: grid;
+    gap: 0.35rem;
+    width: 100%;
+    min-height: 5.5rem;
+    margin: 0;
+    padding: 0.85rem 1rem;
+    border: 0;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    background: #f8f8f8e6;
+    box-shadow: inset 0 0 0 var(--px) var(--panel-edge);
+  }
+
+  .recap:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+
+  .recap p {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .recap small {
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.55;
+    justify-self: end;
+  }
+
   .moves {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2090,22 +2562,46 @@
     background: #3f8fc444;
   }
 
+  .party-toggle {
+    width: 100%;
+  }
+
   .party {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+    min-height: 0;
+  }
+
+  .party-list {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 0.4rem;
+    max-height: min(38vh, 12.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 0.1rem;
+  }
+
+  .party-cancel {
+    justify-self: center;
+    min-height: 44px;
   }
 
   .chip {
     display: grid;
-    gap: 0.15rem;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 0.55rem;
+    align-items: center;
     box-sizing: border-box;
-    min-height: 64px;
-    padding: 0 0.6rem;
-    align-content: center;
+    min-height: 56px;
+    padding: 0.3rem 0.7rem;
     border: 2px solid var(--panel-edge);
-    background: var(--inlay-face);
-    box-shadow: inset 0 2px 0 var(--inlay-shade);
+    background: var(--panel-face);
+    box-shadow: inset 0 -2px 0 var(--panel-shade);
+    color: var(--ink);
     font: inherit;
     font-weight: 600;
     text-align: left;
@@ -2115,27 +2611,55 @@
     -webkit-user-select: none;
   }
 
-  .chip.on {
-    border-color: var(--selected);
-    background: var(--selected-face);
-    box-shadow:
-      inset 0 0 0 2px var(--selected-ring),
-      inset 0 -2px 0 var(--selected);
+  .chip:active:not(:disabled) {
+    box-shadow: inset 0 2px 0 #00000022;
+    transform: translateY(var(--px));
+    background: var(--paper);
   }
 
+  .chip.down,
   .chip:disabled {
     cursor: default;
+    filter: grayscale(1) opacity(0.55);
   }
 
-  .chip:disabled:not(.on) {
-    filter: grayscale(1) opacity(0.6);
+  .chip-sprite {
+    position: relative;
+    width: 48px;
+    height: 44px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .chip-anchor {
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 0;
+    height: 0;
+  }
+
+  .chip-sprite img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: bottom;
+    image-rendering: pixelated;
+  }
+
+  .chip-info {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
   }
 
   .chip-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
   }
 
   .chip-meta {
@@ -2175,6 +2699,16 @@
 
     .body.hurt-1 {
       animation: hurt-b 0.45s steps(6, end);
+    }
+
+    .body.recall-0,
+    .body.recall-1 {
+      animation: recall 0.28s ease-in both;
+    }
+
+    .body.sendout-0,
+    .body.sendout-1 {
+      animation: sendout 0.32s ease-out both;
     }
 
     .body.faint-0,
@@ -2363,6 +2897,28 @@
     }
     84% {
       transform: none;
+      opacity: 1;
+    }
+  }
+
+  @keyframes recall {
+    from {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: translate(0, 28px) scale(0.3);
+      opacity: 0;
+    }
+  }
+
+  @keyframes sendout {
+    from {
+      transform: translate(0, 24px) scale(0.3);
+      opacity: 0;
+    }
+    to {
+      transform: translate(0, 0) scale(1);
       opacity: 1;
     }
   }

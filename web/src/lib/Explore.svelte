@@ -431,13 +431,18 @@
   }
 
   function cardsForBattle(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
+    const monAt = (id: number) =>
+      teamSnapshot.find((entry) => entry.id === id) ?? game.pokemon.find((entry) => entry.id === id)
     return battleHighlightCards({
       battle,
       nameOf,
-      canEvolve: readyToEvolve,
+      canEvolve: (fighter) => {
+        const mon = monAt(fighter.pokemonId)
+        if (!mon) return false
+        const before = fighter.level - fighter.levelsGained
+        return mon.evolutions.some((option) => before < option.minLevel && fighter.level >= option.minLevel)
+      },
       regions,
-      berries: game.berries,
-      balls: game.balls.list,
     })
   }
 
@@ -821,13 +826,6 @@
     return mon ? (mon.nickname ?? mon.displayName) : 'Pokémon'
   }
 
-  function readyToEvolve(fighter: BattleOutcome['fighters'][number]): boolean {
-    const mon = game.pokemon.find((entry) => entry.id === fighter.pokemonId)
-    if (!mon) return false
-    const before = fighter.level - fighter.levelsGained
-    return mon.evolutions.some((option) => before < option.minLevel && fighter.level >= option.minLevel)
-  }
-
   async function readError(response: Response): Promise<ApiError> {
     return (await response.json().catch(() => ({ error: 'internal' }))) as ApiError
   }
@@ -1079,6 +1077,9 @@
           start={fightStart}
           {encounter}
           team={fightTeam}
+          progression={game.progression}
+          berries={game.berries}
+          balls={game.balls.list}
           {battleAuto}
           initialInputs={fightInputs}
           resumeElapsedMs={fightResumeMs}

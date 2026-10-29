@@ -417,16 +417,16 @@ Os pesos do Crystal já são a média dos três períodos. Próximas candidatas,
   ```
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
 - **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
-- **Vitória**: cada Pokémon que lutou ganha XP pela fórmula abaixo, **dividido pelo tamanho do time**. O treinador ganha XP normalmente, e o encontro segue para a captura. Dividir o XP é o custo de mandar mais gente: para upar um Pokémon específico, compensa lutar sozinho.
+- **Vitória**: só quem **entrou em campo e não desmaiou** ganha XP (e EVs). Quem ficou na pokébola não conta. O XP é **dividido entre esses**. O treinador ganha XP normalmente, e o encontro segue para a captura. Mandar gente a mais só custa XP se ela entrar de fato; lutar só com um deixa o XP inteiro nele. **Exp Share** (item) fica para depois e deve ampliar quem recebe sem exigir entrada.
 - **XP de batalha**, igual aos jogos a partir da Geração 5. O BST decide a luta (poder, acima), e o `base_experience` decide a recompensa:
   ```
   b  = base_experience do selvagem (PokéAPI)
   L  = nível do selvagem
-  Lp = nível de quem lutou (calculado para cada Pokémon do time)
+  Lp = nível de quem recebe (cada um que entrou e não desmaiou)
   xp = floor( (b * L / BATTLE_XP_DIV) * ((2L + 10) / (L + Lp + 10)) ^ BATTLE_XP_LEVEL_EXP ) + 1
-  ganho = floor(xp / tamanho do time)                 // BATTLE_XP_DIV inicial: 5; BATTLE_XP_LEVEL_EXP: 2.5
+  ganho = floor(xp / N)   // N = quantos recebem; BATTLE_XP_DIV inicial: 5; BATTLE_XP_LEVEL_EXP: 2.5
   ```
-  O fator de nível dá mais XP por vencer alguém mais forte e quase nada por vencer alguém bem mais fraco. No time, o Pokémon de nível mais baixo ganha mais, o que ajuda a puxar quem ficou para trás. Exemplos com os valores iniciais:
+  O fator de nível dá mais XP por vencer alguém mais forte e quase nada por vencer alguém bem mais fraco. No time, o Pokémon de nível mais baixo ganha mais, o que ajuda a puxar quem ficou para trás. Exemplos com os valores iniciais (N = 1):
 
   | Selvagem | Quem venceu | XP | O nível pede |
   |---|---|---|---|
@@ -791,6 +791,14 @@ Se o mix ficar estranho, o jardim volta a um gramado frontal. O teste é só vis
 - Movimento puramente visual no cliente: alvo aleatório na grade, andar até ele, esperar alguns segundos, repetir.
 - Clicar em um Pokémon abre os detalhes (nível, XP, doces da linha, ações).
 - Canteiros de berry ocupam um bloco da grade.
+
+#### Clima no jardim (futuro, anotado em 2026-10-29)
+Vão existir **diferentes climas** no jardim (sol, chuva, nuvem, etc. — lista a fechar). Cada clima:
+- muda o visual do gramado / céu;
+- dá **bônus diferentes para Pokémon** (ex.: XP no jardim/daycare, humor, tipos favorecidos);
+- dá **bônus diferentes para plantas** (ex.: crescimento mais rápido, yield, chance de semente).
+
+Ainda sem fase nem schema. Quando entrar: estado de clima no servidor (timestamp / rotação), efeito em config por clima, e o jardim só espelha. Não confundir com o **clima no combate** (5.18), que é outra ideia.
 
 ### 5.12 Pokédex e guia do jogo (Fase 7)
 A Pokédex não é só a lista de espécies vistas e capturadas. Ela também é a wiki do próprio jogo, e a informação de cada espécie vai sendo liberada conforme o jogador avança com ela. Feito em 2026-10-28 (Fase 7).
@@ -1313,7 +1321,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
-**Depois (ideias anotadas, ainda sem fase):** **animação de evolução** (5.8 / coleção — anotado em 2026-10-28); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
+**Depois (ideias anotadas, ainda sem fase):** **animação de evolução** (5.8 / coleção — anotado em 2026-10-28); breed com herança de IVs e nature (5.18); construção do jardim com biomas, máquinas e itens de evolução (5.16); **climas no jardim** com bônus para Pokémon e plantas (5.11 — anotado em 2026-10-29); campo de encontro (5.14); missões de NPC (5.15); cuidador do daycare (5.9); personagem e perfil de treinador (5.17); Pokémon machucados depois da luta, com cura no jardim, itens ou centro (5.18); clima no combate (5.18).
 
 ---
 

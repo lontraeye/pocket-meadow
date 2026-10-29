@@ -160,7 +160,7 @@ export type BattleResult = {
   log: BattleEvent[]
   /** Inputs efetivos (inclui os do automático). */
   inputs: BattleInput[]
-  /** Slots do time que entraram na luta (para EVs). */
+  /** Slots do time que entraram na luta (XP/EVs: quem entrou e não desmaiou). */
   enteredSlots: number[]
   snapshot: BattleSnapshot
 }

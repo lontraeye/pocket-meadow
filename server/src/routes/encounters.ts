@@ -19,7 +19,7 @@ import {
   trainers,
 } from '../db/schema.js'
 import { creditChainCandies, creditItems, debitItem, grantTrainerLevelRewards } from '../db/inventory.js'
-import { catchChance, fighterXp, rollWild } from '../game/battle.js'
+import { battleXpSharers, catchChance, fighterXp, rollWild } from '../game/battle.js'
 import { rollBattleSeed } from '../game/berries.js'
 import {
   applyEvYield,
@@ -316,10 +316,10 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     clock,
     encounter: encounter.row,
     team: team.rows.map((row, slot) => ({ ...row, slot })),
-    teamSize: team.rows.length,
     wild,
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
+    faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
     now,
     log: result.log,
   })
@@ -385,21 +385,6 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
   const wild = loadWildSpecies(encounter.row.speciesId)
   const team = loadRewardTeamFromSetup(userId, setup)
 
-  if (abandoned) {
-    return applyBattleOutcome({
-      userId,
-      clock,
-      encounter: encounter.row,
-      team,
-      teamSize: setup.team.length,
-      wild,
-      won: false,
-      enteredSlots: [],
-      now,
-      log: [{ t: 0, kind: 'end', result: 'lose' }],
-    })
-  }
-
   let result: BattleResult
   try {
     result = runManualEncounterBattle(setup, encounter.row.rngSeed, inputs)
@@ -415,8 +400,26 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
     throw error
   }
 
+  // Desmaio (win/lose) vale mesmo se o relógio de parede já passou do limite:
+  // senão um finish atrasado (linger / rede) transformava vitória em derrota.
+  const decidedByFaint = result.result === 'win' || result.result === 'lose'
+  if (abandoned && !decidedByFaint) {
+    return applyBattleOutcome({
+      userId,
+      clock,
+      encounter: encounter.row,
+      team,
+      wild,
+      won: false,
+      enteredSlots: result.enteredSlots,
+      faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+      now,
+      log: result.log.length > 0 ? result.log : [{ t: 0, kind: 'end', result: 'lose' }],
+    })
+  }
+
   const elapsed = now - startedAt
-  if (isFinishTooEarly(elapsed, result.durationMs)) {
+  if (!abandoned && isFinishTooEarly(elapsed, result.durationMs)) {
     return fail('finish_too_early', 400)
   }
 
@@ -425,10 +428,10 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
     clock,
     encounter: encounter.row,
     team,
-    teamSize: setup.team.length,
     wild,
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
+    faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
     now,
     log: result.log,
   })
@@ -442,37 +445,40 @@ function applyBattleOutcome(input: {
   encounter: EncounterRow
   /** Só Pokémon que ainda existem e são do jogador. */
   team: RewardTeamRow[]
-  /** Tamanho do time que lutou (setup), para dividir XP. */
-  teamSize: number
   wild: WildBattleRow
   won: boolean
   enteredSlots: number[]
+  /** Slots que terminaram desmaiados (não recebem XP). */
+  faintedSlots: number[]
   now: number
   log: BattleEvent[]
 }) {
-  const { userId, clock, encounter, team, teamSize, wild, won, enteredSlots, now, log } = input
+  const { userId, clock, encounter, team, wild, won, enteredSlots, faintedSlots, now, log } = input
   const db = getDb()
   const yieldEvs = evYieldFromSpecies(wild)
-  const entered = new Set(enteredSlots)
-  const fought = Math.max(1, teamSize)
+  // Só quem entrou e não desmaiou. Bench e KO ficam de fora; Exp Share (futuro) muda isso.
+  const sharers = battleXpSharers(enteredSlots, faintedSlots)
+  const sharerSet = new Set(sharers)
 
   const fighters = team.map((mon) => {
-    const share = won ? fighterXp(wild.baseExperience, encounter.level, mon.level, fought) : 0
+    const getsShare = won && sharerSet.has(mon.slot)
+    const share = getsShare
+      ? fighterXp(wild.baseExperience, encounter.level, mon.level, sharers.length)
+      : 0
     const granted = grantXp(mon.level, mon.xp, share)
-    const nextEvs =
-      won && entered.has(mon.slot)
-        ? applyEvYield(
-            {
-              hp: mon.evHp,
-              attack: mon.evAttack,
-              defense: mon.evDefense,
-              spAttack: mon.evSpAttack,
-              spDefense: mon.evSpDefense,
-              speed: mon.evSpeed,
-            },
-            yieldEvs,
-          )
-        : null
+    const nextEvs = getsShare
+      ? applyEvYield(
+          {
+            hp: mon.evHp,
+            attack: mon.evAttack,
+            defense: mon.evDefense,
+            spAttack: mon.evSpAttack,
+            spDefense: mon.evSpDefense,
+            speed: mon.evSpeed,
+          },
+          yieldEvs,
+        )
+      : null
     let learnedMove: ReturnType<typeof applyLevelMovesToPokemon>['learned'] = null
     if (share > 0 || nextEvs) {
       db.update(pokemon)

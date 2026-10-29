@@ -8,6 +8,7 @@
   import Daycare from './lib/Daycare.svelte'
   import Explore from './lib/Explore.svelte'
   import Garden from './lib/Garden.svelte'
+  import Modal from './lib/Modal.svelte'
   import Pokedex from './lib/Pokedex.svelte'
   import { baseTasks, gameTasks, warmUp } from './lib/preload'
   import { readyStatus, shouldShowReadyBanner } from './lib/ready'
@@ -25,7 +26,7 @@
   let applyUpdate = $state<() => void>(() => undefined)
   let muted = $state(isMuted())
   let volumeLevel = $state(getVolume())
-  let volumeOpen = $state(false)
+  let configOpen = $state(false)
   // Ícone com X quando não sai som, seja pelo mudo ou pela barra no zero.
   const silent = $derived(muted || volumeLevel === 0)
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
@@ -45,7 +46,15 @@
 
   const claimable = $derived(game?.pokedex.claimable ?? 0)
 
-  // Ícone da Pokédex no HUD (X = pixel aceso), no traço do alto-falante.
+  /** Progresso visual até o próximo Nv (só a barra do HUD). */
+  const trainerXpPct = $derived.by(() => {
+    if (!game) return 0
+    const { xp, xpToNext: need } = game.trainer
+    if (need <= 0) return 0
+    return Math.min(100, Math.max(0, (xp / need) * 100))
+  })
+
+  // Ícones 12×12 do HUD (X = pixel aceso), no traço do alto-falante.
   const DEX_ICON = [
     '.XXXXXXXXXX.',
     'X..........X',
@@ -59,6 +68,36 @@
     'X.XXXXXXXX.X',
     'X..........X',
     '.XXXXXXXXXX.',
+  ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
+
+  const BAG_ICON = [
+    '..XXXXXXXX..',
+    '.X........X.',
+    'X.XX....XX.X',
+    'X..........X',
+    'X.XXXXXXXX.X',
+    'X.X......X.X',
+    'X.X......X.X',
+    'X.X......X.X',
+    'X.XXXXXXXX.X',
+    'X..........X',
+    '.X........X.',
+    '..XXXXXXXX..',
+  ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
+
+  const GEAR_ICON = [
+    '....XXXX....',
+    '...X....X...',
+    '.XXX....XXX.',
+    'X..X....X..X',
+    'X...XXXX...X',
+    '.X........X.',
+    '.X........X.',
+    'X...XXXX...X',
+    'X..X....X..X',
+    '.XXX....XXX.',
+    '...X....X...',
+    '....XXXX....',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
   function isNarrowDex(): boolean {
@@ -181,6 +220,7 @@
   })
 
   async function logout() {
+    configOpen = false
     try {
       await api('/api/auth/logout', {})
     } catch {
@@ -315,98 +355,78 @@
       <p class="offline-banner" role="status">Sem conexão · tentando de novo</p>
     {/if}
     <header class="panel hud">
-      <div class="level" aria-label="Nível de treinador">
-        <small>Nv</small>{game.trainer.level}
+      <div class="hud-trainer">
+        <div class="level-wrap" aria-label="Nível de treinador {game.trainer.level}">
+          <span class="level-tab">Nv</span>
+          <div class="level">{game.trainer.level}</div>
+          <div class="level-xp" aria-hidden="true">
+            <span style:width="{trainerXpPct}%"></span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="energy"
+          aria-label="Energia"
+          onclick={() => (energyDetail = !energyDetail)}
+        >
+          <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
+          <div class="pips" aria-hidden="true">
+            {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
+              <span class="pip" class:full={i < game.trainer.energy}></span>
+            {/each}
+          </div>
+          <span class="timer">{energyCaption()}</span>
+        </button>
       </div>
-      <button
-        type="button"
-        class="energy"
-        aria-label="Energia"
-        onclick={() => (energyDetail = !energyDetail)}
-      >
-        <span class="label">Energia {game.trainer.energy}/{game.trainer.energyMax}</span>
-        <div class="pips" aria-hidden="true">
-          {#each Array.from({ length: game.trainer.energyMax }, (_, i) => i) as i (i)}
-            <span class="pip" class:full={i < game.trainer.energy}></span>
-          {/each}
-        </div>
-        <span class="timer">{energyCaption()}</span>
-      </button>
-      <button
-        type="button"
-        class="btn mute-btn"
-        aria-expanded={volumeOpen}
-        aria-controls="volume-panel"
-        aria-label="Som"
-        title="Som"
-        onclick={() => (volumeOpen = !volumeOpen)}
-      >
-        <!-- Alto-falante em pixels (grade 12×12): ondas com som, X no mudo. -->
-        <svg class="speaker" viewBox="0 0 12 12" width="22" height="22" aria-hidden="true">
-          <rect x="1" y="4" width="2" height="4" />
-          <rect x="3" y="3" width="1" height="6" />
-          <rect x="4" y="2" width="1" height="8" />
-          <rect x="5" y="1" width="1" height="10" />
-          {#if silent}
-            <rect x="7" y="4" width="1" height="1" /><rect x="8" y="5" width="1" height="1" />
-            <rect x="9" y="6" width="1" height="1" /><rect x="10" y="7" width="1" height="1" />
-            <rect x="10" y="4" width="1" height="1" /><rect x="9" y="5" width="1" height="1" />
-            <rect x="8" y="6" width="1" height="1" /><rect x="7" y="7" width="1" height="1" />
-          {:else}
-            <rect x="7" y="4" width="1" height="4" />
-            <rect x="9" y="2" width="1" height="1" /><rect x="10" y="3" width="1" height="6" />
-            <rect x="9" y="9" width="1" height="1" />
+      <span class="hud-sep" aria-hidden="true"></span>
+      <div class="hud-actions">
+        <button
+          type="button"
+          class="btn icon-btn badge-host"
+          aria-label="Pokédex"
+          aria-pressed={pokedexOpen}
+          title="Pokédex"
+          onclick={togglePokedex}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each DEX_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+          {#if claimable > 0}
+            <span class="dot" aria-hidden="true"></span>
+            <span class="sr-only">{claimable === 1 ? '1 recompensa para resgatar' : `${claimable} recompensas para resgatar`}</span>
           {/if}
-        </svg>
-      </button>
-      <button
-        type="button"
-        class="btn dex-btn badge-host"
-        aria-label="Pokédex"
-        aria-pressed={pokedexOpen}
-        title="Pokédex"
-        onclick={togglePokedex}
-      >
-        <!-- Pokédex em pixels (grade 12×12), na cor do texto como o alto-falante:
-             lente e luzinhas em cima, dobradiça e tela embaixo. -->
-        <svg class="speaker" viewBox="0 0 12 12" width="22" height="22" aria-hidden="true">
-          {#each DEX_ICON as px (`${px.x},${px.y}`)}
-            <rect x={px.x} y={px.y} width="1" height="1" />
-          {/each}
-        </svg>
-        {#if claimable > 0}
-          <!-- Só uma bolinha: o número de blocos está no próprio álbum. -->
-          <span class="dot" aria-hidden="true"></span>
-          <span class="sr-only">{claimable === 1 ? '1 recompensa para resgatar' : `${claimable} recompensas para resgatar`}</span>
-        {/if}
-      </button>
-      <button type="button" class="btn bag-btn" aria-label="Mochila" onclick={() => (screen = 'bag')}>
-        Mochila
-      </button>
-      <button type="button" class="btn" onclick={logout}>Sair</button>
-      {#if volumeOpen}
-        <!-- Toque fora fecha o painel. -->
-        <button type="button" class="volume-dismiss" aria-label="Fechar volume" onclick={() => (volumeOpen = false)}></button>
-        <div class="panel volume-panel" id="volume-panel">
-          <label class="volume-row">
-            <span>Volume</span>
-            <input
-              type="range"
-              class="volume-range"
-              min="0"
-              max="100"
-              step="5"
-              value={Math.round(volumeLevel * 100)}
-              disabled={muted}
-              oninput={onVolume}
-            />
-            <strong>{muted ? '—' : `${Math.round(volumeLevel * 100)}%`}</strong>
-          </label>
-          <button type="button" class="btn" aria-pressed={muted} onclick={onMute}>
-            {muted ? 'Ligar som' : 'Silenciar'}
-          </button>
-        </div>
-      {/if}
+        </button>
+        <button
+          type="button"
+          class="btn icon-btn"
+          aria-label="Mochila"
+          title="Mochila"
+          aria-pressed={screen === 'bag'}
+          onclick={() => (screen = 'bag')}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each BAG_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="btn icon-btn"
+          aria-label="Configurações"
+          title="Configurações"
+          aria-pressed={configOpen}
+          onclick={() => (configOpen = true)}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+            {#each GEAR_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+        </button>
+      </div>
     </header>
     {#if screen === 'meadow' && showReadyBanner && ready?.summary}
       <div class="ready-banner panel" role="status">
@@ -461,6 +481,54 @@
       >
         <Pokedex {game} onState={loadState} onClose={() => closePokedex()} />
       </div>
+    {/if}
+
+    {#if configOpen}
+      <Modal label="Configurações" fullMobile onBackdrop={() => (configOpen = false)}>
+        <div class="config">
+          <header class="config-head">
+            <h2>Configurações</h2>
+            <button type="button" class="btn config-close" aria-label="Fechar" onclick={() => (configOpen = false)}>
+              ✕
+            </button>
+          </header>
+          <label class="volume-row">
+            <span>Volume</span>
+            <input
+              type="range"
+              class="volume-range"
+              min="0"
+              max="100"
+              step="5"
+              value={Math.round(volumeLevel * 100)}
+              disabled={muted}
+              oninput={onVolume}
+            />
+            <strong>{muted ? '—' : `${Math.round(volumeLevel * 100)}%`}</strong>
+          </label>
+          <button type="button" class="btn mute-toggle" aria-pressed={muted} onclick={onMute}>
+            <svg class="hud-icon" viewBox="0 0 12 12" width="24" height="24" aria-hidden="true">
+              <rect x="1" y="4" width="2" height="4" />
+              <rect x="3" y="3" width="1" height="6" />
+              <rect x="4" y="2" width="1" height="8" />
+              <rect x="5" y="1" width="1" height="10" />
+              {#if silent}
+                <rect x="7" y="4" width="1" height="1" /><rect x="8" y="5" width="1" height="1" />
+                <rect x="9" y="6" width="1" height="1" /><rect x="10" y="7" width="1" height="1" />
+                <rect x="10" y="4" width="1" height="1" /><rect x="9" y="5" width="1" height="1" />
+                <rect x="8" y="6" width="1" height="1" /><rect x="7" y="7" width="1" height="1" />
+              {:else}
+                <rect x="7" y="4" width="1" height="4" />
+                <rect x="9" y="2" width="1" height="1" /><rect x="10" y="3" width="1" height="6" />
+                <rect x="9" y="9" width="1" height="1" />
+              {/if}
+            </svg>
+            {muted ? 'Ligar som' : 'Silenciar'}
+          </button>
+          <div class="config-spacer"></div>
+          <button type="button" class="btn config-logout" onclick={logout}>Sair da conta</button>
+        </div>
+      </Modal>
     {/if}
   </main>
 {/if}
@@ -742,28 +810,124 @@
     padding: 0.35rem 0.4rem;
   }
 
-  /* Botões dentro do HUD: borda mais leve para não colar na moldura do painel. */
-  .hud .btn {
-    box-shadow: none;
+  .hud-trainer {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1;
+    min-width: 0;
+    /* Desktop: ações à esquerda; o DOM fica perfil → ações pro empilhar no celular. */
+    order: 2;
+  }
+
+  .hud-sep {
+    flex: none;
+    align-self: stretch;
+    width: 1px;
+    margin: 0.15rem 0;
+    background: var(--panel-shade);
+    order: 1;
+  }
+
+  .hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: none;
+    order: 0;
+  }
+
+  /* Ícones do HUD (Pokédex / mochila / config): quadrado com borda e sombra. */
+  .hud .icon-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: var(--px) solid var(--panel-edge);
+    background: var(--panel-face);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 -2px 0 var(--panel-shade);
+    color: var(--ink);
+  }
+
+  .hud .icon-btn:active:not(:disabled) {
+    background: var(--paper);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 2px 0 #00000022;
+    transform: translateY(var(--px));
+  }
+
+  .hud .icon-btn[aria-pressed='true'] {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--selected-face);
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 -2px 0 var(--primary-shade);
+  }
+
+  /* Etiqueta “Nv” em cima do quadrado, tipo aba de pasta / marcador. */
+  .level-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: none;
+    width: 44px;
+  }
+
+  .level-tab {
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    margin: 0 0 calc(var(--px) * -1);
+    padding: 0 4px;
+    height: 11px;
+    border: var(--px) solid var(--ink);
+    border-bottom: 0;
+    background: var(--accent);
+    color: var(--ink);
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    box-shadow: 1px 0 0 #000;
   }
 
   .level {
     display: grid;
     place-items: center;
-    min-width: 44px;
+    box-sizing: border-box;
+    width: 44px;
     height: 44px;
+    border: var(--px) solid var(--accent);
     background: var(--ink);
     color: var(--accent);
     font-size: 1.3rem;
     font-weight: 700;
     line-height: 1;
-    box-shadow: inset 0 calc(var(--px) * -2) 0 #00000055;
-    flex: none;
+    text-align: center;
+    box-shadow:
+      1px 1px 0 #000,
+      inset 0 calc(var(--px) * -2) 0 #00000055;
   }
 
-  .level small {
-    font-size: 0.55rem;
-    color: #fff;
+  .level-xp {
+    width: 100%;
+    height: 4px;
+    margin-top: 2px;
+    background: #00000044;
+  }
+
+  .level-xp > span {
+    display: block;
+    height: 100%;
+    background: var(--grass-side);
   }
 
   .energy {
@@ -789,13 +953,14 @@
   }
 
   .pips {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 14px);
+    display: flex;
     gap: 3px;
+    width: 100%;
   }
 
   .pip {
+    flex: 1 1 0;
+    min-width: 0;
     height: 14px;
     background: #00000022;
     box-shadow: inset 0 0 0 var(--px) #00000033;
@@ -817,32 +982,20 @@
     text-overflow: ellipsis;
   }
 
-  /* Altura vem do .btn (48px), igual para Som, Pokédex, Mochila e Sair. */
-  .bag-btn,
-  .mute-btn,
-  .dex-btn {
-    min-width: 44px;
+  .icon-btn {
     flex: none;
   }
 
-  .mute-btn,
-  .dex-btn {
-    padding-left: 0.45rem;
-    padding-right: 0.45rem;
-  }
-
-  .mute-btn[aria-pressed='true'] {
-    color: var(--ink-soft);
-  }
-
-  /* 22px: com as bordas de 12px o botão fica nos mesmos 48px dos vizinhos. */
-  .speaker {
+  /* 24px = 12×2: escala inteira, senão o SVG deixa pixels de larguras diferentes. */
+  .hud-icon {
     display: block;
     flex: none;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     fill: currentColor;
     shape-rendering: crispEdges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
   }
 
   /* Só para leitor de tela. */
@@ -867,31 +1020,54 @@
     box-shadow: inset -2px -2px 0 #b8401a;
   }
 
-  .dex-btn.badge-host,
   .badge-host {
     position: relative;
   }
 
-  .volume-dismiss {
-    position: fixed;
-    z-index: 30;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-    cursor: default;
+  .config {
+    display: grid;
+    gap: 0.75rem;
+    min-height: 0;
+    flex: 1;
   }
 
-  .volume-panel {
-    position: absolute;
-    z-index: 31;
-    top: calc(100% + 0.25rem);
-    left: 0;
-    display: grid;
+  .config-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
-    width: min(100%, 20rem);
-    box-sizing: border-box;
+  }
+
+  .config-head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .config-close {
+    min-width: 44px;
+    flex: none;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  .mute-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .config-spacer {
+    flex: 1;
+    min-height: 1rem;
+  }
+
+  .config-logout {
+    width: 100%;
+    color: #fff;
+    background: var(--danger);
+    text-shadow: 0 var(--px) 0 #801818;
+    box-shadow: inset 0 -3px 0 #801818;
   }
 
   .volume-row {
@@ -961,27 +1137,35 @@
     box-shadow: inset 0 -3px 0 var(--accent-shade);
   }
 
-  /* Celular: nível e energia numa linha; ícones + Mochila + Sair embaixo. */
+  /* Celular: perfil em cima; ações embaixo à esquerda. */
   @media (max-width: 420px) {
     .hud {
       flex-wrap: wrap;
       row-gap: 0.45rem;
     }
 
-    .energy {
-      flex-basis: calc(100% - 44px - 0.5rem);
+    .hud-trainer {
+      order: 0;
+      flex: 1 1 100%;
     }
 
-    .hud .btn {
-      flex: 1;
+    .hud-sep {
+      order: 1;
+      width: 100%;
+      height: 1px;
+      margin: 0;
     }
 
-    /* Ícones: alvo ≥44px sem comer espaço dos botões de texto. */
-    .hud .mute-btn,
-    .hud .dex-btn {
+    .hud-actions {
+      order: 2;
+    }
+
+    .hud .icon-btn {
       flex: none;
       width: 48px;
+      height: 48px;
       min-width: 48px;
+      min-height: 48px;
     }
   }
 
