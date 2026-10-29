@@ -7,6 +7,7 @@ import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from
 import { berryItemKey, getBerry } from '../config/berries.js'
 import { type Region, regionBySlug } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
+import { isWholeTeam } from '../db/team.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import {
@@ -620,6 +621,8 @@ function loadPendingEncounter(userId: number, encounterId: number): { ok: true; 
 }
 
 function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows: TeamBattleRow[] } | Failure {
+  // O time inteiro vai para a luta; a ordem só diz quem abre.
+  if (!isWholeTeam(userId, pokemonIds)) return fail('invalid_team', 400)
   const rows = selectTeamRows(userId, pokemonIds)
   if (rows.length !== pokemonIds.length) return fail('invalid_team', 400)
   const byId = new Map(rows.map((row) => [row.id, row]))
@@ -1068,7 +1071,7 @@ function takeBonus(userId: number, effectKey: string): number {
 }
 
 function parseTeam(value: unknown[]): number[] | null {
-  if (value.length < 1 || value.length > 3) return null
+  if (value.length < 1 || value.length > trainerConfig.teamMax) return null
   const ids: number[] = []
   for (const entry of value) {
     if (typeof entry !== 'number' || !Number.isInteger(entry) || entry <= 0) return null

@@ -155,6 +155,14 @@ export const pokemon = sqliteTable(
     location: text('location', { enum: ['garden', 'daycare'] })
       .notNull()
       .default('garden'),
+    /**
+     * Guardado no PC: some do jardim e fica parado. É coluna à parte (e não
+     * um location 'pc') porque mudar o CHECK de location pede recriar a
+     * tabela, e o DROP apagaria em cascata o daycare e os encontros.
+     */
+    inPc: integer('in_pc', { mode: 'boolean' }).notNull().default(false),
+    /** Posição no time (0 a 5); null = fora do time. */
+    teamSlot: integer('team_slot'),
     caughtAt: integer('caught_at').notNull(),
     caughtRegion: text('caught_region'),
     /** Chave da bola usada na captura (`poke`, `great`…). */
@@ -184,6 +192,10 @@ export const pokemon = sqliteTable(
     index('idx_pokemon_user').on(table.userId),
     index('idx_pokemon_user_species').on(table.userId, table.speciesId),
     check('ck_pokemon_location', sql`${table.location} in ('garden', 'daycare')`),
+    check('ck_pokemon_team_slot', sql`${table.teamSlot} is null or ${table.teamSlot} between 0 and 5`),
+    uniqueIndex('uq_pokemon_team_slot')
+      .on(table.userId, table.teamSlot)
+      .where(sql`${table.teamSlot} is not null`),
     check(
       'ck_pokemon_ability_slot',
       sql`${table.abilitySlot} is null or ${table.abilitySlot} in ('1', '2', 'hidden')`,
@@ -292,7 +304,7 @@ export const encounterFighters = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.encounterId, table.slot] }),
-    check('ck_encounter_fighters_slot', sql`${table.slot} between 0 and 2`),
+    check('ck_encounter_fighters_slot', sql`${table.slot} between 0 and 5`),
   ],
 )
 

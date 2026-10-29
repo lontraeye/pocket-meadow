@@ -943,3 +943,90 @@ test('a migração weather_seed dá uma semente de clima a cada treinador sem me
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração pc_team monta o time com os 6 melhores do jardim e não mexe no daycare nem nos encontros', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-pc-team-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  for (const fileName of [
+    '0000_init.sql',
+    '0001_auth_events.sql',
+    '0002_encounter_fighters.sql',
+    '0003_base_experience.sql',
+    '0004_via_trade.sql',
+    '0005_daycare_xp_gained.sql',
+    '0006_google_login.sql',
+    '0007_drop_password.sql',
+    '0008_pokemon_traits.sql',
+    '0009_battle_started.sql',
+    '0010_battle_setup_json.sql',
+    '0011_won_at.sql',
+    '0012_battle_auto.sql',
+    '0013_encounter_secret_seed.sql',
+    '0014_pokedex_album.sql',
+    '0015_pokeballs.sql',
+    '0016_weather_seed.sql',
+  ]) {
+    execMigration(db, fileName)
+  }
+
+  for (const [id, name] of [[1, 'ash'], [2, 'misty']] as const) {
+    db.prepare(`insert into users (username, created_at) values (?, ?)`).run(name, id)
+    db.prepare(
+      `insert into trainers (user_id, level, xp, energy, energy_updated_at, updated_at) values (?, 5, 0, 8, 100, 100)`,
+    ).run(id)
+  }
+  db.prepare(
+    `insert into species (
+      id, name, display_name, type1, hp, attack, defense, sp_attack, sp_defense, speed,
+      base_stat_total, base_experience, capture_rate, evolution_chain_id, evolution_stage,
+      ev_hp, ev_attack, ev_defense, ev_sp_attack, ev_sp_defense, ev_speed
+    ) values
+      (16, 'pidgey', 'Pidgey', 'normal', 40, 45, 40, 35, 35, 56, 251, 50, 255, 10, 1, 0, 0, 0, 0, 0, 1)`,
+  ).run()
+  const insertMon = db.prepare(
+    `insert into pokemon (user_id, species_id, level, xp, caught_at, original_species_id, is_favorite, location)
+     values (?, 16, ?, 0, 1, 16, ?, ?)`,
+  )
+  // ash: 8 no jardim (um favorito fraco) e 1 no daycare. misty: 2 no jardim.
+  const ashLevels = [3, 9, 7, 12, 5, 8, 10, 4]
+  for (const level of ashLevels) insertMon.run(1, level, level === 3 ? 1 : 0, 'garden')
+  const inDaycare = insertMon.run(1, 30, 0, 'daycare').lastInsertRowid
+  db.prepare(
+    `insert into daycare_slots (user_id, slot_index, pokemon_id, entered_at, last_settled_at) values (1, 0, ?, 1, 1)`,
+  ).run(inDaycare)
+  insertMon.run(2, 6, 0, 'garden')
+  insertMon.run(2, 2, 0, 'garden')
+  const encounter = db
+    .prepare(
+      `insert into encounters (user_id, region_slug, species_id, level, is_shiny, rng_seed, status, created_at, expires_at)
+       values (1, 'route-1', 16, 3, 0, 42, 'pending', 100, 200)`,
+    )
+    .run().lastInsertRowid
+  db.prepare(`insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (?, 0, 1, 10)`).run(encounter)
+
+  execMigration(db, '0017_pc_team.sql')
+
+  const team = (user: number) =>
+    (
+      db
+        .prepare(`select level, is_favorite from pokemon where user_id = ? and team_slot is not null order by team_slot`)
+        .all(user) as { level: number; is_favorite: number }[]
+    ).map((row) => (row.is_favorite ? `${row.level}★` : String(row.level)))
+  // Favorito primeiro, depois por nível; o do daycare fica de fora.
+  assert.deepEqual(team(1), ['3★', '12', '10', '9', '8', '7'])
+  assert.deepEqual(team(2), ['6', '2'])
+  assert.equal((db.prepare(`select count(*) as n from pokemon where in_pc = 1`).get() as { n: number }).n, 0)
+  assert.equal((db.prepare(`select count(*) as n from daycare_slots`).get() as { n: number }).n, 1)
+  assert.equal((db.prepare(`select count(*) as n from encounter_fighters`).get() as { n: number }).n, 1)
+  // O time aceita até a posição 5 nos lutadores, e não passa disso.
+  db.prepare(`insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (?, 5, 2, 10)`).run(encounter)
+  assert.throws(() =>
+    db.prepare(`insert into encounter_fighters (encounter_id, slot, pokemon_id, power) values (?, 6, 3, 10)`).run(encounter),
+  )
+  assert.throws(() => db.prepare(`update pokemon set team_slot = 6 where id = 9`).run())
+
+  db.close()
+  fs.rmSync(file, { force: true })
+})

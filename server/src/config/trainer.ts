@@ -4,6 +4,8 @@ export const trainerConfig = {
   // com ela. Religar (ou trocar por outro freio) é só voltar para true.
   energyEnabled: false,
   energyMax: 10,
+  /** Tamanho máximo do time (o time inteiro vai para a luta). */
+  teamMax: 6,
   // Vitória: 8 + 2 × nível do selvagem. Captura: 10 + nível, somada à vitória.
   // Curva em trainerXpToNext. Ver PLANNING.md, seção 5.1.
   winXpBase: 8,

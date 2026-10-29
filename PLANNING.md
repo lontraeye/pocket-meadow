@@ -1112,6 +1112,15 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 
 **Na tela:** a ficha mostra IVs (avaliação), nature, habilidade, os dois golpes e os EVs. Antes de lutar, a efetividade dos seus golpes contra o selvagem.
 
+### 5.19 Time e PC (feito em 2026-10-29)
+- **Time:** até `trainerConfig.teamMax` (6) Pokémon do jardim, em ordem (`pokemon.team_slot`, 0 a 5). **O time inteiro vai para a luta**; antes de entrar, o jogador toca em quem abre, e durante a luta troca por qualquer um do time. O XP continua só para quem entrou em campo (5.5). Substitui a escolha de 1 a 3 do jardim a cada encontro.
+- **O time nunca fica vazio.** Mandar para o PC, colocar no daycare ou soltar quem é o último do time é recusado (`last_in_team`). Como o time é do jardim, isso também garante o jardim nunca vazio.
+- **Capturado não entra no time sozinho:** vai para o jardim, e o jogador põe no time pela ficha. O inicial abre o time.
+- **PC:** o Pokémon some do jardim e fica parado (sem andar, sem lutar, sem daycare). Dá para alimentar, evoluir e soltar no PC. No futuro, quem fica no jardim ganha felicidade; no PC, não.
+- **Dados:** `pokemon.in_pc` (e não um `location = 'pc'`: mudar o CHECK de `location` pede recriar a tabela, e o DROP apagaria em cascata o daycare e os encontros) e `pokemon.team_slot` com índice único por jogador. A API manda `location: 'pc'` para a tela. `encounter_fighters.slot` vai até 5. A migração `0017_pc_team` monta o time de quem já joga com os 6 melhores do jardim (favoritos primeiro, depois nível).
+- **Rotas:** `PUT /trainer/team` (`{ pokemonIds }`, a ordem é a posição), `POST /pokemon/:id/pc` e `POST /pokemon/:id/garden`. A luta (`/encounters/:id/battle/start`) exige o time inteiro, em qualquer ordem: o primeiro abre.
+- **Tela:** a ficha (aba Treino) tem "Pôr no time / Tirar do time" e "Guardar no PC / Trazer para o jardim"; a Coleção tem os filtros Time e PC e a marca no card; o encontro mostra o time e "toque em quem abre". Na luta, a troca mostra o time em duas colunas.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")

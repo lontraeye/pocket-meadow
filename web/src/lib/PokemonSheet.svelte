@@ -89,7 +89,28 @@
   const yield_ = $derived(releaseYield(mon.level, mon.isShiny, rules))
   const lastOne = $derived(game.pokemon.length <= 1)
   const inDaycare = $derived(mon.location === 'daycare')
+  const inPc = $derived(mon.location === 'pc')
   const gardenCount = $derived(game.pokemon.filter((entry) => entry.location === 'garden').length)
+  /** O time em ordem de posição (todos vão para a luta). */
+  const team = $derived(
+    game.pokemon.filter((entry) => entry.teamSlot !== null).sort((a, b) => (a.teamSlot ?? 0) - (b.teamSlot ?? 0)),
+  )
+  const inTeam = $derived(mon.teamSlot !== null)
+  const onlyInTeam = $derived(inTeam && team.length <= 1)
+  const teamReason = $derived(
+    inPc
+      ? 'Está no PC'
+      : inDaycare
+        ? 'Está no daycare'
+        : inTeam
+          ? onlyInTeam
+            ? 'É o único do time'
+            : ''
+          : team.length >= game.trainer.teamMax
+            ? `Time cheio (${team.length}/${game.trainer.teamMax})`
+            : '',
+  )
+  const pcReason = $derived(inDaycare ? 'Está no daycare' : onlyInTeam ? 'É o único do time' : '')
   const daycareSlot = $derived(game.daycare.slots.find((slot) => slot.pokemonId === mon.id) ?? null)
   const freeSlot = $derived(
     [...Array(game.daycare.slotsUnlocked).keys()].find((index) => !game.daycare.slots.some((slot) => slot.slotIndex === index)) ??
@@ -102,11 +123,17 @@
         ? game.daycare.nextSlotLevel
           ? `Abre no nível ${game.daycare.nextSlotLevel}`
           : 'Sem slot livre'
-        : gardenCount <= 1
-          ? 'Deixe alguém no jardim'
-          : '',
+        : inPc
+          ? 'Está no PC'
+          : onlyInTeam
+            ? 'É o único do time'
+            : gardenCount <= 1
+              ? 'Deixe alguém no jardim'
+              : '',
   )
-  const releaseReason = $derived(lastOne ? 'É o seu último Pokémon' : inDaycare ? 'Está no daycare' : '')
+  const releaseReason = $derived(
+    lastOne ? 'É o seu último Pokémon' : inDaycare ? 'Está no daycare' : onlyInTeam ? 'É o único do time' : '',
+  )
 
   $effect(() => {
     const current = mon.id
@@ -156,7 +183,7 @@
     if (doses > maxDoses) doses = Math.max(1, maxDoses)
   })
 
-  async function send(path: string, body: unknown, method: 'POST' | 'PATCH' = 'POST'): Promise<boolean> {
+  async function send(path: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' = 'POST'): Promise<boolean> {
     pending = true
     message = ''
     try {
@@ -343,6 +370,19 @@
 
   async function toggleFavorite() {
     await send(`/api/pokemon/${mon.id}`, { isFavorite: !mon.isFavorite }, 'PATCH')
+  }
+
+  async function toggleTeam() {
+    const ids = team.map((entry) => entry.id)
+    const next = inTeam ? ids.filter((id) => id !== mon.id) : [...ids, mon.id]
+    const ok = await send('/api/trainer/team', { pokemonIds: next }, 'PUT')
+    if (ok) message = inTeam ? 'Saiu do time.' : 'Entrou no time.'
+  }
+
+  async function togglePc() {
+    const wasInPc = inPc
+    const ok = await send(`/api/pokemon/${mon.id}/${wasInPc ? 'garden' : 'pc'}`, {})
+    if (ok) message = wasInPc ? 'Voltou para o jardim.' : 'Guardado no PC.'
   }
 
   async function putInDaycare() {
@@ -810,6 +850,27 @@
     {/if}
 
     <div class="block">
+      <h3>Time e PC</h3>
+      <p class="hint">
+        {#if inTeam}
+          No time ({(mon.teamSlot ?? 0) + 1}º de {team.length}).
+        {:else if inPc}
+          No PC: fora do jardim, parado.
+        {:else}
+          No jardim, fora do time.
+        {/if}
+      </p>
+      <div class="pair">
+        <button type="button" class="btn" class:btn-primary={!inTeam && teamReason === ''} disabled={pending || teamReason !== ''} onclick={() => void toggleTeam()}>
+          {teamReason || (inTeam ? 'Tirar do time' : 'Pôr no time')}
+        </button>
+        <button type="button" class="btn" disabled={pending || pcReason !== ''} onclick={() => void togglePc()}>
+          {pcReason || (inPc ? 'Trazer para o jardim' : 'Guardar no PC')}
+        </button>
+      </div>
+    </div>
+
+    <div class="block">
       <h3>Daycare</h3>
       {#if inDaycare}
         <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void takeFromDaycare()}>Retirar</button>
@@ -1200,6 +1261,17 @@
   .dock .btn,
   .block .btn {
     width: 100%;
+  }
+
+  .block .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+
+  .block .pair .btn {
+    padding: 0 0.4rem;
+    font-size: 16px;
   }
 
   .danger {

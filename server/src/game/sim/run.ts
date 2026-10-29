@@ -73,8 +73,8 @@ export type RunBattleOptions = {
 
 export function runBattle(options: RunBattleOptions): BattleResult {
   const { setup, seed } = options
-  if (setup.team.length < 1 || setup.team.length > 3) {
-    throw new Error('team must have 1–3 fighters')
+  if (setup.team.length < 1 || setup.team.length > simConfig.teamMax) {
+    throw new Error(`team must have 1–${simConfig.teamMax} fighters`)
   }
 
   const auto = options.inputs === undefined || options.inputs === 'auto'
@@ -833,7 +833,7 @@ function validateAndSortInputs(inputs: BattleInput[]): BattleInput[] {
     }
     if (input.t < prev) throw new Error('inputs_out_of_order')
     prev = input.t
-    if (input.action === 'switch' && (input.slot === undefined || input.slot < 0 || input.slot > 2)) {
+    if (input.action === 'switch' && (input.slot === undefined || input.slot < 0 || input.slot >= simConfig.teamMax)) {
       throw new Error('invalid_switch_slot')
     }
   }

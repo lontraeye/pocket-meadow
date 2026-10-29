@@ -67,6 +67,8 @@ export function createPlayer(input: {
       userId: user.id,
       speciesId: starterSpecies.id,
       level: trainerConfig.starterLevel,
+      // O inicial abre o time.
+      teamSlot: 0,
       caughtAt: now,
       caughtBall: 'poke',
       originalSpeciesId: starterSpecies.id,

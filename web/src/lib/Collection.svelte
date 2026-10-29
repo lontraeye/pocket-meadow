@@ -8,16 +8,18 @@
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Filter = 'all' | 'favorite' | 'shiny' | 'duplicate' | 'daycare'
+  type Filter = 'all' | 'team' | 'pc' | 'favorite' | 'shiny' | 'duplicate' | 'daycare'
   type Sort = 'recent' | 'level' | 'dex' | 'name'
 
   const storageKey = 'pocket-meadow-collection'
   const filters: { id: Filter; label: string }[] = [
     { id: 'all', label: 'Todos' },
+    { id: 'team', label: 'Time' },
+    { id: 'pc', label: 'PC' },
     { id: 'favorite', label: 'Favoritos' },
     { id: 'shiny', label: 'Shiny' },
     { id: 'duplicate', label: 'Repetidos' },
-    { id: 'daycare', label: 'No daycare' },
+    { id: 'daycare', label: 'Daycare' },
   ]
   const sorts: { id: Sort; label: string }[] = [
     { id: 'recent', label: 'Recentes' },
@@ -64,6 +66,8 @@
   const visible = $derived.by(() => {
     const text = query.trim().toLocaleLowerCase('pt')
     const list = game.pokemon.filter((mon) => {
+      if (filter === 'team' && mon.teamSlot === null) return false
+      if (filter === 'pc' && mon.location !== 'pc') return false
       if (filter === 'favorite' && !mon.isFavorite) return false
       if (filter === 'shiny' && !mon.isShiny) return false
       if (filter === 'daycare' && mon.location !== 'daycare') return false
@@ -74,6 +78,8 @@
     })
     const byName = (mon: OwnedPokemon) => (mon.nickname ?? mon.displayName).toLocaleLowerCase('pt')
     list.sort((a, b) => {
+      // No filtro Time, a ordem é a do time.
+      if (filter === 'team') return (a.teamSlot ?? 0) - (b.teamSlot ?? 0)
       if (sort === 'level') return b.level - a.level || a.speciesId - b.speciesId
       if (sort === 'dex') return a.speciesId - b.speciesId || b.level - a.level
       if (sort === 'name') return byName(a).localeCompare(byName(b), 'pt')
@@ -94,6 +100,9 @@
         ? 'Fique com pelo menos um'
         : marked.some((mon) => mon.location === 'daycare')
           ? 'Tem alguém no daycare'
+          : game.pokemon.some((mon) => mon.teamSlot !== null) &&
+              game.pokemon.every((mon) => mon.teamSlot === null || picked.includes(mon.id))
+            ? 'Deixe alguém no time'
           : marked.length > game.progression.releaseMax
             ? `Máximo de ${game.progression.releaseMax} por vez`
             : '',
@@ -255,6 +264,11 @@
             <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" loading="lazy" width="72" height="72" />
             <span class="name">{mon.nickname ?? mon.displayName}</span>
             <small>Nv {mon.level}{mon.isShiny ? ' ★' : ''}{mon.isFavorite ? ' ♥' : ''}</small>
+            {#if mon.teamSlot !== null}
+              <span class="tag team-tag">Time</span>
+            {:else if mon.location === 'pc'}
+              <span class="tag pc-tag">PC</span>
+            {/if}
           </button>
         {/each}
       </div>
@@ -300,6 +314,9 @@
   .scroll {
     display: grid;
     align-content: start;
+    /* Linhas no tamanho do conteúdo: a faixa de filtros (que rola de lado)
+       tem altura mínima zero e era espremida. */
+    grid-auto-rows: max-content;
     gap: 0.45rem;
     flex: 1;
     min-height: 0;
@@ -310,16 +327,21 @@
     scrollbar-gutter: stable;
   }
 
+  /* Uma faixa só, que rola para o lado: 7 filtros em fileiras tomavam a tela. */
   .chips {
     display: flex;
-    flex-wrap: wrap;
+    flex: none;
     gap: 0.35rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 0.3rem;
+    scrollbar-width: thin;
   }
 
-  /* Cresce até encher a linha (no 360px ficam ~2 por fileira; o último sozinho ocupa a linha). */
   .chip {
-    flex: 1 1 7rem;
+    flex: none;
     width: auto;
+    padding: 0 0.85rem;
     text-align: center;
   }
 
@@ -423,6 +445,7 @@
   }
 
   .card {
+    position: relative;
     display: grid;
     justify-items: center;
     gap: 0.1rem;
@@ -437,6 +460,25 @@
     color: inherit;
     cursor: pointer;
     touch-action: manipulation;
+  }
+
+  /* Marca no canto do card: no time ou no PC. */
+  .tag {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    padding: 1px 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: #fff;
+  }
+
+  .team-tag {
+    background: var(--primary);
+  }
+
+  .pc-tag {
+    background: var(--ink-soft);
   }
 
   .card.on {

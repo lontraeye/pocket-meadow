@@ -55,7 +55,8 @@
   let regions = $state<RegionInfo[]>([])
   /** O último /regions falhou por rede (tenta de novo quando a conexão voltar). */
   let regionsFailed = $state(false)
-  let selected = $state<number[]>([])
+  /** Quem abre a luta (null = o primeiro do time). */
+  let lead = $state<number | null>(null)
   let result = $state<Result | null>(null)
   let message = $state('')
   let pending = $state(false)
@@ -373,12 +374,18 @@
   )
   /** Sem energia para um encontro (só quando a energia está ligada no servidor). */
   const noEnergy = $derived(game.trainer.energyEnabled && game.trainer.energy < 1)
+  /** O time, na ordem das posições. Todos vão para a luta. */
   const roster = $derived(
     game.pokemon
-      .filter((mon) => mon.location === 'garden')
-      .sort((a, b) => b.level - a.level || a.id - b.id),
+      .filter((mon) => mon.teamSlot !== null && mon.location === 'garden')
+      .sort((a, b) => (a.teamSlot ?? 0) - (b.teamSlot ?? 0)),
   )
-  const chosen = $derived(selected.flatMap((id) => roster.filter((mon) => mon.id === id)))
+  const leadId = $derived(roster.some((mon) => mon.id === lead) ? lead : (roster[0]?.id ?? null))
+  /** Quem abre primeiro; o resto segue a ordem do time. */
+  const chosen = $derived([
+    ...roster.filter((mon) => mon.id === leadId),
+    ...roster.filter((mon) => mon.id !== leadId),
+  ])
 
   onMount(() => {
     void loadRegions()
@@ -617,7 +624,7 @@
       warmCries([found.speciesId])
       await spriteReady(found.speciesId, found.isShiny)
       encounter = found
-      selected = []
+      lead = null
       step = 'encounter'
       // A tela já tem o que precisa; o HUD (energia) se atualiza em segundo
       // plano, sem segurar a escolha do time por mais uma ida ao servidor.
@@ -654,13 +661,9 @@
     }
   }
 
-  function toggle(id: number) {
-    if (selected.includes(id)) {
-      selected = selected.filter((entry) => entry !== id)
-      return
-    }
-    if (selected.length >= 3) return
-    selected = [...selected, id]
+  function pickLead(id: number) {
+    play('tap')
+    lead = id
   }
 
   async function battle() {
@@ -1126,23 +1129,23 @@
         {@render wild(encounter, 'compact')}
       </section>
       <section class="panel sheet">
-        <h2>Time {chosen.length}/3 <small class="pick">{chosen.length === 0 ? 'escolha de 1 a 3' : ''}</small></h2>
+        <h2>Time {roster.length}/{game.trainer.teamMax} <small class="pick">toque em quem abre</small></h2>
         {#if roster.length === 0}
-          <p class="hint">Nenhum Pokémon no jardim.</p>
+          <p class="hint">Seu time está vazio. Monte o time na Coleção.</p>
         {:else}
           <div class="roster">
             {#each roster as mon (mon.id)}
-              {@const on = selected.includes(mon.id)}
+              {@const on = mon.id === leadId}
               <button
                 type="button"
                 class="member"
                 class:on
                 aria-pressed={on}
-                disabled={pending || (!on && selected.length >= 3)}
-                onclick={() => toggle(mon.id)}
+                disabled={pending}
+                onclick={() => pickLead(mon.id)}
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
-                <small>Nv {mon.level}</small>
+                <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
               </button>
             {/each}
           </div>
@@ -1986,6 +1989,10 @@
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;
+  }
+
+  .lead-tag {
+    color: var(--selected);
   }
 
   .member.on {

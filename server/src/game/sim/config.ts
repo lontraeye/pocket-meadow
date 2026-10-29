@@ -4,6 +4,9 @@
  */
 
 export const simConfig = {
+  /** Lutadores do jogador numa luta: o time inteiro (PC e time, 2026-10-29). */
+  teamMax: 6,
+
   /** Energia máxima da barra. */
   energyMax: 100,
 

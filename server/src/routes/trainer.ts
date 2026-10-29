@@ -3,9 +3,24 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { getDb, immediate } from '../db/client.js'
 import { trainers } from '../db/schema.js'
+import { setTeam } from '../db/team.js'
 import { readObject } from './http.js'
 
 export const trainerRoutes = new Hono<AuthEnv>()
+
+/** Time (até trainerConfig.teamMax, todos vão para a luta). Ordem = posição. */
+trainerRoutes.put('/team', requireUser, async (c) => {
+  const body = await readObject(c)
+  if (!body || !Array.isArray(body.pokemonIds)) return c.json({ error: 'invalid_body' }, 400)
+  const ids = body.pokemonIds
+  if (!ids.every((id): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0)) {
+    return c.json({ error: 'invalid_team' }, 400)
+  }
+  const userId = c.get('userId')
+  const result = immediate(() => setTeam(userId, ids))
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  return c.json({ team: result.team })
+})
 
 /** Preferências do treinador (8.5): hoje só o interruptor Auto da luta. */
 trainerRoutes.put('/prefs', requireUser, async (c) => {

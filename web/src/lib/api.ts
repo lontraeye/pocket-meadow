@@ -145,7 +145,10 @@ export type OwnedPokemon = {
   isShiny: boolean
   nickname: string | null
   isFavorite: boolean
-  location: 'garden' | 'daycare'
+  /** 'pc' = guardado no PC: fora do jardim, parado. */
+  location: 'garden' | 'daycare' | 'pc'
+  /** Posição no time (0 a teamMax − 1); null = fora do time. */
+  teamSlot: number | null
   caughtAt: number
   caughtRegion: string | null
   caughtBall: string
@@ -260,6 +263,8 @@ export type GameState = {
     xpToNext: number
     /** false = energia desligada (config do servidor): encontro não gasta e a tela some com ela. */
     energyEnabled: boolean
+    /** Tamanho máximo do time (todos vão para a luta). */
+    teamMax: number
     energy: number
     energyMax: number
     energyNextAt: number | null
@@ -396,7 +401,11 @@ export function errorText(error: ApiError): string {
     case 'finish_too_early':
       return 'Espere a luta terminar.'
     case 'invalid_team':
-      return 'Escolha de 1 a 3 Pokémon seus, no jardim, sem repetir.'
+      return 'O time mudou. Abra o encontro de novo.'
+    case 'last_in_team':
+      return 'O time precisa de pelo menos um Pokémon.'
+    case 'in_pc':
+      return 'Ele está no PC. Traga para o jardim antes.'
     case 'pokemon_not_found':
       return 'Esse Pokémon não está mais com você.'
     case 'in_daycare':

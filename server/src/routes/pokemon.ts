@@ -13,6 +13,7 @@ import { applyLevelMovesToPokemon, rerollMovesOnEvolve, type MoveView } from '..
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
 import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
+import { leaveTeam } from '../db/team.js'
 import { learnsetFor, movesByName } from '../seed/traitsData.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 import { devToolsEnabled } from './dev.js'
@@ -37,6 +38,23 @@ pokemonRoutes.post('/:id/release', requireUser, (c) => {
   const result = immediate(() => releaseMany(c.get('userId'), [id], Date.now()))
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json(result.release)
+})
+
+// PC: some do jardim e fica parado. Sai do time; o time não pode ficar vazio.
+pokemonRoutes.post('/:id/pc', requireUser, (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const result = immediate(() => moveToPc(c.get('userId'), id, true))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json({ inPc: true })
+})
+
+pokemonRoutes.post('/:id/garden', requireUser, (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const result = immediate(() => moveToPc(c.get('userId'), id, false))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json({ inPc: false })
 })
 
 pokemonRoutes.post('/:id/feed', requireUser, async (c) => {
@@ -207,6 +225,28 @@ function devToggleShiny(userId: number, id: number, now: number): Ok<{ shiny: { 
   return { ok: true, shiny: { isShiny } }
 }
 
+function moveToPc(userId: number, id: number, toPc: boolean): { ok: true } | Failure {
+  const db = getDb()
+  const mon = db
+    .select({ location: pokemon.location, inPc: pokemon.inPc })
+    .from(pokemon)
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (mon.location === 'daycare') return fail('in_daycare', 400)
+  if (mon.inPc === toPc) return { ok: true }
+  if (toPc) {
+    // O time sai junto e nunca fica vazio, então o jardim também não.
+    const left = leaveTeam(userId, [id])
+    if (!left.ok) return fail(left.error, 400)
+  }
+  db.update(pokemon)
+    .set({ inPc: toPc })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  return { ok: true }
+}
+
 function devDelete(userId: number, id: number, now: number): { ok: true } | Failure {
   persistCatchUp(userId, now)
   const db = getDb()
@@ -219,6 +259,8 @@ function devDelete(userId: number, id: number, now: number): { ok: true } | Fail
   if (!mon) return fail('pokemon_not_found', 404)
   if (mon.location === 'daycare') return fail('in_daycare', 400)
   if (owned.length <= 1) return fail('last_pokemon', 400)
+  const left = leaveTeam(userId, [id])
+  if (!left.ok) return fail(left.error, 400)
   db.delete(pokemon)
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
@@ -263,6 +305,8 @@ function releaseMany(userId: number, ids: number[], now: number): Ok<{ release: 
     const status = plan.error === 'pokemon_not_found' ? 404 : 400
     return fail(plan.error, status, plan.pokemonId !== undefined ? { pokemonId: plan.pokemonId } : undefined)
   }
+  const left = leaveTeam(userId, ids)
+  if (!left.ok) return fail(left.error, 400)
 
   db.delete(pokemon)
     .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, ids)))

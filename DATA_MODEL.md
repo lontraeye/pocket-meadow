@@ -186,6 +186,9 @@ CREATE TABLE pokemon (
   is_favorite       INTEGER NOT NULL DEFAULT 0,
   location          TEXT    NOT NULL DEFAULT 'garden'
                     CHECK (location IN ('garden', 'daycare')),
+  in_pc             INTEGER NOT NULL DEFAULT 0,      -- guardado no PC: fora do jardim, parado (PLANNING 5.19)
+  team_slot         INTEGER CHECK (team_slot IS NULL OR team_slot BETWEEN 0 AND 5),
+                                                     -- posição no time; NULL = fora. Único por jogador.
   caught_at         INTEGER NOT NULL,
   caught_region     TEXT,                            -- region_slug do config; NULL para o inicial
   original_species_id INTEGER NOT NULL REFERENCES species(id), -- espécie na captura (histórico)

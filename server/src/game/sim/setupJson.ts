@@ -1,4 +1,5 @@
 import { isPokemonType } from '../../config/types.js'
+import { simConfig } from './config.js'
 import { emptyMoveEffects, type MoveAilment, type StageStat } from './effects.js'
 import type { BattleSetup, SimFighter, SimMove } from './types.js'
 
@@ -28,7 +29,7 @@ export function serializeBattleSetup(setup: BattleSetup): SerializedBattleSetup 
 
 export function parseBattleSetup(json: string): BattleSetup {
   const raw = JSON.parse(json) as SerializedBattleSetup
-  if (!raw || !Array.isArray(raw.team) || raw.team.length < 1 || raw.team.length > 3 || !raw.wild) {
+  if (!raw || !Array.isArray(raw.team) || raw.team.length < 1 || raw.team.length > simConfig.teamMax || !raw.wild) {
     throw new Error('invalid_battle_setup')
   }
   return {

@@ -5,6 +5,7 @@ import { daycareConfig, daycareSlotsUnlocked } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { daycareSlots, pokemon } from '../db/schema.js'
+import { leaveTeam } from '../db/team.js'
 import { levelsGainedFromStay } from '../game/daycare.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
 
@@ -71,19 +72,22 @@ function place(
   if (taken) return fail('slot_taken', 400)
 
   const mon = db
-    .select({ id: pokemon.id, location: pokemon.location })
+    .select({ id: pokemon.id, location: pokemon.location, inPc: pokemon.inPc })
     .from(pokemon)
     .where(and(eq(pokemon.id, pokemonId), eq(pokemon.userId, userId)))
     .get()
   if (!mon) return fail('pokemon_not_found', 404)
   if (mon.location === 'daycare') return fail('in_daycare', 400)
+  if (mon.inPc) return fail('in_pc', 400)
 
   const gardenCount = db
     .select({ id: pokemon.id })
     .from(pokemon)
-    .where(and(eq(pokemon.userId, userId), eq(pokemon.location, 'garden')))
+    .where(and(eq(pokemon.userId, userId), eq(pokemon.location, 'garden'), eq(pokemon.inPc, false)))
     .all().length
   if (gardenCount <= 1) return fail('last_in_garden', 400)
+  const left = leaveTeam(userId, [pokemonId])
+  if (!left.ok) return fail(left.error, 400)
 
   db.insert(daycareSlots)
     .values({

@@ -1690,8 +1690,9 @@
       {#if recapHint && !recapBusy}<small>Toque</small>{/if}
     </button>
   {:else}
-    <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha. -->
-    <div class="moves" class:solo={!activeFighter.chargedMove}>
+    <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha.
+         Escolhendo a troca, os golpes saem para o time caber na tela. -->
+    <div class="moves" class:solo={!activeFighter.chargedMove} hidden={partyOpen}>
       <button
         type="button"
         class="btn act typed"
@@ -2471,6 +2472,11 @@
     gap: 0.5rem;
   }
 
+  /* O display: grid acima venceria o atributo hidden. */
+  .moves[hidden] {
+    display: none;
+  }
+
   .moves.solo {
     grid-template-columns: 1fr;
   }
@@ -2618,11 +2624,13 @@
     min-height: 0;
   }
 
+  /* Até 5 para trocar (time de 6): duas colunas, para caber no celular. */
   .party-list {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: max-content;
     gap: 0.4rem;
-    max-height: min(38vh, 12.5rem);
+    max-height: min(30vh, 7.4rem);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -2637,12 +2645,13 @@
 
   .chip {
     display: grid;
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 0.55rem;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 0.35rem;
     align-items: center;
     box-sizing: border-box;
-    min-height: 56px;
-    padding: 0.3rem 0.7rem;
+    min-width: 0;
+    min-height: 52px;
+    padding: 0.25rem 0.4rem;
     border: 2px solid var(--panel-edge);
     background: var(--panel-face);
     box-shadow: inset 0 -2px 0 var(--panel-shade);
@@ -2670,8 +2679,8 @@
 
   .chip-sprite {
     position: relative;
-    width: 48px;
-    height: 44px;
+    width: 36px;
+    height: 40px;
     overflow: hidden;
     pointer-events: none;
   }
@@ -2704,7 +2713,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
   }
 
   .chip-meta {
