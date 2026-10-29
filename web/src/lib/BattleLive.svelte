@@ -59,6 +59,8 @@
     type SpriteBody,
   } from './sprites'
   import { formatCountdown } from './time'
+  import TypeIcon from './TypeIcon.svelte'
+  import { TYPE_COLORS, typeColor, typeInk } from './typeStyle'
   import { xpToNext } from './progression'
 
   // Luta ao vivo (8.3). A tela re-simula `runBattle({ untilMs })` com os inputs
@@ -116,26 +118,7 @@
     [...line].flatMap((tone, x) => (tone === '.' ? [] : [{ x, y, tone }])),
   )
 
-  const TYPE_GLOW: Record<string, string> = {
-    normal: '#a8a878',
-    fire: '#f08030',
-    water: '#6890f0',
-    electric: '#f8d030',
-    grass: '#78c850',
-    ice: '#98d8d8',
-    fighting: '#c03028',
-    poison: '#a040a0',
-    ground: '#e0c068',
-    flying: '#a890f0',
-    psychic: '#f85888',
-    bug: '#a8b820',
-    rock: '#b8a038',
-    ghost: '#705898',
-    dragon: '#7038f8',
-    dark: '#705848',
-    steel: '#b8b8d0',
-    fairy: '#ee99ac',
-  }
+  const TYPE_GLOW = TYPE_COLORS
 
   let {
     start,
@@ -1709,16 +1692,30 @@
   {:else}
     <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha. -->
     <div class="moves" class:solo={!activeFighter.chargedMove}>
-      <button type="button" class="btn act" disabled={!canAct} onclick={() => manual('fast')}>
+      <button
+        type="button"
+        class="btn act typed"
+        style:--type={typeColor(activeFighter.fastMove.type)}
+        style:--type-ink={typeInk(activeFighter.fastMove.type)}
+        class:white-ink={typeInk(activeFighter.fastMove.type) === '#ffffff'}
+        disabled={!canAct}
+        onclick={() => manual('fast')}
+      >
         <span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>
-        <span class="label">{lockLabel ?? 'Rápido'}</span>
+        <span class="label">
+          {#if !lockLabel}<TypeIcon type={activeFighter.fastMove.type} />{/if}
+          {lockLabel ?? 'Rápido'}
+        </span>
         <small>{lockLabel ? lockLabel : moveLabel(activeFighter.fastMove.name)}</small>
       </button>
       {#if activeFighter.chargedMove && chargedCost !== null}
         <button
           type="button"
-          class="btn act charged"
+          class="btn act charged typed"
           class:ready={chargeReady}
+          style:--type={typeColor(activeFighter.chargedMove.type)}
+          style:--type-ink={typeInk(activeFighter.chargedMove.type)}
+          class:white-ink={typeInk(activeFighter.chargedMove.type) === '#ffffff'}
           disabled={!canCharged}
           aria-label="Carregado: {moveLabel(activeFighter.chargedMove.name)}, {chargeDone} de {chargeNeeded} golpes rápidos"
           onclick={() => manual('charged')}
@@ -1726,7 +1723,10 @@
           <!-- Cada golpe rápido enche o botão de baixo para cima. -->
           <span class="charge" style:transform="scaleY({chargeFill})" aria-hidden="true"></span>
           {#if chargeReady}<span class="cd" style:transform="scaleX({cdFill})" aria-hidden="true"></span>{/if}
-          <span class="label">{lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}</span>
+          <span class="label">
+            {#if !lockLabel}<TypeIcon type={activeFighter.chargedMove.type} />{/if}
+            {lockLabel ?? (chargeReady ? 'Carregado!' : `Carga ${chargeDone}/${chargeNeeded}`)}
+          </span>
           <small>{lockLabel ? lockLabel : moveLabel(activeFighter.chargedMove.name)}</small>
         </button>
       {/if}
@@ -2535,8 +2535,53 @@
 
   .act .label {
     position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 1.15rem;
     white-space: nowrap;
+  }
+
+  /* Golpe com a cor e o ícone do tipo (Fogo vermelho-laranja, Água azul...). */
+  .act.typed {
+    background: var(--type);
+    color: var(--type-ink);
+    text-shadow: none;
+    box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--type) 62%, #000);
+  }
+
+  /* Texto branco ganha sombra do próprio tipo, como o botão primário. */
+  .act.typed.white-ink {
+    text-shadow: 0 var(--px) 0 color-mix(in srgb, var(--type) 55%, #000);
+  }
+
+  /* Rápido esperando o próximo golpe: continua com a cor do tipo, só apagado. */
+  .act.typed:disabled {
+    filter: saturate(0.55) brightness(0.92);
+  }
+
+  /* Carregado enchendo: fundo claro do tipo, e a carga sobe na cor cheia. */
+  .act.charged.typed:not(.ready) {
+    background: color-mix(in srgb, var(--type) 28%, var(--panel-face));
+    color: var(--ink);
+    text-shadow: none;
+  }
+
+  .act.charged.typed:not(.ready) .charge {
+    background: color-mix(in srgb, var(--type) 80%, transparent);
+  }
+
+  .act.charged.typed:disabled:not(.ready) {
+    filter: none;
+    color: var(--ink);
+  }
+
+  .act.charged.typed.ready {
+    background: var(--type);
+    color: var(--type-ink);
+    box-shadow:
+      inset 0 0 0 2px var(--selected-ring),
+      inset 0 -3px 0 color-mix(in srgb, var(--type) 62%, #000);
   }
 
   .act small {
