@@ -1,131 +1,145 @@
 /**
- * Física do arremesso (Fase 9.4). Funções puras; a tela só chama e anima.
- * Todos os números ajustáveis ficam em THROW_PHYSICS — revisar no celular.
+ * Física do arremesso (Fase 9.4, refeita em 2026-10-29). Funções puras; a tela
+ * só mede o gesto, chama e anima.
+ *
+ * A bola é simulada num espaço 3D simples e projetada na tela:
+ * - Z é a profundidade: 0 na mão, 1 no plano do Pokémon.
+ * - X é o lado e Y a altura acima do chão, em px "do plano da mão" (no Z = 0
+ *   valem px de tela; mais fundo, a perspectiva encolhe).
+ * - A gravidade puxa Y para baixo; o giro empurra X para o lado (curva), com
+ *   força que cresce durante o voo: sai reta e quebra perto do Pokémon.
+ *
+ * Tudo que vem do gesto é medido em **U** = distância vertical na tela entre o
+ * ponto de soltar e o centro do alvo. Assim o mesmo peteleco, proporcional à
+ * tela, faz a mesma coisa no celular e no PC. Não há ímã: acerta quem cruza o
+ * plano do Pokémon dentro do círculo do alvo.
+ *
+ * Os números ajustáveis ficam em THROW_PHYSICS. Em dev, o painel do laboratório
+ * de arremesso (ThrowLab) mexe neles ao vivo.
  */
 
-export const THROW_PHYSICS = {
+export type ThrowTuning = {
+  /** Janela (ms) antes de soltar usada para medir a velocidade do dedo. */
+  velocityWindowMs: number
+  /** Se a janela tem poucas amostras, alarga até isto (ms). */
+  velocityMaxWindowMs: number
+  /** Peteleco mais fraco que lança (U/s para cima). Abaixo disso a bola volta. */
+  minUpSpeed: number
+  /** Força ideal (U/s para cima): chega na altura do centro do alvo. */
+  idealSpeed: number
   /**
-   * Janela (ms) antes de soltar em que se procura o trecho mais rápido do gesto:
-   * o dedo costuma desacelerar antes de sair da tela, e a média só do fim
-   * transformava um bom peteleco num arremesso fraco.
+   * Resposta da força (expoente; 1 = linear). Abaixo de 1 amacia: peteleco
+   * rápido de polegar não dispara e o lento não morre. A bola voa com a força
+   * já amaciada (o voo também fica menos brusco).
    */
-  velocitySampleMs: 160,
-  /** Trecho mínimo (ms) para medir a velocidade sem pegar ruído de um evento só. */
-  velocityMinSpanMs: 32,
+  powerResponse: number
   /**
-   * Velocidade mínima para cima (px/s, eixo Y da tela cresce para baixo).
-   * Soltar mais fraco ou para baixo → bola volta, sem gastar.
+   * Folga da força do lado fraco (fração da ideal): com (1 − f) × ideal, reto,
+   * a bola ainda pega a base do alvo; mais fraco cai antes. O lado forte sai da
+   * gravidade e fica um pouco mais largo (com 0,15: até ~1,27×); mais forte
+   * passa por cima.
    */
-  minUpSpeedPx: 420,
-  /**
-   * Giro: soma de quanto a direção do dedo vira (rad), em qualquer lugar da tela.
-   * Uma volta completa (2π) no mesmo sentido = girando.
-   */
+  speedTolerance: number
+  /** Tempo de voo (s) com a força ideal. Mais forte chega antes. */
+  flightTimeS: number
+  /** Quantas vezes o alvo parece menor que a mão (perspectiva). */
+  depthRatio: number
+  /** 1 = a bola sai exatamente na direção do dedo na tela. */
+  lateralGain: number
+  /** Desvio da curva no plano do Pokémon, em raios do alvo (1 volta, força ideal). */
+  curveShiftRadii: number
+  /** Cada volta a mais de giro soma esta fração ao desvio (até spinMaxTurns). */
+  curvePerExtraTurn: number
+  /** Raio do alvo = fração da altura do corpo do Pokémon. */
+  hitRadiusFrac: number
+  /** Depois de passar do Pokémon, a bola segue até esta profundidade e some. */
+  maxDepth: number
+  /** Quique no chão: fração da velocidade vertical e da de avanço que sobra. */
+  bounceKeep: number
+  bounceSlide: number
+  /** Tempo (ms) mostrando o quique antes de contar o erro. */
+  bounceShowMs: number
+  // Giro (a mão faz círculos antes de soltar).
+  spinThresholdRad: number
+  spinMinStepPx: number
+  spinMaxTurns: number
+  spinHalfLifeMs: number
+  spinRestRad: number
+  spinCurveMinRad: number
+  spinMaxRad: number
+  // Anel e qualidade.
+  ringPeriodMs: number
+  feedbackHoldMs: number
+  ringChanceGreen: number
+  ringChanceYellow: number
+  ringChanceOrange: number
+  ringColorGreen: string
+  ringColorYellow: string
+  ringColorOrange: string
+  ringColorRed: string
+  ringExcellentFrac: number
+  ringGreatFrac: number
+  ringNiceFrac: number
+  /** Toque curto (sem arrastar): não lança. */
+  tapMaxDragPx: number
+  tapMaxMs: number
+  // Agitação do selvagem (só visual; o alvo anda junto).
+  agitationStrafePx: number
+  agitationJumpPx: number
+  agitationFreqHz: number
+  agitationFreqStepHz: number
+}
+
+export const THROW_DEFAULTS: Readonly<ThrowTuning> = Object.freeze({
+  velocityWindowMs: 80,
+  velocityMaxWindowMs: 160,
+  minUpSpeed: 1.2,
+  idealSpeed: 3.2,
+  powerResponse: 0.65,
+  speedTolerance: 0.18,
+  flightTimeS: 0.62,
+  depthRatio: 2.6,
+  lateralGain: 0.32,
+  curveShiftRadii: 1.4,
+  curvePerExtraTurn: 0.15,
+  hitRadiusFrac: 0.6,
+  maxDepth: 1.8,
+  bounceKeep: 0.35,
+  bounceSlide: 0.5,
+  bounceShowMs: 260,
   spinThresholdRad: Math.PI * 2,
-  /** Passo mínimo do dedo (px) para contar a direção (ignora tremidas). */
   spinMinStepPx: 4,
-  /** Acima disto (voltas), girar mais não aumenta a curva. */
   spinMaxTurns: 3,
-  /**
-   * Força ideal do gesto (px/s para cima): com ela a bola chega na altura do alvo.
-   * O ponto de chegada sai direto do gesto (não de uma parábola na tela), para
-   * a faixa que acerta ser larga o bastante para o dedo no celular.
-   */
-  idealUpSpeedPx: 1300,
-  /**
-   * Folga estreita em volta da força ideal (fração): só nela a altura é a do
-   * alvo. Fora disso o pouso sobe/desce de verdade — sem “ímã” artificial.
-   */
-  powerTolerance: 0.18,
-  /**
-   * Auxílio invisível: só quase-acerto (anel + assistMaxPullPx). Empurra no
-   * máximo assistMaxPullPx em direção ao alvo — sem curva gigante “ímã”.
-   */
-  assistMaxPullPx: 18,
-  /** Fração do raio real para onde o empurrão aponta (sempre ≤ 1). */
-  assistLandInsideFrac: 0.92,
-  /**
-   * Fora da folga: px de erro na altura por unidade de força a mais ou a menos.
-   */
-  overshootPxPerPower: 160,
-  /** Desvio lateral na chegada: segundos × velocidade horizontal do gesto (px/s). */
-  lateralReachS: 0.22,
-  /**
-   * Curva estilo Pokémon GO: desvio na chegada por volta de giro (px).
-   * Giro horário (tela) → curva para a direita; anti-horário → esquerda.
-   * Jogue um pouco para o lado oposto para compensar (como no GO).
-   */
-  curveDriftPx: 92,
-  /**
-   * Forma do voo (só visual): sobe na direção do gesto, passa arcHeightPx
-   * acima da chegada e desce nela — a curva lateral vem só do pouso (giro).
-   */
-  arcHeightPx: 56,
-  /**
-   * Duração do voo: a bola sai da mão na velocidade do dedo (sem "parar" ao
-   * soltar), entre estes limites (ms).
-   */
-  flightFastMs: 320,
-  flightSlowMs: 680,
-  /**
-   * Quanto o controle do arco “segura” a direção do peteleco (1 = topo na
-   * linha do gesto; >1 prolonga essa direção). O giro só puxa no pouso, então
-   * a bola sai para onde você jogou e só depois converte para a curva.
-   */
-  curveThrowHold: 1.18,
-  /**
-   * Inércia do giro: depois que o dedo para de girar, a bola continua rodando e
-   * a velocidade cai pela metade a cada spinHalfLifeMs. Abaixo de spinRestRad/s, para.
-   */
   spinHalfLifeMs: 900,
   spinRestRad: 0.4,
-  /**
-   * A curva (e o brilho de "pronta") só vale com a bola girando pelo menos isto
-   * (rad/s). Girou e esperou demais: ela desacelera, perde a curva e o brilho.
-   */
   spinCurveMinRad: 4,
-  /** Teto da velocidade de rotação (rad/s), para um giro frenético não virar borrão. */
   spinMaxRad: 28,
-  /** Ciclo completo do anel encolher→expandir (ms). */
   ringPeriodMs: 1200,
-  /**
-   * Tempo (ms) mostrando Nice / Great / Excellent / Curva no alvo antes da
-   * cena de captura (hit → absorver → chão). Curto de propósito.
-   */
   feedbackHoldMs: 420,
-  /**
-   * Cor do anel pela chance de captura mostrada (qualidade normal).
-   * Limites inclusivos no teto de cada faixa (ex.: 0,60 = verde).
-   */
   ringChanceGreen: 0.6,
   ringChanceYellow: 0.35,
   ringChanceOrange: 0.15,
-  /** Cores fortes, legíveis no card claro e no sprite (tema pixel). */
   ringColorGreen: '#3ecf5a',
   ringColorYellow: '#e8c547',
   ringColorOrange: '#ef7a2e',
   ringColorRed: '#e05a4a',
-  /**
-   * Frações do raio máximo do anel no instante do acerto:
-   * dentro de excellent → Excellent; great → Great; nice → Nice; senão normal.
-   */
   ringExcellentFrac: 0.28,
   ringGreatFrac: 0.55,
   ringNiceFrac: 1,
-  /** Raio do alvo = esta fração da menor dimensão do stage (fallback). */
-  targetRadiusFrac: 0.3,
-  /** Escala da bola: mão → alvo. */
-  ballScaleHand: 1,
-  ballScaleTarget: 0.38,
-  /** Arrasto (px) e duração (ms) máximos para contar como toque simples (sempre acerta). */
   tapMaxDragPx: 14,
   tapMaxMs: 240,
-  /** Agitação: amplitude lateral/vertical (px) por nível; freq base + passo (Hz). */
   agitationStrafePx: 7,
   agitationJumpPx: 5,
   agitationFreqHz: 0.65,
   agitationFreqStepHz: 0.18,
-} as const
+})
+
+/** Valores em uso. Mutável só para o laboratório de dev ajustar ao vivo. */
+export const THROW_PHYSICS: ThrowTuning = { ...THROW_DEFAULTS }
+
+export function applyThrowTuning(patch: Partial<ThrowTuning>) {
+  Object.assign(THROW_PHYSICS, THROW_DEFAULTS, patch)
+}
 
 export type ThrowQuality = 'normal' | 'nice' | 'great' | 'excellent'
 
@@ -145,48 +159,121 @@ export type SpinState = {
 
 export type TargetCircle = { cx: number; cy: number; radius: number }
 
-export type FlightState = {
-  elapsedMs: number
-  durationMs: number
-  x: number
-  y: number
-  depth: number
-  scale: number
-  spinAngle: number
-  done: boolean
-  // internos: curva de Bézier quadrática da mão (p0) ao ponto de chegada (p2).
+/**
+ * A cena do arremesso em px de tela: onde a bola sai, o ponto de fuga
+ * horizontal (meio do palco) e o chão sob o Pokémon.
+ */
+export type ThrowScene = {
   x0: number
   y0: number
-  cx: number
-  cy: number
-  landX: number
-  landY: number
-  curveDir: -1 | 0 | 1
-  spinSpeed: number
+  /** X do meio do palco: para onde a perspectiva converge. */
+  vanishX: number
+  /** Y do chão sob o Pokémon (pés). */
+  groundY: number
 }
 
+export type ThrowOutcome =
+  | { kind: 'hit'; /** Distância do centro / raio do alvo (0..1). */ distRatio: number }
+  | { kind: 'miss'; why: 'short' | 'over' | 'wide' }
+
+/** Leitura de um arremesso (laboratório de dev): o que o gesto deu e no que deu. */
+export type ThrowReading = {
+  /** Força medida / força ideal (1 = ideal). */
+  power: number
+  /** Ângulo do peteleco (graus; 0 = reto para cima, + = direita). */
+  angleDeg: number
+  /** U do arremesso (px). */
+  unitPx: number
+  curve: boolean
+  turns: number
+  result: 'tap' | 'weak' | 'hit' | 'short' | 'over' | 'wide'
+  /** No acerto: distância do centro / raio. */
+  distRatio: number | null
+  quality: ThrowQuality | null
+}
+
+export type FlightState = {
+  elapsedMs: number
+  /** Tela (px). */
+  x: number
+  y: number
+  /** Sombra no chão, embaixo da bola (px de tela). */
+  shadowX: number
+  shadowY: number
+  /** Escala da bola pela perspectiva (1 na mão). */
+  scale: number
+  /** Profundidade 0..maxDepth (1 = plano do Pokémon). */
+  depth: number
+  spinAngle: number
+  spinSpeed: number
+  curveDir: -1 | 0 | 1
+  /** Preenchido quando o resultado já está decidido (acerto, erro). */
+  outcome: ThrowOutcome | null
+  /** Terminou a animação (acerto: no contato; erro: depois de sumir ou quicar). */
+  done: boolean
+  // Simulação (mundo).
+  scene: ThrowScene
+  X: number
+  Y: number
+  Z: number
+  vX: number
+  vY: number
+  vZ: number
+  aX: number
+  g: number
+  /** Ms desde o quique (null = ainda no ar). */
+  bouncedMs: number | null
+  /** Sempre acerta ao cruzar o plano (teclado / movimento reduzido). */
+  guaranteed: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Gesto
+
 /**
- * Velocidade do arremesso (px/s): o trecho mais rápido para cima dentro de
- * velocitySampleMs antes de soltar (com pelo menos velocityMinSpanMs).
+ * Velocidade do dedo ao soltar (px/s): reta de mínimos quadrados nas amostras
+ * dos últimos velocityWindowMs. A regressão aguenta eventos de toque que chegam
+ * agrupados (comum no celular), ao contrário de pegar o pico entre dois pontos.
  */
-export function sampleVelocity(samples: readonly PointerSample[], now = samples.at(-1)?.t ?? 0): {
+export function releaseVelocity(samples: readonly PointerSample[], now = samples.at(-1)?.t ?? 0): {
   vx: number
   vy: number
 } {
-  const { velocitySampleMs, velocityMinSpanMs } = THROW_PHYSICS
-  const recent = samples.filter((s) => now - s.t <= velocitySampleMs)
-  let best = { vx: 0, vy: 0 }
-  for (let i = 0; i < recent.length; i += 1) {
-    for (let j = i + 1; j < recent.length; j += 1) {
-      const a = recent[i]!
-      const b = recent[j]!
-      const dtMs = b.t - a.t
-      if (dtMs < velocityMinSpanMs) continue
-      const vy = ((b.y - a.y) / dtMs) * 1000
-      if (vy < best.vy) best = { vx: ((b.x - a.x) / dtMs) * 1000, vy }
-    }
+  const { velocityWindowMs, velocityMaxWindowMs } = THROW_PHYSICS
+  // Repetições do mesmo ponto no fim (o dedo levantando) não são movimento.
+  const trimmed = [...samples]
+  while (trimmed.length > 2) {
+    const a = trimmed.at(-1)!
+    const b = trimmed.at(-2)!
+    if (a.x !== b.x || a.y !== b.y) break
+    trimmed.pop()
   }
-  return best
+  let recent = trimmed.filter((s) => now - s.t <= velocityWindowMs)
+  if (recent.length < 3) recent = trimmed.filter((s) => now - s.t <= velocityMaxWindowMs)
+  if (recent.length < 2) return { vx: 0, vy: 0 }
+  const n = recent.length
+  let mt = 0
+  let mx = 0
+  let my = 0
+  for (const s of recent) {
+    mt += s.t
+    mx += s.x
+    my += s.y
+  }
+  mt /= n
+  mx /= n
+  my /= n
+  let stt = 0
+  let stx = 0
+  let sty = 0
+  for (const s of recent) {
+    const dt = s.t - mt
+    stt += dt * dt
+    stx += dt * (s.x - mx)
+    sty += dt * (s.y - my)
+  }
+  if (!(stt > 0)) return { vx: 0, vy: 0 }
+  return { vx: (stx / stt) * 1000, vy: (sty / stt) * 1000 }
 }
 
 /**
@@ -217,196 +304,282 @@ export function isSpinning(state: SpinState): boolean {
   return Math.abs(state.accumulated) >= THROW_PHYSICS.spinThresholdRad
 }
 
-/** Gesto fraco ou para baixo: não lança. vy positivo = para baixo na tela. */
-export function shouldLaunch(vy: number): boolean {
-  return -vy >= THROW_PHYSICS.minUpSpeedPx
-}
-
 export function isSimpleTap(dragPx: number, durationMs: number): boolean {
   return dragPx <= THROW_PHYSICS.tapMaxDragPx && durationMs <= THROW_PHYSICS.tapMaxMs
 }
 
-/**
- * Onde a bola chega (px de tela) a partir do gesto. A altura depende só da força:
- * dentro da folga em volta da ideal ela chega na altura do alvo; fraco demais
- * fica curto (mais embaixo), forte demais passa por cima. O lado vem da
- * velocidade horizontal e, com giro, do desvio da curva.
- * Quase-acerto (até assistMaxPullPx fora do anel) ganha um empurrão curto
- * em direção ao alvo — nunca o suficiente para inventar uma curva enorme.
- */
-export function landingPoint(input: {
-  x0: number
-  vx: number
-  vy: number
-  curveDir: -1 | 0 | 1
-  /** Voltas de giro (spinTurns): a curva cresce com elas. */
-  turns?: number
-  targetX: number
-  targetY: number
-  /** Raio do hit-test (px). Define também a zona invisível de auxílio. */
-  targetRadius?: number
-}): { x: number; y: number } {
-  const { idealUpSpeedPx, powerTolerance, overshootPxPerPower, lateralReachS, curveDriftPx, assistMaxPullPx, assistLandInsideFrac } =
-    THROW_PHYSICS
-  const power = Math.max(0, -input.vy) / idealUpSpeedPx
-  const off = power - 1
-  const excess = Math.sign(off) * Math.max(0, Math.abs(off) - powerTolerance)
-  const raw = {
-    x: input.x0 + input.vx * lateralReachS + input.curveDir * curveDriftPx * Math.max(1, input.turns ?? 1),
-    y: input.targetY - excess * overshootPxPerPower,
-  }
-  const r = input.targetRadius ?? 0
-  const maxPull = assistMaxPullPx
-  if (!(r > 0) || !(maxPull > 0)) return raw
-  const dx = raw.x - input.targetX
-  const dy = raw.y - input.targetY
-  const dist = Math.hypot(dx, dy)
-  if (!(dist > 0)) return raw
-  // Já ia acertar: não mexe (Nice/Great ficam honestos).
-  if (dist <= r) return raw
-  // Fora da auréola curta: erro limpo, sem puxar.
-  if (dist > r + maxPull) return raw
-  const goal = r * Math.min(1, Math.max(0.5, assistLandInsideFrac))
-  const gx = input.targetX + (dx / dist) * goal
-  const gy = input.targetY + (dy / dist) * goal
-  const mx = gx - raw.x
-  const my = gy - raw.y
-  const need = Math.hypot(mx, my) || 1
-  // No máximo maxPull px — se ainda ficar fora, erra (sem forçar o acerto).
-  const pull = Math.min(maxPull, need)
-  return { x: raw.x + (mx / need) * pull, y: raw.y + (my / need) * pull }
+/** U: distância vertical (px) do ponto de soltar ao centro do alvo. */
+export function throwUnit(scene: ThrowScene, target: TargetCircle): number {
+  return Math.max(60, scene.y0 - target.cy)
 }
 
+/** Força do peteleco em U/s para cima (vy de tela cresce para baixo). */
 /**
- * Arco estilo Pokémon GO (Bézier quadrática): a bola sai na direção do peteleco
- * (controle só nessa linha) e o giro só aparece no pouso — como na física real,
- * joga para um lado e a curva converte depois, sem pular para o lado do giro.
- * A duração faz a bola sair da mão na velocidade do dedo.
+ * Força do arremesso em U/s: a velocidade inteira do peteleco (não só a parte
+ * vertical), para jogar na diagonal compensando a curva não virar bola fraca.
+ * Para baixo ou de lado puro não conta.
  */
-function flightFrom(
-  x0: number,
-  y0: number,
-  land: { x: number; y: number },
-  curveDir: -1 | 0 | 1,
-  spinSpeed: number,
-  /** Direção da saída (gesto); sem ela, reto para a chegada. */
-  launchDir?: { x: number; y: number },
-  /** Voltas de giro (só no pouso / sparkles; o arco inicial ignora). */
-  _turns = 0,
-  /** Velocidade do dedo ao soltar (px/s). */
-  releaseSpeed: number = THROW_PHYSICS.idealUpSpeedPx,
+export function throwSpeed(vx: number, vy: number, unitPx: number): number {
+  return vy < 0 ? Math.hypot(vx, vy) / unitPx : 0
+}
+
+/** Força que a bola usa: a do dedo amaciada em volta da ideal (powerResponse). */
+export function effectiveSpeed(raw: number): number {
+  const ideal = THROW_PHYSICS.idealSpeed
+  if (!(raw > 0)) return 0
+  return ideal * (raw / ideal) ** THROW_PHYSICS.powerResponse
+}
+
+export function upSpeed(vy: number, unitPx: number): number {
+  return Math.max(0, -vy) / unitPx
+}
+
+/** Gesto fraco ou para baixo: não lança. */
+export function shouldLaunch(vy: number, unitPx: number): boolean {
+  return upSpeed(vy, unitPx) >= THROW_PHYSICS.minUpSpeed
+}
+
+// ---------------------------------------------------------------------------
+// Projeção
+
+function persp(Z: number): number {
+  return 1 / (1 + Math.max(0, Z) * (THROW_PHYSICS.depthRatio - 1))
+}
+
+/** Y de tela do horizonte: faz o chão da mão (y0) chegar no chão do Pokémon em Z = 1. */
+function horizonY(scene: ThrowScene): number {
+  const s1 = persp(1)
+  return (scene.groundY - scene.y0 * s1) / (1 - s1)
+}
+
+export function project(scene: ThrowScene, X: number, Y: number, Z: number): { x: number; y: number; s: number } {
+  const s = persp(Z)
+  const yh = horizonY(scene)
+  return {
+    x: scene.vanishX + (X - scene.vanishX) * s,
+    y: yh + (scene.y0 - yh) * s - Y * s,
+    s,
+  }
+}
+
+/** O alvo de tela no plano do Pokémon, em coordenadas do mundo. */
+export function targetInWorld(scene: ThrowScene, target: TargetCircle): { X: number; Y: number; R: number } {
+  const s1 = persp(1)
+  return {
+    X: scene.vanishX + (target.cx - scene.vanishX) / s1,
+    Y: (scene.groundY - target.cy) / s1,
+    R: target.radius / s1,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Voo
+
+/** Escala da curva pelas voltas: 1 volta = 1; cada volta a mais soma um pouco. */
+function curveTurnFactor(turns: number): number {
+  const t = Math.min(THROW_PHYSICS.spinMaxTurns, Math.max(1, turns))
+  return 1 + (t - 1) * THROW_PHYSICS.curvePerExtraTurn
+}
+
+function baseFlight(
+  scene: ThrowScene,
+  v: { vX: number; vY: number; vZ: number; aX: number; g: number },
+  extra: { curveDir: -1 | 0 | 1; spinAngle: number; spinSpeed: number; guaranteed: boolean },
 ): FlightState {
-  const dist = Math.hypot(land.x - x0, land.y - y0) || 1
-  let dirX = launchDir ? launchDir.x : (land.x - x0) / dist
-  let dirY = launchDir ? launchDir.y : (land.y - y0) / dist
-  const norm = Math.hypot(dirX, dirY) || 1
-  dirX /= norm
-  dirY /= norm
-  // Controle só na linha do peteleco (sem pendência do giro): a bola “guarda”
-  // a velocidade lateral do gesto e só depois o pouso com drift puxa a curva.
-  const cy = Math.min(y0, land.y) - THROW_PHYSICS.arcHeightPx
-  const rise = y0 - cy
-  const lineX = dirY < -0.15 ? x0 + (dirX / -dirY) * rise : x0
-  const hold = THROW_PHYSICS.curveThrowHold
-  const cx = x0 + (lineX - x0) * hold
-  const { flightFastMs, flightSlowMs } = THROW_PHYSICS
-  const startLen = Math.hypot(cx - x0, cy - y0)
-  const durationMs = Math.min(flightSlowMs, Math.max(flightFastMs, ((2 * startLen) / Math.max(1, releaseSpeed)) * 1000))
   return {
     elapsedMs: 0,
-    durationMs,
-    x: x0,
-    y: y0,
+    x: scene.x0,
+    y: scene.y0,
+    shadowX: scene.x0,
+    shadowY: scene.y0,
+    scale: 1,
     depth: 0,
-    scale: THROW_PHYSICS.ballScaleHand,
-    spinAngle: 0,
+    spinAngle: extra.spinAngle,
+    spinSpeed: extra.spinSpeed,
+    curveDir: extra.curveDir,
+    outcome: null,
     done: false,
-    x0,
-    y0,
-    cx,
-    cy,
-    landX: land.x,
-    landY: land.y,
-    curveDir,
-    spinSpeed,
+    scene,
+    X: scene.x0,
+    Y: 0,
+    Z: 0,
+    ...v,
+    bouncedMs: null,
+    guaranteed: extra.guaranteed,
   }
 }
 
 /**
- * Inicia o voo em coordenadas de tela (px).
- * curveDir: -1 esquerda, +1 direita, 0 reto (sem giro).
+ * Coeficientes do lançamento para a força u (U/s), com o alvo atual.
+ * A força ideal leva flightTimeS e chega na altura do centro; a gravidade é
+ * escolhida para que (1 − speedTolerance) × ideal chegue um raio abaixo.
+ */
+function launchCoefficients(scene: ThrowScene, target: TargetCircle) {
+  const P = THROW_PHYSICS
+  const world = targetInWorld(scene, target)
+  const kz = 1 / (P.idealSpeed * P.flightTimeS) // vZ = kz · u
+  // Altura no plano do Pokémon: Y(u) = A − B/u². Y(ideal) = centro e
+  // Y((1 − f)·ideal) = centro − R fixam A e B.
+  const low = 1 - Math.min(0.9, Math.max(0.02, P.speedTolerance))
+  const B = (world.R * P.idealSpeed ** 2) / (1 / (low * low) - 1)
+  const A = world.Y + B / P.idealSpeed ** 2
+  return { world, kz, kY: A * kz, g: 2 * B * kz * kz }
+}
+
+/**
+ * Inicia o voo do gesto. vx/vy: velocidade do dedo ao soltar (px/s de tela).
+ * A bola sai na direção do dedo na tela; a força decide quão longe e alto ela
+ * vai; o giro (curveDir + turns) curva para o lado durante o voo.
  */
 export function beginFlight(input: {
-  x0: number
-  y0: number
+  scene: ThrowScene
+  target: TargetCircle
   vx: number
   vy: number
   curveDir: -1 | 0 | 1
   spinning: boolean
-  /** Voltas de giro (spinTurns); mais voltas, mais curva. */
   turns?: number
-  /** Centro do alvo na tela (px): a força ideal chega na altura dele. */
-  targetX: number
-  targetY: number
-  /** Raio do hit-test: só aplica auxílio se o pouso cru já acerta. */
-  targetRadius?: number
-  /** Rotação da bola na mão ao soltar (rad e rad/s): o voo continua dela. */
   spinAngle?: number
   spinRate?: number
 }): FlightState {
+  const P = THROW_PHYSICS
+  const { scene, target } = input
+  const U = throwUnit(scene, target)
+  const u = effectiveSpeed(throwSpeed(input.vx, input.vy, U))
+  const { world, kz, kY, g } = launchCoefficients(scene, target)
+  const vZ = kz * u
+  const vY = kY * u
+  // Direção na tela: a velocidade inicial projetada segue a razão vx/vy do dedo.
+  const D1 = P.depthRatio - 1
+  const yh = horizonY(scene)
+  const screenUp = (scene.y0 - yh) * D1 * vZ + vY
+  const ratio = input.vy < 0 ? input.vx / -input.vy : 0
+  const vX = ratio * screenUp * P.lateralGain + (scene.x0 - scene.vanishX) * D1 * vZ
   const curveDir = input.spinning ? input.curveDir : 0
-  const turns = input.spinning ? Math.max(1, input.turns ?? 1) : 0
-  const land = landingPoint({
-    x0: input.x0,
-    vx: input.vx,
-    vy: input.vy,
+  const shift = curveDir * P.curveShiftRadii * world.R * curveTurnFactor(input.turns ?? 1)
+  // Empurrão lateral cresce com o tempo (a = aX · t / flightTimeS): o desvio
+  // vai como t³, então a bola sai reta e a curva aparece no fim.
+  // Efeito do giro cresce com a velocidade (como a força de Magnus): ×(u/ideal)²
+  // compensa o voo mais curto, e a curva desvia o mesmo em qualquer força.
+  // Junto com o ângulo (que também não depende da força), o lado em que a bola
+  // chega depende só da mira e do giro; a força decide só a altura.
+  const aX = ((6 * shift) / P.flightTimeS ** 2) * (u / P.idealSpeed) ** 2
+  const spinSpeed = input.spinRate ?? curveDir * 10 * curveTurnFactor(input.turns ?? 1)
+  return baseFlight(scene, { vX, vY, vZ, aX, g }, {
     curveDir,
-    turns,
-    targetX: input.targetX,
-    targetY: input.targetY,
-    targetRadius: input.targetRadius,
+    spinAngle: input.spinAngle ?? 0,
+    spinSpeed,
+    guaranteed: false,
   })
-  const spinRate = input.spinRate ?? curveDir * 10 * Math.max(1, turns)
-  const releaseSpeed = Math.hypot(input.vx, input.vy)
-  const flight = flightFrom(input.x0, input.y0, land, curveDir, spinRate, { x: input.vx, y: input.vy }, turns, releaseSpeed)
-  return { ...flight, spinAngle: input.spinAngle ?? 0 }
 }
 
-/** Voo reto até o centro do alvo (a11y / toque simples). Sempre acerta. */
-export function beginGuaranteedFlight(input: {
-  x0: number
-  y0: number
-  targetX: number
-  targetY: number
-}): FlightState {
-  return flightFrom(input.x0, input.y0, { x: input.targetX, y: input.targetY }, 0, 0)
+/** Voo com a força ideal até o centro (teclado / movimento reduzido). Sempre acerta. */
+export function beginGuaranteedFlight(input: { scene: ThrowScene; target: TargetCircle }): FlightState {
+  const P = THROW_PHYSICS
+  const { scene, target } = input
+  const { world, kz, kY, g } = launchCoefficients(scene, target)
+  const vZ = kz * P.idealSpeed
+  const vY = kY * P.idealSpeed
+  const vX = (world.X - scene.x0) / P.flightTimeS
+  return baseFlight(scene, { vX, vY, vZ, aX: 0, g }, { curveDir: 0, spinAngle: 0, spinSpeed: 0, guaranteed: true })
 }
 
-/** Avança o voo; dt em ms. */
-export function stepFlight(state: FlightState, dtMs: number): FlightState {
+const SUBSTEP_MS = 4
+
+/**
+ * Avança o voo (dt em ms). `target` é o alvo vivo (anda com a agitação):
+ * o acerto é testado no instante em que a bola cruza o plano do Pokémon.
+ */
+export function stepFlight(state: FlightState, dtMs: number, target: TargetCircle): FlightState {
   if (state.done) return state
-  const elapsedMs = Math.min(state.durationMs, state.elapsedMs + dtMs)
-  const t = elapsedMs / state.durationMs
-  // Bézier quadrática: termina exatamente no ponto de chegada.
-  const u = 1 - t
-  const x = u * u * state.x0 + 2 * u * t * state.cx + t * t * state.landX
-  const y = u * u * state.y0 + 2 * u * t * state.cy + t * t * state.landY
-  const depth = t
-  const scale =
-    THROW_PHYSICS.ballScaleHand +
-    (THROW_PHYSICS.ballScaleTarget - THROW_PHYSICS.ballScaleHand) * depth
-  const spinAngle = state.spinAngle + state.spinSpeed * (dtMs / 1000)
+  const P = THROW_PHYSICS
+  let { X, Y, Z, vX, vY, vZ, outcome, bouncedMs, elapsedMs } = state
+  let done = false
+  let remaining = Math.max(0, dtMs)
+  while (remaining > 0 && !done) {
+    const h = Math.min(SUBSTEP_MS, remaining) / 1000
+    remaining -= h * 1000
+    elapsedMs += h * 1000
+    const prevZ = Z
+    const prevX = X
+    const prevY = Y
+    vX += state.aX * (elapsedMs / 1000 / P.flightTimeS) * h
+    vY -= state.g * h
+    X += vX * h
+    Y += vY * h
+    Z += vZ * h
+
+    if (outcome === null && prevZ < 1 && Z >= 1) {
+      // Cruzou o plano do Pokémon neste passo: interpola o ponto exato.
+      const f = (1 - prevZ) / (Z - prevZ)
+      const cX = prevX + (X - prevX) * f
+      const cY = prevY + (Y - prevY) * f
+      const world = targetInWorld(state.scene, target)
+      const dist = Math.hypot(cX - world.X, cY - world.Y)
+      if (state.guaranteed || dist <= world.R) {
+        X = cX
+        Y = cY
+        Z = 1
+        outcome = { kind: 'hit', distRatio: state.guaranteed ? 0 : dist / world.R }
+        done = true
+        break
+      }
+      // O erro é para onde a bola mais saiu do círculo: lado, cima ou baixo.
+      const offX = Math.abs(cX - world.X)
+      const offY = cY - world.Y
+      outcome = { kind: 'miss', why: offX >= Math.abs(offY) ? 'wide' : offY > 0 ? 'over' : 'short' }
+    }
+
+    if (Y <= 0 && vY < 0) {
+      Y = 0
+      if (bouncedMs === null) {
+        bouncedMs = 0
+        if (outcome === null) outcome = { kind: 'miss', why: 'short' }
+      }
+      vY = -vY * P.bounceKeep
+      vZ *= P.bounceSlide
+      vX *= P.bounceSlide
+    }
+    if (bouncedMs !== null) {
+      bouncedMs += h * 1000
+      if (bouncedMs >= P.bounceShowMs) done = true
+    }
+    if (Z >= P.maxDepth) done = true
+  }
+  if (done && outcome === null) outcome = { kind: 'miss', why: 'over' }
+  const screen = project(state.scene, X, Y, Z)
+  const ground = project(state.scene, X, 0, Z)
   return {
     ...state,
     elapsedMs,
-    x,
-    y,
-    depth,
-    scale,
-    spinAngle,
-    done: elapsedMs >= state.durationMs,
+    X,
+    Y,
+    Z,
+    vX,
+    vY,
+    vZ,
+    x: screen.x,
+    y: screen.y,
+    shadowX: ground.x,
+    shadowY: ground.y,
+    scale: screen.s,
+    depth: Z,
+    spinAngle: state.spinAngle + state.spinSpeed * (dtMs / 1000),
+    outcome,
+    bouncedMs,
+    done,
   }
 }
+
+/** Simula o voo inteiro de uma vez (testes e laboratório). */
+export function simulateFlight(start: FlightState, target: TargetCircle, maxMs = 4000): FlightState {
+  let state = start
+  for (let t = 0; t < maxMs && !state.done; t += 16) state = stepFlight(state, 16, target)
+  return state
+}
+
+// ---------------------------------------------------------------------------
+// Anel, qualidade, agitação
 
 /**
  * Raio atual do anel (0..1 relativo ao raio máximo).
@@ -432,10 +605,9 @@ export function ringColorFor(chance: number): string {
   return THROW_PHYSICS.ringColorRed
 }
 
-export function qualityFromRing(distFromCenter: number, maxRingRadius: number, ringFrac: number): ThrowQuality {
-  if (!(maxRingRadius > 0)) return 'normal'
-  const ringR = maxRingRadius * ringFrac
-  if (distFromCenter > ringR) return 'normal'
+/** Qualidade pelo ponto de contato (distância / raio) e o tamanho do anel na hora. */
+export function qualityFromRing(distRatio: number, ringFrac: number): ThrowQuality {
+  if (distRatio > ringFrac) return 'normal'
   const { ringExcellentFrac, ringGreatFrac, ringNiceFrac } = THROW_PHYSICS
   if (ringFrac <= ringExcellentFrac) return 'excellent'
   if (ringFrac <= ringGreatFrac) return 'great'
@@ -443,36 +615,11 @@ export function qualityFromRing(distFromCenter: number, maxRingRadius: number, r
   return 'normal'
 }
 
-export function hitTest(x: number, y: number, target: TargetCircle): boolean {
-  const dx = x - target.cx
-  const dy = y - target.cy
-  return dx * dx + dy * dy <= target.radius * target.radius
-}
-
-/**
- * Acerto se qualquer ponto do arco (não só o pouso) entra no alvo —
- * evita “passou no Pokémon e contou erro”.
- */
-export function flightHitsTarget(state: FlightState, target: TargetCircle, samples = 28): boolean {
-  const r2 = target.radius * target.radius
-  for (let i = 0; i <= samples; i += 1) {
-    const t = i / samples
-    const u = 1 - t
-    const x = u * u * state.x0 + 2 * u * t * state.cx + t * t * state.landX
-    const y = u * u * state.y0 + 2 * u * t * state.cy + t * t * state.landY
-    const dx = x - target.cx
-    const dy = y - target.cy
-    if (dx * dx + dy * dy <= r2) return true
-  }
-  return false
-}
-
 /** Deslocamento visual do alvo pela agitação (só front). */
 export function agitationOffset(agitation: number, timeMs: number): { x: number; y: number } {
   const level = Math.max(0, agitation)
   if (level === 0) return { x: 0, y: 0 }
-  const freq =
-    THROW_PHYSICS.agitationFreqHz + THROW_PHYSICS.agitationFreqStepHz * (level - 1)
+  const freq = THROW_PHYSICS.agitationFreqHz + THROW_PHYSICS.agitationFreqStepHz * (level - 1)
   const w = (Math.PI * 2 * freq * timeMs) / 1000
   return {
     x: Math.sin(w) * THROW_PHYSICS.agitationStrafePx * level,

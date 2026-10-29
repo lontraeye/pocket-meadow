@@ -23,8 +23,9 @@
   import { ballIconSrc, previewCatchChance } from './balls'
   import { percent } from './battle'
   import BattleLive from './BattleLive.svelte'
+  import ThrowLab from './ThrowLab.svelte'
   import ThrowPad from './ThrowPad.svelte'
-  import { agitationOffset, throwAimMult } from './throwPhysics'
+  import { agitationOffset, throwAimMult, type ThrowReading } from './throwPhysics'
   import { setLiveFight } from './liveFight'
   import BattleScene from './BattleScene.svelte'
   import {
@@ -143,6 +144,9 @@
       .filter((ball) => ball.quantity > 0),
   )
   const hasBalls = $derived(ownedBalls.length > 0)
+  // Laboratório do arremesso (dev): treino sem gastar e leitura de cada lançamento.
+  let throwPractice = $state(false)
+  let throwReadings = $state.raw<ThrowReading[]>([])
   const activeBall = $derived(
     ownedBalls.find((ball) => ball.key === selectedBall) ?? ownedBalls[0] ?? null,
   )
@@ -1185,6 +1189,9 @@
           </div>
         {/if}
       </section>
+      {#if game.devTools}
+        <ThrowLab bind:practice={throwPractice} readings={throwReadings} />
+      {/if}
     </div>
     <div class="dock">
       <!-- Mochila · bola equipada (lança) · bolas (equipar). -->
@@ -1212,7 +1219,11 @@
           mode={throwMode}
           spriteSrc={throwSpriteSrc}
           label={throwLabel}
-          disabled={pending || (throwMode === 'ball' && !hasBalls) || (throwMode === 'berry' && !activeCaptureBerry)}
+          disabled={pending ||
+            (!throwPractice && throwMode === 'ball' && !hasBalls) ||
+            (throwMode === 'berry' && !activeCaptureBerry)}
+          practice={throwPractice}
+          onReading={(reading) => (throwReadings = [reading, ...throwReadings].slice(0, 30))}
           busy={throwing}
           agitation={decideAgitation}
           catchChance={ringCatchChance}
