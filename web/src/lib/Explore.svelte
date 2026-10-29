@@ -43,7 +43,7 @@
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
-  type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result'
+  type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result' | 'practice'
   type Result =
     | { kind: 'fled' }
     | { kind: 'battle'; battle: BattleOutcome; team: OwnedPokemon[]; left?: boolean }
@@ -147,6 +147,43 @@
   // Laboratório do arremesso (dev): treino sem gastar e leitura de cada lançamento.
   let throwPractice = $state(false)
   let throwReadings = $state.raw<ThrowReading[]>([])
+
+  /** O que o palco do selvagem precisa para desenhar (encontro real ou treino). */
+  type StageMon = Pick<PendingEncounter, 'speciesId' | 'isShiny' | 'displayName' | 'level' | 'regionName' | 'agitation'>
+
+  // Treino livre de arremesso: um Pokémon de exemplo (sorteado entre as espécies
+  // do jogador) e a Poké Ball básica. Não gasta nada, não captura, não chama o
+  // servidor: é o modo treino do ThrowPad numa tela própria. Só o arremesso,
+  // com o retorno de sempre (Nice!, Curto!...): sem laboratório nem estatística.
+  let practiceMon = $state<StageMon | null>(null)
+  let practiceAgitation = $state(0)
+  const PRACTICE_AGITATION_MAX = 3
+
+  function pickPracticeMon() {
+    const pool = game.pokemon
+    const others = pool.filter((mon) => mon.speciesId !== practiceMon?.speciesId)
+    const from = others.length > 0 ? others : pool
+    const pick = from[Math.floor(Math.random() * from.length)]
+    if (!pick) return
+    practiceMon = {
+      speciesId: pick.speciesId,
+      isShiny: false,
+      displayName: pick.displayName,
+      level: pick.level,
+      regionName: 'Treino',
+      agitation: 0,
+    }
+    const look = gardenSprite(pick.speciesId, false)
+    if (look.kind === 'pmd') void loadPmdBattle(pick.speciesId, look.shinySheet)
+  }
+
+  function startPractice() {
+    message = ''
+    practiceAgitation = 0
+    pickPracticeMon()
+    if (practiceMon) step = 'practice'
+  }
+
   const activeBall = $derived(
     ownedBalls.find((ball) => ball.key === selectedBall) ?? ownedBalls[0] ?? null,
   )
@@ -327,7 +364,7 @@
   $effect(() => {
     const found = game.encounter
     if (!found?.wonAt) return
-    if (captureAnim || step === 'fight' || step === 'highlights' || step === 'result') return
+    if (captureAnim || step === 'fight' || step === 'highlights' || step === 'result' || step === 'practice') return
     encounter = found
     if (step !== 'decide') step = 'decide'
     const look = gardenSprite(found.speciesId, found.isShiny)
@@ -842,7 +879,7 @@
   anda com o `agitationOffset` (throwPhysics.ts), o mesmo que o ThrowPad usa no
   acerto: o alvo que se vê é o alvo testado.
 -->
-{#snippet wild(mon: PendingEncounter, variant: 'full' | 'compact' | 'dizzy' = 'full')}
+{#snippet wild(mon: StageMon, variant: 'full' | 'compact' | 'dizzy' = 'full')}
   {@const look = gardenSprite(mon.speciesId, mon.isShiny)}
   {@const sheet = look.kind === 'pmd' ? pmdAnim(mon.speciesId, look.shinySheet, 'Idle') : null}
   {@const scale = variant === 'compact' ? 2 : 3}
@@ -979,6 +1016,11 @@
             }}
           >
             Continuar encontro
+          </button>
+        {:else}
+          <button type="button" class="btn choice" disabled={pending} onclick={startPractice}>
+            Treinar arremesso
+            <small>Não gasta bola nem energia</small>
           </button>
         {/if}
         {#each groups as group (group.id)}
@@ -1260,6 +1302,58 @@
       <!-- Sair da captura é deixar ir: não fica encontro esperando no jardim. -->
       <button type="button" class="btn" disabled={pending} onclick={() => void leaveWild()}>Deixar ir</button>
     </div>
+  {:else if step === 'practice' && practiceMon}
+    <!-- Mesmo layout da captura (palco, uma linha, três botões e um embaixo):
+         cabe onde a captura cabe. Nada abre ou fecha. A física não se mexe
+         aqui: o laboratório de dev fica só na captura. -->
+    <div class="scroll">
+      <section class="panel sheet wild">
+        {@render wild({ ...practiceMon, agitation: practiceAgitation }, 'dizzy')}
+        <p class="hint">Treino: não gasta bola nem captura.</p>
+      </section>
+    </div>
+    <div class="dock">
+      <!-- Outro Pokémon · bola (lança) · agitação do alvo. -->
+      <div class="throw-row">
+        <button type="button" class="tool" aria-label="Outro Pokémon" onclick={pickPracticeMon}>
+          <span class="icon-slot">
+            <!-- Duas setas em roda (trocar), em pixels. -->
+            <svg class="bag-icon" viewBox="0 0 12 12" width="28" height="28" aria-hidden="true" shape-rendering="crispEdges">
+              <path d="M3 2h6v1h1v3H9V4H8V3H3zM1 6h1v2h1v1h6v1H3V9H2V8H1zM2 5h3v1H2zM7 6h3v1H7z" />
+            </svg>
+          </span>
+          <small>Outro</small>
+        </button>
+        <ThrowPad
+          mode="ball"
+          spriteSrc={ballIconSrc('poke')}
+          label="Lançar"
+          practice
+          agitation={practiceAgitation}
+          catchChance={1}
+          stageEl={wildStageEl}
+          onBallHit={() => undefined}
+          onBallMiss={() => undefined}
+          onBerryHit={() => undefined}
+          onBerryMiss={() => undefined}
+        />
+        <button
+          type="button"
+          class="tool"
+          class:on={practiceAgitation > 0}
+          aria-label={practiceAgitation === 0 ? 'Alvo parado' : `Alvo inquieto, nível ${practiceAgitation}`}
+          onclick={() => (practiceAgitation = (practiceAgitation + 1) % (PRACTICE_AGITATION_MAX + 1))}
+        >
+          <span class="icon-slot agitation-icon" aria-hidden="true">
+            {#each Array(PRACTICE_AGITATION_MAX) as _, i (i)}
+              <span class="pip" class:lit={i < practiceAgitation}></span>
+            {/each}
+          </span>
+          <small>{practiceAgitation === 0 ? 'Parado' : 'Inquieto'}</small>
+        </button>
+      </div>
+      <button type="button" class="btn" onclick={() => (step = 'regions')}>Voltar</button>
+    </div>
   {:else if step === 'highlights' && result?.kind === 'battle'}
     <div class="scroll">
       <section class="panel sheet">
@@ -1354,6 +1448,27 @@
     gap: 0.3rem;
     width: 100%;
     margin-top: 0.5rem;
+  }
+
+  /* Treino: os três pontinhos da agitação no lugar do ícone, lado a lado.
+     `.tool` na frente: senão o `.tool .icon-slot` (grid) ganha e eles empilham. */
+  .tool .icon-slot.agitation-icon {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .agitation-icon .pip {
+    flex: none;
+    width: 6px;
+    height: 14px;
+    background: #00000022;
+    box-shadow: inset 0 0 0 var(--px) #00000033;
+  }
+
+  .agitation-icon .pip.lit {
+    background: var(--danger);
   }
 
   /* Captura: laterais menores, meio maior — quadrados, base alinhada. */
