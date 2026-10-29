@@ -889,8 +889,8 @@
     }
   }
 
-  async function flee() {
-    if (!encounter) return
+  async function flee(): Promise<boolean> {
+    if (!encounter) return false
     pending = true
     message = ''
     notice = ''
@@ -903,13 +903,17 @@
           step = 'regions'
         }
         await onState()
-        return
+        return false
       }
+      clearSavedBattle(encounter.id)
+      fightStart = null
       result = { kind: 'fled' }
       step = 'result'
       void onState().catch(() => undefined)
+      return true
     } catch {
       message = 'Sem conexão com o servidor.'
+      return false
     } finally {
       pending = false
     }
@@ -1201,6 +1205,7 @@
           onBattleAuto={(on) => void setBattleAuto(on)}
           onFinished={onFightFinished}
           onError={onFightError}
+          onFlee={flee}
         />
       </section>
     </div>

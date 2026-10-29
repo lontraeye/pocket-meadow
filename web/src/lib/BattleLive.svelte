@@ -133,6 +133,7 @@
     onBattleAuto,
     onFinished,
     onError,
+    onFlee,
   }: {
     start: BattleStart
     encounter: PendingEncounter
@@ -151,6 +152,8 @@
     onBattleAuto: (on: boolean) => void
     onFinished: (outcome: BattleOutcome, team: OwnedPokemon[]) => void
     onError: (message: string) => void
+    /** Encerra o encontro no meio da luta. Devolve false se o servidor recusou. */
+    onFlee: () => Promise<boolean>
   } = $props()
 
   type Pose = { id: number; start: number; steps: Step[] }
@@ -248,6 +251,8 @@
   let inputs: BattleInput[] = untrack(() => [...initialInputs])
 
   let status = $state<Status>('live')
+  let fleeing = $state(false)
+  let alive = true
   let clock = $state(performance.now())
   let floaters = $state.raw<Floater[]>([])
   let liveFx = $state.raw<LiveFx[]>([])
@@ -473,7 +478,7 @@
     nextEventAt = nextEventFor(next, e)
     // Fim por desmaio: dispara o finish na hora (não espera o próximo quadro),
     // e o timer já congela via displayElapsed.
-    if (next.snapshot.result !== null && status === 'live') void finish()
+    if (next.snapshot.result !== null && status === 'live' && !fleeing) void finish()
   }
 
   /**
@@ -594,10 +599,18 @@
   }
 
   function toggleAuto() {
-    if (status !== 'live') return
+    if (status !== 'live' || fleeing) return
     play('tap')
     onBattleAuto(!battleAuto)
     persist()
+  }
+
+  async function fleeFight() {
+    if (status !== 'live' || fleeing) return
+    fleeing = true
+    play('tap')
+    const ok = await onFlee()
+    if (!ok && alive) fleeing = false
   }
 
   // Automático: toca quando o cooldown libera mais uma reação curta, com a
@@ -665,7 +678,7 @@
     }
     if (chargedFx && now >= chargedFx.until) chargedFx = null
     pulseStatusFx(now)
-    if (status !== 'live') return
+    if (status !== 'live' || fleeing) return
     const e = elapsedAt(now)
     if (e >= nextEventAt) resim(e)
     autoStep(e)
@@ -687,6 +700,7 @@
     }
     frame = requestAnimationFrame(tick)
     return () => {
+      alive = false
       cancelAnimationFrame(frame)
       window.clearTimeout(flashClear)
       clearSwitchTimers()
@@ -882,7 +896,7 @@
   }
 
   async function finish() {
-    if (status !== 'live') return
+    if (status !== 'live' || fleeing) return
     status = 'finishing'
     recapLine = '…'
     recapHint = false
@@ -1465,9 +1479,12 @@
 <div class="live" class:ending={endingFaint && status === 'finishing'}>
   <div class="top">
     <span class="timer" class:late={remaining < 10_000} aria-label="Tempo restante">{formatCountdown(remaining)}</span>
-    <button type="button" class="btn auto" class:on={battleAuto} aria-pressed={battleAuto} disabled={status !== 'live'} onclick={toggleAuto}>
-      Auto{battleAuto ? ': ligado' : ''}
-    </button>
+    <div class="top-actions">
+      <button type="button" class="btn flee" disabled={status !== 'live' || fleeing} onclick={fleeFight}>Fugir</button>
+      <button type="button" class="btn auto" class:on={battleAuto} aria-pressed={battleAuto} disabled={status !== 'live' || fleeing} onclick={toggleAuto}>
+        Auto{battleAuto ? ': ligado' : ''}
+      </button>
+    </div>
   </div>
 
   <div
@@ -1827,6 +1844,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .timer {
@@ -1837,6 +1855,15 @@
 
   .timer.late {
     color: var(--danger);
+  }
+
+  .top-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .top-actions .btn {
+    padding: 0 0.6rem;
   }
 
   .auto {
