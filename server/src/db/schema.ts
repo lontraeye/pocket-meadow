@@ -134,8 +134,23 @@ export const trainers = sqliteTable('trainers', {
   battleAuto: integer('battle_auto', { mode: 'boolean' }).notNull().default(false),
   /** Semente do clima do dia (5.11): sorteada na criação, nunca vai ao front. */
   weatherSeed: integer('weather_seed').notNull().default(0),
+  /** Onde o treinador está na jornada (JORNADA.md, seção 11): slug do lugar. */
+  currentPlace: text('current_place').notNull().default('new-bark'),
   updatedAt: integer('updated_at').notNull(),
 })
+
+/** Lugares já visitados: Voo, selo "novo" e aviso de chegada. */
+export const trainerPlaces = sqliteTable(
+  'trainer_places',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    placeSlug: text('place_slug').notNull(),
+    firstVisitAt: integer('first_visit_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.placeSlug] })],
+)
 
 export const pokemon = sqliteTable(
   'pokemon',

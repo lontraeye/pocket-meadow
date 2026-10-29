@@ -52,11 +52,13 @@ test('com a energia desligada, o encontro sai mesmo com 0 e não gasta nada', as
   // Energia zerada agora (sem tempo para recarregar).
   getDb().update(trainers).set({ energy: 0, energyUpdatedAt: Date.now() }).where(eq(trainers.userId, userId)).run()
 
-  const first = await post('/encounters', cookie, { regionSlug: 'route-1' })
+  // Encontro só onde o jogador está (JORNADA.md, seção 11).
+  getSqlite().prepare(`update trainers set current_place = 'route-29' where user_id = ?`).run(userId)
+  const first = await post('/encounters', cookie, { regionSlug: 'route-29' })
   assert.equal(first.status, 201)
   const encounter = (await first.json()) as { id: number }
   assert.equal((await post(`/encounters/${encounter.id}/flee`, cookie)).status, 200)
-  assert.equal((await post('/encounters', cookie, { regionSlug: 'route-1' })).status, 201)
+  assert.equal((await post('/encounters', cookie, { regionSlug: 'route-29' })).status, 201)
 
   const row = getDb().select({ energy: trainers.energy }).from(trainers).where(eq(trainers.userId, userId)).get()
   assert.equal(row?.energy, 0)

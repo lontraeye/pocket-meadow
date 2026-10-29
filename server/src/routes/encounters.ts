@@ -8,6 +8,7 @@ import { berryItemKey, getBerry } from '../config/berries.js'
 import { type Region, regionBySlug } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { isWholeTeam } from '../db/team.js'
+import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import {
@@ -71,7 +72,11 @@ encounterRoutes.post('/', requireUser, async (c) => {
   const userId = c.get('userId')
   const now = Date.now()
   try {
-    const result = immediate(() => createEncounter(userId, region, now))
+    const result = immediate(() => {
+      // Só se procura Pokémon onde se está (JORNADA.md, seção 11).
+      if (currentPlaceOf(userId) !== region.slug) return fail('not_here', 400)
+      return createEncounter(userId, region, now)
+    })
     if (!result.ok) return c.json({ error: result.error }, result.status)
     return c.json(result.encounter, 201)
   } catch (error) {

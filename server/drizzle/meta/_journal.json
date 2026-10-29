@@ -127,6 +127,13 @@
       "when": 1793300000000,
       "tag": "0017_pc_team",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793310000000,
+      "tag": "0018_places",
+      "breakpoints": true
     }
   ]
 }

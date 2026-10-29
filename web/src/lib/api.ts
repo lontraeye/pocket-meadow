@@ -64,6 +64,42 @@ export type RegionInfo = {
   unlocked: boolean
 }
 
+/** Lugar da jornada (JORNADA.md, seção 11), como o GET /places manda. */
+export type PlaceView = {
+  slug: string
+  name: string
+  kind: 'town' | 'area' | 'water'
+  chapter: number
+  blurb: string
+  x: number
+  y: number
+  open: boolean
+  /** Por que está fechado (ex.: "Abre no nível 3"); null = aberto. */
+  reason: string | null
+  visited: boolean
+  wildLevelRange: [number, number] | null
+  speciesTotal: number
+  speciesCaught: number
+  links: { to: string; open: boolean; reason: string | null; isNew: boolean }[]
+}
+
+export type PlacesResponse = {
+  current: string
+  trainerLevel: number
+  chapter: {
+    number: number
+    title: string
+    caught: number
+    total: number
+    nextChapter: number | null
+    nextTitle: string | null
+    nextLevel: number | null
+  }
+  places: PlaceView[]
+  /** Espécies do lugar atual; as não vistas vêm sem id (o "?"). */
+  here: { species: { speciesId: number | null; displayName: string | null; status: 'caught' | 'seen' | 'unknown' }[] }
+}
+
 export type ItemCredit = { itemKey: string; quantity: number }
 
 export type BattleStart = {
@@ -384,6 +420,14 @@ export function errorText(error: ApiError): string {
       return 'Sem energia no momento.'
     case 'region_locked':
       return 'Essa região ainda está bloqueada.'
+    case 'not_here':
+      return 'Você não está mais nesse lugar. Abra a exploração de novo.'
+    case 'place_locked':
+      return 'Esse caminho ainda está fechado.'
+    case 'place_not_linked':
+      return 'Esse lugar fica longe daqui: vá pelos vizinhos.'
+    case 'place_not_found':
+      return 'Esse lugar não existe.'
     case 'region_not_found':
       return 'Essa região não existe.'
     case 'species_not_found':

@@ -6,7 +6,8 @@ import { setCookie } from 'hono/cookie'
 import { authConfig } from '../config/auth.js'
 import { type StarterKey, trainerConfig } from '../config/trainer.js'
 import { getDb } from '../db/client.js'
-import { authEvents, inventory, pokedexEntries, pokemon, sessions, species, trainers, users } from '../db/schema.js'
+import { authEvents, inventory, pokedexEntries, pokemon, sessions, species, trainerPlaces, trainers, users } from '../db/schema.js'
+import { START_PLACE } from '../config/places.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { traitColumns } from '../game/traitValues.js'
 import { rollTraits, traitsRngSeed } from '../game/traits.js'
@@ -62,6 +63,8 @@ export function createPlayer(input: {
       updatedAt: now,
     })
     .run()
+  // A jornada começa no lugar inicial, já visitado.
+  db.insert(trainerPlaces).values({ userId: user.id, placeSlug: START_PLACE, firstVisitAt: now }).run()
   db.insert(pokemon)
     .values({
       userId: user.id,

@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { after, before, test } from 'node:test'
+import { Hono } from 'hono'
+import { createPlayer } from '../auth/accounts.js'
+import { hashToken } from '../auth/session.js'
+import { authConfig } from '../config/auth.js'
+import { checkPlaces, linksOf, placeConfigs, START_PLACE } from '../config/places.js'
+import { loadRegions } from '../config/regions.js'
+import { getDb, getSqlite, immediate } from '../db/client.js'
+import { migrateDatabase } from '../db/migrate.js'
+import { sessions } from '../db/schema.js'
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pocket-meadow-places-'))
+process.env.DATABASE_PATH = path.join(dir, 'meadow.sqlite')
+const { placeRoutes } = await import('./places.js')
+const { encounterRoutes } = await import('./encounters.js')
+
+const app = new Hono().route('/places', placeRoutes).route('/encounters', encounterRoutes)
+const env = { incoming: { socket: { remoteAddress: '203.0.113.7', remotePort: 1, remoteFamily: 'IPv4' } } }
+
+type Link = { to: string; open: boolean; reason: string | null; isNew: boolean }
+type View = {
+  current: string
+  chapter: { number: number; caught: number; total: number; nextLevel: number | null }
+  places: { slug: string; open: boolean; visited: boolean; links: Link[]; speciesTotal: number }[]
+  here: { species: { speciesId: number | null; status: string }[] }
+}
+
+function player(username: string): { cookie: string; userId: number } {
+  const now = Date.now()
+  const token = randomBytes(32).toString('base64url')
+  const userId = immediate(() => {
+    const created = createPlayer({ username, googleSub: null, starter: 'bulbasaur', now })
+    getDb()
+      .insert(sessions)
+      .values({ id: hashToken(token), userId: created.userId, createdAt: now, expiresAt: now + authConfig.sessionTtlMs })
+      .run()
+    return created.userId
+  })
+  return { cookie: `${authConfig.cookieName}=${token}`, userId }
+}
+
+const post = (url: string, cookie: string, body: unknown) =>
+  app.request(url, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) }, env)
+const view = async (cookie: string) => (await (await app.request('/places', { headers: { cookie } }, env)).json()) as View
+const errorOf = async (response: Response) => ((await response.json()) as { error: string }).error
+
+before(() => migrateDatabase())
+after(() => {
+  getSqlite().close()
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('o config confere, toda área de Johto tem lugar e o mapa é conectado', () => {
+  checkPlaces()
+  const slugs = new Set(placeConfigs.map((place) => place.slug))
+  for (const region of loadRegions().filter((item) => item.gameRegion === 'johto')) {
+    assert.ok(slugs.has(region.slug), `${region.slug} sem lugar`)
+  }
+  const seen = new Set([START_PLACE])
+  const queue = [START_PLACE]
+  while (queue.length > 0) {
+    for (const link of linksOf(queue.shift()!)) {
+      if (seen.has(link.to)) continue
+      seen.add(link.to)
+      queue.push(link.to)
+    }
+  }
+  assert.equal(seen.size, placeConfigs.length)
+})
+
+test('começa em New Bark; anda só para vizinhos abertos; avisa a primeira visita', async () => {
+  const { cookie, userId } = player('ethan')
+  let places = await view(cookie)
+  assert.equal(places.current, 'new-bark')
+  const links = places.places.find((place) => place.slug === 'new-bark')!.links
+  assert.deepEqual(links.find((link) => link.to === 'route-29'), { to: 'route-29', open: true, reason: null, isNew: true })
+  assert.equal(links.find((link) => link.to === 'route-27')?.open, false)
+
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'cherrygrove' })), 'place_not_linked')
+  let moved = await post('/places/travel', cookie, { to: 'route-29' })
+  assert.deepEqual(await moved.json(), { current: 'route-29', firstVisit: true })
+  moved = await post('/places/travel', cookie, { to: 'new-bark' })
+  assert.deepEqual(await moved.json(), { current: 'new-bark', firstVisit: false })
+
+  // Violet abre a Rota 32 só no capítulo 2 (nível 3).
+  getSqlite().prepare(`update trainers set current_place = 'violet' where user_id = ?`).run(userId)
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'route-32' })), 'place_locked')
+  places = await view(cookie)
+  assert.equal(places.places.find((place) => place.slug === 'route-29')?.visited, true)
+  assert.equal(places.chapter.number, 1)
+  assert.equal(places.chapter.nextLevel, 3)
+})
+
+test('encontro só onde está; não viaja com encontro pendente; espécies do lugar sem spoiler', async () => {
+  const { cookie } = player('kris')
+  assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-29' })), 'not_here')
+  await post('/places/travel', cookie, { to: 'route-29' })
+
+  let places = await view(cookie)
+  assert.ok(places.here.species.length > 0)
+  assert.ok(places.here.species.every((entry) => entry.status === 'unknown' && entry.speciesId === null))
+
+  const created = await post('/encounters', cookie, { regionSlug: 'route-29' })
+  assert.equal(created.status, 201)
+  const wild = (await created.json()) as { id: number; speciesId: number }
+  assert.equal(await errorOf(await post('/places/travel', cookie, { to: 'new-bark' })), 'encounter_pending')
+
+  places = await view(cookie)
+  assert.ok(places.here.species.some((entry) => entry.speciesId === wild.speciesId && entry.status === 'seen'))
+  assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-30' })), 'not_here')
+})

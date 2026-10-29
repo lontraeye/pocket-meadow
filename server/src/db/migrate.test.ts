@@ -1030,3 +1030,36 @@ test('a migração pc_team monta o time com os 6 melhores do jardim e não mexe 
   db.close()
   fs.rmSync(file, { force: true })
 })
+
+test('a migração places põe todo treinador em New Bark, já visitado', () => {
+  const file = path.join(os.tmpdir(), `pocket-meadow-places-${process.pid}.sqlite`)
+  fs.rmSync(file, { force: true })
+  const db = new Database(file)
+  db.pragma('foreign_keys = ON')
+  const all = JSON.parse(fs.readFileSync(path.join(drizzleDir, 'meta', '_journal.json'), 'utf8')) as {
+    entries: { tag: string }[]
+  }
+  for (const entry of all.entries) {
+    if (entry.tag === '0018_places') break
+    execMigration(db, `${entry.tag}.sql`)
+  }
+  for (const [id, name] of [[1, 'ash'], [2, 'misty']] as const) {
+    db.prepare(`insert into users (username, created_at) values (?, ?)`).run(name, id)
+    db.prepare(
+      `insert into trainers (user_id, level, xp, energy, energy_updated_at, updated_at) values (?, 4, 0, 8, 100, ?)`,
+    ).run(id, id * 1000)
+  }
+
+  execMigration(db, '0018_places.sql')
+
+  assert.deepEqual(db.prepare(`select user_id, current_place from trainers order by user_id`).all(), [
+    { user_id: 1, current_place: 'new-bark' },
+    { user_id: 2, current_place: 'new-bark' },
+  ])
+  assert.deepEqual(db.prepare(`select user_id, place_slug, first_visit_at from trainer_places order by user_id`).all(), [
+    { user_id: 1, place_slug: 'new-bark', first_visit_at: 1000 },
+    { user_id: 2, place_slug: 'new-bark', first_visit_at: 2000 },
+  ])
+  db.close()
+  fs.rmSync(file, { force: true })
+})

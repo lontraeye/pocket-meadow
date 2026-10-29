@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Journey from './Journey.svelte'
   import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
   import { serverClock } from './serverClock.svelte'
@@ -321,58 +322,6 @@
     return () => setLiveFight(false)
   })
 
-  // Títulos provisórios dos capítulos (JORNADA.md, seção 5.2), até os marcos
-  // virem do servidor.
-  const CHAPTER_TITLES: Record<number, string> = {
-    1: 'New Bark → Violet',
-    2: 'Ruínas e Azalea',
-    3: 'Ilex e Goldenrod',
-    4: 'Ecruteak',
-    5: 'Costa e Cianwood',
-    6: 'Olivine',
-    7: 'Mahogany',
-    8: 'Blackthorn',
-    9: 'Caminho da Liga',
-    10: 'Fim de jogo',
-  }
-
-  type RegionSection = { key: string; title: string | null; regions: RegionInfo[]; unlocked: boolean; minLevel: number }
-
-  /**
-   * Áreas por capítulo. Os capítulos abertos mostram as áreas; dos fechados,
-   * só o próximo aparece, como um aviso (a lista inteira não cabe no celular).
-   */
-  function sectionsOf(list: RegionInfo[]): { open: RegionSection[]; next: RegionSection | null; later: number } {
-    const sections: RegionSection[] = []
-    for (const region of list) {
-      const key = region.chapter === null ? 'free' : `chapter-${region.chapter}`
-      let section = sections.find((item) => item.key === key)
-      if (!section) {
-        const title =
-          region.chapter === null
-            ? null
-            : region.chapter <= 8
-              ? `Capítulo ${region.chapter} · ${CHAPTER_TITLES[region.chapter] ?? ''}`
-              : (CHAPTER_TITLES[region.chapter] ?? `Capítulo ${region.chapter}`)
-        section = { key, title, regions: [], unlocked: false, minLevel: region.minTrainerLevel }
-        sections.push(section)
-      }
-      section.regions.push(region)
-      section.unlocked ||= region.unlocked
-      section.minLevel = Math.min(section.minLevel, region.minTrainerLevel)
-    }
-    // Sem capítulo (Kanto, por enquanto): tudo à mostra, como antes.
-    const open = sections.filter((section) => section.unlocked || section.title === null)
-    const locked = sections.filter((section) => !section.unlocked && section.title !== null)
-    return { open, next: locked[0] ?? null, later: Math.max(0, locked.length - 1) }
-  }
-
-  const groups = $derived(
-    [
-      { id: 'johto', title: 'Johto', regions: regions.filter((region) => region.gameRegion === 'johto') },
-      { id: 'kanto', title: 'Kanto', regions: regions.filter((region) => region.gameRegion === 'kanto') },
-    ].map((group) => ({ ...group, ...sectionsOf(group.regions) })),
-  )
   /** Sem energia para um encontro (só quando a energia está ligada no servidor). */
   const noEnergy = $derived(game.trainer.energyEnabled && game.trainer.energy < 1)
   /** O time, na ordem das posições. Todos vão para a luta. */
@@ -1013,121 +962,81 @@
   {/if}
 
   {#if step === 'regions'}
-    <div class="scroll">
-      <section class="panel sheet">
-        <h2>Para onde?</h2>
-        {#if game.trainer.energyEnabled}
-          <p class="hint">
-            Cada encontro gasta 1 de energia. Energia {game.trainer.energy}/{game.trainer.energyMax}.
-            {#if game.trainer.energy < 1}Sem energia no momento.{/if}
-          </p>
-        {/if}
-        {#if game.effects.length > 0}
-          <div class="chips" aria-label="Efeitos ativos">
-            {#each game.effects as effect (effect.id)}
-              <span class="chip">
-                {effectLabel(effect.effectKey)}{effect.multiplier}
-                {#if effect.charges !== null}
-                  · {effect.charges} carga{effect.charges === 1 ? '' : 's'}
-                {:else if effect.expiresAt !== null}
-                  · {formatCountdown(Math.max(0, effect.expiresAt - clock.now()))}
-                {/if}
-              </span>
-            {/each}
-          </div>
-        {/if}
-        {#if game.devTools}
-          {#if game.trainer.energyEnabled}
-            <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
-          {/if}
-          <button type="button" class="btn choice" disabled={pending} onclick={() => void grantBalls()}>
-            Ganhar bolas (teste)
-          </button>
-          <form
-            class="dev-encounter"
-            onsubmit={(event) => {
-              event.preventDefault()
-              devEncounter()
-            }}
-          >
-            <input
-              type="text"
-              placeholder="Espécie (nome ou nº)"
-              aria-label="Espécie do encontro de teste"
-              bind:value={devSpecies}
-              autocomplete="off"
-            />
-            <input type="number" min="1" max="100" aria-label="Nível" bind:value={devLevel} />
-            <button
-              type="submit"
-              class="btn"
-              aria-busy={searching === 'dev'}
-              disabled={pending || !devSpecies.trim() || noEnergy || game.encounter !== null}
-            >
-              Encontro de teste
-            </button>
-          </form>
-        {/if}
-        {#if game.encounter}
-          <button
-            type="button"
-            class="btn btn-primary choice"
-            onclick={() => {
-              encounter = game.encounter
-              step = game.encounter?.wonAt ? 'decide' : 'encounter'
-            }}
-          >
-            Continuar encontro
-          </button>
-        {:else}
-          <button type="button" class="btn choice" disabled={pending} onclick={startPractice}>
-            Treinar arremesso
-            <small>{game.trainer.energyEnabled ? 'Não gasta bola nem energia' : 'Não gasta bola'}</small>
-          </button>
-        {/if}
-        {#each groups as group (group.id)}
-          {#if group.regions.length > 0}
-            <h3>{group.title}</h3>
-            {#each group.open as section (section.key)}
-              {#if section.title}<h4 class="chapter">{section.title}</h4>{/if}
-              {#each section.regions as region (region.slug)}
-                <button
-                  type="button"
-                  class="btn choice"
-                  class:btn-primary={region.unlocked && !game.encounter}
-                  aria-busy={searching === region.slug}
-                  disabled={pending || !region.unlocked || noEnergy || game.encounter !== null}
-                  onclick={() => search(region.slug)}
-                >
-                  <span>{region.name}</span>
-                  {#if searching === region.slug}
-                    <small class="waiting"><span class="ball sprite-wait" aria-hidden="true"></span>Procurando…</small>
-                  {:else}
-                    <small>Nv {region.wildLevelRange[0]}–{region.wildLevelRange[1]}</small>
+    <Journey
+      busy={pending}
+      {searching}
+      hasEncounter={game.encounter !== null}
+      onSearch={(slug) => search(slug)}
+      onGarden={onClose}
+    >
+      {#snippet extras()}
+        <section class="panel sheet">
+          {#if game.effects.length > 0}
+            <div class="chips" aria-label="Efeitos ativos">
+              {#each game.effects as effect (effect.id)}
+                <span class="chip">
+                  {effectLabel(effect.effectKey)}{effect.multiplier}
+                  {#if effect.charges !== null}
+                    · {effect.charges} carga{effect.charges === 1 ? '' : 's'}
+                  {:else if effect.expiresAt !== null}
+                    · {formatCountdown(Math.max(0, effect.expiresAt - clock.now()))}
                   {/if}
-                  {#if !region.unlocked}<small>Abre no nível {region.minTrainerLevel}</small>{/if}
-                </button>
+                </span>
               {/each}
-            {/each}
-            {#if group.next}
-              <p class="next-chapter">
-                <strong>{group.next.title}</strong>
-                <small>
-                  {group.next.regions.length} área{group.next.regions.length === 1 ? '' : 's'} · abre no nível {group.next.minLevel}
-                  {#if group.later > 0}· mais {group.later} capítulo{group.later === 1 ? '' : 's'} depois{/if}
-                </small>
-              </p>
-            {/if}
+            </div>
           {/if}
-        {/each}
-        {#if regions.length === 0 && !message}
-          <p class="hint">{regionsFailed ? 'Sem conexão: o mapa abre quando voltar.' : 'Olhando o mapa…'}</p>
-        {/if}
-      </section>
-    </div>
-    <div class="dock">
-      <button type="button" class="btn" onclick={onClose}>Jardim</button>
-    </div>
+          {#if game.devTools}
+            {#if game.trainer.energyEnabled}
+              <button type="button" class="btn choice" disabled={pending} onclick={refillEnergy}>Encher energia (teste)</button>
+            {/if}
+            <button type="button" class="btn choice" disabled={pending} onclick={() => void grantBalls()}>
+              Ganhar bolas (teste)
+            </button>
+            <form
+              class="dev-encounter"
+              onsubmit={(event) => {
+                event.preventDefault()
+                devEncounter()
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Espécie (nome ou nº)"
+                aria-label="Espécie do encontro de teste"
+                bind:value={devSpecies}
+                autocomplete="off"
+              />
+              <input type="number" min="1" max="100" aria-label="Nível" bind:value={devLevel} />
+              <button
+                type="submit"
+                class="btn"
+                aria-busy={searching === 'dev'}
+                disabled={pending || !devSpecies.trim() || noEnergy || game.encounter !== null}
+              >
+                Encontro de teste
+              </button>
+            </form>
+          {/if}
+          {#if game.encounter}
+            <button
+              type="button"
+              class="btn btn-primary choice"
+              onclick={() => {
+                encounter = game.encounter
+                step = game.encounter?.wonAt ? 'decide' : 'encounter'
+              }}
+            >
+              Continuar encontro
+            </button>
+          {:else}
+            <button type="button" class="btn choice" disabled={pending} onclick={startPractice}>
+              Treinar arremesso
+              <small>{game.trainer.energyEnabled ? 'Não gasta bola nem energia' : 'Não gasta bola'}</small>
+            </button>
+          {/if}
+        </section>
+      {/snippet}
+    </Journey>
   {:else if step === 'encounter' && encounter}
     <div class="scroll">
       <section class="panel sheet">
@@ -1507,22 +1416,6 @@
     font-size: 1.15rem;
   }
 
-  h4.chapter {
-    margin: 0.4rem 0 0;
-    font-size: 0.95rem;
-    color: var(--ink-soft);
-  }
-
-  .next-chapter {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    margin: 0.4rem 0 0;
-    padding: 0.6rem 0.75rem;
-    border: 2px dashed currentColor;
-    border-radius: 6px;
-    opacity: 0.75;
-  }
 
   .hint,
   .lv,

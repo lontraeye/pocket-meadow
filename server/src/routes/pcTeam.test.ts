@@ -140,7 +140,9 @@ test('a luta leva o time inteiro, em qualquer ordem; só parte do time é recusa
   const a = clone(userId, starterId)
   assert.equal((await send('PUT', '/trainer/team', cookie, { pokemonIds: [starterId, a] })).status, 200)
 
-  const created = await send('POST', '/encounters', cookie, { regionSlug: 'route-1' })
+  // Encontro só onde o jogador está (JORNADA.md, seção 11).
+  getSqlite().prepare(`update trainers set current_place = 'route-29' where user_id = ?`).run(userId)
+  const created = await send('POST', '/encounters', cookie, { regionSlug: 'route-29' })
   assert.equal(created.status, 201)
   const encounter = (await created.json()) as { id: number }
 

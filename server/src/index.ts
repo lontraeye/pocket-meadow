@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { checkPlaces } from './config/places.js'
 import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
@@ -11,12 +12,14 @@ import { itemRoutes } from './routes/items.js'
 import { plotRoutes } from './routes/plots.js'
 import { pokedexRoutes } from './routes/pokedex.js'
 import { pokemonRoutes } from './routes/pokemon.js'
+import { placeRoutes } from './routes/places.js'
 import { regionRoutes } from './routes/regions.js'
 import { stateRoutes } from './routes/state.js'
 import { trainerRoutes } from './routes/trainer.js'
 
 migrateDatabase()
 loadRegions()
+checkPlaces()
 
 const port = Number(process.env.PORT ?? 3001)
 if (!Number.isInteger(port) || port <= 0) {
@@ -62,6 +65,7 @@ app.route('/auth', authRoutes)
 app.route('/state', stateRoutes)
 app.route('/trainer', trainerRoutes)
 app.route('/regions', regionRoutes)
+app.route('/places', placeRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/pokedex', pokedexRoutes)

@@ -31,6 +31,7 @@ import { availableMovesFor, buildTraitView, requireTraitFields } from '../game/t
 import type { AbilitySlot } from '../game/traits.js'
 import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
+import { currentPlaceOf } from './places.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -244,6 +245,7 @@ function readState(userId: number, now: number) {
       xpToNext: trainerXpToNext(trainer.level),
       energyEnabled: trainerConfig.energyEnabled,
       teamMax: trainerConfig.teamMax,
+      currentPlace: currentPlaceOf(userId),
       energy: trainer.energy,
       energyMax: trainerConfig.energyMax,
       energyNextAt: nextEnergyAt(trainer.energy, trainer.energyUpdatedAt),
