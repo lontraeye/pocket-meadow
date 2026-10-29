@@ -260,7 +260,9 @@
         {/if}
         {#if arrival}<p class="arrival" role="status">{arrival}</p>{/if}
       </div>
-      <section class="panel sheet place" aria-live="polite">
+      <!-- Altura fixa: sem seleção, a mesma estrutura fica invisível por baixo
+           da dica, para o campo não mudar de tamanho ao tocar num Pokémon. -->
+      <section class="panel sheet place field-panel" aria-live="polite">
         {#if spawn}
           <div class="place-head">
             <h2>
@@ -284,7 +286,10 @@
             {searching === field?.regionSlug ? 'Indo…' : 'Batalhar'}
           </button>
         {:else}
-          <p class="hint">Toque num Pokémon do campo para ver e batalhar.</p>
+          <div class="place-head ghost" aria-hidden="true"><h2>—</h2><small>Nv</small></div>
+          <div class="types ghost" aria-hidden="true"><span class="type">—</span></div>
+          <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
+          <p class="hint pick-hint">Toque num Pokémon do campo para ver e batalhar.</p>
         {/if}
         {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
         {#if message}<p class="alert" role="alert">{message}</p>{/if}
@@ -657,6 +662,23 @@
   .field-count {
     margin-left: auto;
     color: var(--ink-soft);
+  }
+
+  .field-panel {
+    position: relative;
+  }
+
+  .ghost {
+    visibility: hidden;
+  }
+
+  .pick-hint {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 0 1rem;
+    text-align: center;
   }
 
   .field-wait {
