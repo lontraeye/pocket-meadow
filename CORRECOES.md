@@ -13,6 +13,10 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 - [x] **Depois da luta, volta ao campo** — luta começada no campo termina com "Voltar ao campo" (e "Ir ao jardim" como link), em vez de mandar direto ao jardim.
 - [x] **Campo não se repõe sozinho** — quem foi enfrentado sai e a vaga fica vazia; os outros continuam. O campo só enche ao chegar na área (se estiver vazio) ou pelo **"Explorar de novo"** (`POST /field/explore`), que só aparece e só vale com o campo vazio (`field_not_empty` se não estiver).
 
+### Mapa
+
+- [x] **Caminhar até lugares distantes** — tocar num lugar longe mostra "Caminhar até X · N pontos" (menor caminho pelos caminhos abertos). O boneco anda sozinho, ponto a ponto (~0,9 s por ponto, com pulinho), e o mapa acompanha. Cada passo é um `travel` ao vizinho, então o servidor confere tudo. Dá para parar no meio. Toque duplo também caminha. Cidade com Voo continua com "Voar" (e "Caminhar" como alternativa).
+
 ---
 
 ## `fix/correcoes-out-29` (out/2026)

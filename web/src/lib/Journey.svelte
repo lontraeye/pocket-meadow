@@ -51,6 +51,12 @@
   let picked = $state<string | null>(null)
   let moreOpen = $state(false)
   let arrivalTimer = 0
+  /** Caminhada em andamento: pontos feitos / total, e o pedido de parar. */
+  let walk = $state<{ to: string; done: number; total: number } | null>(null)
+  let stopWalk = false
+  let unmounted = false
+  /** Tempo de caminhada em cada ponto do caminho. */
+  const WALK_STEP_MS = 900
   /** Numa rota: o mapa (ao abrir e ao chegar) ou o campo (pelo botão, ou de volta da luta). */
   let view = $state<'field' | 'map'>(untrack(() => startOnField) ? 'field' : 'map')
   let field = $state<FieldResponse | null>(null)
@@ -61,6 +67,8 @@
   const selected = $derived<PlaceView | null>((picked ? bySlug.get(picked) : null) ?? here)
   const isHere = $derived(selected !== null && selected.slug === data?.current)
   const link = $derived(selected && here ? (here.links.find((entry) => entry.to === selected.slug) ?? null) : null)
+  /** Caminho a pé até o lugar escolhido (pelos caminhos abertos); null = não dá. */
+  const route = $derived(selected && data && !isHere ? routeTo(selected.slug) : null)
   const caughtHere = $derived(data?.here.species.filter((entry) => entry.status === 'caught').length ?? 0)
   const goal = $derived(data?.goal ?? null)
   const mark = $derived(goal?.milestone ?? null)
@@ -140,8 +148,95 @@
 
   onMount(() => {
     void load()
-    return () => window.clearTimeout(arrivalTimer)
+    return () => {
+      unmounted = true
+      stopWalk = true
+      window.clearTimeout(arrivalTimer)
+    }
   })
+
+  /**
+   * Menor caminho a pé (busca em largura), só por ligações abertas: as mesmas
+   * que o servidor aceita em cada passo. Devolve os pontos depois de você.
+   */
+  function routeTo(slug: string): string[] | null {
+    if (!data || slug === data.current) return null
+    const from = new Map<string, string>([[data.current, '']])
+    const queue = [data.current]
+    while (queue.length > 0) {
+      const at = queue.shift()!
+      if (at === slug) break
+      for (const next of bySlug.get(at)?.links ?? []) {
+        if (!next.open || from.has(next.to) || !bySlug.has(next.to)) continue
+        from.set(next.to, at)
+        queue.push(next.to)
+      }
+    }
+    if (!from.has(slug)) return null
+    const path: string[] = []
+    for (let at = slug; at !== data.current; at = from.get(at)!) path.unshift(at)
+    return path
+  }
+
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+  /**
+   * Anda sozinho até o lugar, ponto a ponto: cada passo é uma viagem ao
+   * vizinho (o servidor confere cada uma) e leva um tempinho no mapa.
+   * "Parar" termina no ponto em que estiver.
+   */
+  async function walkTo(slug: string) {
+    if (pending || !data) return
+    const path = routeTo(slug)
+    if (!path || path.length === 0) return
+    play('tap')
+    traveling = true
+    stopWalk = false
+    message = ''
+    arrival = ''
+    picked = slug
+    spawnSlot = null
+    view = 'map'
+    walk = { to: slug, done: 0, total: path.length }
+    let firstVisit = false
+    try {
+      for (const [index, step] of path.entries()) {
+        if (stopWalk) break
+        const response = await api('/api/places/travel', { to: step })
+        const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & { firstVisit?: boolean }
+        if (!response.ok) {
+          message = errorText(payload)
+          break
+        }
+        if (unmounted || !data) return
+        data.current = step
+        walk = { to: slug, done: index + 1, total: path.length }
+        firstVisit = step === slug && payload.firstVisit === true
+        await sleep(WALK_STEP_MS)
+      }
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      if (!unmounted) {
+        const target = bySlug.get(slug)
+        const reached = data?.current === slug
+        walk = null
+        traveling = false
+        picked = reached ? null : picked
+        await load()
+        if (reached && firstVisit && target) showArrival(target)
+      }
+    }
+  }
+
+  function showArrival(target: PlaceView) {
+    arrival =
+      target.kind === 'area' && target.speciesTotal > 0
+        ? `${target.name} · ${target.speciesTotal} espécie${target.speciesTotal === 1 ? '' : 's'} aqui · novo!`
+        : `${target.name} · primeira visita`
+    window.clearTimeout(arrivalTimer)
+    arrivalTimer = window.setTimeout(() => (arrival = ''), 3500)
+  }
 
   // Sem rede na primeira tentativa: tenta de novo quando a conexão volta.
   $effect(() => {
@@ -154,10 +249,9 @@
     picked = slug === data?.current ? null : slug
   }
 
-  /** Toque duplo: num vizinho aberto, viaja direto; no resto, só seleciona. */
+  /** Toque duplo: onde dá para chegar a pé, vai andando; no resto, só seleciona. */
   function activate(slug: string) {
-    const open = here?.links.some((entry) => entry.to === slug && entry.open) ?? false
-    if (open && !hasEncounter) void travel(slug)
+    if (!hasEncounter && !pending && routeTo(slug)) void walkTo(slug)
     else select(slug)
   }
 
@@ -212,12 +306,7 @@
       view = 'map'
       await load()
       if (payload.firstVisit && target) {
-        arrival =
-          target.kind === 'area' && target.speciesTotal > 0
-            ? `${target.name} · ${target.speciesTotal} espécie${target.speciesTotal === 1 ? '' : 's'} aqui · novo!`
-            : `${target.name} · primeira visita`
-        window.clearTimeout(arrivalTimer)
-        arrivalTimer = window.setTimeout(() => (arrival = ''), 3500)
+        showArrival(target)
       } else {
         arrival = ''
       }
@@ -272,6 +361,7 @@
         selected={selected.slug}
         onSelect={select}
         onActivate={activate}
+        walking={walk !== null}
         visible={!showField}
       />
       {#if arrival && !showField}<p class="arrival" role="status">{arrival}</p>{/if}
@@ -378,9 +468,12 @@
         {#if selected.speciesTotal > 0 && selected.visited}
           <p class="hint">{selected.speciesCaught}/{selected.speciesTotal} espécies capturadas</p>
         {/if}
-        {#if link?.open}
-          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
-            {traveling ? 'Indo…' : `Ir para ${selected.name}`}
+        {#if walk}
+          <p class="hint walking" role="status">Caminhando… {walk.done}/{walk.total}</p>
+          <button type="button" class="btn" onclick={() => (stopWalk = true)}>Parar</button>
+        {:else if link?.open || (route && !selected.flyable)}
+          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
+            {link?.open ? `Ir para ${selected.name}` : `Caminhar até ${selected.name} · ${route?.length} pontos`}
           </button>
         {:else if link}
           <p class="hint locked">{link.reason}</p>
@@ -388,12 +481,17 @@
           <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
             {traveling ? 'Voando…' : `Voar para ${selected.name}`}
           </button>
+          {#if route}
+            <button type="button" class="btn" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
+              Caminhar · {route.length} pontos
+            </button>
+          {/if}
         {:else if !selected.open}
           <p class="hint locked">{selected.reason}</p>
         {:else if data.flyReason && selected.kind === 'town' && selected.visited}
           <p class="hint locked">{data.flyReason}</p>
         {:else}
-          <p class="hint">Longe daqui: vá pelos lugares vizinhos (ligados ao seu).</p>
+          <p class="hint">Não há caminho aberto até aqui.</p>
         {/if}
       {/if}
       {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}

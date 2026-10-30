@@ -15,6 +15,7 @@
     onSelect,
     onActivate,
     visible = true,
+    walking = false,
   }: {
     places: PlaceView[]
     current: string
@@ -26,6 +27,8 @@
     onActivate: (slug: string) => void
     /** Escondido atrás do campo: centraliza de novo quando volta a aparecer. */
     visible?: boolean
+    /** Andando sozinho pelo caminho: o marcador vai a passo, balançando. */
+    walking?: boolean
   } = $props()
 
   // Toque duplo pelo intervalo entre dois toques: o dblclick não é confiável no celular.
@@ -187,9 +190,11 @@
     {/each}
     <!-- Você: desliza até o lugar novo ao viajar. -->
     {#if here}
-      <g class="me" style:transform="translate({px(here)}px, {py(here)}px)" aria-hidden="true">
-        <circle class="me-ring" r="17" />
-        <circle class="me-dot" r="6" />
+      <g class="me" class:walking style:transform="translate({px(here)}px, {py(here)}px)" aria-hidden="true">
+        <g class="me-body">
+          <circle class="me-ring" r="17" />
+          <circle class="me-dot" r="6" />
+        </g>
       </g>
     {/if}
   </svg>
@@ -414,6 +419,25 @@
     transition: transform 0.45s ease-in-out;
   }
 
+  /* Caminhando: passo constante entre os pontos e um pulinho a cada passada. */
+  .me.walking {
+    transition-duration: 0.8s;
+    transition-timing-function: linear;
+  }
+
+  .me.walking .me-body {
+    animation: step 0.27s ease-in-out infinite alternate;
+  }
+
+  @keyframes step {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-5px);
+    }
+  }
+
   .me-ring {
     fill: none;
     stroke: var(--primary);
@@ -429,6 +453,10 @@
   @media (prefers-reduced-motion: reduce) {
     .me {
       transition: none;
+    }
+
+    .me.walking .me-body {
+      animation: none;
     }
   }
 </style>
