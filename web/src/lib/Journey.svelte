@@ -273,7 +273,7 @@
       }
       play('catch')
       await load()
-      const opened = data?.goal.chapter === payload.opens ? data.goal.title : null
+      const opened = data && data.goal.chapter === payload.opens ? data.goal.title : null
       const grants = payload.grants && payload.grants.length > 0 ? ` Ganhou: ${payload.grants.join(', ')}.` : ''
       celebrate = `${name} conquistado!${opened ? ` Capítulo ${payload.opens} aberto: ${opened}.` : ''}${grants}`
     } catch {

@@ -467,9 +467,12 @@ test('tempo limite e troca automática ao cair', () => {
 })
 
 test('finish_too_early: duração do log maior que o tempo real', () => {
-  assert.equal(isFinishTooEarly(100, 2000, 400), true)
-  assert.equal(isFinishTooEarly(2000, 2000, 400), false)
-  assert.equal(isFinishTooEarly(1800, 2000, 400), false)
+  assert.equal(isFinishTooEarly(100, 2000, 400, 1), true)
+  assert.equal(isFinishTooEarly(2000, 2000, 400, 1), false)
+  assert.equal(isFinishTooEarly(1800, 2000, 400, 1), false)
+  // Acelerada (2x): metade do tempo real basta, menos que isso não.
+  assert.equal(isFinishTooEarly(1000, 2000, 0, 2), false)
+  assert.equal(isFinishTooEarly(700, 2000, 400, 2), true)
 })
 
 test('automático vence fraco e perde para forte', () => {

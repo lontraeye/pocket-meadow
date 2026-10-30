@@ -21,6 +21,14 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 
 - [x] **Nome das bolas nas recompensas** — o resgate mostrava `ball:poke`, `ball:great`: o `rewardLine` não passava a lista de bolas para o `itemLabel`. Agora sai "Poké Ball ×5".
 
+### Luta
+
+- [x] **Botão 2x** — ao lado do Auto, acelera o relógio da luta (simulação, timer e recargas) para o dobro; fica lembrado no aparelho (`pm-battle-speed`). O servidor aceita até `simConfig.maxSpeed` (2): o `finish_too_early` passa a conferir `tempo real × 2`. Ao retomar uma luta acelerada, começa do último toque salvo. As animações seguem no ritmo normal.
+
+### Tipos
+
+- [x] **Journey: `data` possivelmente nulo** no resgate do marco — o único erro do `svelte-check`.
+
 ---
 
 ## `fix/correcoes-out-29` (out/2026)

@@ -1,6 +1,24 @@
 import type { BattleInput, BattleSetup } from '@sim'
 
 const AUTO_KEY = 'pm-battle-auto'
+const SPEED_KEY = 'pm-battle-speed'
+
+/** Velocidade da luta escolhida neste aparelho (1 ou 2). */
+export function loadBattleSpeed(): 1 | 2 {
+  try {
+    return localStorage.getItem(SPEED_KEY) === '2' ? 2 : 1
+  } catch {
+    return 1
+  }
+}
+
+export function saveBattleSpeed(speed: 1 | 2): void {
+  try {
+    localStorage.setItem(SPEED_KEY, String(speed))
+  } catch {
+    /* ignore */
+  }
+}
 
 export type SavedBattle = {
   startedAtWall: number

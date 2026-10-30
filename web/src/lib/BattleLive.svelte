@@ -11,7 +11,7 @@
     type PendingEncounter,
     type ProgressionRules,
   } from './api'
-  import { clearSavedBattle, saveBattleProgress } from './battlePersist'
+  import { clearSavedBattle, loadBattleSpeed, saveBattleProgress, saveBattleSpeed } from './battlePersist'
   import {
     FX_FLYING_RATE,
     FX_FRAME_SIZE,
@@ -248,7 +248,11 @@
   }))
   const reduced = prefersReducedMotion()
 
-  const t0 = performance.now() - untrack(() => resumeElapsedMs)
+  // Relógio da luta: tempo da simulação = base + tempo real desde a última
+  // troca de velocidade × velocidade (botão 2x; o servidor aceita até maxSpeed).
+  let speed = $state<1 | 2>(loadBattleSpeed())
+  let simBase = untrack(() => resumeElapsedMs)
+  let wallBase = performance.now()
   const startedWall = Date.now() - untrack(() => resumeElapsedMs)
   let inputs: BattleInput[] = untrack(() => [...initialInputs])
 
@@ -309,7 +313,7 @@
   }
 
   function elapsedAt(now: number): number {
-    return Math.min(timeLimit, Math.max(0, Math.floor(now - t0)))
+    return Math.min(timeLimit, Math.max(0, Math.floor(simBase + (now - wallBase) * speed)))
   }
 
   function simulate(untilMs: number): BattleResult {
@@ -614,6 +618,16 @@
         )
       }, SWITCH_OUT_MS),
     )
+  }
+
+  function toggleSpeed() {
+    if (status !== 'live' || fleeing) return
+    play('tap')
+    const now = performance.now()
+    simBase = elapsedAt(now)
+    wallBase = now
+    speed = speed === 2 ? 1 : 2
+    saveBattleSpeed(speed)
   }
 
   function toggleAuto() {
@@ -1508,6 +1522,17 @@
     <span class="timer" class:late={remaining < 10_000} aria-label="Tempo restante">{formatCountdown(remaining)}</span>
     <div class="top-actions">
       <button type="button" class="btn flee" disabled={status !== 'live' || fleeing} onclick={fleeFight}>Fugir</button>
+      <button
+        type="button"
+        class="btn speed"
+        class:on={speed === 2}
+        aria-pressed={speed === 2}
+        aria-label="Acelerar a luta"
+        disabled={status !== 'live' || fleeing}
+        onclick={toggleSpeed}
+      >
+        2x
+      </button>
       <button type="button" class="btn auto" class:on={battleAuto} aria-pressed={battleAuto} disabled={status !== 'live' || fleeing} onclick={toggleAuto}>
         Auto{battleAuto ? ': ligado' : ''}
       </button>
@@ -1892,11 +1917,13 @@
     padding: 0 0.6rem;
   }
 
-  .auto {
+  .auto,
+  .speed {
     min-height: 48px;
   }
 
-  .auto.on {
+  .auto.on,
+  .speed.on {
     background: var(--primary);
     color: #fff;
     text-shadow: 0 var(--px) 0 var(--primary-shade);

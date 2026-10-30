@@ -430,7 +430,8 @@
         { encounterId: found.id, seed: saved.seed, setup: saved.setup, timeLimitMs: limit },
         members,
         saved.inputs,
-        clock.now() - startedAt,
+        // Acelerada (2x), a luta pode ter andado mais que o relógio: retoma do último toque.
+        Math.max(clock.now() - startedAt, saved.inputs.at(-1)?.t ?? 0),
       )
     } catch {
       message = 'Sem conexão com o servidor.'

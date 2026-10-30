@@ -90,6 +90,12 @@ export const simConfig = {
    */
   finishEarlySlackMs: 400,
 
+  /**
+   * Aceleração máxima da luta no cliente (botão 2x): o relógio da simulação
+   * pode correr até isto vezes o tempo real, e o finish é conferido com ela.
+   */
+  maxSpeed: 2,
+
   /** Folga além do tempo limite para considerar a luta abandonada como derrota. */
   abandonSlackMs: 2000,
 
@@ -152,8 +158,9 @@ export function isFinishTooEarly(
   elapsedMs: number,
   durationMs: number,
   slackMs: number = simConfig.finishEarlySlackMs,
+  speed: number = simConfig.maxSpeed,
 ): boolean {
-  return elapsedMs + slackMs < durationMs
+  return elapsedMs * speed + slackMs < durationMs
 }
 
 export function bandValue(
