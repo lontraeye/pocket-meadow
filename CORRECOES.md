@@ -17,6 +17,10 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 
 - [x] **Caminhar até lugares distantes** — tocar num lugar longe mostra "Caminhar até X · N pontos" (menor caminho pelos caminhos abertos). O boneco anda sozinho, ponto a ponto (~0,9 s por ponto, com pulinho), e o mapa acompanha. Cada passo é um `travel` ao vizinho, então o servidor confere tudo. Dá para parar no meio. Toque duplo também caminha. Cidade com Voo continua com "Voar" (e "Caminhar" como alternativa).
 
+### Pokédex
+
+- [x] **Nome das bolas nas recompensas** — o resgate mostrava `ball:poke`, `ball:great`: o `rewardLine` não passava a lista de bolas para o `itemLabel`. Agora sai "Poké Ball ×5".
+
 ---
 
 ## `fix/correcoes-out-29` (out/2026)

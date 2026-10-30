@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { api, errorText, itemLabel, type ApiError, type BerryInfo, type GameState } from './api'
+  import { api, errorText, itemLabel, type ApiError, type BallInfo, type BerryInfo, type GameState } from './api'
   import { albumClaimCards, type HighlightCard } from './highlights'
   import Highlights from './Highlights.svelte'
   import PmdSprite from './PmdSprite.svelte'
@@ -221,9 +221,9 @@
     return `${groundAt(sheet, 0, 0).y * 2 + 4}px`
   }
 
-  function rewardLine(reward: AlbumBlock['reward'], berries: BerryInfo[]): string {
+  function rewardLine(reward: AlbumBlock['reward'], berries: BerryInfo[], balls: BallInfo[]): string {
     const parts: string[] = []
-    for (const item of reward.items) parts.push(`${itemLabel(item.itemKey, berries)} ×${item.quantity}`)
+    for (const item of reward.items) parts.push(`${itemLabel(item.itemKey, berries, balls)} ×${item.quantity}`)
     if (reward.genericCandies > 0) parts.push(`${reward.genericCandies} doces genéricos`)
     if (reward.energy > 0) parts.push(`${reward.energy} energia`)
     return parts.join(' · ')
@@ -507,7 +507,7 @@
                   <span class="bar" aria-hidden="true"
                     ><span style:transform="scaleX({block.total ? block.caught / block.total : 0})"></span></span
                   >
-                  <p class="reward">{rewardLine(block.reward, game.berries)}</p>
+                  <p class="reward">{rewardLine(block.reward, game.berries, game.balls.list)}</p>
                   {#if block.claimed}
                     <p class="hint claimed">Resgatado</p>
                   {:else if block.complete}
