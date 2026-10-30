@@ -10,6 +10,8 @@ import { hashToken } from '../auth/session.js'
 import { authConfig } from '../config/auth.js'
 import { battleConfig } from '../config/battle.js'
 import { regionBySlug } from '../config/regions.js'
+import { spotDropsConfig } from '../config/spotDrops.js'
+import { trainerConfig } from '../config/trainer.js'
 import { getDb, getSqlite, immediate } from '../db/client.js'
 import { migrateDatabase } from '../db/migrate.js'
 import { sessions } from '../db/schema.js'
@@ -183,7 +185,10 @@ test('manchas: árvore e água aparecem fechadas sem marco; com a ferramenta, so
   )
   assert.equal(await errorOf(await post('/field/use', cookie, { method: 'surf' })), 'spot_not_found')
 
+  // Sem item: a árvore sempre dá um Pokémon aqui.
+  spotDropsConfig.chance = 0
   const used = await post('/field/use', cookie, { method: 'headbutt' })
+  spotDropsConfig.chance = 0.3
   assert.equal(used.status, 201)
   const row = getSqlite()
     .prepare(`select species_id as speciesId, region_slug as regionSlug from encounters where user_id = ? and status = 'pending'`)
@@ -208,3 +213,45 @@ test('lugar só de água: sem ninguém no mato, só a mancha de água', async ()
   )
 })
 
+
+test('árvore e pedra podem soltar item: gasta a energia, credita e não abre encontro', async () => {
+  const { cookie, userId } = player('lumberjack')
+  const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
+  for (const key of ['violet', 'azalea']) grant.run(userId, key)
+  getSqlite().prepare(`update trainers set current_place = 'route-30' where user_id = ?`).run(userId)
+  const energyOf = () =>
+    (getSqlite().prepare(`select energy from trainers where user_id = ?`).get(userId) as { energy: number }).energy
+  const before = energyOf()
+
+  // A energia está desligada no jogo; ligada aqui para conferir o gasto.
+  const energy = trainerConfig as { energyEnabled: boolean }
+  const energyWas = energy.energyEnabled
+  energy.energyEnabled = true
+  spotDropsConfig.chance = 1
+  const response = await post('/field/use', cookie, { method: 'headbutt' })
+  spotDropsConfig.chance = 0.3
+  energy.energyEnabled = energyWas
+  assert.equal(response.status, 200)
+  const { drop } = (await response.json()) as { drop: { itemKey: string; quantity: number } }
+  assert.ok(drop.itemKey.startsWith('berry:'), drop.itemKey)
+  assert.equal(drop.quantity, 1)
+  assert.equal(energyOf(), before - 1)
+  const pending = getSqlite().prepare(`select count(*) as n from encounters where user_id = ? and status = 'pending'`).get(userId) as {
+    n: number
+  }
+  assert.equal(pending.n, 0)
+  const held = getSqlite()
+    .prepare(`select quantity from inventory where user_id = ? and item_key = ?`)
+    .get(userId, drop.itemKey) as { quantity: number } | undefined
+  assert.ok(held && held.quantity >= 1)
+})
+
+test('o lugar diz onde cada espécie aparece (mato, água, árvore)', async () => {
+  const { cookie, userId } = player('birdwatcher')
+  getSqlite().prepare(`update trainers set current_place = 'route-30' where user_id = ?`).run(userId)
+  const response = await app.request('/places', { headers: { cookie } }, env)
+  const { here } = (await response.json()) as { here: { species: { where: string[] }[] } }
+  const groups = new Set(here.species.flatMap((entry) => entry.where))
+  assert.ok(groups.has('walk') && groups.has('water') && groups.has('tree'), [...groups].join(','))
+  assert.ok(here.species.every((entry) => entry.where.length > 0))
+})

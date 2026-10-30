@@ -3,14 +3,17 @@ import { SqliteError } from 'better-sqlite3'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { battleConfig } from '../config/battle.js'
+import { dropsOf, spotDropsConfig } from '../config/spotDrops.js'
+import { trainerConfig } from '../config/trainer.js'
 import { bestRod, type Progress, RODS, toolBlock } from '../config/milestones.js'
 import { placeBySlug } from '../config/places.js'
 import { type FieldMethod, methodSlots, regionBySlug, regionOpen, type Region } from '../config/regions.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
-import { fieldSpawns, species } from '../db/schema.js'
-import { rollWild } from '../game/battle.js'
+import { creditItems } from '../db/inventory.js'
+import { encounters, fieldSpawns, species, trainers } from '../db/schema.js'
+import { rollWeighted, rollWild } from '../game/battle.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { createEncounter, markSeen, peekBonus } from './encounters.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
@@ -26,6 +29,7 @@ import { currentPlaceOf } from './places.js'
 // Manchas (JORNADA.md, seção 4): água, árvore e pedra, quando a área tem a
 // tabela do método. Usar a ferramenta sorteia na hora, da tabela dela, e já
 // começa o encontro (o Pokémon só se revela quando morde, cai ou sai da pedra).
+// Árvore e pedra às vezes soltam um item no lugar do Pokémon (spotDrops.ts).
 
 export const fieldRoutes = new Hono<AuthEnv>()
 
@@ -46,6 +50,7 @@ fieldRoutes.post('/use', requireUser, async (c) => {
   try {
     const result = immediate(() => useSpot(userId, method, now))
     if (!result.ok) return c.json({ error: result.error }, result.status)
+    if ('drop' in result) return c.json({ drop: result.drop })
     return c.json(result.encounter, 201)
   } catch (error) {
     if (error instanceof SqliteError && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -255,6 +260,14 @@ function useSpot(userId: number, method: FieldMethod, now: number) {
   if (!chosen) return fail('spot_not_found', 404)
   if (!chosen.open) return fail('tool_locked', 400)
 
+  if (dropsOf(method)) {
+    const rng = mulberry32(randomSeed())
+    if (rng() < spotDropsConfig.chance) {
+      const table = spotDropsConfig.tables[method].map((row, index) => ({ ...row, speciesId: index + 1 }))
+      return dropItem(userId, clock.energy, rollWeighted(table, rng).itemKey, now)
+    }
+  }
+
   const rngSeed = randomSeed()
   const wild = rollWild(mulberry32(rngSeed), {
     slots: methodSlots(area.region, method),
@@ -262,4 +275,24 @@ function useSpot(userId: number, method: FieldMethod, now: number) {
     rareMultiplier: peekBonus(userId, 'rare_boost'),
   })
   return createEncounter(userId, area.region, now, wild, { rngSeed })
+}
+
+/**
+ * Caiu um item em vez de um Pokémon: gasta a energia como um encontro (com as
+ * mesmas travas: sem encontro pendente, com energia) e credita o item.
+ */
+function dropItem(userId: number, energy: number, itemKey: string, now: number) {
+  const db = getDb()
+  const pending = db
+    .select({ id: encounters.id })
+    .from(encounters)
+    .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .get()
+  if (pending) return fail('encounter_pending', 409)
+  if (trainerConfig.energyEnabled && energy < 1) return fail('no_energy', 400)
+  if (trainerConfig.energyEnabled) {
+    db.update(trainers).set({ energy: energy - 1, updatedAt: now }).where(eq(trainers.userId, userId)).run()
+  }
+  creditItems(userId, [{ itemKey, quantity: 1 }])
+  return { ok: true as const, drop: { itemKey, quantity: 1 } }
 }

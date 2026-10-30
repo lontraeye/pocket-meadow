@@ -11,6 +11,7 @@
     berryIconSrc,
     effectLabel,
     errorText,
+    itemLabel,
     type ApiError,
     type BattleOutcome,
     type BattleStart,
@@ -19,6 +20,7 @@
     type OwnedPokemon,
     type PendingEncounter,
     type RegionInfo,
+    type SpotDrop,
     type ThrowOutcome,
     type ThrowQuality,
   } from './api'
@@ -572,7 +574,8 @@
     if (regionsFailed && !connection.offline) void loadRegions()
   })
 
-  async function search(slug: string, request = () => api('/api/encounters', { regionSlug: slug })) {
+  /** Começa o encontro. Árvore e pedra podem soltar um item no lugar: devolve o nome dele. */
+  async function search(slug: string, request = () => api('/api/encounters', { regionSlug: slug })): Promise<string | null> {
     play('tap')
     pending = true
     searching = slug
@@ -583,9 +586,14 @@
       if (!response.ok) {
         message = errorText(await readError(response))
         await onState()
-        return
+        return null
       }
-      const found = (await response.json()) as PendingEncounter
+      const payload = (await response.json()) as PendingEncounter | SpotDrop
+      if ('drop' in payload) {
+        void onState().catch(() => undefined)
+        return itemLabel(payload.drop.itemKey, game.berries, game.balls.list)
+      }
+      const found = payload
       // O grito baixa junto com o sprite, para tocar assim que ele aparecer.
       warmCries([found.speciesId])
       await spriteReady(found.speciesId, found.isShiny)
@@ -601,6 +609,7 @@
       pending = false
       searching = null
     }
+    return null
   }
 
   // Só em teste: encontro com espécie (nome ou nº) e nível escolhidos.
@@ -999,7 +1008,7 @@
       }}
       onUseSpot={(slug, method) => {
         fromField = true
-        search(slug, () => api('/api/field/use', { method }))
+        return search(slug, () => api('/api/field/use', { method }))
       }}
       onGarden={onClose}
       {onOpenPc}

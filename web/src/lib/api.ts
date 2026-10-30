@@ -100,6 +100,11 @@ export type FieldSpawn = {
   type2: string | null
 }
 
+export type SpeciesWhere = 'walk' | 'water' | 'tree' | 'rock'
+
+/** Árvore ou pedra que soltou um item em vez de um Pokémon (POST /field/use). */
+export type SpotDrop = { drop: { itemKey: string; quantity: number } }
+
 /** Mancha do campo (água, árvore, pedra) e o que dá para fazer nela. */
 export type FieldSpot = {
   kind: 'water' | 'tree' | 'rock'
@@ -141,7 +146,15 @@ export type PlacesResponse = {
   }
   places: PlaceView[]
   /** Espécies do lugar atual; as não vistas vêm sem id (o "?"). */
-  here: { species: { speciesId: number | null; displayName: string | null; status: 'caught' | 'seen' | 'unknown' }[] }
+  here: {
+    species: {
+      speciesId: number | null
+      displayName: string | null
+      status: 'caught' | 'seen' | 'unknown'
+      /** Onde aparece aqui, na ordem mato → água → árvore → pedra. */
+      where: SpeciesWhere[]
+    }[]
+  }
 }
 
 export type ItemCredit = { itemKey: string; quantity: number }

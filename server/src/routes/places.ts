@@ -12,7 +12,7 @@ import {
   toolOpen,
 } from '../config/milestones.js'
 import { CHAPTER_TITLES, linksOf, lockReason, placeBySlug, placeConfigs, START_PLACE } from '../config/places.js'
-import { regionBySlug, regionSpecies } from '../config/regions.js'
+import { regionBySlug, regionSpecies, regionSpeciesWhere, type SpeciesWhere } from '../config/regions.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
@@ -220,6 +220,8 @@ function placesView(userId: number, now: number) {
   })
 
   // Espécies do lugar atual: as não vistas vão sem id (o "?" da tela).
+  const hereRegion = regionBySlug(here)
+  const hereWhere = hereRegion ? regionSpeciesWhere(hereRegion) : new Map<number, SpeciesWhere[]>()
   const hereIds = speciesIn(here)
   const names = new Map(
     hereIds.length === 0
@@ -234,9 +236,11 @@ function placesView(userId: number, now: number) {
   const hereSpecies = hereIds
     .map((id) => {
       const status = statusOf(id)
+      // O lugar (mato, água…) vai até para os não vistos: diz onde procurar, não quem é.
+      const where = hereWhere.get(id) ?? []
       return status === 'unknown'
-        ? { speciesId: null, displayName: null, status }
-        : { speciesId: id, displayName: names.get(id) ?? null, status }
+        ? { speciesId: null, displayName: null, status, where }
+        : { speciesId: id, displayName: names.get(id) ?? null, status, where }
     })
     .sort((a, b) => order(a.status) - order(b.status) || (a.speciesId ?? 0) - (b.speciesId ?? 0))
 

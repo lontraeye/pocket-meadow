@@ -254,6 +254,34 @@ export function regionSpecies(region: Region): number[] {
   return [...ids]
 }
 
+/** Onde a espécie aparece na área: mato, água (varas e Surf), árvore ou pedra. */
+export type SpeciesWhere = 'walk' | 'water' | 'tree' | 'rock'
+
+const WHERE_OF: Record<FieldMethod, SpeciesWhere> = {
+  oldRod: 'water',
+  goodRod: 'water',
+  superRod: 'water',
+  surf: 'water',
+  headbutt: 'tree',
+  rockSmash: 'rock',
+}
+
+/** Cada espécie da área e os lugares dela, na ordem mato → água → árvore → pedra. */
+export function regionSpeciesWhere(region: Region): Map<number, SpeciesWhere[]> {
+  const order: SpeciesWhere[] = ['walk', 'water', 'tree', 'rock']
+  const found = new Map<number, Set<SpeciesWhere>>()
+  const add = (id: number, where: SpeciesWhere) => {
+    const set = found.get(id) ?? new Set<SpeciesWhere>()
+    set.add(where)
+    found.set(id, set)
+  }
+  for (const slot of region.slots) add(slot.speciesId, 'walk')
+  for (const [method, slots] of Object.entries(region.methods) as [FieldMethod, readonly RegionSlot[]][]) {
+    for (const slot of slots) add(slot.speciesId, WHERE_OF[method])
+  }
+  return new Map([...found].map(([id, set]) => [id, order.filter((where) => set.has(where))]))
+}
+
 /** Área com capítulo abre pelos marcos; sem capítulo (Kanto, por enquanto), pelo nível. */
 export function regionOpen(region: Region, progress: Progress): boolean {
   return region.chapter !== null ? chapterOpen(region.chapter, progress) : progress.level >= region.minTrainerLevel

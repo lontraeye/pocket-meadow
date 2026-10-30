@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, type Snippet, untrack } from 'svelte'
-  import { api, errorText, type ApiError, type FieldResponse, type FieldSpot, type PlaceTool, type PlacesResponse, type PlaceView } from './api'
+  import { api, errorText, type ApiError, type FieldResponse, type FieldSpot, type PlaceTool, type PlacesResponse, type PlaceView, type SpeciesWhere } from './api'
   import { connection } from './connection.svelte'
   import FieldView from './FieldView.svelte'
   import JourneyMap from './JourneyMap.svelte'
@@ -37,8 +37,11 @@
     hasEncounter: boolean
     /** Enfrenta o Pokémon da vaga do campo. */
     onEngage: (regionSlug: string, slot: number) => void
-    /** Usa a ferramenta numa mancha do campo (pescar, surfar, sacudir, quebrar). */
-    onUseSpot: (regionSlug: string, method: PlaceTool) => void
+    /**
+     * Usa a ferramenta numa mancha do campo (pescar, surfar, sacudir, quebrar).
+     * Se a árvore ou a pedra soltar um item no lugar do Pokémon, devolve o nome dele.
+     */
+    onUseSpot: (regionSlug: string, method: PlaceTool) => Promise<string | null>
     onGarden: () => void
     /** Abre o PC (nas cidades, como um Centro Pokémon). */
     onOpenPc: () => void
@@ -94,6 +97,18 @@
   const spawn = $derived(field?.spawns.find((entry) => entry.slot === spawnSlot) ?? null)
   const spot = $derived(field?.spots.find((entry) => entry.kind === spotKind) ?? null)
   const SPOT_TITLES: Record<FieldSpot['kind'], string> = { water: 'Água', tree: 'Árvore', rock: 'Pedra' }
+  /** O que a árvore ou a pedra acabou de soltar (fica no painel até tocar em outra coisa). */
+  let dropText = $state('')
+
+  const WHERE_ORDER: SpeciesWhere[] = ['walk', 'water', 'tree', 'rock']
+  /**
+   * Espécies daqui na ordem de onde aparecem (mato, água, árvore, pedra). Cada
+   * uma vale pelo primeiro lugar dela: quem sai no mato e na água fica no mato.
+   * Quem não sai no mato ganha a borda da cor do lugar.
+   */
+  const hereSpecies = $derived(
+    WHERE_ORDER.flatMap((where) => (data?.here.species ?? []).filter((entry) => (entry.where[0] ?? 'walk') === where)),
+  )
 
   $effect(() => {
     onMapView?.(data !== null)
@@ -172,17 +187,22 @@
   function pickSpawn(slot: number) {
     spawnSlot = slot
     spotKind = null
+    dropText = ''
   }
 
   function pickSpot(kind: FieldSpot['kind']) {
     play('tap')
     spotKind = kind
     spawnSlot = null
+    dropText = ''
   }
 
-  function useSpot(method: PlaceTool) {
-    if (!field || pending || hasEncounter) return
-    onUseSpot(field.regionSlug, method)
+  async function useSpot(method: PlaceTool) {
+    if (!field || !spot || pending || hasEncounter) return
+    const kind = spot.kind
+    dropText = ''
+    const found = await onUseSpot(field.regionSlug, method)
+    if (found) dropText = `${kind === 'rock' ? 'Saiu da pedra' : 'Caiu da árvore'}: ${found}!`
   }
 
   async function load() {
@@ -466,8 +486,8 @@
             <div class="species-row">
               <span class="count">{caughtHere}/{data.here.species.length}</span>
               <ul class="species" aria-label="Espécies daqui">
-                {#each data.here.species as entry, index (entry.speciesId ?? `unknown-${index}`)}
-                  <li class={entry.status} title={entry.displayName ?? 'Ainda não vista'}>
+                {#each hereSpecies as entry, index (entry.speciesId ?? `unknown-${index}`)}
+                  <li class="{entry.status} {entry.where[0] ?? 'walk'}" title={entry.displayName ?? 'Ainda não vista'}>
                     {#if entry.speciesId !== null}
                       <img src={showdownSrc(entry.speciesId, false)} alt={entry.displayName ?? ''} loading="lazy" />
                       {#if entry.status === 'caught'}<span class="tick" aria-label="capturada">✓</span>{/if}
@@ -561,6 +581,7 @@
                 <p class="hint locked">{entry.label}: {entry.reason}</p>
               {/if}
             {/each}
+            {#if dropText}<p class="drop" role="status">{dropText}</p>{/if}
           </div>
         {:else if spawn}
           <div class="place-head">
@@ -967,6 +988,19 @@
     image-rendering: pixelated;
   }
 
+  /* Quem não sai no mato: a borda diz onde procurar. */
+  .species li.water {
+    border-color: #3b82c4;
+  }
+
+  .species li.tree {
+    border-color: #3f8f3a;
+  }
+
+  .species li.rock {
+    border-color: #8a8a92;
+  }
+
   /* Vista mas não capturada: a forma aparece, apagada. */
   .species li.seen img {
     filter: grayscale(1) opacity(0.45);
@@ -1068,6 +1102,12 @@
 
   .spot-actions .hint {
     margin: 0;
+  }
+
+  .drop {
+    margin: 0;
+    font-weight: 700;
+    text-align: center;
   }
 
   .shiny {
