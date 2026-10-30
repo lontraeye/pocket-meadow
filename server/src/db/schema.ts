@@ -142,7 +142,7 @@ export const trainers = sqliteTable('trainers', {
 /**
  * Campo de encontro (PLANNING.md 5.14): os Pokémon andando no gramado de cada
  * área, por jogador. Sorteados e salvos antes de aparecer (sem rerolar); quem
- * é enfrentado sai e outro entra na vaga.
+ * é enfrentado sai e a vaga fica vazia até o campo ser explorado de novo.
  */
 export const fieldSpawns = sqliteTable(
   'field_spawns',

@@ -118,13 +118,23 @@ test('começa em New Bark; anda só para vizinhos abertos; avisa a primeira visi
 })
 
 test('encontro só onde está; não viaja com encontro pendente; espécies do lugar sem spoiler', async () => {
-  const { cookie } = player('kris')
+  const { cookie, userId } = player('kris')
   assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-29' })), 'not_here')
   await post('/places/travel', cookie, { to: 'route-29' })
 
+  // Chegar enche o campo: só quem está nele conta como visto; o resto fica oculto.
+  const inField = new Set(
+    (getSqlite().prepare(`select species_id from field_spawns where user_id = ?`).all(userId) as { species_id: number }[]).map(
+      (row) => row.species_id,
+    ),
+  )
   let places = await view(cookie)
   assert.ok(places.here.species.length > 0)
-  assert.ok(places.here.species.every((entry) => entry.status === 'unknown' && entry.speciesId === null))
+  assert.ok(
+    places.here.species.every((entry) =>
+      entry.status === 'unknown' ? entry.speciesId === null : entry.speciesId !== null && inField.has(entry.speciesId),
+    ),
+  )
 
   const created = await post('/encounters', cookie, { regionSlug: 'route-29' })
   assert.equal(created.status, 201)

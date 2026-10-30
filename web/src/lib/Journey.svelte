@@ -93,6 +93,31 @@
     }
   }
 
+  let exploring = $state(false)
+
+  /** Campo vazio: sorteia Pokémon novos para ele. */
+  async function exploreAgain() {
+    if (!field?.canExplore || pending || exploring) return
+    play('tap')
+    exploring = true
+    message = ''
+    try {
+      const response = await api('/api/field/explore', {})
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError | FieldResponse
+      if (!response.ok) {
+        message = errorText(payload as ApiError)
+        await loadField()
+        return
+      }
+      field = payload as FieldResponse
+      spawnSlot = null
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      exploring = false
+    }
+  }
+
   function engage() {
     if (!spawn || !field || pending || hasEncounter) return
     onEngage(field.regionSlug, spawn.slot)
@@ -295,8 +320,21 @@
         {:else}
           <div class="place-head ghost" aria-hidden="true"><h2>—</h2><small>Nv</small></div>
           <div class="types ghost" aria-hidden="true"><span class="type">—</span></div>
-          <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
-          <p class="hint pick-hint">Toque num Pokémon do campo para ver e batalhar.</p>
+          {#if field?.canExplore}
+            <p class="hint">O campo ficou vazio.</p>
+            <button
+              type="button"
+              class="btn btn-primary"
+              aria-busy={exploring}
+              disabled={pending || exploring || hasEncounter}
+              onclick={exploreAgain}
+            >
+              {exploring ? 'Procurando…' : 'Explorar de novo'}
+            </button>
+          {:else}
+            <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
+            <p class="hint pick-hint">Toque num Pokémon do campo para ver e batalhar.</p>
+          {/if}
         {/if}
         {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
         {#if message}<p class="alert" role="alert">{message}</p>{/if}

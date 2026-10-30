@@ -6,6 +6,15 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 
 ---
 
+## `fix/correcoes` (out/2026, lote 30/10)
+
+### Campo de encontro
+
+- [x] **Depois da luta, volta ao campo** — luta começada no campo termina com "Voltar ao campo" (e "Ir ao jardim" como link), em vez de mandar direto ao jardim.
+- [x] **Campo não se repõe sozinho** — quem foi enfrentado sai e a vaga fica vazia; os outros continuam. O campo só enche ao chegar na área (se estiver vazio) ou pelo **"Explorar de novo"** (`POST /field/explore`), que só aparece e só vale com o campo vazio (`field_not_empty` se não estiver).
+
+---
+
 ## `fix/correcoes-out-29` (out/2026)
 
 ### XP de batalha (estilo jogos)

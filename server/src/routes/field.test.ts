@@ -83,7 +83,7 @@ test('cidade não tem campo; na rota aparecem 4 da área, já vistos, e o campo 
   )
 })
 
-test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e repõe a vaga', async () => {
+test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e a vaga fica vazia', async () => {
   const { cookie } = player('kris')
   await post('/places/travel', cookie, { to: 'route-29' })
   const before = await spawnsOf(cookie)
@@ -95,11 +95,12 @@ test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e
   assert.equal(encounter.speciesId, target.speciesId)
   assert.equal(encounter.level, target.level)
 
+  // Quem foi enfrentado sai; os outros ficam como estavam.
   const after = await spawnsOf(cookie)
-  assert.equal(after.length, battleConfig.fieldSize)
-  assert.notEqual(after.find((spawn) => spawn.slot === 1)?.id, target.id)
+  assert.equal(after.length, battleConfig.fieldSize - 1)
+  assert.equal(after.find((spawn) => spawn.slot === 1), undefined)
   assert.deepEqual(
-    after.filter((spawn) => spawn.slot !== 1).map((spawn) => spawn.id),
+    after.map((spawn) => spawn.id),
     before.filter((spawn) => spawn.slot !== 1).map((spawn) => spawn.id),
   )
 
@@ -113,6 +114,36 @@ test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e
   const other = after.find((spawn) => spawn.slot === 2)!
   assert.equal(await errorOf(await post('/field/2/engage', cookie)), 'encounter_pending')
   assert.equal((await spawnsOf(cookie)).find((spawn) => spawn.slot === 2)?.id, other.id)
+})
+
+test('explorar de novo: só com o campo vazio; chegar na área enche o campo vazio', async () => {
+  const { cookie, userId } = player('lyra')
+  await post('/places/travel', cookie, { to: 'route-29' })
+  const response = (await (await field(cookie)).json()) as { spawns: Spawn[]; canExplore: boolean }
+  assert.equal(response.canExplore, false)
+  assert.equal(await errorOf(await post('/field/explore', cookie)), 'field_not_empty')
+
+  const clearEncounter = getSqlite().prepare(`delete from encounters where user_id = ?`)
+  for (const spawn of response.spawns) {
+    assert.equal((await post(`/field/${spawn.slot}/engage`, cookie)).status, 201)
+    clearEncounter.run(userId)
+  }
+  // Vazio: o GET não repõe ninguém, mas oferece explorar.
+  const empty = (await (await field(cookie)).json()) as { spawns: Spawn[]; canExplore: boolean }
+  assert.equal(empty.spawns.length, 0)
+  assert.equal(empty.canExplore, true)
+
+  const explored = await post('/field/explore', cookie)
+  assert.equal(explored.status, 200)
+  const filled = (await explored.json()) as { spawns: Spawn[]; canExplore: boolean }
+  assert.equal(filled.spawns.length, battleConfig.fieldSize)
+  assert.equal(filled.canExplore, false)
+
+  // Esvazia de novo, sai e volta: a chegada enche.
+  getSqlite().prepare(`delete from field_spawns where user_id = ?`).run(userId)
+  await post('/places/travel', cookie, { to: 'new-bark' })
+  await post('/places/travel', cookie, { to: 'route-29' })
+  assert.equal((await spawnsOf(cookie)).length, battleConfig.fieldSize)
 })
 
 test('vaga inexistente e área fechada são recusadas', async () => {

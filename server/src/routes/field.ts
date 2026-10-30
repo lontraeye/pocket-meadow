@@ -18,8 +18,10 @@ import { currentPlaceOf } from './places.js'
 
 // Campo de encontro (PLANNING.md 5.14, JORNADA.md seção 11): ao entrar numa
 // área, alguns Pokémon dela andam no gramado e o jogador escolhe quem
-// enfrentar. O campo é vivo: quem é enfrentado sai e outro entra na vaga. Cada
-// um é sorteado e salvo antes de aparecer (sem rerolar) e já conta como visto.
+// enfrentar. Quem é enfrentado sai do campo e a vaga fica vazia; os outros
+// ficam. O campo se enche ao chegar na área (se estiver vazio) ou pelo
+// "Explorar de novo", que só vale com o campo vazio. Cada um é sorteado e salvo
+// antes de aparecer (sem rerolar) e já conta como visto.
 //
 // Manchas (JORNADA.md, seção 4): água, árvore e pedra, quando a área tem a
 // tabela do método. Usar a ferramenta sorteia na hora, da tabela dela, e já
@@ -51,6 +53,14 @@ fieldRoutes.post('/use', requireUser, async (c) => {
     }
     throw error
   }
+})
+
+fieldRoutes.post('/explore', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => explore(userId, now))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json(result.field)
 })
 
 fieldRoutes.post('/:slot/engage', requireUser, (c) => {
@@ -139,28 +149,46 @@ function spawn(userId: number, region: Region, slot: number, now: number): void 
   markSeen(userId, wild.speciesId, now)
 }
 
-/** Completa as vagas que faltam (campo novo ou depois de um encontro). */
-function fill(userId: number, region: Region, now: number): void {
-  const taken = new Set(
-    getDb()
-      .select({ slot: fieldSpawns.slot })
-      .from(fieldSpawns)
-      .where(and(eq(fieldSpawns.userId, userId), eq(fieldSpawns.regionSlug, region.slug)))
-      .all()
-      .map((row) => row.slot),
-  )
-  // Lugar só de água: ninguém anda no mato.
-  if (region.slots.length === 0) return
-  for (let slot = 0; slot < battleConfig.fieldSize; slot += 1) {
-    if (!taken.has(slot)) spawn(userId, region, slot, now)
-  }
+function isEmpty(userId: number, region: Region): boolean {
+  const row = getDb()
+    .select({ id: fieldSpawns.id })
+    .from(fieldSpawns)
+    .where(and(eq(fieldSpawns.userId, userId), eq(fieldSpawns.regionSlug, region.slug)))
+    .get()
+  return row === undefined
+}
+
+/**
+ * Enche o campo, só se estiver vazio (os que já estão ficam até serem
+ * enfrentados). Lugar só de água: ninguém anda no mato. Devolve se encheu.
+ */
+function fillIfEmpty(userId: number, region: Region, now: number): boolean {
+  if (region.slots.length === 0 || !isEmpty(userId, region)) return false
+  for (let slot = 0; slot < battleConfig.fieldSize; slot += 1) spawn(userId, region, slot, now)
+  return true
+}
+
+/** Chegou numa área (viagem): o campo vazio se enche. Cidade ou área fechada: nada. */
+export function fillOnArrival(userId: number, slug: string, progress: Progress, now: number): void {
+  const place = placeBySlug(slug)
+  const region = regionBySlug(slug)
+  if (!place || place.kind === 'town' || !region || !regionOpen(region, progress)) return
+  fillIfEmpty(userId, region, now)
+}
+
+function explore(userId: number, now: number) {
+  const clock = persistCatchUp(userId, now)
+  const area = hereArea(userId, clock.level)
+  if (!area.ok) return area
+  if (area.region.slots.length === 0) return fail('no_field_here', 400)
+  if (!fillIfEmpty(userId, area.region, now)) return fail('field_not_empty', 409)
+  return fieldView(userId, now)
 }
 
 function fieldView(userId: number, now: number) {
   const clock = persistCatchUp(userId, now)
   const area = hereArea(userId, clock.level)
   if (!area.ok) return area
-  fill(userId, area.region, now)
   const spawns = getDb()
     .select({
       id: fieldSpawns.id,
@@ -179,7 +207,13 @@ function fieldView(userId: number, now: number) {
     .all()
   return {
     ok: true as const,
-    field: { regionSlug: area.region.slug, spawns, spots: spotsOf(area.region, area.progress) },
+    field: {
+      regionSlug: area.region.slug,
+      spawns,
+      spots: spotsOf(area.region, area.progress),
+      // Campo vazio numa área com mato: dá para explorar de novo.
+      canExplore: spawns.length === 0 && area.region.slots.length > 0,
+    },
   }
 }
 
@@ -205,9 +239,8 @@ function engage(userId: number, slot: number, now: number) {
     { rngSeed: chosen.rngSeed, countSeen: false },
   )
   if (!created.ok) return created
-  // Saiu do gramado para a luta; outro entra na vaga.
+  // Saiu do gramado para a luta; a vaga fica vazia (os outros continuam).
   db.delete(fieldSpawns).where(eq(fieldSpawns.id, chosen.id)).run()
-  spawn(userId, area.region, slot, now)
   return created
 }
 

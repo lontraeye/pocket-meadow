@@ -17,6 +17,7 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
 import { encounters, pokedexEntries, species, trainerMilestones, trainerPlaces, trainers } from '../db/schema.js'
+import { fillOnArrival } from './field.js'
 import { type Failure, fail, readObject } from './http.js'
 
 // Jornada: onde o treinador está, para onde pode ir, o que tem em cada lugar
@@ -120,6 +121,7 @@ function travel(
     .values({ userId, placeSlug: to, firstVisitAt: now })
     .onConflictDoNothing()
     .run()
+  fillOnArrival(userId, to, progress, now)
   return { ok: true, current: to, firstVisit: inserted.changes === 1, flew }
 }
 

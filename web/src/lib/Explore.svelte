@@ -691,6 +691,16 @@
     step = 'result'
   }
 
+  /** A luta saiu do campo: volta para ele (o enfrentado já saiu, os outros ficam). */
+  function backToField() {
+    play('tap')
+    encounter = null
+    result = null
+    notice = ''
+    message = ''
+    step = 'regions'
+  }
+
   async function throwBall(quality: ThrowQuality, curve: boolean) {
     if (!encounter || !activeBall) return
     pending = true
@@ -1388,7 +1398,12 @@
       </section>
     </div>
     <div class="dock">
-      <button type="button" class="btn btn-primary" onclick={onClose}>Ver no jardim</button>
+      {#if fromField}
+        <button type="button" class="btn btn-primary" onclick={backToField}>Voltar ao campo</button>
+        <button type="button" class="btn-link" onclick={onClose}>Ir ao jardim</button>
+      {:else}
+        <button type="button" class="btn btn-primary" onclick={onClose}>Ver no jardim</button>
+      {/if}
     </div>
   {/if}
 </div>

@@ -106,7 +106,13 @@ export type FieldSpot = {
   actions: { method: PlaceTool; label: string; open: boolean; reason: string | null }[]
 }
 
-export type FieldResponse = { regionSlug: string; spawns: FieldSpawn[]; spots: FieldSpot[] }
+export type FieldResponse = {
+  regionSlug: string
+  spawns: FieldSpawn[]
+  spots: FieldSpot[]
+  /** Campo vazio numa área com mato: dá para explorar de novo. */
+  canExplore: boolean
+}
 
 export type PlacesResponse = {
   current: string
@@ -470,6 +476,8 @@ export function errorText(error: ApiError): string {
       return 'Aqui não tem mato para procurar.'
     case 'spawn_not_found':
       return 'Esse Pokémon já saiu do campo.'
+    case 'field_not_empty':
+      return 'Ainda tem Pokémon no campo.'
     case 'milestone_not_here':
       return 'O marco é na cidade dele. Vá até lá.'
     case 'milestone_level':
