@@ -997,6 +997,10 @@
         fromField = true
         search(slug, () => api(`/api/field/${slot}/engage`, {}))
       }}
+      onUseSpot={(slug, method) => {
+        fromField = true
+        search(slug, () => api('/api/field/use', { method }))
+      }}
       onGarden={onClose}
       {onOpenPc}
       onMapView={onMapOpen}

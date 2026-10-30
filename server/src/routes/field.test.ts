@@ -176,8 +176,12 @@ test('manchas: árvore e água aparecem fechadas sem marco; com a ferramenta, so
   for (const key of ['violet', 'azalea']) grant.run(userId, key)
   spots = await spotsOf(cookie)
   assert.equal(spots[0]!.actions[0]!.open, true)
-  // Surf ainda fechado (marco de Ecruteak).
-  assert.equal(spots[0]!.actions.find((entry) => entry.method === 'surf')?.open, false)
+  // Poça do campo: só pesca, sem Surf (o Surf é dos lugares só de água).
+  assert.deepEqual(
+    spots[0]!.actions.map((entry) => entry.method),
+    ['oldRod'],
+  )
+  assert.equal(await errorOf(await post('/field/use', cookie, { method: 'surf' })), 'spot_not_found')
 
   const used = await post('/field/use', cookie, { method: 'headbutt' })
   assert.equal(used.status, 201)

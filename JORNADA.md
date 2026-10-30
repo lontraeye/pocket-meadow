@@ -168,6 +168,7 @@ Cada parte é testada antes da próxima, como nas fases do `PLANNING.md`.
 4. **Campo de encontro** (5.14), já pensando nas manchas de ferramenta.
    - **Feito em 2026-10-29:** rota abre no campo vivo (4 Pokémon, vaga reposta, salvo por área, visto ao aparecer); cidade fica no mapa. Ver PLANNING.md 5.14. As manchas de água, árvore e pedra entram com as ferramentas.
 5. **Ferramentas:** pontos de pesca, Surf, Headbutt e Rock Smash, com o snapshot por método.
+   - **Feito em 2026-10-30:** snapshot por método (pesca Velha/Boa/Super, Surf, Headbutt, Rock Smash), Rotas 40/41, Lake of Rage e Dragon's Den como lugares só de água, `GET /field` com as manchas e `POST /field/use`. Na tela, as manchas do campo (água, árvore, pedra) abrem um painel com a ação ("Pescar", "Surfar"…) ou o motivo de estar fechada; o lugar só de água abre o campo pelo mapa ("Ir para a água"). **Surf só nos lugares só de água:** a água do campo numa área com mato é uma poça, só para pescar; a tabela de Surf dessas áreas é descartada ao carregar (`landMethods` em `regions.ts`), e com ela some da Pokédex e da contagem do lugar. O Surf continua valendo como ferramenta de caminho (ligações com Surf no mapa).
 6. **Desafio do líder:** luta de treinador com time fixo, usando a simulação da Fase 8.
 7. **Presentes e eventos** da seção 7, e depois as missões (5.15).
 

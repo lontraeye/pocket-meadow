@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, type Snippet, untrack } from 'svelte'
-  import { api, errorText, type ApiError, type FieldResponse, type PlacesResponse, type PlaceView } from './api'
+  import { api, errorText, type ApiError, type FieldResponse, type FieldSpot, type PlaceTool, type PlacesResponse, type PlaceView } from './api'
   import { connection } from './connection.svelte'
   import FieldView from './FieldView.svelte'
   import JourneyMap from './JourneyMap.svelte'
@@ -14,14 +14,16 @@
    * Exploração como jornada (JORNADA.md, seção 11). Abre no mapa: tocar num
    * lugar mostra ele no painel de baixo, e num vizinho aberto dá para ir. Numa
    * rota, "Abrir o campo" mostra os Pokémon da área andando, e você escolhe
-   * quem enfrentar; depois da luta, volta para o campo. Volta sempre ao último
-   * lugar visitado.
+   * quem enfrentar; depois da luta, volta para o campo. As manchas do campo
+   * (água, árvore, pedra) usam a ferramenta e sorteiam na hora. Volta sempre
+   * ao último lugar visitado.
    */
   let {
     busy,
     searching,
     hasEncounter,
     onEngage,
+    onUseSpot,
     onGarden,
     onOpenPc,
     extras,
@@ -35,6 +37,8 @@
     hasEncounter: boolean
     /** Enfrenta o Pokémon da vaga do campo. */
     onEngage: (regionSlug: string, slot: number) => void
+    /** Usa a ferramenta numa mancha do campo (pescar, surfar, sacudir, quebrar). */
+    onUseSpot: (regionSlug: string, method: PlaceTool) => void
     onGarden: () => void
     /** Abre o PC (nas cidades, como um Centro Pokémon). */
     onOpenPc: () => void
@@ -64,6 +68,7 @@
   let view = $state<'field' | 'map'>(untrack(() => startOnField) ? 'field' : 'map')
   let field = $state<FieldResponse | null>(null)
   let spawnSlot = $state<number | null>(null)
+  let spotKind = $state<FieldSpot['kind'] | null>(null)
 
   const bySlug = $derived(new Map((data?.places ?? []).map((place) => [place.slug, place])))
   const here = $derived(data ? (bySlug.get(data.current) ?? null) : null)
@@ -84,9 +89,11 @@
   /** Altura do painel que flutua sobre o mapa (lida do próprio painel). */
   let sheetHeight = $state(0)
   const pending = $derived(busy || traveling)
-  const hasField = $derived(here !== null && here.kind === 'area' && here.open)
+  const hasField = $derived(here !== null && here.kind !== 'town' && here.open)
   const showField = $derived(hasField && view === 'field')
   const spawn = $derived(field?.spawns.find((entry) => entry.slot === spawnSlot) ?? null)
+  const spot = $derived(field?.spots.find((entry) => entry.kind === spotKind) ?? null)
+  const SPOT_TITLES: Record<FieldSpot['kind'], string> = { water: 'Água', tree: 'Árvore', rock: 'Pedra' }
 
   $effect(() => {
     onMapView?.(data !== null)
@@ -126,6 +133,7 @@
       }
       field = (await response.json()) as FieldResponse
       if (spawnSlot !== null && !field.spawns.some((entry) => entry.slot === spawnSlot)) spawnSlot = null
+      if (spotKind !== null && !field.spots.some((entry) => entry.kind === spotKind)) spotKind = null
     } catch {
       field = null
     }
@@ -159,6 +167,22 @@
   function engage() {
     if (!spawn || !field || pending || hasEncounter) return
     onEngage(field.regionSlug, spawn.slot)
+  }
+
+  function pickSpawn(slot: number) {
+    spawnSlot = slot
+    spotKind = null
+  }
+
+  function pickSpot(kind: FieldSpot['kind']) {
+    play('tap')
+    spotKind = kind
+    spawnSlot = null
+  }
+
+  function useSpot(method: PlaceTool) {
+    if (!field || pending || hasEncounter) return
+    onUseSpot(field.regionSlug, method)
   }
 
   async function load() {
@@ -226,6 +250,7 @@
     arrival = ''
     picked = slug
     spawnSlot = null
+    spotKind = null
     view = 'map'
     walk = { to: slug, done: 0, total: path.length }
     let firstVisit = false
@@ -332,6 +357,7 @@
       }
       picked = null
       spawnSlot = null
+      spotKind = null
       // Chegou: fica no mapa, olhando o lugar; o campo abre pelo botão.
       view = 'map'
       await load()
@@ -436,7 +462,7 @@
 
         {#if isHere}
           <p class="blurb">{selected.blurb}</p>
-          {#if selected.kind === 'area'}
+          {#if selected.kind !== 'town'}
             <div class="species-row">
               <span class="count">{caughtHere}/{data.here.species.length}</span>
               <ul class="species" aria-label="Espécies daqui">
@@ -452,9 +478,9 @@
                 {/each}
               </ul>
             </div>
-            <button type="button" class="btn btn-primary" onclick={() => (view = 'field')}>Abrir o campo</button>
-          {:else if selected.kind === 'water'}
-            <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
+            <button type="button" class="btn btn-primary" onclick={() => (view = 'field')}>
+              {selected.kind === 'water' ? 'Ir para a água' : 'Abrir o campo'}
+            </button>
           {:else}
             <button type="button" class="btn" onclick={onOpenPc}>Usar o PC</button>
           {/if}
@@ -499,7 +525,14 @@
       <div class="map-wrap">
         {@render goalChip()}
         {#if field}
-          <FieldView spawns={field.spawns} selected={spawnSlot} onSelect={(slot) => (spawnSlot = slot)} />
+          <FieldView
+            spawns={field.spawns}
+            selected={spawnSlot}
+            onSelect={pickSpawn}
+            spots={field.spots}
+            selectedSpot={spotKind}
+            onSelectSpot={pickSpot}
+          />
         {:else}
           <p class="hint field-wait">Olhando o mato…</p>
         {/if}
@@ -508,7 +541,28 @@
       <!-- Altura fixa: sem seleção, a mesma estrutura fica invisível por baixo
            da dica, para o campo não mudar de tamanho ao tocar num Pokémon. -->
       <section class="panel sheet place field-panel" aria-live="polite">
-        {#if spawn}
+        {#if spot}
+          <div class="place-head">
+            <h2>{SPOT_TITLES[spot.kind]}</h2>
+          </div>
+          <div class="spot-actions">
+            {#each spot.actions as entry (entry.method)}
+              {#if entry.open}
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  aria-busy={searching === field?.regionSlug}
+                  disabled={pending || hasEncounter}
+                  onclick={() => useSpot(entry.method)}
+                >
+                  {searching === field?.regionSlug ? 'Indo…' : entry.label}
+                </button>
+              {:else}
+                <p class="hint locked">{entry.label}: {entry.reason}</p>
+              {/if}
+            {/each}
+          </div>
+        {:else if spawn}
           <div class="place-head">
             <h2>
               {spawn.displayName}
@@ -546,7 +600,13 @@
             </button>
           {:else}
             <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
-            <p class="hint pick-hint">Toque num Pokémon do campo para ver e batalhar.</p>
+            <p class="hint pick-hint">
+              {field && field.spawns.length === 0 && field.spots.length > 0
+                ? 'Toque na água, na árvore ou na pedra para usar a ferramenta.'
+                : field && field.spots.length > 0
+                  ? 'Toque num Pokémon, ou numa mancha, para ver e batalhar.'
+                  : 'Toque num Pokémon do campo para ver e batalhar.'}
+            </p>
           {/if}
         {/if}
         {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
@@ -999,6 +1059,15 @@
 
   .field-wait {
     margin: auto;
+  }
+
+  .spot-actions {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .spot-actions .hint {
+    margin: 0;
   }
 
   .shiny {

@@ -478,6 +478,10 @@ export function errorText(error: ApiError): string {
       return 'Esse Pokémon já saiu do campo.'
     case 'field_not_empty':
       return 'Ainda tem Pokémon no campo.'
+    case 'spot_not_found':
+      return 'Não dá para fazer isso aqui.'
+    case 'tool_locked':
+      return 'Você ainda não tem a ferramenta para isso.'
     case 'milestone_not_here':
       return 'O marco é na cidade dele. Vá até lá.'
     case 'milestone_level':

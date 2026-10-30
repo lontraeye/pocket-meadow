@@ -165,6 +165,19 @@ function sourcesKey(sources: readonly RegionSource[]): string {
   return sources.map((source) => `${source.area}/${source.version}`).join(' + ')
 }
 
+/**
+ * Área com mato: a água do campo é só uma poça, então dá para pescar, mas não
+ * surfar. O Surf fica para os lugares só de água (rotas do mar, lagos).
+ */
+function landMethods(
+  slots: readonly RegionSlot[],
+  methods: Readonly<Partial<Record<FieldMethod, readonly RegionSlot[]>>>,
+): Readonly<Partial<Record<FieldMethod, readonly RegionSlot[]>>> {
+  if (slots.length === 0 || !methods.surf) return methods
+  const { surf: _surf, ...rest } = methods
+  return rest
+}
+
 function assembleRegions(): readonly Region[] {
   const snapshot = readRegionsSnapshot()
   const slugs = new Set<string>()
@@ -190,7 +203,7 @@ function assembleRegions(): readonly Region[] {
       minTrainerLevel: config.minTrainerLevel,
       sources: config.sources,
       slots: entry.slots,
-      methods,
+      methods: landMethods(entry.slots, methods),
       // Nível do mato; no lugar só de água, de tudo.
       wildLevelRange: wildLevelRange(entry.slots.length > 0 ? entry.slots : Object.values(methods).flat()),
     }
