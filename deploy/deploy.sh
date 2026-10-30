@@ -25,6 +25,9 @@ echo "== build"
 
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
+# mktemp cria a pasta com 700, e o tar como root na VM copiaria isso (e o dono
+# local) para a release: o ubuntu não entraria nela.
+chmod 755 "$stage"
 mkdir -p "$stage/server" "$stage/web"
 cp -rp server/dist server/drizzle server/snapshots server/package.json server/package-lock.json "$stage/server/"
 # -p preserva a data: o ETag do Caddy vem dela, e sprite igual não é baixado de novo.
@@ -38,7 +41,7 @@ if [[ "${1:-}" == "setup" ]]; then
 fi
 
 echo "== envio de $release"
-tar -C "$stage" -czf - . | ssh_vm "sudo mkdir -p /opt/pocket-meadow/releases/$release && sudo tar -C /opt/pocket-meadow/releases/$release -xzf -"
+tar -C "$stage" -czf - . | ssh_vm "sudo mkdir -p /opt/pocket-meadow/releases/$release && sudo tar --no-same-owner -C /opt/pocket-meadow/releases/$release -xzf -"
 
 echo "== instalação e troca"
 ssh_vm "bash -s" <<REMOTE
