@@ -22,6 +22,8 @@
   import { play } from './sound'
   import { showdownSrc } from './sprites'
   import StatTable from './StatTable.svelte'
+  import TypeIcon from './TypeIcon.svelte'
+  import { typeColor, typeInk } from './typeStyle'
   import { damageClassLabelPt, typeLabelPt } from './typesPt'
 
   let {
@@ -161,6 +163,7 @@
     loadRegions().catch(() => undefined)
   })
 
+  const monTypes = $derived([mon.type1, mon.type2].filter((type): type is string => Boolean(type)))
   const natureHint = $derived(formatNature(mon.nature))
   const ivStars = $derived('★'.repeat(mon.ivRating.stars) + '☆'.repeat(5 - mon.ivRating.stars))
   const caughtBall = $derived(game.balls.list.find((ball) => ball.key === mon.caughtBall) ?? null)
@@ -486,6 +489,28 @@
   }
 </script>
 
+{#snippet typeChip(type: string)}
+  <span class="type" style:--type={typeColor(type)} style:--type-ink={typeInk(type)}>
+    <TypeIcon {type} size={12} />{typeLabelPt(type)}
+  </span>
+{/snippet}
+
+{#snippet moveCard(slot: string, move: MoveView)}
+  <!-- Um cartão por golpe: faixa na cor do tipo, nome, tipo, poder e classe. -->
+  <section class="move-card" style:--type={typeColor(move.type)}>
+    <div class="move-head">
+      <p class="slot">{slot}</p>
+      {@render typeChip(move.type)}
+    </div>
+    <strong class="move-name">{move.displayName}</strong>
+    <div class="badges">
+      <span class="badge"><small>Poder</small> {move.power}</span>
+      <span class="badge">{damageClassLabelPt(move.damageClass)}</span>
+    </div>
+    {#if move.effectText}<p class="effect">{move.effectText}</p>{/if}
+  </section>
+{/snippet}
+
 <div class="overlay" role="presentation">
   <button type="button" class="backdrop" aria-label="Fechar" onclick={onClose}></button>
   <div class="panel sheet" role="dialog" aria-modal="true" aria-label="Detalhes">
@@ -570,7 +595,12 @@
           <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" />
         </div>
         <div class="meta">
-          <p class="lv">Nv {mon.level}</p>
+          <div class="lv-row">
+            <p class="lv">Nv {mon.level}</p>
+            <div class="types" aria-label="Tipos">
+              {#each monTypes as type (type)}{@render typeChip(type)}{/each}
+            </div>
+          </div>
           <div class="xp">
             {#if mon.xpToNext === null}
               <span>XP no máximo</span>
@@ -598,7 +628,7 @@
     {#if message}<p class="alert" role="alert">{message}</p>{/if}
 
     <!-- Abas: a ficha inteira não cabia numa rolagem só no celular. -->
-    <div class="tabs" role="tablist" aria-label="Seções da ficha">
+    <div class="tabs" role="tablist" aria-label="Seções da ficha" style:--tab-count={sheetTabs.length}>
       {#each sheetTabs as entry (entry.key)}
         <button
           type="button"
@@ -616,62 +646,54 @@
 
   <div class="scroll" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
     {#if tab === 'perfil'}
-    <div class="block traits">
+    <section class="block">
+      <h3>Captura</h3>
+      <dl class="facts">
+        <dt>Bola</dt>
+        <dd class="ball-fact">
+          {#if caughtBall}<img class="caught-ball" src={ballIconSrc(caughtBall.sprite)} alt="" width="20" height="20" />{/if}
+          {caughtBall?.displayName ?? 'Poké Ball'}
+        </dd>
+        {#if caughtRegionName}
+          <dt>Onde</dt>
+          <dd>{caughtRegionName}</dd>
+        {/if}
+      </dl>
+    </section>
+
+    <section class="block">
       <h3>Traços</h3>
-      <p class="hint caught-with">
-        {#if caughtBall}
-          <img class="caught-ball" src={ballIconSrc(caughtBall.sprite)} alt="" width="20" height="20" />
-          Capturado com {caughtBall.displayName}{#if caughtRegionName} · {caughtRegionName}{/if}
-        {:else}
-          Capturado com Poké Ball{#if caughtRegionName} · {caughtRegionName}{/if}
-        {/if}
-      </p>
-      <p class="hint">IVs {ivStars} · {mon.ivRating.percent}%</p>
-      <p class="hint">Natureza {mon.nature.displayName} ({natureHint})</p>
-      <p class="hint">
-        Habilidade {mon.ability.displayName}
-        {#if !mon.ability.combat}
-          <span class="muted"> · sem efeito em combate por enquanto</span>
-        {/if}
-      </p>
+      <dl class="facts">
+        <dt>IVs</dt>
+        <dd><span class="stars" aria-label="{mon.ivRating.stars} de 5">{ivStars}</span> {mon.ivRating.percent}%</dd>
+        <dt>Natureza</dt>
+        <dd>{mon.nature.displayName} <small>{natureHint}</small></dd>
+        <dt>Habilidade</dt>
+        <dd>
+          {mon.ability.displayName}
+          {#if !mon.ability.combat}<small class="note">sem efeito em combate por enquanto</small>{/if}
+        </dd>
+      </dl>
+    </section>
+
+    <section class="block">
+      <h3>Status</h3>
       <StatTable stats={mon.stats} />
-    </div>
+    </section>
 
     {:else if tab === 'golpes'}
-    <div class="block">
-      <h3>Golpes</h3>
-      <div class="move">
-        <div>
-          <p class="slot">Golpe rápido</p>
-          <strong>{mon.fastMove.displayName}</strong>
-          <p class="hint">
-            {typeLabelPt(mon.fastMove.type)} · {mon.fastMove.power} · {damageClassLabelPt(mon.fastMove.damageClass)}
-          </p>
-          {#if mon.fastMove.effectText}
-            <p class="hint effect">{mon.fastMove.effectText}</p>
-          {/if}
-        </div>
-      </div>
-      <div class="move">
-        <div>
-          <p class="slot">Golpe carregado</p>
-          {#if mon.chargedMove}
-            <strong>{mon.chargedMove.displayName}</strong>
-            <p class="hint">
-              {typeLabelPt(mon.chargedMove.type)} · {mon.chargedMove.power} · {damageClassLabelPt(mon.chargedMove.damageClass)}
-            </p>
-            {#if mon.chargedMove.effectText}
-              <p class="hint effect">{mon.chargedMove.effectText}</p>
-            {/if}
-          {:else}
-            <strong>Ainda não aprendeu um golpe carregado</strong>
-            {#if mon.nextChargedMove}
-              <p class="hint">Aprende {mon.nextChargedMove.displayName} no Nv {mon.nextChargedMove.level}</p>
-            {/if}
-          {/if}
-        </div>
-      </div>
-    </div>
+    {@render moveCard('Golpe rápido', mon.fastMove)}
+    {#if mon.chargedMove}
+      {@render moveCard('Golpe carregado', mon.chargedMove)}
+    {:else}
+      <section class="move-card empty">
+        <p class="slot">Golpe carregado</p>
+        <strong>Ainda não aprendeu</strong>
+        {#if mon.nextChargedMove}
+          <p class="note">Aprende {mon.nextChargedMove.displayName} no Nv {mon.nextChargedMove.level}</p>
+        {/if}
+      </section>
+    {/if}
 
     {:else if tab === 'debug' && game.devTools}
     <p class="hint">Só em teste (DEV_TOOLS). Nada disto existe em produção.</p>
@@ -968,7 +990,7 @@
 
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--tab-count, 3), minmax(0, 1fr));
     gap: 0.35rem;
     flex: none;
   }
@@ -1245,6 +1267,157 @@
     min-width: 0;
   }
 
+  /* Cada categoria num cartão: faixa de título e o conteúdo com margem. */
+  .block {
+    gap: 0.5rem;
+    padding-bottom: 0.6rem;
+    border: 2px solid var(--panel-edge);
+    background: color-mix(in srgb, var(--inlay-face) 35%, var(--paper));
+    box-shadow: 0 2px 0 #00000022;
+  }
+
+  .block > h3 {
+    padding: 0.25rem 0.6rem;
+    border-bottom: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .block > :not(h3) {
+    margin-inline: 0.6rem;
+  }
+
+  /* Rótulo à esquerda, valor à direita, em linhas iguais. */
+  .facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.35rem 0.75rem;
+    margin-block: 0;
+    align-items: center;
+  }
+
+  .facts dt {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .facts dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.2rem 0.4rem;
+    margin: 0;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .facts small {
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+  }
+
+  .facts .note {
+    flex-basis: 100%;
+  }
+
+  .stars {
+    color: #e0a800;
+    letter-spacing: 0.05em;
+  }
+
+  .lv-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.5rem;
+  }
+
+  .types {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 2px 6px;
+    background: var(--type);
+    color: var(--type-ink);
+    box-shadow: inset 0 -2px 0 #00000033;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .move-card {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.5rem 0.6rem 0.6rem 0.75rem;
+    border: 2px solid var(--panel-edge);
+    border-left: 8px solid var(--type);
+    background: color-mix(in srgb, var(--type) 14%, var(--paper));
+    box-shadow: 0 2px 0 #00000022;
+  }
+
+  .move-card.empty {
+    border-style: dashed;
+    border-left-width: 2px;
+    background: transparent;
+    box-shadow: none;
+    text-align: center;
+  }
+
+  .move-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .move-name {
+    font-size: 1.15rem;
+  }
+
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    padding: 2px 7px;
+    border: 2px solid var(--panel-edge);
+    background: var(--paper);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .badge small {
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+  }
+
+  .effect {
+    padding: 0.3rem 0.45rem;
+    border-top: 2px dashed #00000022;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .note {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
   .coins,
   .stepper {
     grid-template-columns: 1fr auto 1fr;
@@ -1258,8 +1431,8 @@
     font-weight: 700;
   }
 
-  .dock .btn,
-  .block .btn {
+  /* No cartão o botão estica pela grade (largura 100% somaria com a margem). */
+  .dock .btn {
     width: 100%;
   }
 
@@ -1284,37 +1457,9 @@
     font-weight: 700;
   }
 
-  .muted {
-    font-weight: 600;
-    opacity: 0.75;
-  }
-
-  .traits {
-    text-align: center;
-  }
-
-  .traits .hint {
-    justify-self: center;
-  }
-
-  .caught-with {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    flex-wrap: wrap;
-  }
-
   .caught-ball {
     flex: none;
     image-rendering: pixelated;
-  }
-
-  .move {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.4rem;
-    align-items: center;
   }
 
   .slot {

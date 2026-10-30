@@ -34,6 +34,13 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 - [x] **Sem seleção de texto** — toques rápidos no mapa não selecionam os nomes das placas.
 - [x] **Pixel art** — gramado em tiles, caminhos de terra em "L" (só horizontal/vertical), árvores no vazio (sempre nas mesmas casas), casinha nas cidades, mato alto nas rotas, caverna, torre, floresta, água, placas com o nome, cursor piscando na seleção, setinha nos vizinhos abertos e um treinador no lugar do marcador. Desenhos originais em `web/src/lib/mapSprites.ts` (sem asset de fora). Para não engasgar ao arrastar: gramado e árvores viram uma imagem só (canvas), cada desenho vira uma imagem pequena, lugares fechados usam uma versão já apagada (sem filtro CSS) e o mapa tem camada própria.
 
+### Ficha do Pokémon
+
+- [x] **Tipos no topo** — chips coloridos com ícone ao lado do nível.
+- [x] **Categorias em cartões** — cada seção (Captura, Traços, Status, Alimentar, Evoluir, Time e PC, Daycare e as de Debug) num cartão com faixa de título; os traços em linhas rótulo/valor alinhadas, em vez de frases soltas centralizadas.
+- [x] **Golpes em cartões** — borda e fundo na cor do tipo, chip do tipo, nome em destaque, selos de Poder e Físico/Especial e o efeito separado embaixo; golpe carregado ainda não aprendido aparece pontilhado com o nível em que vem.
+- [x] **Abas numa linha** — uma coluna por aba (com Debug eram 4 numa grade de 3).
+
 ### Tipos
 
 - [x] **Journey: `data` possivelmente nulo** no resgate do marco — o único erro do `svelte-check`.
