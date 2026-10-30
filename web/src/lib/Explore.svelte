@@ -48,7 +48,15 @@
     onClose,
     onState,
     onOpenPc,
-  }: { game: GameState; onClose: () => void; onState: () => Promise<void>; onOpenPc: () => void } = $props()
+    onMapOpen,
+  }: {
+    game: GameState
+    onClose: () => void
+    onState: () => Promise<void>
+    onOpenPc: () => void
+    /** A jornada (mapa ou campo) apareceu (true) ou saiu da tela (false). */
+    onMapOpen?: (open: boolean) => void
+  } = $props()
 
   type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result' | 'practice'
   type Result =
@@ -991,6 +999,7 @@
       }}
       onGarden={onClose}
       {onOpenPc}
+      onMapView={onMapOpen}
     >
       {#snippet extras()}
         <section class="panel sheet">

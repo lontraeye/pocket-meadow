@@ -25,6 +25,15 @@ Branches de ajustes soltos — bugs de UI, regras de XP, polimentos — **fora**
 
 - [x] **Botão 2x** — ao lado do Auto, acelera o relógio da luta (simulação, timer e recargas) para o dobro; fica lembrado no aparelho (`pm-battle-speed`). O servidor aceita até `simConfig.maxSpeed` (2): o `finish_too_early` passa a conferir `tempo real × 2`. Ao retomar uma luta acelerada, começa do último toque salvo. As animações seguem no ritmo normal.
 
+### Mapa (visual)
+
+- [x] **Jornada ganha a tela** — no mapa e no campo, a barra do topo (nível, energia, ícones) some; volta na luta e nas outras telas.
+- [x] **Marco por cima do mapa** — o painel do marco abre sobreposto ao mapa (não muda o tamanho dele) e tem ▴ para recolher; recolhido vira um botão "🚩 Marco de …" no canto (pisca com "!" quando dá para desafiar). Lembrado no aparelho (`pm-goal-open`). Título sozinho na linha e a ação ("Desafiar"/"Vá até") ao lado do nível, para caber em 320 px.
+- [x] **Painel do lugar flutua sobre o mapa** — o mapa ocupa a altura toda e nunca muda de tamanho; o painel (espécies, viagem) fica por cima, embaixo, do tamanho do conteúdo (sem espaço sobrando). O mapa sabe quanto está coberto (`bottomInset`): centraliza você no meio da parte visível, desliza se o painel cobrir o lugar escolhido e ganha espaço extra embaixo para rolar até o fim. No campo, o painel tem altura fixa.
+- [x] **Treinador segue o caminho** — ao viajar, o boneco passa pela quina do caminho em "L" (cada trecho com tempo proporcional ao comprimento), em vez de cortar na diagonal por cima das árvores.
+- [x] **Sem seleção de texto** — toques rápidos no mapa não selecionam os nomes das placas.
+- [x] **Pixel art** — gramado em tiles, caminhos de terra em "L" (só horizontal/vertical), árvores no vazio (sempre nas mesmas casas), casinha nas cidades, mato alto nas rotas, caverna, torre, floresta, água, placas com o nome, cursor piscando na seleção, setinha nos vizinhos abertos e um treinador no lugar do marcador. Desenhos originais em `web/src/lib/mapSprites.ts` (sem asset de fora). Para não engasgar ao arrastar: gramado e árvores viram uma imagem só (canvas), cada desenho vira uma imagem pequena, lugares fechados usam uma versão já apagada (sem filtro CSS) e o mapa tem camada própria.
+
 ### Tipos
 
 - [x] **Journey: `data` possivelmente nulo** no resgate do marco — o único erro do `svelte-check`.

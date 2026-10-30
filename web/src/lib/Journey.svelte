@@ -26,6 +26,7 @@
     onOpenPc,
     extras,
     startOnField = false,
+    onMapView,
   }: {
     /** Outra ação em andamento na exploração (procura, luta). */
     busy: boolean
@@ -41,6 +42,8 @@
     extras?: Snippet
     /** Voltando de uma luta do campo: abre no campo em vez do mapa. */
     startOnField?: boolean
+    /** A jornada (mapa ou campo) está na tela (true) ou não (carregando, luta, saiu). */
+    onMapView?: (shown: boolean) => void
   } = $props()
 
   let data = $state<PlacesResponse | null>(null)
@@ -78,10 +81,37 @@
   )
   let claiming = $state(false)
   let celebrate = $state('')
+  /** Altura do painel que flutua sobre o mapa (lida do próprio painel). */
+  let sheetHeight = $state(0)
   const pending = $derived(busy || traveling)
   const hasField = $derived(here !== null && here.kind === 'area' && here.open)
   const showField = $derived(hasField && view === 'field')
   const spawn = $derived(field?.spawns.find((entry) => entry.slot === spawnSlot) ?? null)
+
+  $effect(() => {
+    onMapView?.(data !== null)
+    return () => onMapView?.(false)
+  })
+
+  // Painel do marco: aberto ou recolhido num botão sobre o mapa (lembrado no aparelho).
+  const GOAL_KEY = 'pm-goal-open'
+  let goalOpen = $state(readGoalOpen())
+  function readGoalOpen(): boolean {
+    try {
+      return localStorage.getItem(GOAL_KEY) !== '0'
+    } catch {
+      return true
+    }
+  }
+  function setGoalOpen(open: boolean) {
+    play('tap')
+    goalOpen = open
+    try {
+      localStorage.setItem(GOAL_KEY, open ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function loadField() {
     if (!hasField) {
@@ -318,13 +348,19 @@
   }
 </script>
 
-<div class="journey">
-  {#if data && here && selected}
-    <!-- Objetivo do momento: o marco do capítulo (na cidade dele). -->
-    <div class="goal panel" class:ready={mark?.ready} aria-label="Objetivo">
+<!-- Objetivo do momento: o marco do capítulo (na cidade dele). Aberto, fica
+     por cima do mapa (não muda o tamanho dele); recolhido, vira um botão. -->
+{#snippet goalChip()}
+  {#if goalOpen && goal}
+    <div class="goal panel overlay" class:ready={mark?.ready} aria-label="Objetivo">
       {#if mark && goal}
+        <!-- Título sozinho na linha; a ação fica embaixo, ao lado do nível (cabe em tela estreita). -->
         <p class="goal-title">
           <span class="goal-name">{mark.name} · {mark.typeLabel}</span>
+        </p>
+        <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
+        <div class="goal-meta">
+          <span class="goal-level" class:done={mark.ready} title="Nível de treinador">Nível {Math.min(mark.level, mark.needLevel)}/{mark.needLevel}</span>
           {#if mark.ready && mark.here}
             <button type="button" class="btn btn-primary challenge" disabled={claiming || pending} onclick={() => void claim()}>
               {claiming ? '…' : 'Desafiar'}
@@ -332,11 +368,7 @@
           {:else if mark.ready}
             <button type="button" class="btn go" onclick={() => select(mark.town)}>Vá até {mark.townName}</button>
           {/if}
-        </p>
-        <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
-        <p class="goal-meta">
-          <span class:done={mark.ready}>Nível de treinador {Math.min(mark.level, mark.needLevel)}/{mark.needLevel}</span>
-        </p>
+        </div>
       {:else if goal}
         <p class="goal-title">
           <span class="goal-name">Cap. {goal.chapter} · {goal.title}</span>
@@ -344,7 +376,24 @@
         </p>
         <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
       {/if}
+      <button type="button" class="goal-close" aria-label="Recolher o marco" onclick={() => setGoalOpen(false)}>▴</button>
     </div>
+  {:else if goal}
+    <button type="button" class="goal-chip" class:ready={mark?.ready} aria-label="Abrir o marco" onclick={() => setGoalOpen(true)}>
+      <svg viewBox="0 0 8 8" width="16" height="16" aria-hidden="true" shape-rendering="crispEdges">
+        <rect x="1" y="0" width="1" height="8" fill="currentColor" />
+        <rect x="2" y="0" width="4" height="1" fill="var(--accent)" />
+        <rect x="2" y="1" width="5" height="2" fill="var(--accent)" />
+        <rect x="2" y="3" width="3" height="1" fill="var(--accent)" />
+      </svg>
+      <span>{mark ? mark.name : `Cap. ${goal.chapter}`}</span>
+      {#if mark?.ready}<strong aria-label="pronto">!</strong>{/if}
+    </button>
+  {/if}
+{/snippet}
+
+<div class="journey">
+  {#if data && here && selected}
 
     {#if showField}
       <div class="field-head">
@@ -354,6 +403,7 @@
       </div>
     {/if}
     <div class="map-wrap" class:hidden={showField}>
+      {@render goalChip()}
       <JourneyMap
         places={data.places}
         current={data.current}
@@ -363,6 +413,7 @@
         onActivate={activate}
         walking={walk !== null}
         visible={!showField}
+        bottomInset={sheetHeight + 12}
       />
       {#if arrival && !showField}<p class="arrival" role="status">{arrival}</p>{/if}
       {#if celebrate}
@@ -371,10 +422,82 @@
           <small>Toque para fechar</small>
         </button>
       {/if}
+      {#if !showField}
+      <!-- Flutua sobre o mapa, com a altura do conteúdo; o mapa sabe quanto está
+           coberto (bottomInset) para não esconder você nem o lugar escolhido. -->
+      <section class="panel sheet place floating" aria-live="polite" bind:clientHeight={sheetHeight}>
+        <div class="place-head">
+          <h2>
+            {selected.name}
+            {#if kindLabel(selected)}<small class="kind">{kindLabel(selected)}</small>{/if}
+          </h2>
+          {#if selected.wildLevelRange}<small>Nv {selected.wildLevelRange[0]}–{selected.wildLevelRange[1]}</small>{/if}
+        </div>
+
+        {#if isHere}
+          <p class="blurb">{selected.blurb}</p>
+          {#if selected.kind === 'area'}
+            <div class="species-row">
+              <span class="count">{caughtHere}/{data.here.species.length}</span>
+              <ul class="species" aria-label="Espécies daqui">
+                {#each data.here.species as entry, index (entry.speciesId ?? `unknown-${index}`)}
+                  <li class={entry.status} title={entry.displayName ?? 'Ainda não vista'}>
+                    {#if entry.speciesId !== null}
+                      <img src={showdownSrc(entry.speciesId, false)} alt={entry.displayName ?? ''} loading="lazy" />
+                      {#if entry.status === 'caught'}<span class="tick" aria-label="capturada">✓</span>{/if}
+                    {:else}
+                      <span class="unknown" aria-label="Ainda não vista">?</span>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            </div>
+            <button type="button" class="btn btn-primary" onclick={() => (view = 'field')}>Abrir o campo</button>
+          {:else if selected.kind === 'water'}
+            <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
+          {:else}
+            <button type="button" class="btn" onclick={onOpenPc}>Usar o PC</button>
+          {/if}
+        {:else}
+          <p class="blurb">{selected.blurb}</p>
+          {#if selected.speciesTotal > 0 && selected.visited}
+            <p class="hint">{selected.speciesCaught}/{selected.speciesTotal} espécies capturadas</p>
+          {/if}
+          {#if walk}
+            <p class="hint walking" role="status">Caminhando… {walk.done}/{walk.total}</p>
+            <button type="button" class="btn" onclick={() => (stopWalk = true)}>Parar</button>
+          {:else if link?.open || (route && !selected.flyable)}
+            <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
+              {link?.open ? `Ir para ${selected.name}` : `Caminhar até ${selected.name} · ${route?.length} pontos`}
+            </button>
+          {:else if link}
+            <p class="hint locked">{link.reason}</p>
+          {:else if selected.flyable}
+            <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
+              {traveling ? 'Voando…' : `Voar para ${selected.name}`}
+            </button>
+            {#if route}
+              <button type="button" class="btn" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
+                Caminhar · {route.length} pontos
+              </button>
+            {/if}
+          {:else if !selected.open}
+            <p class="hint locked">{selected.reason}</p>
+          {:else if data.flyReason && selected.kind === 'town' && selected.visited}
+            <p class="hint locked">{data.flyReason}</p>
+          {:else}
+            <p class="hint">Não há caminho aberto até aqui.</p>
+          {/if}
+        {/if}
+        {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
+        {#if message}<p class="alert" role="alert">{message}</p>{/if}
+      </section>
+      {/if}
     </div>
 
     {#if showField}
       <div class="map-wrap">
+        {@render goalChip()}
         {#if field}
           <FieldView spawns={field.spawns} selected={spawnSlot} onSelect={(slot) => (spawnSlot = slot)} />
         {:else}
@@ -429,74 +552,6 @@
         {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
         {#if message}<p class="alert" role="alert">{message}</p>{/if}
       </section>
-    {:else}
-    <section class="panel sheet place" aria-live="polite">
-      <div class="place-head">
-        <h2>
-          {selected.name}
-          {#if kindLabel(selected)}<small class="kind">{kindLabel(selected)}</small>{/if}
-        </h2>
-        {#if selected.wildLevelRange}<small>Nv {selected.wildLevelRange[0]}–{selected.wildLevelRange[1]}</small>{/if}
-      </div>
-
-      {#if isHere}
-        <p class="blurb">{selected.blurb}</p>
-        {#if selected.kind === 'area'}
-          <div class="species-row">
-            <span class="count">{caughtHere}/{data.here.species.length}</span>
-            <ul class="species" aria-label="Espécies daqui">
-              {#each data.here.species as entry, index (entry.speciesId ?? `unknown-${index}`)}
-                <li class={entry.status} title={entry.displayName ?? 'Ainda não vista'}>
-                  {#if entry.speciesId !== null}
-                    <img src={showdownSrc(entry.speciesId, false)} alt={entry.displayName ?? ''} loading="lazy" />
-                    {#if entry.status === 'caught'}<span class="tick" aria-label="capturada">✓</span>{/if}
-                  {:else}
-                    <span class="unknown" aria-label="Ainda não vista">?</span>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </div>
-          <button type="button" class="btn btn-primary" onclick={() => (view = 'field')}>Abrir o campo</button>
-        {:else if selected.kind === 'water'}
-          <p class="hint">Aqui só dá para pescar ou surfar. Em breve.</p>
-        {:else}
-          <button type="button" class="btn" onclick={onOpenPc}>Usar o PC</button>
-        {/if}
-      {:else}
-        <p class="blurb">{selected.blurb}</p>
-        {#if selected.speciesTotal > 0 && selected.visited}
-          <p class="hint">{selected.speciesCaught}/{selected.speciesTotal} espécies capturadas</p>
-        {/if}
-        {#if walk}
-          <p class="hint walking" role="status">Caminhando… {walk.done}/{walk.total}</p>
-          <button type="button" class="btn" onclick={() => (stopWalk = true)}>Parar</button>
-        {:else if link?.open || (route && !selected.flyable)}
-          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
-            {link?.open ? `Ir para ${selected.name}` : `Caminhar até ${selected.name} · ${route?.length} pontos`}
-          </button>
-        {:else if link}
-          <p class="hint locked">{link.reason}</p>
-        {:else if selected.flyable}
-          <button type="button" class="btn btn-primary" disabled={pending || hasEncounter} onclick={() => void travel(selected.slug)}>
-            {traveling ? 'Voando…' : `Voar para ${selected.name}`}
-          </button>
-          {#if route}
-            <button type="button" class="btn" disabled={pending || hasEncounter} onclick={() => void walkTo(selected.slug)}>
-              Caminhar · {route.length} pontos
-            </button>
-          {/if}
-        {:else if !selected.open}
-          <p class="hint locked">{selected.reason}</p>
-        {:else if data.flyReason && selected.kind === 'town' && selected.visited}
-          <p class="hint locked">{data.flyReason}</p>
-        {:else}
-          <p class="hint">Não há caminho aberto até aqui.</p>
-        {/if}
-      {/if}
-      {#if hasEncounter}<p class="hint">Você tem um encontro em andamento.</p>{/if}
-      {#if message}<p class="alert" role="alert">{message}</p>{/if}
-    </section>
     {/if}
   {:else}
     <section class="panel sheet">
@@ -537,10 +592,85 @@
   }
 
   .goal {
+    position: absolute;
+    z-index: 3;
+    top: 6px;
+    left: 6px;
+    right: 54px;
     display: grid;
     flex: none;
     gap: 0.2rem;
     padding: 0.35rem 0.55rem;
+  }
+
+  .goal-title {
+    padding-right: 40px;
+  }
+
+  .goal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .goal-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .goal-chip {
+    position: absolute;
+    z-index: 2;
+    top: 6px;
+    left: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: calc(100% - 64px);
+    min-height: 40px;
+    padding: 0 0.6rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--paper);
+    box-shadow: 0 2px 0 #00000033;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .goal-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .goal-chip strong {
+    display: grid;
+    place-items: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    background: var(--selected);
+    color: #fff;
+  }
+
+  .goal-chip.ready {
+    border-color: var(--selected);
+    animation: pulse 0.8s steps(2, jump-none) infinite alternate;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .goal-chip.ready {
+      animation: none;
+    }
   }
 
   .goal p {
@@ -556,17 +686,15 @@
     font-size: 0.95rem;
   }
 
+  .goal.overlay {
+    box-shadow: 0 3px 0 #00000044;
+  }
+
   .goal.ready {
     border-color: var(--selected);
     box-shadow: inset 0 0 0 2px var(--selected-ring);
   }
 
-  .goal-title .btn {
-    flex: none;
-    min-height: 36px;
-    padding: 0 0.7rem;
-    font-size: 0.9rem;
-  }
 
   .challenge {
     animation: pulse 0.8s steps(2, jump-none) infinite alternate;
@@ -585,8 +713,31 @@
   }
 
   .goal-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
     font-size: 0.78rem;
     color: var(--ink-soft);
+  }
+
+  .goal-level {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .goal-meta .btn {
+    flex: none;
+    max-width: 60%;
+    min-height: 34px;
+    padding: 0 0.6rem;
+    overflow: hidden;
+    font-size: 0.85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .goal-meta .done {
@@ -658,10 +809,30 @@
     pointer-events: none;
   }
 
+  /* O painel nunca muda o tamanho do mapa: no campo tem altura fixa; no mapa
+     flutua por cima. O que passar rola dentro dele. */
   .place {
     display: grid;
     flex: none;
+    align-content: start;
     gap: 0.35rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .field-panel {
+    height: 12.5rem;
+  }
+
+  /* No mapa, o painel flutua por cima, na parte de baixo, do tamanho do conteúdo. */
+  .place.floating {
+    position: absolute;
+    z-index: 2;
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    max-height: 62%;
+    box-shadow: 0 3px 0 #00000044;
   }
 
   .place-head {

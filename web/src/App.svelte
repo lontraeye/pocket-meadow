@@ -38,6 +38,8 @@
   // Abertura: sprites, molduras e fontes antes da primeira tela (lib/preload.ts).
   let progress = $state({ done: 0, total: 0 })
   let offline = $state(false)
+  /** A jornada (mapa ou campo) está na tela: a barra do topo some. */
+  let mapOpen = $state(false)
   let screen = $state<'meadow' | 'explore' | 'daycare' | 'bag' | 'pc'>('meadow')
   /** De onde o PC foi aberto (Voltar volta para lá). */
   let pcReturn = $state<'meadow' | 'explore'>('meadow')
@@ -394,6 +396,8 @@
     {#if connection.offline}
       <p class="offline-banner" role="status">Sem conexão · tentando de novo</p>
     {/if}
+    <!-- Na jornada (mapa ou campo), a barra some e a tela fica para eles. -->
+    {#if !(screen === 'explore' && mapOpen)}
     <header class="panel hud">
       <div class="hud-trainer">
         <div class="level-wrap" aria-label="Nível de treinador {game.trainer.level}">
@@ -490,6 +494,7 @@
         </button>
       </div>
     </header>
+    {/if}
     {#if screen === 'meadow' && showReadyBanner && ready?.summary}
       <div class="ready-banner panel" role="status">
         <button type="button" class="ready-go" onclick={onReadyBanner}>{ready.summary}</button>
@@ -501,7 +506,13 @@
     {#if screen !== 'meadow'}
       <div class="world">
         {#if screen === 'explore'}
-          <Explore {game} onClose={() => (screen = 'meadow')} onState={loadState} onOpenPc={() => openPc('explore')} />
+          <Explore
+            {game}
+            onClose={() => (screen = 'meadow')}
+            onState={loadState}
+            onOpenPc={() => openPc('explore')}
+            onMapOpen={(open) => (mapOpen = open)}
+          />
         {:else if screen === 'pc'}
           <PcBox {game} onClose={() => (screen = pcReturn)} onState={loadState} />
         {:else if screen === 'daycare'}
