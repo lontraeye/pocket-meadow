@@ -17,6 +17,7 @@ import {
   berryPlots,
   daycareSlots,
   encounters,
+  pokemon,
   species,
   trainerMilestones,
   trainerPlaces,
@@ -172,6 +173,32 @@ devRoutes.post('/daycare/advance', requireUser, async (c) => {
 
 // Adianta um canteiro: recua planted_at e ready_at. `ready: true` termina o
 // crescimento agora; senão, `minutes` (1 a 1440).
+// Adianta o relógio do jardim (5.21): fome, carinho, felicidade, XP e presentes
+// passam como se tivessem passado `hours` horas.
+devRoutes.post('/garden/advance', requireUser, async (c) => {
+  const body = (await readObject(c)) ?? {}
+  const hours = body.hours
+  if (typeof hours !== 'number' || !Number.isInteger(hours) || hours < 1 || hours > 72) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const userId = c.get('userId')
+  const shift = hours * 60 * 60 * 1000
+  immediate(() => {
+    persistCatchUp(userId, Date.now())
+    getDb()
+      .update(pokemon)
+      .set({
+        petAt: sql`${pokemon.petAt} - ${shift}`,
+        lastPetAt: sql`${pokemon.lastPetAt} - ${shift}`,
+        lastGiftAt: sql`${pokemon.lastGiftAt} - ${shift}`,
+      })
+      .where(eq(pokemon.userId, userId))
+      .run()
+    persistCatchUp(userId, Date.now())
+  })
+  return c.json({ hours })
+})
+
 devRoutes.post('/plots/advance', requireUser, async (c) => {
   const body = (await readObject(c)) ?? {}
   const plotIndex = body.plotIndex

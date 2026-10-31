@@ -4,7 +4,18 @@
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
   import { untrack } from 'svelte'
-  import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type PlotState } from './api'
+  import {
+    api,
+    berryIconSrc,
+    errorText,
+    giftIconSrc,
+    giftLabel,
+    itemLabel,
+    type ApiError,
+    type GameState,
+    type GardenGift,
+    type PlotState,
+  } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import PokemonSheet from './PokemonSheet.svelte'
   import WeatherIcon from './WeatherIcon.svelte'
@@ -312,6 +323,49 @@
   )
 
   const selected = $derived(game.pokemon.find((mon) => mon.id === selectedId) ?? null)
+
+  // Balão sobre quem está com fome ou pedindo carinho (5.21); a fome vem antes.
+  const needById = $derived(
+    new Map(
+      game.pokemon.map((mon) => [
+        mon.id,
+        mon.pet.hunger < game.garden.needThreshold
+          ? ('hunger' as const)
+          : mon.pet.affection < game.garden.needThreshold
+            ? ('affection' as const)
+            : null,
+      ]),
+    ),
+  )
+
+  // Presentes no chão: cada um numa casa fixa (pelo id), fora dos canteiros.
+  const giftSpots = $derived.by(() => {
+    void game.plotSlotsUnlocked
+    const spots = walkableSpots()
+    return game.garden.gifts.map((gift) => ({
+      gift,
+      spot: spots[(gift.id * 7919) % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 },
+    }))
+  })
+  let giftToast = $state('')
+  let giftToastTimer: ReturnType<typeof setTimeout> | null = null
+
+  async function collectGift(gift: GardenGift) {
+    const response = await api(`/api/garden/gifts/${gift.id}/collect`, {})
+    if (response.ok) {
+      showGiftToast(`Ganhou ${giftLabel(gift.itemKey, gift.quantity, game.berries, game.balls.list)}!`)
+      play('harvest')
+    } else {
+      showGiftToast(errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError))
+    }
+    await onState()
+  }
+
+  function showGiftToast(text: string) {
+    giftToast = text
+    if (giftToastTimer) clearTimeout(giftToastTimer)
+    giftToastTimer = setTimeout(() => (giftToast = ''), 2200)
+  }
   const selectedAsleep = $derived(walkers.find((walker) => walker.id === selectedId)?.anim === 'Sleep')
 
   // Quanto os sprites passam do ponto do chão, em px na escala 1. Depende só de
@@ -1089,8 +1143,24 @@
           ></div>
         {/if}
       {/each}
+      {#each giftSpots as { gift, spot: cell } (gift.id)}
+        {@const spot = place(cell.col, cell.row)}
+        <button
+          type="button"
+          class="gift"
+          style:left="{snapToDevice(spot.x)}px"
+          style:top="{snapToDevice(spot.y + halfH)}px"
+          style:--size="{Math.round(24 * scale)}px"
+          style:z-index={cell.col + cell.row + depthSpan}
+          aria-label={`Presente: ${giftLabel(gift.itemKey, gift.quantity, game.berries, game.balls.list)}`}
+          onclick={() => void collectGift(gift)}
+        >
+          <img src={giftIconSrc(gift.itemKey)} alt="" />
+        </button>
+      {/each}
       {#each walkers as walker (walker.id)}
         {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
+        {@const need = needById.get(walker.id) ?? null}
         {@const spot = place(walker.col, walker.row)}
         <!-- O botão é o ponto do chão (centro do bloco); o sprite cresce a partir dele. -->
         <button
@@ -1107,6 +1177,16 @@
           {#if showLabels}
             <span class="mon-tag" style:top="{tagAnchorY(walker, look)}px" aria-hidden="true">
               {walker.displayName} Lv {walker.level}
+            </span>
+          {/if}
+          {#if need && walker.anim !== 'Sleep'}
+            <span
+              class="need"
+              class:hungry={need === 'hunger'}
+              style:top="{tagAnchorY(walker, look) - (showLabels ? 18 : 0)}px"
+              aria-hidden="true"
+            >
+              {#if need === 'hunger'}<img src={berryIconSrc('oran')} alt="" />{:else}<span class="heart"></span>{/if}
             </span>
           {/if}
           {#if look.kind === 'pmd'}
@@ -1147,6 +1227,10 @@
         </button>
       {/each}
     </div>
+
+    {#if giftToast}
+      <div class="gift-toast" role="status">{giftToast}</div>
+    {/if}
 
     <!-- Clima do dia sobre o jardim (véu de cor + chuva/vento/nuvens); não pega toque. -->
     <WeatherLayer weather={game.weather.key} />
@@ -1592,6 +1676,84 @@
 
   /* Zzz de quem dorme: três letras que nascem no alto da cabeça (zzzSpot),
      sobem em diagonal para o lado dela crescendo e somem, uma atrás da outra. */
+  /* Presente no chão (5.21): o ponto do botão é o centro do bloco. */
+  .gift {
+    position: absolute;
+    width: var(--size);
+    height: var(--size);
+    margin: calc(var(--size) * -0.85) 0 0 calc(var(--size) * -0.5);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    animation: gift-bob 1.6s ease-in-out infinite;
+  }
+
+  .gift img {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.35));
+  }
+
+  @keyframes gift-bob {
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  /* Balão de necessidade: base no topo do sprite. */
+  .need {
+    position: absolute;
+    left: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 20px;
+    transform: translate(-50%, -100%);
+    background: #fff;
+    border: 2px solid #2b2b2b;
+    border-radius: 6px;
+    pointer-events: none;
+    animation: gift-bob 1.4s ease-in-out infinite;
+  }
+
+  .need img {
+    width: 16px;
+    height: 16px;
+    image-rendering: pixelated;
+  }
+
+  .heart {
+    width: 10px;
+    height: 9px;
+    background: #e05a7a;
+    clip-path: polygon(50% 100%, 0 40%, 0 15%, 20% 0, 50% 18%, 80% 0, 100% 15%, 100% 40%);
+  }
+
+  .gift-toast {
+    position: absolute;
+    left: 50%;
+    top: 0.75rem;
+    z-index: 30;
+    transform: translateX(-50%);
+    padding: 0.4rem 0.75rem;
+    background: rgb(20 24 20 / 0.85);
+    color: #fff;
+    font-weight: 700;
+    border-radius: 8px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gift,
+    .need {
+      animation: none;
+    }
+  }
+
   .zzz {
     position: absolute;
     width: 0;

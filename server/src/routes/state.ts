@@ -10,6 +10,7 @@ import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
 import { trainerConfig, trainerXpToNext } from '../config/trainer.js'
 import { weatherConfig } from '../config/weather.js'
+import { petConfig } from '../config/pets.js'
 import { loadWeather } from '../db/weather.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -21,6 +22,7 @@ import {
   daycareSlots,
   encounters,
   evolutions,
+  gardenGifts,
   inventory,
   pokemon,
   species,
@@ -33,6 +35,7 @@ import type { AbilitySlot } from '../game/traits.js'
 import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 import { currentPlaceOf } from './places.js'
+import { view as petView } from './garden.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -92,6 +95,10 @@ function readState(userId: number, now: number) {
       fastMove: pokemon.fastMove,
       chargedMove: pokemon.chargedMove,
       moveOffer: pokemon.moveOffer,
+      hunger: pokemon.hunger,
+      affection: pokemon.affection,
+      happiness: pokemon.happiness,
+      lastPetAt: pokemon.lastPetAt,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -313,9 +320,25 @@ function readState(userId: number, now: number) {
         rerollOptions: view.rerollOptions,
         learnset: view.learnset,
         availableMoves: available,
+        pet: petView(mon, now),
       }
     }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
+    garden: {
+      gifts: db
+        .select({
+          id: gardenGifts.id,
+          pokemonId: gardenGifts.pokemonId,
+          itemKey: gardenGifts.itemKey,
+          quantity: gardenGifts.quantity,
+          createdAt: gardenGifts.createdAt,
+        })
+        .from(gardenGifts)
+        .where(eq(gardenGifts.userId, userId))
+        .all(),
+      needThreshold: petConfig.needThreshold,
+      fullAt: petConfig.fullAt,
+    },
     daycare,
     plots: db
       .select({

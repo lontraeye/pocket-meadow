@@ -14,6 +14,7 @@ import { plotRoutes } from './routes/plots.js'
 import { pokedexRoutes } from './routes/pokedex.js'
 import { pokemonRoutes } from './routes/pokemon.js'
 import { fieldRoutes } from './routes/field.js'
+import { gardenRoutes } from './routes/garden.js'
 import { pcRoutes } from './routes/pc.js'
 import { placeRoutes } from './routes/places.js'
 import { regionRoutes } from './routes/regions.js'
@@ -76,6 +77,7 @@ app.route('/leaders', leaderRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/pokedex', pokedexRoutes)
 app.route('/daycare', daycareRoutes)
+app.route('/garden', gardenRoutes)
 app.route('/plots', plotRoutes)
 app.route('/items', itemRoutes)
 if (devToolsEnabled()) {

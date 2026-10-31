@@ -1266,6 +1266,9 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 - `pokemon`: `happiness`, `happiness_at`, `last_fed_at`, `last_pet_at`. Tabela `garden_gifts` (`id`, `user_id`, `pokemon_id`, `item_key`, `qty`, `created_at`). Migração.
 - `POST /pokemon/:id/feed-pet` (`{ itemKey }`), `POST /pokemon/:id/pet`, `POST /garden/gifts/:id/collect`. O XP do jardim e os presentes são calculados quando chega qualquer pedido (`GET /state`), como o catch-up.
 
+**Parte 1, feita em 2026-10-31** (`feat/pets`): fome, carinho e felicidade por timestamp (`server/src/config/pets.ts`, `game/pets.ts`), liquidados no catch-up para quem está no jardim (`db/pets.ts`: PC e daycare congelam, `pet_at` null); XP do jardim (1 × nível × felicidade por hora); presentes no chão (felicidade 60+, um a cada 4 h por Pokémon, até 5 no chão; sementes, doce genérico, Poké e Great Ball). Rotas `POST /garden/pets/:id/pet`, `POST /garden/pets/:id/snack` (`{ berryKey }`) e `POST /garden/gifts/:id/collect`; `GET /state` traz `pet` em cada Pokémon e `garden.gifts`. Migração `0023_pets`. Na tela: seção "Cuidado" no Perfil da ficha (barras, "Fazer carinho", "Dar berry"), balão de fome ou carinho sobre o sprite e presentes no chão que se pegam com um toque. Debug: "+1 h / +6 h / +24 h" do jardim na aba Debug da ficha (`POST /dev/garden/advance`).
+**Falta:** capacidade do jardim; evolução por felicidade (seed); a taxa nova do daycare (alcance e piso); a felicidade e as necessidades na Coleção.
+
 **Pontos a decidir:** as taxas (quantas horas a fome leva para zerar, quanto a felicidade sobe por dia); se cada espécie prefere uma berry (sabor, como nos jogos); e se felicidade alta dá algum bônus pequeno na luta (sugestão: não, para o combate continuar igual).
 
 ---

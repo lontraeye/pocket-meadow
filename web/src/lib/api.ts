@@ -293,6 +293,25 @@ export type OwnedPokemon = {
   rerollOptions: { fast: number; charged: number }
   learnset: LearnEntryView[]
   availableMoves: { fast: MoveView[]; charged: MoveView[] }
+  /** Cuidado como pet (5.21): de 0 a 100; `petReadyAt` = quando o carinho volta (null = já). */
+  pet: PetView
+}
+
+export type PetView = {
+  pokemonId: number
+  hunger: number
+  affection: number
+  happiness: number
+  petReadyAt: number | null
+}
+
+/** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
+export type GardenGift = {
+  id: number
+  pokemonId: number | null
+  itemKey: string
+  quantity: number
+  createdAt: number
 }
 
 export type ProgressionRules = {
@@ -400,6 +419,7 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
+  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number }
   daycare: DaycareState
   plots: PlotState[]
   inventory: InventoryRow[]
@@ -456,6 +476,20 @@ export function berryIconSrc(berryKey: string): string {
 
 export function ballIconSrc(spriteOrKey: string): string {
   return `/sprites/items/${spriteOrKey}-ball.png`
+}
+
+/** Ícone de um presente do jardim (5.21). */
+export function giftIconSrc(itemKey: string): string {
+  if (itemKey === 'generic_candy') return '/sprites/items/rare-candy.png'
+  if (itemKey.startsWith('seed:')) return berryIconSrc(itemKey.slice(5))
+  if (itemKey.startsWith('ball:')) return ballIconSrc(itemKey.slice(5))
+  if (itemKey.startsWith('berry:')) return berryIconSrc(itemKey.slice(6))
+  return '/sprites/items/poke-ball.png'
+}
+
+export function giftLabel(itemKey: string, quantity: number, berries: BerryInfo[], balls?: BallInfo[]): string {
+  const name = itemKey === 'generic_candy' ? (quantity > 1 ? 'doces genéricos' : 'doce genérico') : itemLabel(itemKey, berries, balls)
+  return `${quantity} ${name}`
 }
 
 export function itemLabel(itemKey: string, berries: BerryInfo[], balls?: BallInfo[]): string {
@@ -570,6 +604,14 @@ export function errorText(error: ApiError): string {
       return 'O time precisa de pelo menos um Pokémon.'
     case 'in_pc':
       return 'Ele está no PC. Traga para o jardim antes.'
+    case 'pet_cooldown':
+      return 'Ele acabou de ganhar carinho. Volte daqui a pouco.'
+    case 'not_hungry':
+      return 'Ele está de barriga cheia.'
+    case 'no_berry':
+      return 'Você não tem essa berry.'
+    case 'gift_not_found':
+      return 'Esse presente já foi pego.'
     case 'pokemon_not_found':
       return 'Esse Pokémon não está mais com você.'
     case 'in_daycare':

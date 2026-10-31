@@ -40,7 +40,9 @@ async function main(): Promise<void> {
     'premier-ball.png',
     'luxury-ball.png',
   ]
-  const itemFiles = [...berryList.map((berry) => `${berry.key}-berry.png`), ...ballFiles]
+  // Doce genérico (presentes do jardim, 5.21): ícone da Rare Candy.
+  const otherFiles = ['rare-candy.png']
+  const itemFiles = [...berryList.map((berry) => `${berry.key}-berry.png`), ...ballFiles, ...otherFiles]
   let itemsDownloaded = 0
   for (const name of itemFiles) {
     itemsDownloaded += await saveFile(`${itemsBase}/${name}`, path.join(itemsDir, name), 'png')

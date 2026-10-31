@@ -4,6 +4,7 @@
   import {
     api,
     ballIconSrc,
+    berryIconSrc,
     errorText,
     type ApiError,
     type GameState,
@@ -20,6 +21,8 @@
   } from './highlights'
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { play } from './sound'
+  import { serverClock } from './serverClock.svelte'
+  import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
   import StatTable from './StatTable.svelte'
   import TypeIcon from './TypeIcon.svelte'
@@ -252,6 +255,66 @@
 
   function crossedEvolve(beforeLevel: number, afterLevel: number, evolutions: OwnedPokemon['evolutions']): boolean {
     return evolutions.some((option) => beforeLevel < option.minLevel && afterLevel >= option.minLevel)
+  }
+
+  // Cuidado como pet (5.21): só no jardim.
+  const careClock = serverClock(() => game.now)
+  const inGarden = $derived(mon.location === 'garden')
+  const snackRows = $derived(
+    game.inventory
+      .filter((row) => row.itemKey.startsWith('berry:') && row.quantity > 0)
+      .map((row) => ({ key: row.itemKey.slice(6), quantity: row.quantity }))
+      .map((row) => ({ ...row, name: game.berries.find((berry) => berry.key === row.key)?.name ?? row.key })),
+  )
+  const petWaitMs = $derived(mon.pet.petReadyAt === null ? 0 : Math.max(0, mon.pet.petReadyAt - careClock.now()))
+  const full = $derived(mon.pet.hunger >= game.garden.fullAt)
+  let choosingSnack = $state(false)
+  let hearts = $state(0)
+
+  function mood(happiness: number): string {
+    if (happiness >= 80) return 'Radiante'
+    if (happiness >= 60) return 'Feliz'
+    if (happiness >= 35) return 'Tranquilo'
+    if (happiness >= 15) return 'Chateado'
+    return 'Triste'
+  }
+
+  async function careAction(url: string, body: unknown, done: string) {
+    pending = true
+    message = ''
+    try {
+      const response = await api(url, body)
+      if (!response.ok) {
+        message = errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError)
+        return
+      }
+      hearts += 1
+      play('levelup')
+      message = done
+      await onState()
+    } finally {
+      pending = false
+    }
+  }
+
+  function petIt() {
+    void careAction(`/api/garden/pets/${mon.id}/pet`, {}, `${mon.nickname ?? mon.displayName} adorou o carinho!`)
+  }
+
+  function snack(berryKey: string, name: string) {
+    choosingSnack = false
+    void careAction(`/api/garden/pets/${mon.id}/snack`, { berryKey }, `${mon.nickname ?? mon.displayName} comeu a ${name}.`)
+  }
+
+  async function advanceGarden(hours: number) {
+    pending = true
+    try {
+      const response = await api('/api/dev/garden/advance', { hours })
+      message = response.ok ? `Jardim adiantado ${hours} h.` : errorText((await response.json()) as ApiError)
+      await onState()
+    } finally {
+      pending = false
+    }
   }
 
   async function feed() {
@@ -701,6 +764,46 @@
 
   <div class="scroll" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
     {#if tab === 'perfil'}
+    {#if inGarden}
+      <section class="block care">
+        <h3>Cuidado <small class="mood">{mood(mon.pet.happiness)}</small></h3>
+        {#key hearts}
+          {#if hearts > 0}<span class="hearts" aria-hidden="true"><i></i><i></i><i></i></span>{/if}
+        {/key}
+        <dl class="needs">
+          <dt>Felicidade</dt>
+          <dd><span class="meter happy" style:--fill="{mon.pet.happiness}%"></span></dd>
+          <dt>Barriga</dt>
+          <dd><span class="meter" class:low={mon.pet.hunger < game.garden.needThreshold} style:--fill="{mon.pet.hunger}%"></span></dd>
+          <dt>Carinho</dt>
+          <dd><span class="meter" class:low={mon.pet.affection < game.garden.needThreshold} style:--fill="{mon.pet.affection}%"></span></dd>
+        </dl>
+        <div class="care-actions">
+          <button type="button" class="btn" disabled={pending || petWaitMs > 0} onclick={petIt}>
+            {petWaitMs > 0 ? `Carinho em ${formatCountdown(petWaitMs)}` : 'Fazer carinho'}
+          </button>
+          <button
+            type="button"
+            class="btn"
+            disabled={pending || full || snackRows.length === 0}
+            onclick={() => (choosingSnack = !choosingSnack)}
+          >
+            {full ? 'Barriga cheia' : snackRows.length === 0 ? 'Sem berries' : 'Dar berry'}
+          </button>
+        </div>
+        {#if choosingSnack}
+          <div class="snacks">
+            {#each snackRows as row (row.key)}
+              <button type="button" class="btn snack" disabled={pending} onclick={() => snack(row.key, row.name)}>
+                <img src={berryIconSrc(row.key)} alt="" width="20" height="20" />
+                {row.name} <small>×{row.quantity}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <p class="care-hint">Feliz, ele ganha XP no jardim e às vezes deixa presentes no chão.</p>
+      </section>
+    {/if}
     <section class="block">
       <h3>Captura</h3>
       <dl class="facts">
@@ -767,6 +870,13 @@
 
     {:else if tab === 'debug' && game.devTools}
     <p class="hint">Só em teste (DEV_TOOLS). Nada disto existe em produção.</p>
+
+    <div class="block">
+      <h3>Jardim (todos os Pokémon)</h3>
+      {#each [1, 6, 24] as hours (hours)}
+        <button type="button" class="btn" disabled={pending} onclick={() => void advanceGarden(hours)}>+{hours} h</button>
+      {/each}
+    </div>
 
     {#if mon.evolutions.length > 0}
       <div class="block">
@@ -1383,6 +1493,117 @@
   }
 
   /* Rótulo à esquerda, valor à direita, em linhas iguais. */
+  .care {
+    position: relative;
+  }
+
+  .mood {
+    margin-left: 0.4rem;
+    font-weight: 700;
+    opacity: 0.75;
+  }
+
+  .needs {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 0.6rem;
+    align-items: center;
+    margin: 0.4rem 0;
+  }
+
+  .needs dt {
+    font-weight: 700;
+  }
+
+  .needs dd {
+    margin: 0;
+  }
+
+  .meter {
+    display: block;
+    height: 10px;
+    border: 2px solid #2b2b2b;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #6fc46a var(--fill), #e6e2d6 var(--fill));
+  }
+
+  .meter.low {
+    background: linear-gradient(90deg, #ef7a2e var(--fill), #e6e2d6 var(--fill));
+  }
+
+  .meter.happy {
+    background: linear-gradient(90deg, #e05a7a var(--fill), #e6e2d6 var(--fill));
+  }
+
+  .care-actions,
+  .snacks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .snacks {
+    margin-top: 0.5rem;
+  }
+
+  .snack img {
+    image-rendering: pixelated;
+    vertical-align: middle;
+  }
+
+  .care-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    opacity: 0.75;
+  }
+
+  .hearts {
+    position: absolute;
+    right: 1rem;
+    top: 0.5rem;
+    pointer-events: none;
+  }
+
+  .hearts i {
+    position: absolute;
+    width: 12px;
+    height: 11px;
+    background: #e05a7a;
+    clip-path: polygon(50% 100%, 0 40%, 0 15%, 20% 0, 50% 18%, 80% 0, 100% 15%, 100% 40%);
+    animation: heart-up 1.1s ease-out forwards;
+    opacity: 0;
+  }
+
+  .hearts i:nth-child(2) {
+    left: -16px;
+    animation-delay: 0.15s;
+  }
+
+  .hearts i:nth-child(3) {
+    left: 14px;
+    animation-delay: 0.3s;
+  }
+
+  @keyframes heart-up {
+    0% {
+      opacity: 0;
+      transform: translateY(14px) scale(0.6);
+    }
+    30% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-22px) scale(1.1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hearts i {
+      animation: none;
+    }
+  }
+
   .facts {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

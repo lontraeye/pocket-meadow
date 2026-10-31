@@ -246,6 +246,15 @@ export const pokemon = sqliteTable(
      * o slot sai do poder dele. null = nenhuma oferta.
      */
     moveOffer: text('move_offer'),
+    // Cuidado como pet (5.21): valores de 0 a 100 no instante `petAt`.
+    hunger: real('hunger').notNull().default(80),
+    affection: real('affection').notNull().default(60),
+    happiness: real('happiness').notNull().default(20),
+    /** Até quando fome, carinho e felicidade foram liquidados; null = fora do jardim (congelado). */
+    petAt: integer('pet_at'),
+    lastPetAt: integer('last_pet_at'),
+    /** Último presente (ou a entrada no jardim): o próximo sai `intervalMs` depois. */
+    lastGiftAt: integer('last_gift_at'),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),
@@ -275,6 +284,23 @@ export const candies = sqliteTable(
     primaryKey({ columns: [table.userId, table.evolutionChainId] }),
     check('ck_candies_amount', sql`${table.amount} >= 0`),
   ],
+)
+
+// Presentes que os pets deixam no chão do jardim (5.21), sorteados ao surgir.
+export const gardenGifts = sqliteTable(
+  'garden_gifts',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    pokemonId: integer('pokemon_id').references(() => pokemon.id, { onDelete: 'set null' }),
+    /** Chave do inventário (`seed:oran`, `ball:poke`) ou `generic_candy`. */
+    itemKey: text('item_key').notNull(),
+    quantity: integer('quantity').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_garden_gifts_user').on(table.userId)],
 )
 
 export const daycareSlots = sqliteTable(

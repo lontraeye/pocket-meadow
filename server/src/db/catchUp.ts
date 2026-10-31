@@ -3,6 +3,7 @@ import { applyCatchUp } from '../game/catchUp.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { getDb } from './client.js'
+import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 
 export type PlayerClock = {
@@ -127,6 +128,8 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
       .where(and(eq(encounters.id, id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
       .run()
   }
+
+  settleGarden(userId, now)
 
   return {
     level: trainer.level,
