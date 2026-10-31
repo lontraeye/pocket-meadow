@@ -20,6 +20,66 @@ Loop principal: **encontro → batalha (XP) → captura → time mais forte → 
 
 O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta entre jogadores. As interações sociais previstas são adicionar amigos, deixar um presente para um amigo e trocar Pokémon. O schema e a fase disso ficam para depois do loop single-player. Presente e troca seguem as regras que já existem: o servidor resolve, a operação roda em transação, e um jogador não pode ficar com zero Pokémon.
 
+### 1.1 Pilares e mapa das features (2026-10-30)
+Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar. O jogo ganhou muitas features, mas elas não empurram o jogador para a frente nem o fazem voltar. E o jogo virou dois jogos paralelos: a exploração do mundo, que cresceu muito, e o cuidado com o jardim, que ficou pequeno. O jardim era a ideia inicial e o diferencial. Esta seção junta os dois, encaixa cada feature e diz o que arrumar antes de qualquer sistema novo.
+
+**O que o jogo é:** um jogo de **jardim** com Pokémon, de sessões curtas várias vezes por dia. No jardim, o jogador **constrói e decora** o espaço, **cuida dos Pokémon como pets** e **produz coisas em cadeias de produção**, com os Pokémon trabalhando. O **mundo** é para onde ele sai em expedições curtas, para capturar, lutar e trazer o que o jardim precisa. A jornada (líderes e capítulos) é o objetivo de longo prazo. A referência de gênero é a dos jogos de criar e cuidar com timers, como Dragon City, com o combate do Pokémon GO.
+
+**Pilares:**
+1. **O jardim é o centro.** É onde o progresso acontece e onde o jogador passa a maior parte do tempo. Toda expedição volta para ele.
+2. **O mundo e o jardim trocam coisas.** O mundo dá Pokémon, sementes e materiais. O jardim dá força ao time, itens e berries para a luta. Nenhum dos dois se basta sozinho (tabela abaixo).
+3. **Sempre há um motivo para voltar.** A cada poucas horas, algo fica pronto, um Pokémon precisa de cuidado ou uma missão renova. Tudo calculado por timestamp (seção 2).
+4. **Sempre há um próximo passo possível agora.** O jogador nunca abre o jogo sem ter o que fazer. Os muros da jornada se passam melhorando o jardim, não só repetindo luta.
+5. **O combate é o momento bom.** Ele já funciona (confirmado jogando) e fica como está.
+6. **Profundidade é opcional.** IVs, natureza, habilidade e golpes nunca são exigidos no começo, e vão aparecendo conforme o nível de treinador.
+
+#### Diagnóstico (jogando, 2026-10-30)
+- **O jardim quase não tem o que fazer.** Os Pokémon andam, os canteiros dão berries, e o daycare rende cerca de 1 nível por dia (seção 11). Não dá para construir, decorar nem interagir com os Pokémon além de abrir a ficha.
+- **Os dois lados não conversam.** Quase nada do que se traz do mundo muda o jardim. Sementes, bolas e itens de árvore e pedra vão para a mochila, e poucos ajudam a ficar mais forte.
+- **Não existe motivo para voltar.** A energia está desligada (5.2), e nada fica esperando o jogador.
+- **Os muros são duros.** O marco pede nível de treinador (3, 6, 9… até 24) e vencer um líder com IV 31 no ás. A única forma de passar é repetir encontro e luta, e o jogo não diz quanto falta.
+- **Sistemas incompletos:** energia desligada; daycare fraco; avisos de "pronto" (6.1) não feitos; efeito das berries que pouco pesa; missões só no papel (5.15, `roteiro/JOHTO.md`); construção, máquinas e biomas só no papel (5.16); felicidade no jardim só anotada (5.11); Kanto sem mapa. A maioria é do jardim: arrumar esses sistemas e fazer do jardim o diferencial é, em boa parte, a mesma tarefa.
+
+#### A troca entre o mundo e o jardim
+| O mundo dá ao jardim | O jardim dá ao mundo |
+|---|---|
+| Pokémon (moradores, pets e trabalhadores) | XP e força ao time (pets felizes, treino em casa) |
+| Sementes, berries e materiais (árvore, pedra, água, drops de luta) | Itens: bolas, pedras de evolução, berries de luta (cadeias de produção) |
+| Biomas e receitas novas liberados pelos marcos | Visitantes: espécies que aparecem em casa, atraídas pelos biomas |
+| Missões que pedem ir a um lugar | Missões que pedem cuidar, construir ou produzir |
+
+#### As features em camadas
+| Feature | Camada | Hoje | Vira |
+|---|---|---|---|
+| Jardim (5.11) | jardim | Pokémon andando, grade isométrica | o mapa da casa, com blocos, biomas e objetos |
+| Cuidado como pet (5.21, novo) | jardim | não existe | fome, carinho e felicidade; pet feliz produz e cresce |
+| Construção e decoração (5.16) | jardim | só no papel | modo de edição, biomas, enfeites; decoração deixa os Pokémon felizes |
+| Cadeias de produção (5.16, "Crafting") | jardim | só no papel | máquinas e estações com Pokémon trabalhando, receitas em árvore |
+| Berries e canteiros (5.10) | jardim | plantar e colher | primeiro elo das cadeias e comida dos pets |
+| Daycare (5.9) | jardim | slots com XP parado, fraco | fica, com papel próprio: treino rápido e focado (alcançar o time, espécies difíceis de upar) |
+| Visitantes (5.16) | jardim ↔ mundo | só no papel | espécies atraídas pelos biomas |
+| Quadro de missões (5.20) | volta | não existe | 3 missões por dia, de mundo e de jardim |
+| Avisos de "pronto" (6.1) | volta | não existe | a linha do que está esperando, ao abrir |
+| Encontro, campo e luta (5.14, 5.18) | mundo | funciona | igual; é o que funciona |
+| Captura e bolas (5.6) | mundo | funciona | bolas também saem das cadeias |
+| Doces, soltar e alimentar (5.7) | mundo | funciona | doce também vira insumo |
+| Evolução (5.8) | mundo ↔ jardim | por nível | também por item (5.16) e por felicidade (5.21) |
+| Jornada, mapa e ferramentas (`JORNADA.md`) | mundo | funciona | cada marco também abre bioma ou receita |
+| Líderes (marcos) | mundo | muro duro | o jardim ajuda a passar; painel diz quanto falta |
+| Pokédex e álbum (5.12) | longo prazo | funciona | recompensas viram enfeites e materiais |
+| IVs, natureza, habilidade, golpes (5.18) | profundidade | sempre à vista | aparecem aos poucos pelo nível |
+| Clima (5.11) | enfeite | funciona | pode mexer na produção depois |
+| Energia (5.2) | volta | desligada | decidir com as missões (5.20) |
+
+#### O que muda (nesta ordem)
+1. **Cuidado como pet** (5.21). É a peça mais barata, usa o jardim que já existe e dá o motivo de volta mais direto. O daycare continua, com papel novo (5.21).
+2. **Avisos de "pronto" e quadro de missões** (6.1 e 5.20), morando no jardim.
+3. **Primeira cadeia de produção, em lugares fixos:** uma ou duas máquinas com operador e poucas receitas (5.16), usando berries, sementes e os itens de árvore e pedra. Sem modo de edição ainda: as máquinas ocupam blocos fixos da grade, como os canteiros hoje.
+4. **Construção e decoração:** modo de edição, biomas e enfeites. Pede arte (lista de peças na 5.16), por isso vem depois, mas a arte pode começar já.
+5. **Visitantes** atraídos pelos biomas.
+6. **Amaciar os muros** em paralelo: o painel do marco diz quanto falta, e o balanço dos líderes entra com o playtest (seção 11).
+7. **Congelar sistemas novos do mundo** até os itens 1 a 3 estarem no ar e jogados por alguns dias. Ficam parados: Liga contínua, rival, Equipe Rocket, Kanto, breed e personagem (5.17).
+
 ---
 
 ## 2. Princípios de arquitetura (importante)
@@ -1127,6 +1187,87 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - **Tela do PC (2026-10-29):** como nos jogos, o time (6 vagas) no topo e o PC e o jardim em grade. Toque num Pokémon e depois no destino: uma vaga do time (ocupada troca os dois; quem sai vai para onde o outro estava) ou os botões Time, PC e Jardim; dentro do time, tocar em outra vaga reordena. "Vários" move de uma vez para o PC ou o jardim. Abre pelo botão PC do jardim e nas cidades do mapa ("Usar o PC"). **Substituiu a Coleção** (2026-10-29): busca, filtros (Todos, Favoritos, Shiny, Repetidos) e ordem ficam no botão Filtrar; a aba Daycare mostra quem está lá (só a ficha); "Selecionar" move vários para o PC ou o jardim e solta vários (prévia de doces e "Menos o mais forte"). Rotas `POST /pc/move` (`{ pokemonId, to, slot? }`) e `POST /pc/move-many`, numa transação só.
 - **Tela:** a ficha (aba Treino) tem "Pôr no time / Tirar do time" e "Guardar no PC / Trazer para o jardim"; a Coleção tem os filtros Time e PC e a marca no card; o encontro mostra o time e "toque em quem abre". Na luta, a troca mostra o time em duas colunas.
 
+### 5.20 Quadro de missões (especificado em 2026-10-30, ainda sem fase)
+O motivo para voltar (seção 1.1, pilar 1). Todo dia o jogador recebe 3 missões curtas, que dão recompensas que deixam o time mais forte. São diferentes das missões de NPC (5.15) e das do roteiro (`roteiro/JOHTO.md`), que são fixas e contam a história. Estas renovam.
+
+**Regras:**
+- **3 missões por dia**, sorteadas no primeiro acesso do dia e **persistidas antes de aparecer** (seção 2). Recarregar não rerola.
+- **O dia vira num horário fixo** do servidor (config, inicial: 00:00 em `America/Sao_Paulo`). As missões do dia anterior somem, resgatadas ou não. A resposta manda `renewsAt`, e o jardim mostra "novas em 6h 12m".
+- **Cada missão se cumpre numa sessão curta** (alvo: 5 a 10 minutos de jogo). O alvo de cada uma escala com o nível de treinador (config).
+- **As missões apontam para o capítulo atual:** a área sorteada é uma das áreas abertas do capítulo em que o jogador está, para puxar a exploração sem obrigá-la.
+- **Completar as 3 dá um bônus** (o "baú do dia"), maior que cada missão sozinha.
+- **Trocar uma missão:** uma vez por dia, de graça. Ela é trocada por outra de tipo diferente.
+
+**Objetivos da primeira versão,** todos contados nos encontros feitos depois da missão aparecer (`encounters.created_at >= assigned_at`), sem rastreio novo:
+- vencer N lutas (qualquer área ou uma área do capítulo);
+- capturar N Pokémon (qualquer, de um tipo, ou numa área);
+- capturar uma espécie que ainda não tem;
+- vencer N lutas com um Pokémon de um tipo no time;
+- usar uma mancha do campo N vezes (pesca, árvore ou pedra), quando o jogador tiver a ferramenta.
+
+Ficam para depois, porque pedem um registro de eventos: colher berries, alimentar, evoluir, soltar. Quando entrarem, entra também uma tabela `trainer_events` (`user_id`, `kind`, `at`, dados em JSON), usada pela contagem.
+
+**Recompensas** (config, por missão e no baú), escolhidas para pagar o muro:
+- XP de treinador (o muro dos marcos);
+- doces genéricos (alimentar quem está atrás);
+- bolas (Great e Ultra no baú);
+- uma berry rara ou um doce da linha de um Pokémon do time (no baú).
+
+**Energia:** continua desligada. O freio é o limite de recompensas por dia, não o de lutas: quem quiser jogar mais pode, mas o que vale mais vem uma vez por dia. Rever depois de jogar alguns dias com as missões.
+
+**Dados e rotas:**
+- Tabela `daily_missions` (`id`, `user_id`, `day` em texto `AAAA-MM-DD`, `slot` 0 a 2, `kind`, `params` em JSON, `target`, `assigned_at`, `claimed_at`), única por (`user_id`, `day`, `slot`). O baú resgatado fica em `daily_chests` (`user_id`, `day`, `claimed_at`). Migração.
+- O sorteio usa uma semente por (`user_id`, `day`) e o estado do jogador (capítulo, ferramentas, tipos do time), com os tipos de missão e os pesos no config (`server/src/config/missions.ts`).
+- `GET /state` traz `missions: { day, renewsAt, list: [{ id, kind, text, progress, target, reward, claimed }], chest: { ready, claimed, reward }, rerollUsed }`. O progresso é calculado no pedido, como o catch-up (seção 6).
+- `POST /missions/:id/claim`, `POST /missions/chest/claim` e `POST /missions/:id/reroll`, cada um numa transação. O servidor confere o progresso: o cliente nunca diz que completou.
+- O destaque da luta (6.2) ganha o cartão "Missão completa: Vencer 5 lutas", e o botão do jardim ganha um selo com o número de missões prontas para resgatar.
+
+**Objetivos de jardim** (cuidar, colher, produzir) entram quando o cuidado (5.21) e as cadeias (5.16) existirem, com a tabela `trainer_events`.
+
+**Tela:** um quadro no jardim (botão no dock ou no topo), com as 3 missões, a barra de progresso de cada uma, "Resgatar" e "Trocar" e o baú embaixo. Tocar numa missão de área leva ao mapa com o lugar marcado. Mobile primeiro (seção 4.4).
+
+**Pronto quando:** as missões do dia aparecem iguais depois de recarregar; viram no horário certo; o progresso conta só o que veio depois de a missão aparecer; resgatar duas vezes é recusado; o baú só abre com as 3 resgatadas; e a tela funciona em 360px.
+
+### 5.21 Cuidado como pet (especificado em 2026-10-30, ainda sem fase)
+O primeiro passo do jardim como centro do jogo (seção 1.1). Os Pokémon do jardim são pets: têm necessidades, ficam felizes com cuidado, e o pet feliz rende. O daycare (5.9) continua, com outro papel (abaixo).
+
+**Necessidades** (duas na primeira versão, em config):
+- **Fome:** cai com o tempo. Alimentar com berry ou com comida (uma receita simples da 5.16, quando existir) enche. A berry é consumida, o que dá uso às berries que sobram.
+- **Carinho:** cai com o tempo, mais devagar. Tocar no Pokémon no jardim e escolher "Fazer carinho" enche um pouco, com intervalo mínimo por Pokémon (config) para não virar spam de toque.
+- Cada necessidade é um número de 0 a 100, **calculado por timestamp** (`last_fed_at`, `last_pet_at`), como a energia (seção 6). Nada roda em loop.
+
+**Felicidade:**
+- Sobe devagar enquanto as necessidades estão acima de um limite (config) e cai devagar quando estão abaixo. Fica guardada em `pokemon.happiness`, com `happiness_at`, e é recalculada sob demanda.
+- **Nunca pune:** Pokémon com fome não foge, não perde nível e não luta pior. Ele só deixa de render e mostra um balão de "com fome". O jogo é para voltar por vontade, não por medo.
+- Enfeites e biomas perto dele (5.16, quando existirem) aumentam o ganho de felicidade.
+
+**O que o pet feliz dá:**
+- **XP no jardim:** cada Pokémon do jardim, inclusive os do time, ganha um pouco de XP por hora conforme a felicidade, até um teto por dia (config). É um ganho lento e de fundo, para o jardim sempre render alguma coisa.
+- **Presentes:** de tempos em tempos, um Pokémon feliz deixa um presente no chão do jardim (sementes, doce genérico, material). O sorteio é feito e persistido quando o presente é gerado, e o jogador coleta com um toque. Limite de presentes no chão (config), para dar motivo de voltar.
+- **Evolução por felicidade:** as da Gen 2 (Golbat → Crobat, Chansey → Blissey, Pichu, Cleffa, Igglybuff, Togepi, Eevee → Espeon/Umbreon) passam a pedir felicidade alta, como nos jogos, em vez de nível. O seed marca pelo `min_happiness` do `evolution_details` da PokéAPI, como a troca e o item (5.15 e 5.16).
+
+**Daycare: treino rápido e focado** (decidido em 2026-10-30). O daycare continua, separado do jardim, e rende **bem mais** que o XP do jardim. Ele serve para:
+- **alcançar o time:** subir rápido um Pokémon de nível baixo (uma captura nova, um bebê) sem ter de voltar a rotas antigas;
+- **espécies difíceis de upar:** as que lutam mal no nível baixo (Magikarp, Abra, bebês) ou têm curva lenta.
+
+Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
+- **bônus de alcance:** quanto mais abaixo do nível médio do time, mais rápido o Pokémon sobe, até um multiplicador máximo (config). Perto do nível do time, volta à taxa normal. O daycare não passa ninguém à frente do time;
+- **piso de XP por hora** para níveis baixos, para o primeiro dia nunca render só 1 nível;
+- a regra de sempre continua: quem está no daycare não luta, não é solto e não evolui (5.9), e também não tem necessidades nem ganha o XP do jardim.
+
+**Quantos pets:** o jardim tem uma **capacidade** (config, cresce com o nível de treinador e, depois, com a construção). Quem passa da capacidade vai para o PC (5.19), onde não tem necessidades nem rende. Assim o cuidado fica em poucos Pokémon, não em 200.
+
+**Tela:**
+- Balão sobre o sprite quando uma necessidade está baixa (comida ou coração), e corações quando recebe carinho. O PMD Sprite Collab tem retratos com emoções (seção 4.5), que podem entrar na ficha.
+- A ficha ganha a felicidade e as duas necessidades na aba Perfil.
+- O aviso de "pronto" (6.1) inclui "3 Pokémon com fome · 2 presentes no chão".
+
+**Dados e rotas:**
+- `pokemon`: `happiness`, `happiness_at`, `last_fed_at`, `last_pet_at`. Tabela `garden_gifts` (`id`, `user_id`, `pokemon_id`, `item_key`, `qty`, `created_at`). Migração.
+- `POST /pokemon/:id/feed-pet` (`{ itemKey }`), `POST /pokemon/:id/pet`, `POST /garden/gifts/:id/collect`. O XP do jardim e os presentes são calculados quando chega qualquer pedido (`GET /state`), como o catch-up.
+
+**Pontos a decidir:** as taxas (quantas horas a fome leva para zerar, quanto a felicidade sobe por dia); se cada espécie prefere uma berry (sabor, como nos jogos); e se felicidade alta dá algum bônus pequeno na luta (sugestão: não, para o combate continuar igual).
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")
@@ -1349,6 +1490,8 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - ~~*9.4 — Arremesso com física:* gesto segurar/girar/soltar; voo 2,5D; anel Nice/Great/Excellent; `POST /miss` gasta bola sem RNG; berry arremessada sem giro; a11y (toque simples / teclado / reduced-motion) sempre acerta `normal`.~~
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
+
+**Jardim no centro (decidido em 2026-10-30, seção 1.1):** vem antes de qualquer sistema novo do mundo. Na ordem: cuidado como pet (5.21), avisos de "pronto" e quadro de missões (6.1 e 5.20), primeira cadeia de produção em lugares fixos (5.16), construção e decoração, visitantes.
 
 **Jornada (mapeada em 2026-10-29, `JORNADA.md`):** região inicial à escolha, capítulos e marcos por região, ~65 áreas, ferramentas (pesca, Surf, Headbutt, Rock Smash) e o caminho de cada espécie especial. É a próxima frente; a ordem de implementação está na seção 9 de lá.
 
