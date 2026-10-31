@@ -17,6 +17,8 @@
     type PlotState,
   } from './api'
   import PmdSprite from './PmdSprite.svelte'
+  import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
+  import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
   import PokemonSheet from './PokemonSheet.svelte'
   import WeatherIcon from './WeatherIcon.svelte'
   import WeatherLayer from './WeatherLayer.svelte'
@@ -404,25 +406,68 @@
     return { hw, hh, ox, oy, sw, sh }
   }
 
-  // Só a zona jogável vira elemento; o resto é o padrão do fundo (lawnBackground).
-  const tiles = Array.from({ length: playCols * playRows }, (_, index) => ({
-    col: playCol0 + (index % playCols),
-    row: playRow0 + Math.floor(index / playCols),
-  }))
+  // O chão é desenhado no canvas (floor); só os canteiros viram elemento, para o toque.
+  const tiles = $derived(
+    Array.from({ length: playCols * playRows }, (_, index) => ({
+      col: playCol0 + (index % playCols),
+      row: playRow0 + Math.floor(index / playCols),
+    })).filter((tile) => isPlotCell(tile.col, tile.row)),
+  )
 
   // Fundo do gramado: losangos iguais aos ladrilhos, em verde mais escuro, que
   // seguem o pan e o zoom. Cada quadro do padrão (tileW × tileH) tem um
   // losango inteiro no meio (cor dos ladrilhos sem .alt) e os cantos na cor
   // .alt, então o xadrez continua o dos ladrilhos sem emenda.
-  const lawnPattern =
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 1' preserveAspectRatio='none' shape-rendering='crispEdges'%3E%3Crect width='2' height='1' fill='%234f7a3a'/%3E%3Cpolygon points='1,0 2,0.5 1,1 0,0.5' fill='%235d8a45'/%3E%3C/svg%3E\")"
+  // Chão em blocos (5.22): os tiles de art/tiles/ entram no build pelo glob.
+  // A zona jogável é um canvas (grama, e terra nos canteiros, com as bordas);
+  // fora dela, o fundo do gramado é um padrão de grama que se repete.
+  const tileFiles = import.meta.glob('../../../art/tiles/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+  let floorAssets = $state<FloorAssets | null>(null)
+  let lawnPatternUrl = $state<string | null>(null)
+  let floorCanvas = $state<HTMLCanvasElement | null>(null)
+  /** Escala da arte (24×12) para o bloco do jardim (48×24 no zoom 1). */
+  const floorScale = $derived(tileW / TILE_W)
+  const floorW = (playCols + playRows) * (TILE_W / 2)
+  const floorH = (playCols + playRows) * (TILE_H / 2)
+  const floorOriginX = playRows * (TILE_W / 2)
+
+  $effect(() => {
+    void buildFloorAssets(
+      Object.entries(tileFiles).map(([file, url]) => ({ name: file.slice(file.lastIndexOf('/') + 1), url })),
+    ).then((assets) => {
+      floorAssets = assets
+      lawnPatternUrl = floorPattern(assets, 'grama')?.toDataURL() ?? null
+    })
+  })
+
+  $effect(() => {
+    if (!floorCanvas || !floorAssets) return
+    const cells: (string | null)[] = []
+    for (let row = 0; row < playRows; row += 1) {
+      for (let col = 0; col < playCols; col += 1) {
+        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'terra' : 'grama')
+      }
+    }
+    const grid: TerrainGrid = { cols: playCols, rows: playRows, cells }
+    const ctx = floorCanvas.getContext('2d')!
+    ctx.clearRect(0, 0, floorW, floorH)
+    drawFloor(ctx, grid, floorAssets, { offsetX: floorOriginX })
+  })
+
+  const floorBox = $derived.by(() => {
+    const spot = place(playCol0, playRow0)
+    return { left: spot.x - floorOriginX * floorScale, top: spot.y }
+  })
+
+  // Fundo do gramado: o padrão de grama acompanha o pan e o zoom, com o vértice
+  // de um bloco no canto do padrão (o padrão é um período da grade).
   const lawnBackground = $derived.by(() => {
-    // Centro do primeiro ladrilho jogável, que tem col + row par (sem .alt).
-    const cx = panX + originX + (playCol0 - playRow0) * halfW
-    const cy = panY + originY + (playCol0 + playRow0) * halfH + halfH
+    const spot = place(playCol0, playRow0)
+    const size = (lawnPatternUrl ? 4 : 1) * floorScale
     return {
-      size: `${tileW}px ${tileH}px`,
-      position: `${cx - halfW}px ${cy - halfH}px`,
+      image: lawnPatternUrl ? `url("${lawnPatternUrl}")` : 'none',
+      size: `${size * TILE_W}px ${size * TILE_H}px`,
+      position: `${panX + spot.x}px ${panY + spot.y}px`,
     }
   })
 
@@ -1089,7 +1134,7 @@
     class="lawn"
     bind:this={lawn}
     aria-label="Jardim"
-    style:background-image={lawnPattern}
+    style:background-image={lawnBackground.image}
     style:background-size={lawnBackground.size}
     style:background-position={lawnBackground.position}
   >
@@ -1099,6 +1144,17 @@
       style:height="{stageH}px"
       style:transform="translate({snapToDevice(panX)}px, {snapToDevice(panY)}px)"
     >
+      <canvas
+        class="floor"
+        bind:this={floorCanvas}
+        width={floorW}
+        height={floorH}
+        style:left="{floorBox.left}px"
+        style:top="{floorBox.top}px"
+        style:width="{floorW * floorScale}px"
+        style:height="{floorH * floorScale}px"
+        aria-hidden="true"
+      ></canvas>
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
         {@const isPlot = isPlotCell(tile.col, tile.row)}
@@ -1109,7 +1165,6 @@
           <button
             type="button"
             class="tile plot"
-            class:alt={(tile.col + tile.row) % 2 === 1}
             class:planted={stage === 'planted'}
             class:growing={stage === 'growing'}
             class:ready={stage === 'ready'}
@@ -1130,17 +1185,6 @@
               <img class="crop berry" src={berryIconSrc(plot.berryKey)} alt="" />
             {/if}
           </button>
-        {:else}
-          <div
-            class="tile"
-            class:alt={(tile.col + tile.row) % 2 === 1}
-            style:left="{spot.x}px"
-            style:top="{spot.y}px"
-            style:width="{tileW}px"
-            style:height="{tileH}px"
-            style:margin-left="{-halfW}px"
-            style:z-index={tile.col + tile.row}
-          ></div>
         {/if}
       {/each}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
@@ -1421,8 +1465,9 @@
     -webkit-user-select: none;
     -webkit-user-drag: none;
     /* O padrão (tamanho e posição) vem do script: lawnBackground. */
-    background-color: #4f7a3a;
+    background-color: #4e8f2f;
     background-repeat: repeat;
+    image-rendering: pixelated;
   }
 
   .lawn:active {
@@ -1437,36 +1482,31 @@
     will-change: transform;
   }
 
-  /* Losango plano (sem extrusão 3D). */
-  .tile {
-    --top: var(--grass-1);
+  /* Chão em blocos (canvas da zona jogável): pixels da arte em escala inteira ou quase. */
+  .floor {
     position: absolute;
-    background: var(--top);
-    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    z-index: 0;
+    image-rendering: pixelated;
+    pointer-events: none;
   }
 
-  .tile.alt {
-    --top: var(--grass-2);
+  /* Canteiro: o chão (terra) vem do canvas; o botão é só a área de toque, em losango. */
+  .tile {
+    position: absolute;
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   }
 
   .tile.plot {
     cursor: pointer;
-    --top: var(--soil);
     padding: 0;
     border: 0;
-    background:
-      repeating-linear-gradient(90deg, #00000018 0 4px, transparent 4px 8px),
-      var(--top);
+    background: transparent;
     touch-action: manipulation;
   }
 
   .tile.plot:focus-visible {
     outline: var(--px) dashed var(--ink);
     outline-offset: 2px;
-  }
-
-  .tile.plot.alt {
-    --top: #c49a5e;
   }
 
   .crop {

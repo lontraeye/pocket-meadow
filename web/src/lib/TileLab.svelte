@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { drawFloor, type FloorAssets } from './floor'
   import {
     MASK_KEYS,
     TILE_H,
@@ -7,13 +8,10 @@
     TERRAIN_ORDER,
     cellAt,
     defaultMask,
-    overlaysAt,
     parseTileFile,
     terrainPriority,
     tileOrigin,
-    variantAt,
     type MaskKey,
-    type TerrainGrid,
   } from './terrain'
 
   // Laboratório de tiles (PLANNING.md, seção 5.22). Lê os PNGs de art/tiles/
@@ -145,50 +143,12 @@
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, width, height)
-    const grid: TerrainGrid = { cols: COLS, rows: ROWS, cells }
-    const scratch = document.createElement('canvas')
-    scratch.width = TILE_W
-    scratch.height = TILE_H
-    const sctx = scratch.getContext('2d')!
-    for (let row = 0; row < ROWS; row += 1) {
-      for (let col = 0; col < COLS; col += 1) {
-        const key = cells[row * COLS + col]
-        const terrain = key ? terrainByKey.get(key) : undefined
-        const o = tileOrigin(col, row)
-        const x = originX + o.x
-        const y = o.y
-        if (terrain) ctx.drawImage(pick(terrain, col, row), x, y)
-        for (const overlay of overlaysAt(grid, col, row)) {
-          const over = terrainByKey.get(overlay.terrain)
-          if (!over) continue
-          sctx.globalCompositeOperation = 'source-over'
-          sctx.clearRect(0, 0, TILE_W, TILE_H)
-          sctx.putImageData(maskImage(overlay.masks), 0, 0)
-          sctx.globalCompositeOperation = 'source-in'
-          if (debugMasks) {
-            sctx.fillStyle = '#ff2bd6'
-            sctx.fillRect(0, 0, TILE_W, TILE_H)
-          } else sctx.drawImage(pick(over, col, row), 0, 0)
-          ctx.drawImage(scratch, x, y)
-        }
-      }
+    const assets: FloorAssets = {
+      terrains: new Map(terrains.map((terrain) => [terrain.key, terrain.variants])),
+      masks: new Map(Object.entries(masks).map(([key, mask]) => [key as MaskKey, mask.data])),
     }
+    drawFloor(ctx, { cols: COLS, rows: ROWS, cells }, assets, { offsetX: originX, variants: useVariants, debugMasks })
     if (showGrid) drawGrid(ctx)
-  }
-
-  function pick(terrain: Terrain, col: number, row: number): HTMLImageElement {
-    const index = useVariants ? variantAt(col, row, terrain.variants.length) : 0
-    return terrain.variants[index] ?? terrain.variants[0]!
-  }
-
-  function maskImage(keys: MaskKey[]): ImageData {
-    const image = new ImageData(TILE_W, TILE_H)
-    for (const key of keys) {
-      const mask = masks[key]?.data
-      if (!mask) continue
-      for (let i = 0; i < mask.length; i += 1) if (mask[i]) image.data[i * 4 + 3] = 255
-    }
-    return image
   }
 
   // Linha de 1 pixel nas bordas de cima de cada losango, meio transparente.
