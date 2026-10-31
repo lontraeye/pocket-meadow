@@ -32,7 +32,8 @@
   let warnings = $state<string[]>([])
   let dir = $state('')
   let selected = $state<string | null>(null)
-  let zoom = $state(4)
+  /** Escala do desenho em px de CSS; múltiplo de 1/devicePixelRatio, para os pixels saírem iguais. */
+  let zoom = $state(2)
   let showGrid = $state(false)
   let debugMasks = $state(false)
   let useVariants = $state(true)
@@ -224,8 +225,20 @@
     cells[index] = selected
   }
 
+  const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
+  /** Zoom que cabe na largura da tela, em pixels inteiros do aparelho. */
+  function fitZoom(): number {
+    const available = Math.max(120, window.innerWidth - 24)
+    return Math.max(1, Math.floor((available * dpr) / width)) / dpr
+  }
+  // Os passos do controle de zoom: do que cabe na tela até 4× isso.
+  const zoomSteps = $derived.by(() => {
+    const base = Math.max(1, Math.round(fitZoom() * dpr))
+    return [1, 1.5, 2, 3, 4].map((m) => Math.max(1, Math.round(base * m)) / dpr)
+  })
+
   onMount(() => {
-    zoom = Math.max(2, Math.min(6, Math.floor((window.innerWidth - 24) / width)))
+    zoom = fitZoom()
     void poll()
     const timer = setInterval(() => void poll(), 1000)
     return () => clearInterval(timer)
@@ -260,7 +273,7 @@
     ></canvas>
   </div>
 
-  <section class="panel">
+  <section class="controls">
     <h2>Pintar com</h2>
     <div class="palette">
       {#each terrains as terrain (terrain.key)}
@@ -288,11 +301,14 @@
       <label><input type="checkbox" bind:checked={showGrid} /> Grade</label>
       <label><input type="checkbox" bind:checked={debugMasks} /> Bordas em rosa</label>
       <label><input type="checkbox" bind:checked={useVariants} /> Variações</label>
-      <label>
-        Zoom
-        <input type="range" min="1" max="8" bind:value={zoom} />
-        {zoom}×
-      </label>
+    </div>
+    <div class="row">
+      <span>Zoom</span>
+      {#each zoomSteps as step, index (index)}
+        <button type="button" class="btn small" class:on={Math.abs(zoom - step) < 0.01} onclick={() => (zoom = step)}>
+          {index === 0 ? 'Caber' : `${[1, 1.5, 2, 3, 4][index]}×`}
+        </button>
+      {/each}
     </div>
 
     <h2>Máscaras das bordas</h2>
@@ -322,14 +338,23 @@
 </main>
 
 <style>
+  :global(html),
+  :global(body) {
+    margin: 0;
+    background: #20262a;
+  }
+
   .lab {
+    box-sizing: border-box;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
-    padding: 0.75rem;
-    min-height: 100vh;
+    padding: 0.75rem 0.75rem calc(1.5rem + env(safe-area-inset-bottom));
+    min-height: 100dvh;
     background: #20262a;
     color: #f2efe6;
     font-family: 'Pixelify Sans', system-ui, sans-serif;
+    font-variant-ligatures: none;
   }
 
   h1 {
@@ -353,7 +378,9 @@
   }
 
   .stage {
+    box-sizing: border-box;
     max-width: 100%;
+    max-height: 70dvh;
     overflow: auto;
     background: #4e7a3a;
     border-radius: 6px;
@@ -366,8 +393,28 @@
     cursor: crosshair;
   }
 
-  .panel {
+  .controls {
+    min-width: 0;
     max-width: 40rem;
+  }
+
+  .btn.small {
+    min-width: 44px;
+    padding: 0 0.5rem;
+  }
+
+  .btn.on {
+    border-color: #f2c94c;
+  }
+
+  details {
+    margin-top: 0.75rem;
+  }
+
+  summary {
+    min-height: 44px;
+    line-height: 44px;
+    cursor: pointer;
   }
 
   .palette,
