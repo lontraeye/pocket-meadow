@@ -260,17 +260,21 @@
     return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
   }
 
-  /** Canteiros na última fileira da zona jogável; plotIndex = col − margem. */
+  // Horta: um espaço reservado de 2×2 blocos perto do canto de baixo, com os 4
+  // canteiros (PLOT_SLOT_LEVELS no servidor); os ainda fechados aparecem com
+  // cadeado. É a primeira "estrutura" do jardim: as máquinas (5.16) seguem o
+  // mesmo molde de blocos reservados.
+  const hortaCol0 = playCol0 + 1
+  const hortaRow0 = playRowEnd - 3
+  const hortaCols = 2
+  const hortaRows = 2
+
   function isPlotCell(col: number, row: number): boolean {
-    return (
-      row === playRowEnd - 1 &&
-      col >= playCol0 &&
-      col < playCol0 + game.plotSlotsUnlocked
-    )
+    return col >= hortaCol0 && col < hortaCol0 + hortaCols && row >= hortaRow0 && row < hortaRow0 + hortaRows
   }
 
-  function plotIndexAt(col: number): number {
-    return col - playCol0
+  function plotIndexAt(col: number, row: number): number {
+    return (row - hortaRow0) * hortaCols + (col - hortaCol0)
   }
 
   function isWalkable(col: number, row: number): boolean {
@@ -363,6 +367,10 @@
     await onState()
   }
 
+  function showLockedPlot() {
+    showGiftToast(game.nextPlotSlotLevel ? `Esse canteiro abre no nível ${game.nextPlotSlotLevel} de treinador.` : 'Canteiro fechado.')
+  }
+
   function showGiftToast(text: string) {
     giftToast = text
     if (giftToastTimer) clearTimeout(giftToastTimer)
@@ -445,7 +453,7 @@
     const cells: (string | null)[] = []
     for (let row = 0; row < playRows; row += 1) {
       for (let col = 0; col < playCols; col += 1) {
-        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'terra' : 'grama')
+        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'canteiro' : 'grama')
       }
     }
     const grid: TerrainGrid = { cols: playCols, rows: playRows, cells }
@@ -1083,7 +1091,7 @@
       const escape: Step[] = [{ col: fromCol, row: fromRow - 1, dir: 3 }]
       return [...escape, ...route(fromCol, fromRow - 1, toCol, toRow)]
     }
-    const viaRow = Math.min(fromRow, toRow, playRowEnd - 2)
+    const viaRow = Math.min(fromRow, toRow, hortaRow0 - 1)
     const via = orthRoute(fromCol, fromRow, fromCol, viaRow, false)
     const rest = orthRoute(fromCol, viaRow, toCol, toRow, true)
     if (via && rest && pathClear(via) && pathClear(rest)) return [...via, ...rest]
@@ -1158,7 +1166,8 @@
       {#each tiles as tile (`${tile.col}-${tile.row}`)}
         {@const spot = place(tile.col, tile.row)}
         {@const isPlot = isPlotCell(tile.col, tile.row)}
-        {@const plotIdx = isPlot ? plotIndexAt(tile.col) : -1}
+        {@const plotIdx = isPlot ? plotIndexAt(tile.col, tile.row) : -1}
+        {@const locked = plotIdx >= game.plotSlotsUnlocked}
         {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
         {@const stage = isPlot ? plotStage(plot) : null}
         {#if isPlot}
@@ -1174,9 +1183,11 @@
             style:height="{tileH}px"
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row + depthSpan}
-            aria-label={`Canteiro ${plotIdx + 1}`}
-            onclick={() => openPlot(plotIdx)}
+            class:locked
+            aria-label={locked ? `Canteiro ${plotIdx + 1}, fechado` : `Canteiro ${plotIdx + 1}`}
+            onclick={() => (locked ? showLockedPlot() : openPlot(plotIdx))}
           >
+            {#if locked}<span class="lock" aria-hidden="true"></span>{/if}
             {#if stage === 'planted'}
               <span class="crop sprout" aria-hidden="true"></span>
             {:else if stage === 'growing'}
@@ -1221,13 +1232,14 @@
           {#if showLabels}
             <span class="mon-tag" style:top="{tagAnchorY(walker, look)}px" aria-hidden="true">
               {walker.displayName} Lv {walker.level}
+              {#if need === 'hunger'}<img class="tag-need" src={berryIconSrc('oran')} alt="" />{:else if need === 'affection'}<span class="heart tag-heart"></span>{/if}
             </span>
           {/if}
-          {#if need && walker.anim !== 'Sleep'}
+          {#if need && walker.anim !== 'Sleep' && !showLabels}
             <span
               class="need"
               class:hungry={need === 'hunger'}
-              style:top="{tagAnchorY(walker, look) - (showLabels ? 18 : 0)}px"
+              style:top="{tagAnchorY(walker, look)}px"
               aria-hidden="true"
             >
               {#if need === 'hunger'}<img src={berryIconSrc('oran')} alt="" />{:else}<span class="heart"></span>{/if}
@@ -1504,6 +1516,37 @@
     touch-action: manipulation;
   }
 
+  /* Canteiro fechado: escurecido, com um cadeado no meio. */
+  .tile.plot.locked {
+    background: rgb(20 16 10 / 0.35);
+  }
+
+  .lock {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 7px;
+    transform: translate(-50%, -30%);
+    background: #e8d6a8;
+    border: 1px solid #3a2a14;
+    border-radius: 1px;
+    pointer-events: none;
+  }
+
+  .lock::before {
+    content: '';
+    position: absolute;
+    left: 1px;
+    top: -5px;
+    width: 4px;
+    height: 4px;
+    border: 1px solid #3a2a14;
+    border-bottom: 0;
+    border-radius: 3px 3px 0 0;
+    background: transparent;
+  }
+
   .tile.plot:focus-visible {
     outline: var(--px) dashed var(--ink);
     outline-offset: 2px;
@@ -1770,6 +1813,19 @@
     height: 9px;
     background: #e05a7a;
     clip-path: polygon(50% 100%, 0 40%, 0 15%, 20% 0, 50% 18%, 80% 0, 100% 15%, 100% 40%);
+  }
+
+  .tag-need {
+    width: 12px;
+    height: 12px;
+    margin-left: 2px;
+    vertical-align: -2px;
+    image-rendering: pixelated;
+  }
+
+  .tag-heart {
+    display: inline-block;
+    margin-left: 3px;
   }
 
   .gift-toast {

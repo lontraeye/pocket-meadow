@@ -50,7 +50,14 @@ type Recipe = {
   speckles: { c: string; p: number }[]
   /** Detalhes desenhados longe da borda: formas e quantos por tile. */
   details?: { stamps: Stamp[]; count: [number, number]; margin?: number }[]
+  /** Pintura fixa por pixel (sulcos, moldura), antes dos detalhes; null = deixa como está. */
+  paint?: (x: number, y: number) => string | null
   variants: number
+}
+
+/** Pixel na borda do losango (algum vizinho de 4 direções fica fora). */
+function onEdge(x: number, y: number): boolean {
+  return !inDiamond(x - 1, y) || !inDiamond(x + 1, y) || !inDiamond(x, y - 1) || !inDiamond(x, y + 1)
 }
 
 const tuft = (dark: string, light: string): Stamp[] => [
@@ -127,6 +134,19 @@ const recipes: Record<string, Recipe> = {
     ],
     variants: 3,
   },
+  // Canteiro da horta: terra arada em sulcos, dentro de uma moldura de madeira.
+  canteiro: {
+    base: 'Terra 3',
+    speckles: [{ c: 'Terra 4', p: 0.05 }],
+    paint: (x, y) => {
+      if (onEdge(x, y)) return y < TILE_H / 2 ? 'Madeira 4' : 'Madeira 2'
+      if (onEdge(x - 1, y) || onEdge(x + 1, y)) return 'Madeira 3'
+      // Sulcos paralelos ao lado nordeste do losango.
+      const band = (((Math.floor(x / 2) + y) % 3) + 3) % 3
+      return band === 0 ? 'Terra 2' : band === 1 ? 'Terra 4' : null
+    },
+    variants: 1,
+  },
   'agua-funda': {
     base: 'Água funda 3',
     speckles: [{ c: 'Água funda 2', p: 0.08 }],
@@ -161,6 +181,15 @@ async function write(terrain: string, variant: number, recipe: Recipe) {
           if (rand() < 0.6) set(x + shift + 1, y, speckle.c)
           break
         }
+      }
+    }
+  }
+  if (recipe.paint) {
+    for (let y = 0; y < TILE_H; y += 1) {
+      for (let x = 0; x < TILE_W; x += 1) {
+        if (!inDiamond(x, y)) continue
+        const c = recipe.paint(x, y)
+        if (c) set(x, y, c)
       }
     }
   }

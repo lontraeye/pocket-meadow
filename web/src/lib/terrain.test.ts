@@ -91,6 +91,12 @@ test('overlaysAt: quem tem prioridade maior entra pelo lado; canto só quando os
   ])
 })
 
+test('overlaysAt: estrutura (canteiro) não mistura com o vizinho', () => {
+  const g: TerrainGrid = { cols: 3, rows: 1, cells: ['terra', 'canteiro', 'grama'] }
+  assert.deepEqual(overlaysAt(g, 1, 0), [])
+  assert.deepEqual(overlaysAt(g, 0, 0), [])
+})
+
 test('parseTileFile: terreno com variação e máscaras', () => {
   assert.deepEqual(parseTileFile('/x/grama-1.png'), { kind: 'terrain', terrain: 'grama', variant: 1 })
   assert.deepEqual(parseTileFile('agua-funda-2.png'), { kind: 'terrain', terrain: 'agua-funda', variant: 2 })

@@ -17,6 +17,12 @@ export const TILE_H = 12
  */
 export const TERRAIN_ORDER = ['agua-funda', 'agua', 'lava', 'areia', 'terra', 'pedra', 'neve', 'chao-escuro', 'grama', 'grama-alta', 'flores'] as const
 
+/**
+ * Chão de estrutura (horta, e depois as máquinas): borda reta, sem mistura.
+ * Não recebe a borda dos vizinhos nem invade o vizinho.
+ */
+export const STRUCTURE_TERRAINS: ReadonlySet<string> = new Set(['canteiro'])
+
 export function terrainPriority(key: string): number {
   return (TERRAIN_ORDER as readonly string[]).indexOf(key)
 }
@@ -118,6 +124,7 @@ export function cellOf(grid: TerrainGrid, col: number, row: number): string | nu
  */
 export function overlaysAt(grid: TerrainGrid, col: number, row: number): { terrain: string; masks: MaskKey[] }[] {
   const own = cellOf(grid, col, row)
+  if (own !== null && STRUCTURE_TERRAINS.has(own)) return []
   const ownPriority = own === null ? -1 : terrainPriority(own)
   const found = new Map<string, MaskKey[]>()
   const add = (terrain: string, mask: MaskKey) => {
@@ -130,12 +137,13 @@ export function overlaysAt(grid: TerrainGrid, col: number, row: number): { terra
     const [dc, dr] = SIDE_STEP[side]
     const other = cellOf(grid, col + dc, row + dr)
     sideTerrain[side] = other
+    if (other !== null && STRUCTURE_TERRAINS.has(other)) continue
     if (other !== null && other !== own && terrainPriority(other) > ownPriority) add(other, `lado-${side}`)
   }
   for (const corner of CORNERS) {
     const [dc, dr] = CORNER_STEP[corner]
     const other = cellOf(grid, col + dc, row + dr)
-    if (other === null || other === own || terrainPriority(other) <= ownPriority) continue
+    if (other === null || other === own || STRUCTURE_TERRAINS.has(other) || terrainPriority(other) <= ownPriority) continue
     const [a, b] = CORNER_SIDES[corner]
     if (sideTerrain[a] === other || sideTerrain[b] === other) continue
     add(other, `canto-${corner}`)
