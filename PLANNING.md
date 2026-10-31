@@ -75,7 +75,7 @@ Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar.
 1. **Cuidado como pet** (5.21). É a peça mais barata, usa o jardim que já existe e dá o motivo de volta mais direto. O daycare continua, com papel novo (5.21).
 2. **Avisos de "pronto" e quadro de missões** (6.1 e 5.20), morando no jardim.
 3. **Primeira cadeia de produção, em lugares fixos:** uma ou duas máquinas com operador e poucas receitas (5.16), usando berries, sementes e os itens de árvore e pedra. Sem modo de edição ainda: as máquinas ocupam blocos fixos da grade, como os canteiros hoje.
-4. **Construção e decoração:** modo de edição, biomas e enfeites. Pede arte (lista de peças na 5.16), por isso vem depois, mas a arte pode começar já.
+4. **Habitats construídos em blocos** (5.22): o jogador monta o habitat peça por peça e o jogo reconhece o bioma pela mistura; cada habitat abriga 2 ou 3 Pokémon e dá o limite do jardim. Junto, o modo de construção e os enfeites. Pede arte (lista de peças na 5.16), por isso vem depois, mas a arte pode começar já.
 5. **Visitantes** atraídos pelos biomas.
 6. **Amaciar os muros** em paralelo: o painel do marco diz quanto falta, e o balanço dos líderes entra com o playtest (seção 11).
 7. **Congelar sistemas novos do mundo** até os itens 1 a 3 estarem no ar e jogados por alguns dias. Ficam parados: Liga contínua, rival, Equipe Rocket, Kanto, breed e personagem (5.17).
@@ -1270,6 +1270,70 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 **Falta:** capacidade do jardim; evolução por felicidade (seed); a taxa nova do daycare (alcance e piso); a felicidade e as necessidades na Coleção.
 
 **Pontos a decidir:** as taxas (quantas horas a fome leva para zerar, quanto a felicidade sobe por dia); se cada espécie prefere uma berry (sabor, como nos jogos); e se felicidade alta dá algum bônus pequeno na luta (sugestão: não, para o combate continuar igual).
+
+### 5.22 Habitats construídos em blocos (especificado em 2026-10-31, ainda sem fase)
+O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.
+
+**Peças:**
+- **Chão** (um por casa da grade): grama, grama alta, flores, areia, terra, pedra, água, água funda, neve, lava, chão escuro. O gramado de hoje é o chão neutro e não conta para nenhum bioma.
+- **Objetos** (em cima do chão, um por casa): rocha, árvore, árvore escura, tronco, cogumelo, cristal, gerador, cerca. Contam mais que o chão para o bioma (peso no config).
+- **Caminho:** chão neutro que separa habitats. Dois habitats encostados se fundiriam; o caminho, a cerca ou o gramado entre eles impedem.
+- Cada peça custa **materiais que vêm do mundo:** pedra (Rock Smash), madeira (Headbutt), areia e água (áreas de água, Surf), flores e grama (berries e sementes), cristal e gerador (marcos, missões). É a troca da seção 1.1: o mundo dá o material, o jardim vira a casa. Custos no config.
+
+**O motor de reconhecimento** (módulo puro, compartilhado entre o servidor e a tela, como a simulação da luta, seção 5.18):
+1. **Zonas:** casas vizinhas (4 direções) com chão ou objeto que não seja neutro formam uma zona (flood fill). Gramado e caminho não entram.
+2. **Tamanho mínimo:** uma zona com menos de `minTiles` casas (inicial: 6) é só decoração, não habitat.
+3. **Composição:** soma o peso de cada peça por material (água, pedra, areia, planta, fogo, escuro, gelo, metal…) e calcula a fração de cada um na zona.
+4. **Receitas de bioma** (config, em ordem; vale a primeira que bate):
+
+   | Bioma | Receita (frações da zona) | Tipos que moram |
+   |---|---|---|
+   | Lago | água ≥ 50% | Água, Gelo |
+   | Cratera | fogo ≥ 30% e pedra ≥ 20% | Fogo, Dragão |
+   | Usina | metal ≥ 25% | Elétrico, Aço |
+   | Bosque sombrio | escuro ≥ 40% | Fantasma, Sombrio, Veneno, Psíquico |
+   | Rochedo | pedra + areia + terra ≥ 60%, com pedra ≥ 20% | Pedra, Terra, Lutador, Aço |
+   | Campo gelado | gelo ≥ 50% | Gelo |
+   | Pradaria | planta ≥ 60% | Normal, Planta, Inseto, Voador, Fada |
+
+   A zona que não bate nenhuma receita é "terreno sem bioma": decoração, sem moradores. A tela diz o que falta ("falta água: 3 de 6").
+5. **Capacidade:** 2 vagas a partir de `minTiles` e 3 a partir de `bigTiles` (inicial: 10). Mais de 3 não, para o cuidado continuar em grupos pequenos. Habitat maior que isso só dá mais espaço para andar.
+6. **Pureza** (depois): quanto mais a zona passa da receita, mais rápido a felicidade dos moradores sobe (seção 5.21).
+
+O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A tela roda enquanto o jogador constrói, com o aviso ao vivo: "Isso vai virar um Rochedo · 3 vagas".
+
+**Moradores:**
+- Um Pokémon mora num habitat de um dos tipos dele (dois tipos: escolhe um dos dois). Ele anda só dentro da zona do habitat.
+- **O jardim tem o limite que os habitats dão.** Quem não tem casa vai para o PC (5.19). O time também mora nos habitats: quem está no time precisa de vaga.
+- **Começo:** o jardim novo vem com 2 habitats prontos (uma Pradaria e um habitat do tipo do inicial), 6 vagas, o tamanho do time.
+- **Carinho no habitat:** um toque faz carinho em todos os moradores de uma vez (o mesmo intervalo da 5.21).
+- Colocar um Pokémon num habitat: pela ficha ("Mudar de casa") ou tocando no habitat no modo de construção.
+
+**Construir:**
+- **Modo de construção** (já previsto na 5.16): o jardim vira grade, o jogador escolhe uma peça e toca nas casas. Sem arrastar com precisão (seção 4.4).
+- **Mudar uma zona com moradores:** se a mudança faz o habitat perder o bioma ou vagas, a tela avisa quem vai para o PC antes de confirmar. Nada é perdido.
+- Tirar uma peça devolve parte do material (config).
+- Os canteiros de berry viram peças do modo de construção (5.16).
+
+**Dados:**
+- `garden_tiles` (`user_id`, `col`, `row`, `floor`, `object`), uma linha por casa que não é gramado.
+- `habitats` (`id`, `user_id`, `biome`, `capacity`, `tiles` em JSON ou uma casa-âncora), recalculados pelo motor a cada construção salva.
+- `pokemon.habitat_id` (null = PC ou daycare).
+- Materiais no `inventory` (`mat:stone`, `mat:wood`, `mat:sand`…).
+- Migração das contas atuais: os 2 habitats iniciais; o time e os favoritos ficam até encher as vagas; o resto vai para o PC.
+
+**Arte:** tiles de chão por material e os objetos, de preferência a pixel art do usuário. Para não travar, a primeira versão usa chão provisório em cores sólidas no estilo do jardim e objetos simples, trocados depois sem mudar regra.
+
+**Ordem sugerida:**
+1. O motor puro com testes (zonas, receitas, capacidade), sem tela.
+2. `garden_tiles`, `habitats`, os 2 habitats iniciais e o limite do jardim, com os moradores andando dentro da zona.
+3. O modo de construção com poucas peças (grama, flores, areia, pedra, água, rocha, árvore) e os materiais saindo das manchas do campo (árvore e pedra já soltam item).
+4. Os outros biomas, objetos e a pureza.
+
+**Pontos a decidir:**
+- O tamanho do jardim (hoje 12×12 casas) e se ele cresce com o nível ou comprando terreno.
+- Se o reconhecimento olha só a composição ou também a forma (ex.: Lago precisa de água cercada de margem).
+- Os pesos de cada peça e as frações das receitas, depois de montar os primeiros habitats na prática.
 
 ---
 
