@@ -35,7 +35,13 @@ export type SimFighter = {
 
 export type BattleSetup = {
   team: SimFighter[]
+  /** O adversário em campo no começo (o selvagem, ou o 1º do treinador). */
   wild: SimFighter
+  /**
+   * Treinador (líder): o time dele em ordem, com `wild` = `foes[0]`. Quando um
+   * desmaia, o próximo entra (como o do jogador). Ausente = selvagem sozinho.
+   */
+  foes?: SimFighter[]
 }
 
 export type BattleAction = 'fast' | 'charged' | 'switch'
@@ -147,7 +153,12 @@ export type BattleSnapshot = {
   activeSlot: number
   switchReadyAt: number
   team: BattleSnapshotSide[]
+  /** O adversário em campo agora. */
   wild: BattleSnapshotSide
+  /** Qual do time adversário está em campo (0 no selvagem). */
+  foeSlot: number
+  /** O time adversário inteiro (só o selvagem, se não for treinador). */
+  foes: BattleSnapshotSide[]
   /** null = luta ainda em andamento (parou em untilMs). */
   result: BattleResultKind | null
 }

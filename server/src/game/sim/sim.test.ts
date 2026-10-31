@@ -674,3 +674,46 @@ test('automático: mesma seed → mesmos inputs; demora mais que o perfeito', ()
   const gaps = a.inputs.slice(1).map((inp, i) => inp.t - a.inputs[i]!.t)
   assert.ok(gaps.every((g) => g >= simConfig.autoReactionMinMs))
 })
+
+test('treinador: quando o Pokémon dele cai, o próximo entra; só vence derrubando todos', () => {
+  const strong = fighter({ id: 1, speciesId: 6, level: 60, stats: { hp: 200, attack: 160, defense: 120, spAttack: 120, spDefense: 120, speed: 120 } })
+  const foes = [
+    fighter({ speciesId: 16, level: 7, stats: { hp: 30, attack: 20, defense: 20, spAttack: 20, spDefense: 20, speed: 30 } }),
+    fighter({ speciesId: 17, level: 9, stats: { hp: 40, attack: 25, defense: 25, spAttack: 25, spDefense: 25, speed: 35 } }),
+  ]
+  const result = runBattle({ setup: { team: [strong], wild: foes[0]!, foes }, seed: 7 })
+  assert.equal(result.result, 'win')
+  const foeEvents = result.log.filter(
+    (e): e is Extract<typeof e, { kind: 'enter' | 'faint' }> => (e.kind === 'enter' || e.kind === 'faint') && e.side === 'wild',
+  )
+  assert.deepEqual(
+    foeEvents.map((e) => `${e.kind}:${e.slot}`),
+    ['enter:0', 'faint:0', 'enter:1', 'faint:1'],
+  )
+  // O próximo entra depois do mesmo intervalo do lado do jogador.
+  const faint0 = foeEvents[1]!.t
+  assert.equal(foeEvents[2]!.t, faint0 + simConfig.faintSwitchDelayMs)
+  assert.equal(result.snapshot.foeSlot, 1)
+  assert.deepEqual(
+    result.snapshot.foes.map((side) => side.fainted),
+    [true, true],
+  )
+  // O HP do seu time segue de uma luta para a outra (uma luta só).
+  const json = JSON.stringify(serializeBattleSetup({ team: [strong], wild: foes[0]!, foes }))
+  assert.deepEqual(parseBattleSetup(json).foes?.map((f) => f.speciesId), [16, 17])
+})
+
+test('treinador: perdeu no meio, os que sobraram ficam de pé', () => {
+  const weak = fighter({ id: 1, speciesId: 10, level: 2, stats: { hp: 12, attack: 6, defense: 6, spAttack: 6, spDefense: 6, speed: 6 } })
+  const foes = [
+    fighter({ speciesId: 16, level: 30, stats: { hp: 90, attack: 80, defense: 60, spAttack: 60, spDefense: 60, speed: 70 } }),
+    fighter({ speciesId: 17, level: 30, stats: { hp: 90, attack: 80, defense: 60, spAttack: 60, spDefense: 60, speed: 70 } }),
+  ]
+  const result = runBattle({ setup: { team: [weak], wild: foes[0]!, foes }, seed: 3 })
+  assert.equal(result.result, 'lose')
+  assert.equal(result.snapshot.foeSlot, 0)
+  assert.deepEqual(
+    result.snapshot.foes.map((side) => side.fainted),
+    [false, false],
+  )
+})

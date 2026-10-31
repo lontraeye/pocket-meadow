@@ -1,3 +1,4 @@
+import { outcomeCard } from './battleFlow'
 import {
   ballIconSrc,
   type AreaProgress,
@@ -48,13 +49,9 @@ export function battleHighlightCards(input: {
   const { battle, nameOf, canEvolve, regions } = input
   const cards: HighlightCard[] = []
 
-  if (!battle.won) {
-    cards.push(captureHighlightCard('lost'))
-  } else if (battle.caught) {
-    cards.push(captureHighlightCard('caught'))
-  } else if (battle.status !== 'pending') {
-    cards.push(captureHighlightCard('escaped'))
-  }
+  // O desfecho depende de contra quem foi (battleFlow.ts): selvagem ou treinador.
+  const outcome = outcomeCard(battle)
+  if (outcome) cards.push(outcome)
 
   // XP já aparece na luta (barra azul). Aqui só novidades: golpe novo / pode evoluir.
   for (const fighter of battle.fighters) {

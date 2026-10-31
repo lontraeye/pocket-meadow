@@ -11,6 +11,7 @@ import {
   toolBlock,
   toolOpen,
 } from '../config/milestones.js'
+import { leaderByMilestone } from '../config/leaders.js'
 import { CHAPTER_TITLES, linksOf, lockReason, placeBySlug, placeConfigs, START_PLACE } from '../config/places.js'
 import { regionBySlug, regionSpecies, regionSpeciesWhere, type SpeciesWhere } from '../config/regions.js'
 import { persistCatchUp } from '../db/catchUp.js'
@@ -149,6 +150,8 @@ function claimMilestone(
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
   if (clock.level < milestone.minLevel) return fail('milestone_level', 400)
+  // Marco com líder: só vencendo o desafio (POST /leaders/:key/challenge).
+  if (leaderByMilestone(key)) return fail('leader_required', 400)
 
   getDb().insert(trainerMilestones).values({ userId, milestoneKey: key, clearedAt: now }).run()
   return {
@@ -284,7 +287,18 @@ function goalView(progress: Progress, here: string, statusOf: (id: number) => Sp
           ready: progress.level >= open.minLevel,
           here: here === open.town,
           grants: (open.grants ?? []).map((tool) => TOOL_NAMES[tool]),
+          leader: leaderView(open.key),
         }
       : null,
+  }
+}
+
+/** O líder do marco e o time dele (para a tela de desafio); null = marco sem luta. */
+function leaderView(key: string) {
+  const leader = leaderByMilestone(key)
+  if (!leader) return null
+  return {
+    name: leader.name,
+    foes: leader.foes.map((foe) => ({ speciesId: foe.speciesId, level: foe.level, ace: foe.ace ?? false })),
   }
 }

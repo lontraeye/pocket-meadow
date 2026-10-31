@@ -53,7 +53,10 @@ type BattleState = {
   t: number
   team: SideState[]
   activeSlot: number
+  /** O adversário em campo (um de `foes`). */
   wild: SideState
+  foes: SideState[]
+  foeSlot: number
   switchReadyAt: number
   enteredSlots: Set<number>
   log: BattleEvent[]
@@ -88,12 +91,16 @@ export function runBattle(options: RunBattleOptions): BattleResult {
   const autoRng = mulberry32(autoReactionSeed(seed))
 
   const team = setup.team.map((fighter, slot) => makeSide(fighter, slot))
-  const wild = makeSide(setup.wild, 0)
+  const foes = (setup.foes && setup.foes.length > 0 ? setup.foes : [setup.wild]).map((fighter, slot) =>
+    makeSide(fighter, slot),
+  )
   const state: BattleState = {
     t: 0,
     team,
     activeSlot: 0,
-    wild,
+    wild: foes[0]!,
+    foes,
+    foeSlot: 0,
     switchReadyAt: 0,
     enteredSlots: new Set([0]),
     log: [],
@@ -127,9 +134,30 @@ export function runBattle(options: RunBattleOptions): BattleResult {
     if (processSideTicks(state, 'player') === 'faint') {
       /* handled below */
     }
+    // O adversário caiu: vitória, ou o próximo do treinador entra (como o seu).
     if (state.wild.hp <= 0) {
-      result = 'win'
-      break
+      const nextFoe = state.foeSlot + 1 < state.foes.length ? state.foeSlot + 1 : null
+      if (nextFoe === null) {
+        result = 'win'
+        break
+      }
+      const switchAt = state.t + simConfig.faintSwitchDelayMs
+      if (untilMs !== null && switchAt > untilMs) {
+        state.t = untilMs
+        stoppedEarly = true
+        break
+      }
+      state.t = switchAt
+      if (state.t >= simConfig.timeLimitMs) {
+        result = 'timeout'
+        break
+      }
+      enter(state, 'wild', nextFoe, false)
+      state.wildActAt = null
+      scheduleWild(state)
+      state.playerActAt = null
+      if (auto) schedulePlayer(state)
+      continue
     }
     if (processSideTicks(state, 'wild') === 'faint') {
       /* handled below */
@@ -160,8 +188,11 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       continue
     }
     if (state.wild.hp <= 0) {
-      result = 'win'
-      break
+      if (lastFoe(state)) {
+        result = 'win'
+        break
+      }
+      continue
     }
 
     if (auto) {
@@ -177,8 +208,11 @@ export function runBattle(options: RunBattleOptions): BattleResult {
           applyPlayerAction(state, { t: state.t, action })
           state.playerActAt = null
           if (state.wild.hp <= 0) {
-            result = 'win'
-            break
+            if (lastFoe(state)) {
+              result = 'win'
+              break
+            }
+            continue
           }
           if (state.team[state.activeSlot]!.hp > 0) schedulePlayer(state)
         }
@@ -194,20 +228,24 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       }
       applyPlayerAction(state, input)
       if (state.wild.hp <= 0) {
-        result = 'win'
+        if (lastFoe(state)) result = 'win'
         break
       }
       if (state.team[state.activeSlot]!.hp <= 0) break
     }
     if (result !== null) break
+    if (state.wild.hp <= 0) continue
     if (state.team[state.activeSlot]!.hp <= 0) continue
 
     if (state.wildActAt !== null && state.wildActAt === state.t) {
       wildAttack(state)
       state.wildActAt = null
       if (state.wild.hp <= 0) {
-        result = 'win'
-        break
+        if (lastFoe(state)) {
+          result = 'win'
+          break
+        }
+        continue
       }
       if (state.team[state.activeSlot]!.hp <= 0) continue
       scheduleWild(state)
@@ -258,6 +296,11 @@ export function runBattle(options: RunBattleOptions): BattleResult {
     enteredSlots: [...state.enteredSlots].sort((a, b) => a - b),
     snapshot: takeSnapshot(state, result),
   }
+}
+
+/** O adversário em campo é o último do time dele (o selvagem sempre é). */
+function lastFoe(state: BattleState): boolean {
+  return state.foeSlot + 1 >= state.foes.length
 }
 
 function activePlayer(state: BattleState): SideState {
@@ -313,6 +356,8 @@ function takeSnapshot(state: BattleState, result: BattleResultKind | null): Batt
     switchReadyAt: state.switchReadyAt,
     team: state.team.map((s) => snapshotSide(s, state.t)),
     wild: snapshotSide(state.wild, state.t),
+    foeSlot: state.foeSlot,
+    foes: state.foes.map((side) => snapshotSide(side, state.t)),
     result,
   }
 }
@@ -393,12 +438,17 @@ function enter(state: BattleState, side: 'player' | 'wild', slot: number, manual
     }
     applyIntimidate(state, 'player')
   } else {
+    const foe = state.foes[slot]!
+    state.wild = foe
+    state.foeSlot = slot
+    foe.readyAt = Math.max(foe.readyAt, state.t)
+    resetStages(foe)
     state.log.push({
       t: state.t,
       kind: 'enter',
       side: 'wild',
-      fighterId: state.wild.fighter.id,
-      slot: 0,
+      fighterId: foe.fighter.id,
+      slot,
     })
     applyIntimidate(state, 'wild')
   }

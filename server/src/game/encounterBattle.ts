@@ -3,6 +3,7 @@ import { calcStats, type StatBlock } from './stats.js'
 import {
   rollTraits,
   type AbilitySlot,
+  type RolledTraits,
   type MoveInfo,
   type SpeciesAbilities,
 } from './traits.js'
@@ -65,6 +66,11 @@ export function buildBattleSetup(input: {
   wild: WildSpeciesRow
   wildLevel: number
   encounterSeed: number
+  /**
+   * Treinador (líder): o time dele em ordem, com características fixas do
+   * config. Com ele, `wild`/`wildLevel` são ignorados e o 1º abre a luta.
+   */
+  trainerFoes?: { species: WildSpeciesRow; level: number; traits: RolledTraits }[]
   abilitiesFor: (speciesId: number) => SpeciesAbilities
   learnsetFor: (speciesId: number) => { move: string; level: number }[]
   moves: Map<string, MoveInfo>
@@ -103,28 +109,40 @@ export function buildBattleSetup(input: {
     }),
   )
 
+  const foeFighter = (spec: WildSpeciesRow, level: number, traits: RolledTraits) =>
+    buildSimFighter({
+      id: null,
+      speciesId: spec.id,
+      level,
+      type1: spec.type1,
+      type2: spec.type2,
+      base: speciesBase(spec),
+      ivs: traits.ivs,
+      evs: traits.evs,
+      nature: traits.nature,
+      abilitySlot: traits.abilitySlot,
+      abilities: input.abilitiesFor(spec.id),
+      fastMove: traits.fastMove,
+      chargedMove: traits.chargedMove,
+      moves,
+    })
+
+  if (input.trainerFoes && input.trainerFoes.length > 0) {
+    const foes = input.trainerFoes.map((foe) => foeFighter(foe.species, foe.level, foe.traits))
+    return {
+      setup: { team: teamFighters, wild: foes[0]!, foes },
+      teamFighters,
+      powers: teamFighters.map(fighterPowerSum),
+    }
+  }
+
   const wildTraits = rollTraits(mulberry32(wildTraitsSeed(input.encounterSeed)), {
     level: input.wildLevel,
     learnset: input.learnsetFor(input.wild.id),
     abilities: input.abilitiesFor(input.wild.id),
     moves,
   })
-  const wildFighter = buildSimFighter({
-    id: null,
-    speciesId: input.wild.id,
-    level: input.wildLevel,
-    type1: input.wild.type1,
-    type2: input.wild.type2,
-    base: speciesBase(input.wild),
-    ivs: wildTraits.ivs,
-    evs: wildTraits.evs,
-    nature: wildTraits.nature,
-    abilitySlot: wildTraits.abilitySlot,
-    abilities: input.abilitiesFor(input.wild.id),
-    fastMove: wildTraits.fastMove,
-    chargedMove: wildTraits.chargedMove,
-    moves,
-  })
+  const wildFighter = foeFighter(input.wild, input.wildLevel, wildTraits)
 
   return {
     setup: { team: teamFighters, wild: wildFighter },

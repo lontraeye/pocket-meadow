@@ -1,8 +1,10 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { asUsername, createPlayer, isStarter, openSession, setSessionCookie } from '../auth/accounts.js'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballList, ballsConfig } from '../config/balls.js'
+import { leaderConfigs } from '../config/leaders.js'
+import { milestoneByKey } from '../config/milestones.js'
 import { progressConfig } from '../config/progress.js'
 import { loadRegions } from '../config/regions.js'
 import { trainerConfig } from '../config/trainer.js'
@@ -11,7 +13,16 @@ import { setDevWeather } from '../game/weather.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { creditItems } from '../db/inventory.js'
-import { berryPlots, daycareSlots, species, trainers, users } from '../db/schema.js'
+import {
+  berryPlots,
+  daycareSlots,
+  encounters,
+  species,
+  trainerMilestones,
+  trainerPlaces,
+  trainers,
+  users,
+} from '../db/schema.js'
 import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
 
@@ -84,6 +95,38 @@ devRoutes.post('/encounter', requireUser, async (c) => {
   )
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.encounter, 201)
+})
+
+// Refaz o desafio do último líder vencido: tira o marco, encerra o encontro em
+// andamento e leva o jogador à cidade do líder (já visitada), pronto para
+// desafiar de novo. Os marcos seguintes ficam como estão.
+devRoutes.post('/leader/reset', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => {
+    const db = getDb()
+    const keys = leaderConfigs.map((leader) => leader.milestoneKey)
+    const last = db
+      .select({ key: trainerMilestones.milestoneKey })
+      .from(trainerMilestones)
+      .where(and(eq(trainerMilestones.userId, userId), inArray(trainerMilestones.milestoneKey, keys)))
+      .orderBy(desc(trainerMilestones.clearedAt))
+      .get()
+    if (!last) return null
+    const milestone = milestoneByKey(last.key)!
+    db.delete(trainerMilestones)
+      .where(and(eq(trainerMilestones.userId, userId), eq(trainerMilestones.milestoneKey, last.key)))
+      .run()
+    db.update(encounters)
+      .set({ status: 'fled', resolvedAt: now })
+      .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+    db.update(trainers).set({ currentPlace: milestone.town, updatedAt: now }).where(eq(trainers.userId, userId)).run()
+    db.insert(trainerPlaces).values({ userId, placeSlug: milestone.town, firstVisitAt: now }).onConflictDoNothing().run()
+    return { key: milestone.key, name: milestone.name, town: milestone.town }
+  })
+  if (!result) return c.json({ error: 'no_leader_cleared' }, 404)
+  return c.json(result)
 })
 
 devRoutes.post('/energy', requireUser, (c) => {

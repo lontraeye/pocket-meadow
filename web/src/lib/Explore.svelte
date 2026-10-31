@@ -37,6 +37,7 @@
     loadSavedBattle,
   } from './battlePersist'
   import Highlights from './Highlights.svelte'
+  import { isTrainerBattle, resultLine } from './battleFlow'
   import { battleHighlightCards, mergeCaptureOutcome, prefersReducedMotion, throwRewardCards } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
   import { battleSpritesReady, spriteReady } from './preload'
@@ -431,6 +432,7 @@
       }
       await battleSpritesReady([
         { speciesId: found.speciesId, isShiny: found.isShiny },
+        ...(found.leader?.foes ?? []).map((foe) => ({ speciesId: foe.speciesId, isShiny: false })),
         ...saved.setup.team.map((fighter) => ({
           speciesId: fighter.speciesId,
           isShiny: members.find((mon) => mon.id === fighter.id)?.isShiny ?? false,
@@ -483,7 +485,8 @@
   function applyBattleResult(battle: BattleOutcome, teamSnapshot: OwnedPokemon[]) {
     result = { kind: 'battle', battle, team: teamSnapshot, left: false }
     battleCards = cardsForBattle(battle, teamSnapshot)
-    if (!battle.won) {
+    if (!battle.won || isTrainerBattle(battle)) {
+      // Derrota, ou vitória contra treinador (sem captura): direto ao resultado.
       step = 'highlights'
     } else {
       if (encounter) {
@@ -493,6 +496,17 @@
       }
       step = 'decide'
     }
+    void onState().catch(() => undefined)
+  }
+
+  /** Fim do desafio (marco ou derrota): volta ao mapa, na cidade do líder. */
+  function backToMap() {
+    play('tap')
+    encounter = null
+    result = null
+    notice = ''
+    message = ''
+    step = 'regions'
     void onState().catch(() => undefined)
   }
 
@@ -623,6 +637,33 @@
     void search('dev', () => api('/api/dev/encounter', { species, level: devLevel }))
   }
 
+  /** Recria a jornada (mapa e marco), para ela ler o lugar e os marcos de novo. */
+  let journeyKey = $state(0)
+
+  /** Só em teste: desfaz o último líder vencido e leva à cidade dele. */
+  async function resetLeader() {
+    pending = true
+    message = ''
+    notice = ''
+    try {
+      const response = await api('/api/dev/leader/reset', {})
+      if (!response.ok) {
+        const error = await readError(response)
+        message = error.error === 'no_leader_cleared' ? 'Nenhum líder vencido para refazer.' : errorText(error)
+        return
+      }
+      const reset = (await response.json()) as { name: string }
+      encounter = null
+      notice = `${reset.name} desfeito: desafie o líder de novo.`
+      await onState()
+      journeyKey += 1
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
   async function refillEnergy() {
     pending = true
     message = ''
@@ -673,6 +714,7 @@
       // máximo 2,5 s) conta, senão o fim passaria do limite de abandono.
       await battleSpritesReady([
         { speciesId: wild.speciesId, isShiny: wild.isShiny },
+        ...(wild.leader?.foes ?? []).map((foe) => ({ speciesId: foe.speciesId, isShiny: false })),
         ...teamSnapshot.map((mon) => ({ speciesId: mon.speciesId, isShiny: mon.isShiny })),
       ])
       enterFight(start, teamSnapshot, [], performance.now() - startedAt)
@@ -977,7 +1019,9 @@
         {mon.displayName}
         {#if mon.isShiny}<span class="star" title="Shiny">★</span>{/if}
       </h2>
-      <p class="lv">Nv {mon.level} · {mon.regionName}</p>
+      <p class="lv">
+        Nv {mon.level} · {mon.regionName}
+      </p>
       {#if variant === 'dizzy' && unrest > 0}
         <div class="agitation" aria-label="Inquieto" title="Inquieto">
           {#each Array(unrest) as _, i (i)}
@@ -998,6 +1042,7 @@
   {/if}
 
   {#if step === 'regions'}
+    {#key journeyKey}
     <Journey
       busy={pending}
       {searching}
@@ -1010,6 +1055,10 @@
       onUseSpot={(slug, method) => {
         fromField = true
         return search(slug, () => api('/api/field/use', { method }))
+      }}
+      onChallenge={(key) => {
+        fromField = false
+        void search(key, () => api(`/api/leaders/${key}/challenge`, {}))
       }}
       onGarden={onClose}
       {onOpenPc}
@@ -1037,6 +1086,9 @@
             {/if}
             <button type="button" class="btn choice" disabled={pending} onclick={() => void grantBalls()}>
               Ganhar bolas (teste)
+            </button>
+            <button type="button" class="btn choice" disabled={pending} onclick={() => void resetLeader()}>
+              Refazer o último líder (teste)
             </button>
             <form
               class="dev-encounter"
@@ -1083,11 +1135,30 @@
         </section>
       {/snippet}
     </Journey>
+    {/key}
   {:else if step === 'encounter' && encounter}
     <div class="scroll">
-      <section class="panel sheet">
-        {@render wild(encounter, 'compact')}
-      </section>
+      {#if encounter.leader}
+        <!-- Desafio do líder: o time dele inteiro, em ordem; uma luta só. -->
+        <section class="panel sheet versus">
+          <p class="kicker">Desafio de ginásio · {encounter.regionName}</p>
+          <h2>{encounter.leader.name}</h2>
+          <ul class="foe-team" aria-label="Time do {encounter.leader.name}">
+            {#each encounter.leader.foes as foe, index (index)}
+              <li class:ace={foe.ace}>
+                <img src={showdownSrc(foe.speciesId, false)} alt="" />
+                <span>{foe.displayName}</span>
+                <small>Nv {foe.level}{#if foe.ace} · ás{/if}</small>
+              </li>
+            {/each}
+          </ul>
+          <p class="hint">Quando um Pokémon cai, o próximo entra, dos dois lados. Sem captura.</p>
+        </section>
+      {:else}
+        <section class="panel sheet">
+          {@render wild(encounter, 'compact')}
+        </section>
+      {/if}
       <section class="panel sheet">
         <h2>Time {roster.length}/{game.trainer.teamMax} <small class="pick">toque em quem abre</small></h2>
         {#if roster.length === 0}
@@ -1128,7 +1199,7 @@
           <strong>Luta automática</strong>
           <small>{battleAuto ? 'Ligada' : 'Desligada'}</small>
         </button>
-        <button type="button" class="btn" disabled={pending} onclick={flee}>Fugir</button>
+        <button type="button" class="btn" disabled={pending} onclick={flee}>{encounter.leader ? 'Desistir' : 'Fugir'}</button>
       </div>
       <button
         type="button"
@@ -1140,7 +1211,7 @@
         {#if fighting}
           <span class="ball sprite-wait" aria-hidden="true"></span>Batalhando…
         {:else}
-          Batalhar
+          {encounter.leader ? 'Lutar' : 'Batalhar'}
         {/if}
       </button>
       <button type="button" class="btn-link" onclick={onClose}>Voltar ao jardim</button>
@@ -1401,20 +1472,29 @@
   {:else if step === 'result' && result}
     <div class="scroll">
       <section class="panel sheet wild">
-        {#if result.kind === 'fled'}
+        {#if result.kind === 'fled' && encounter?.leader}
+          <h2>Desistiu</h2>
+          <p>Você saiu do desafio do {encounter.leader.name}. Desafie de novo quando quiser.</p>
+        {:else if result.kind === 'fled'}
           <h2>Fugiu</h2>
           <p>O encontro acabou.{game.trainer.energyEnabled ? ' A energia não volta.' : ''}</p>
         {:else if encounter}
-          {@render wild(encounter)}
-          {#if result.battle.caught}
-            <p class="good">Capturado! Entrou no jardim.</p>
-          {:else if result.left}
-            <p>Você venceu e deixou ele ir.</p>
-          {:else if result.battle.won}
-            <p>Você venceu, mas ele fugiu.</p>
+          {@const line = resultLine({ ...result.battle, left: result.left })}
+          {#if encounter.leader}
+            <h2>{encounter.leader.name}</h2>
+            <ul class="foe-team" aria-label="Time do {encounter.leader.name}">
+              {#each encounter.leader.foes as foe, index (index)}
+                <li class:ace={foe.ace} class:beaten={result.battle.won}>
+                  <img src={showdownSrc(foe.speciesId, false)} alt="" />
+                  <span>{foe.displayName}</span>
+                  <small>Nv {foe.level}</small>
+                </li>
+              {/each}
+            </ul>
           {:else}
-            <p class="bad">Derrota. Seus Pokémon não se machucaram.</p>
+            {@render wild(encounter)}
           {/if}
+          <p class:good={line.tone === 'good'} class:bad={line.tone === 'bad'}>{line.text}</p>
           {#if result.battle.catchChance !== null}
             <p class="hint">Chance de captura {percent(result.battle.catchChance)}</p>
           {/if}
@@ -1422,7 +1502,9 @@
       </section>
     </div>
     <div class="dock">
-      {#if fromField}
+      {#if encounter?.leader}
+        <button type="button" class="btn btn-primary" onclick={backToMap}>Voltar ao mapa</button>
+      {:else if fromField}
         <button type="button" class="btn btn-primary" onclick={backToField}>Voltar ao campo</button>
         <button type="button" class="btn-link" onclick={onClose}>Ir ao jardim</button>
       {:else}
@@ -1455,6 +1537,56 @@
   .sheet {
     display: grid;
     gap: 0.5rem;
+  }
+
+  /* Desafio do líder: o time dele, lado a lado, com o ás destacado. */
+  .versus .kicker {
+    margin: 0;
+    font-size: 0.8rem;
+    opacity: 0.8;
+  }
+
+  .foe-team {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .foe-team li {
+    display: grid;
+    justify-items: center;
+    padding: 0.25rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    text-align: center;
+  }
+
+  .foe-team li.ace {
+    border-color: var(--accent, #f8d030);
+  }
+
+  .foe-team img {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+
+  .foe-team span {
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .foe-team small {
+    font-size: 0.7rem;
+  }
+
+  /* Na tela final, depois da vitória: o time do líder derrubado. */
+  .foe-team li.beaten img {
+    filter: grayscale(1) opacity(0.55);
   }
 
   h2 {

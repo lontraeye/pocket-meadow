@@ -333,6 +333,12 @@ export const encounters = sqliteTable(
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     resolvedAt: integer('resolved_at'),
+    /**
+     * Luta contra líder (leaders.ts): o marco do líder; null = selvagem. A
+     * espécie e o nível são os do 1º Pokémon dele; a luta é contra o time todo.
+     * Vitória contra o líder fica 'escaped' (não há captura).
+     */
+    leaderKey: text('leader_key'),
   },
   (table) => [
     index('idx_encounters_user_created').on(table.userId, sql`${table.createdAt} desc`),

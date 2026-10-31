@@ -143,6 +143,7 @@ function readState(userId: number, now: number) {
       captureRate: species.captureRate,
       type1: species.type1,
       type2: species.type2,
+      leaderKey: encounters.leaderKey,
     })
     .from(encounters)
     .innerJoin(species, eq(encounters.speciesId, species.id))

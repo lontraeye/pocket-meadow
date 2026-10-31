@@ -7,6 +7,8 @@ import type { BattleSetup, SimFighter, SimMove } from './types.js'
 export type SerializedBattleSetup = {
   team: SerializedFighter[]
   wild: SerializedFighter
+  /** Time do treinador (líder), em ordem; ausente no selvagem. */
+  foes?: SerializedFighter[]
 }
 
 export type SerializedFighter = {
@@ -24,6 +26,7 @@ export function serializeBattleSetup(setup: BattleSetup): SerializedBattleSetup 
   return {
     team: setup.team.map(serializeFighter),
     wild: serializeFighter(setup.wild),
+    ...(setup.foes ? { foes: setup.foes.map(serializeFighter) } : {}),
   }
 }
 
@@ -32,9 +35,15 @@ export function parseBattleSetup(json: string): BattleSetup {
   if (!raw || !Array.isArray(raw.team) || raw.team.length < 1 || raw.team.length > simConfig.teamMax || !raw.wild) {
     throw new Error('invalid_battle_setup')
   }
+  if (raw.foes !== undefined && (!Array.isArray(raw.foes) || raw.foes.length < 1 || raw.foes.length > simConfig.teamMax)) {
+    throw new Error('invalid_battle_setup')
+  }
+  const foes = raw.foes?.map(parseFighter)
   return {
     team: raw.team.map(parseFighter),
-    wild: parseFighter(raw.wild),
+    // Com time de treinador, o primeiro dele é quem abre.
+    wild: foes ? foes[0]! : parseFighter(raw.wild),
+    ...(foes ? { foes } : {}),
   }
 }
 

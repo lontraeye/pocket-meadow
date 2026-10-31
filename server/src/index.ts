@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js'
 import { devRoutes, devToolsEnabled } from './routes/dev.js'
 import { daycareRoutes } from './routes/daycare.js'
 import { encounterRoutes } from './routes/encounters.js'
+import { leaderRoutes } from './routes/leaders.js'
 import { itemRoutes } from './routes/items.js'
 import { plotRoutes } from './routes/plots.js'
 import { pokedexRoutes } from './routes/pokedex.js'
@@ -71,6 +72,7 @@ app.route('/places', placeRoutes)
 app.route('/field', fieldRoutes)
 app.route('/pc', pcRoutes)
 app.route('/encounters', encounterRoutes)
+app.route('/leaders', leaderRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/pokedex', pokedexRoutes)
 app.route('/daycare', daycareRoutes)

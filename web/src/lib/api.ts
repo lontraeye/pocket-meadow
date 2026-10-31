@@ -33,6 +33,14 @@ export type PendingEncounter = {
   captureRate: number
   type1: string
   type2: string | null
+  /** Luta contra líder: quem é e o time dele, em ordem; null = selvagem. */
+  leader: EncounterLeader | null
+}
+
+export type EncounterLeader = {
+  key: string
+  name: string
+  foes: { speciesId: number; displayName: string; level: number; ace: boolean }[]
 }
 
 export type BallInfo = {
@@ -145,6 +153,8 @@ export type PlacesResponse = {
       ready: boolean
       here: boolean
       grants: string[]
+      /** O líder do marco e o time dele; null = marco sem luta. */
+      leader: { name: string; foes: { speciesId: number; level: number; ace: boolean }[] } | null
     } | null
   }
   places: PlaceView[]
@@ -176,7 +186,8 @@ export type BattleOutcome = {
   won: boolean
   catchChance: number | null
   caught: boolean
-  status: 'lost' | 'caught' | 'escaped' | 'pending'
+  /** 'defeated' = venceu um treinador (sem captura nem fuga). */
+  status: 'lost' | 'caught' | 'escaped' | 'pending' | 'defeated'
   log?: unknown[]
   fighters: {
     pokemonId: number
@@ -191,6 +202,10 @@ export type BattleOutcome = {
   trainer: { level: number; xp: number; levelsGained: number }
   seedDrop: { itemKey: string; berryKey: string } | null
   levelRewards: ItemCredit[]
+  /** Contra quem foi a luta; ausente em resposta antiga = selvagem (ver battleFlow.ts). */
+  opponent?:
+    | { kind: 'wild' }
+    | { kind: 'leader'; name: string; cleared: { key: string; name: string; opens: number; grants: string[] } | null }
 }
 
 /** Resposta de POST /encounters/:id/throw. */
@@ -506,6 +521,8 @@ export function errorText(error: ApiError): string {
       return 'O marco é na cidade dele. Vá até lá.'
     case 'milestone_level':
       return 'Ainda falta nível de treinador para esse marco.'
+    case 'leader_required':
+      return 'Esse marco só vem vencendo o líder.'
     case 'milestone_cleared':
       return 'Esse marco já é seu.'
     case 'milestone_locked':

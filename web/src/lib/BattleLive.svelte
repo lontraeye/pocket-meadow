@@ -27,6 +27,7 @@
     loadBattleFx,
     type FxId,
   } from './fx'
+  import { prizeLines, recapIntro } from './battleFlow'
   import FxSprite from './FxSprite.svelte'
   import { prefersReducedMotion } from './highlights'
   import PmdSprite from './PmdSprite.svelte'
@@ -82,6 +83,8 @@
   // Pós-vitória: a barra azul enche antes de sair da luta.
   const XP_FILL_MS = 850
   const XP_LEVEL_PAUSE_MS = 420
+  // Treinador mandando o próximo: quanto a faixa fica na tela.
+  const SEND_OUT_BANNER_MS = 1400
   // Troca: volta pra pokébola e o próximo aparece.
   const SWITCH_OUT_MS = 280
   const SWITCH_IN_MS = 320
@@ -342,7 +345,16 @@
   )
   const active = $derived(snap.team[snap.activeSlot] ?? snap.team[0]!)
   const activeFighter = $derived(setup.team[snap.activeSlot] ?? setup.team[0]!)
-  const wildFighter = setup.wild
+  // Treinador (líder): o time dele em ordem, e quem está em campo agora. No
+  // selvagem é uma lista de um.
+  const foeSetup = setup.foes && setup.foes.length > 0 ? setup.foes : [setup.wild]
+  const isTrainer = foeSetup.length > 1 || encounter.leader !== null
+  const wildFighter = $derived(foeSetup[snap.foeSlot ?? 0] ?? setup.wild)
+  const wildSpeciesId = $derived(wildFighter.speciesId)
+  const wildShiny = $derived(isTrainer ? false : encounter.isShiny)
+  const wildName = $derived(
+    isTrainer ? (encounter.leader?.foes[snap.foeSlot ?? 0]?.displayName ?? encounter.displayName) : encounter.displayName,
+  )
 
   const chargedCost = $derived(activeFighter.chargedMove ? chargedEnergyCost(activeFighter.chargedMove.power) : null)
   const waitMs = $derived(Math.max(0, active.readyAt - elapsed, snap.switchReadyAt - elapsed))
@@ -384,7 +396,7 @@
   )
   const allyShowShiny = $derived(switchFx?.phase === 'out' ? switchFx.holdShiny : allyShiny)
   const allyLook = $derived(gardenSprite(allyShowSpecies, allyShowShiny))
-  const wildLook = $derived(gardenSprite(encounter.speciesId, encounter.isShiny))
+  const wildLook = $derived(gardenSprite(wildSpeciesId, wildShiny))
   const switchCss = $derived(
     !switchFx
       ? ''
@@ -403,7 +415,7 @@
   let allyBody = $state<SpriteBody | null>(null)
   $effect(() => {
     const look = wildLook
-    const speciesId = encounter.speciesId
+    const speciesId = wildSpeciesId
     wildBody = null
     if (look.kind !== 'pmd') return
     let alive = true
@@ -484,6 +496,19 @@
         from = event.t
         if (i >= startAt && !switchStarted) allyPose = null
       }
+      // O próximo do treinador entrou: quem caiu sai de cena, e a faixa avisa quem veio.
+      if (event.kind === 'enter' && event.side === 'wild' && event.slot > 0 && i >= startAt) {
+        wildPose = null
+        if (!reduced && encounter.leader && event.t >= e - FX_STALE_MS) {
+          const next = encounter.leader.foes[event.slot]
+          chargedFx = {
+            name: `${encounter.leader.name} enviou ${next?.displayName ?? 'o próximo'}!`,
+            color: '#ffffff',
+            side: 'wild',
+            until: performance.now() + SEND_OUT_BANNER_MS,
+          }
+        }
+      }
       if (event.kind === 'move' && event.side === 'player') from = event.t
       // Só pula o efeito de evento velho de verdade (a aba ficou em segundo
       // plano, por exemplo). Antes pulava tudo quando a última re-simulação
@@ -514,6 +539,8 @@
     let next = timeLimit
     if (!state.wild.fainted) next = Math.min(next, Math.max(state.wild.readyAt + simConfig.aiFastDelayMinMs, e + 1))
     if (state.team[state.activeSlot]?.fainted) next = Math.min(next, e + 1)
+    // O do treinador caiu e a luta segue: o próximo dele entra sozinho, com o tempo.
+    if (state.wild.fainted) next = Math.min(next, e + 1)
     // Com status em campo, o tempo sozinho muda a luta (dano por segundo,
     // acordar, descongelar, a confusão passar): re-simula a cada 100 ms.
     const ally = state.team[state.activeSlot]
@@ -844,11 +871,7 @@
   function buildRecapSteps(outcome: BattleOutcome): RecapStep[] {
     const steps: RecapStep[] = []
     const onFieldId = activeFighter.id
-    if (outcome.won) {
-      steps.push({ kind: 'text', line: `${encounter.displayName} desmaiou!` })
-    } else {
-      steps.push({ kind: 'text', line: 'Seu time foi derrotado…' })
-    }
+    steps.push({ kind: 'text', line: recapIntro(outcome, encounter) })
     if (outcome.won) {
       for (const fighter of outcome.fighters) {
         if (fighter.xpGained <= 0 && fighter.levelsGained <= 0) continue
@@ -871,16 +894,24 @@
           })
         }
       }
-      // Reserva do “dinheiro” / itens (semente e recompensas de nível por enquanto).
+      // O prêmio do treinador vencido (marco, ferramentas), depois a semente do
+      // selvagem e, por último, o que veio por subir de nível de treinador.
+      for (const line of prizeLines(outcome)) steps.push({ kind: 'text', line })
       if (outcome.seedDrop) {
         steps.push({ kind: 'text', line: `Encontrou ${itemLabel(outcome.seedDrop.itemKey, berries, balls)}!` })
       }
-      for (const reward of outcome.levelRewards ?? []) {
-        const label = itemLabel(reward.itemKey, berries, balls)
+      const levelRewards = outcome.levelRewards ?? []
+      if (outcome.trainer.levelsGained > 0) {
+        const items = levelRewards.map((reward) => {
+          const label = itemLabel(reward.itemKey, berries, balls)
+          return reward.quantity > 1 ? `${reward.quantity}× ${label}` : label
+        })
         steps.push({
           kind: 'text',
           line:
-            reward.quantity > 1 ? `Recebeu ${reward.quantity}× ${label}!` : `Recebeu ${label}!`,
+            items.length > 0
+              ? `Treinador Nv ${outcome.trainer.level}! Recebeu ${items.join(', ')}.`
+              : `Treinador Nv ${outcome.trainer.level}!`,
         })
       }
     }
@@ -1053,7 +1084,7 @@
       spawnStatArrow(event.side, event.stat, event.stages)
     } else if (event.kind === 'faint') {
       play('faint')
-      const fighter = event.side === 'player' ? setup.team[event.slot]! : wildFighter
+      const fighter = event.side === 'player' ? setup.team[event.slot]! : (foeSetup[event.slot] ?? wildFighter)
       poseFor(event.side, faintSteps(fighter, event.side, endingFaint))
     }
   }
@@ -1601,15 +1632,21 @@
     {/if}
     <div class="plate wild-plate">
       <span class="who">
-        <b>{encounter.displayName}{#if encounter.isShiny} ★{/if}</b>
+        <b>{wildName}{#if wildShiny} ★{/if}</b>
         {#if statusSeal(snap.wild.status)}
           {@const seal = statusSeal(snap.wild.status)!}
           <span class="seal {seal.tone}" class:pop={!reduced}>{seal.code}</span>
         {/if}
         {#if snap.wild.confused}<span class="seal conf" class:pop={!reduced}>CNF</span>{/if}
         <small>Nv {wildFighter.level}</small>
+        {#if isTrainer}
+          <!-- Time do líder: uma bola por Pokémon; os que caíram ficam apagados. -->
+          <span class="foe-balls" aria-label="{snap.foes.filter((side) => !side.fainted).length} de {snap.foes.length} de pé">
+            {#each snap.foes as side (side.slot)}<i class:down={side.fainted}></i>{/each}
+          </span>
+        {/if}
       </span>
-      <span role="progressbar" aria-label="HP do selvagem" aria-valuemin="0" aria-valuemax={snap.wild.maxHp} aria-valuenow={snap.wild.hp}>
+      <span role="progressbar" aria-label={isTrainer ? 'HP do adversário' : 'HP do selvagem'} aria-valuemin="0" aria-valuemax={snap.wild.maxHp} aria-valuenow={snap.wild.hp}>
         {@render bar(wildPercent, wildTrail, hpTone(wildPercent))}
       </span>
     </div>
@@ -1629,7 +1666,7 @@
         {#if wildLook.kind === 'pmd'}
           <div class="anchor">
             <PmdSprite
-              speciesId={encounter.speciesId}
+              speciesId={wildSpeciesId}
               shiny={wildLook.shinySheet}
               anim={wildView.anim}
               dir={7}
@@ -1639,7 +1676,7 @@
             />
           </div>
         {:else}
-          <img class="gif" src={showdownSrc(encounter.speciesId, encounter.isShiny)} alt="" />
+          <img class="gif" src={showdownSrc(wildSpeciesId, wildShiny)} alt="" />
         {/if}
         {#if snap.wild.status === 'sleep' && !reduced}<span class="zzz" aria-hidden="true">Zzz</span>{/if}
       </div>
@@ -2260,6 +2297,26 @@
   .ally-plate {
     right: 0.4rem;
     bottom: 0.4rem;
+  }
+
+  /* Time do líder no painel do adversário: bolinhas, as caídas apagadas. */
+  .foe-balls {
+    display: inline-flex;
+    gap: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .foe-balls i {
+    width: 8px;
+    height: 8px;
+    border: 2px solid #283028;
+    background: linear-gradient(#e04848 0 45%, #283028 45% 55%, #f8f8f8 55%);
+  }
+
+  .foe-balls i.down {
+    filter: grayscale(1);
+    opacity: 0.4;
   }
 
   .who {

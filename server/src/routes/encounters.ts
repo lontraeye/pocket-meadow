@@ -5,6 +5,8 @@ import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
+import { type LeaderConfig, leaderByMilestone } from '../config/leaders.js'
+import { milestoneByKey, TOOL_NAMES } from '../config/milestones.js'
 import { placeBySlug } from '../config/places.js'
 import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
@@ -20,6 +22,7 @@ import {
   pokedexEntries,
   pokemon,
   species,
+  trainerMilestones,
   trainers,
 } from '../db/schema.js'
 import { creditChainCandies, creditItems, debitItem, grantTrainerLevelRewards } from '../db/inventory.js'
@@ -34,6 +37,7 @@ import {
   type TeamMonRow,
   type WildSpeciesRow,
 } from '../game/encounterBattle.js'
+import { leaderFoeTraits } from '../game/leaders.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
@@ -320,6 +324,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     wild,
     wildLevel: encounter.row.level,
     encounterSeed: encounter.row.rngSeed,
+    trainerFoes: trainerFoesOf(encounter.row),
     abilitiesFor,
     learnsetFor,
     moves: movesByName(),
@@ -332,6 +337,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     encounter: encounter.row,
     team: team.rows.map((row, slot) => ({ ...row, slot })),
     wild,
+    opponents: opponentsOf(built.setup, wild),
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
     faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
@@ -355,6 +361,7 @@ function startBattle(userId: number, encounterId: number, pokemonIds: number[], 
     wild,
     wildLevel: encounter.row.level,
     encounterSeed: encounter.row.rngSeed,
+    trainerFoes: trainerFoesOf(encounter.row),
     abilitiesFor,
     learnsetFor,
     moves: movesByName(),
@@ -425,6 +432,7 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
       encounter: encounter.row,
       team,
       wild,
+      opponents: opponentsOf(setup, wild),
       won: false,
       enteredSlots: result.enteredSlots,
       faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
@@ -444,6 +452,7 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
     encounter: encounter.row,
     team,
     wild,
+    opponents: opponentsOf(setup, wild),
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
     faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
@@ -460,7 +469,10 @@ function applyBattleOutcome(input: {
   encounter: EncounterRow
   /** Só Pokémon que ainda existem e são do jogador. */
   team: RewardTeamRow[]
+  /** O selvagem (captura); no líder, o 1º dele. */
   wild: WildBattleRow
+  /** Quem foi derrubado na vitória (XP e EVs): o selvagem, ou o time todo do líder. */
+  opponents: { row: WildBattleRow; level: number }[]
   won: boolean
   enteredSlots: number[]
   /** Slots que terminaram desmaiados (não recebem XP). */
@@ -468,9 +480,8 @@ function applyBattleOutcome(input: {
   now: number
   log: BattleEvent[]
 }) {
-  const { userId, clock, encounter, team, wild, won, enteredSlots, faintedSlots, now, log } = input
+  const { userId, clock, encounter, team, wild, opponents, won, enteredSlots, faintedSlots, now, log } = input
   const db = getDb()
-  const yieldEvs = evYieldFromSpecies(wild)
   // Só quem entrou e não desmaiou. Bench e KO ficam de fora; Exp Share (futuro) muda isso.
   const sharers = battleXpSharers(enteredSlots, faintedSlots)
   const sharerSet = new Set(sharers)
@@ -478,11 +489,12 @@ function applyBattleOutcome(input: {
   const fighters = team.map((mon) => {
     const getsShare = won && sharerSet.has(mon.slot)
     const share = getsShare
-      ? fighterXp(wild.baseExperience, encounter.level, mon.level, sharers.length)
+      ? opponents.reduce((sum, foe) => sum + fighterXp(foe.row.baseExperience, foe.level, mon.level, sharers.length), 0)
       : 0
     const granted = grantXp(mon.level, mon.xp, share)
     const nextEvs = getsShare
-      ? applyEvYield(
+      ? opponents.reduce(
+          (evs, foe) => applyEvYield(evs, evYieldFromSpecies(foe.row)),
           {
             hp: mon.evHp,
             attack: mon.evAttack,
@@ -491,7 +503,6 @@ function applyBattleOutcome(input: {
             spDefense: mon.evSpDefense,
             speed: mon.evSpeed,
           },
-          yieldEvs,
         )
       : null
     let learnedMove: ReturnType<typeof applyLevelMovesToPokemon>['learned'] = null
@@ -536,7 +547,8 @@ function applyBattleOutcome(input: {
 
   let catchOdds: number | null = null
   let seedDrop: { itemKey: string; berryKey: string } | null = null
-  if (won) {
+  const leader = encounter.leaderKey ? leaderByMilestone(encounter.leaderKey) : undefined
+  if (won && !leader) {
     // Chance só para a tela; o Pinap só gasta no 1º lançamento (throw).
     catchOdds = catchChance(wild.captureRate, peekBonus(userId, 'catch_boost'))
     seedDrop = rollBattleSeed(mulberry32(seedDropRngSeed(hiddenSeed(encounter))))
@@ -544,7 +556,7 @@ function applyBattleOutcome(input: {
   }
 
   // XP de captura fica no throw; aqui só o da vitória.
-  const trainerXpGained = won ? trainerWinXp(encounter.level) : 0
+  const trainerXpGained = won ? opponents.reduce((sum, foe) => sum + trainerWinXp(foe.level), 0) : 0
   const trainerNext = grantXp(clock.level, clock.xp, trainerXpGained, trainerXpToNext)
   const levelRewards =
     won && trainerNext.levelsGained > 0
@@ -561,7 +573,15 @@ function applyBattleOutcome(input: {
       .run()
   }
 
-  if (won) {
+  let leaderOutcome: ReturnType<typeof clearLeader> | null = null
+  if (won && leader) {
+    // Líder: sem captura; a vitória sobre o time todo dá o marco.
+    db.update(encounters)
+      .set({ status: 'escaped', winChance: null, catchChance: null, resolvedAt: now })
+      .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+      .run()
+    leaderOutcome = clearLeader(userId, leader, now)
+  } else if (won) {
     const decisionUntil = now + battleConfig.decisionTtlMs
     db.update(encounters)
       .set({
@@ -593,7 +613,8 @@ function applyBattleOutcome(input: {
       won,
       catchChance: catchOdds,
       caught: false,
-      status: won ? ('pending' as const) : ('lost' as const),
+      // 'defeated': venceu um treinador (não há captura nem fuga).
+      status: won ? (leader ? ('defeated' as const) : ('pending' as const)) : ('lost' as const),
       fighters,
       trainerXpGained,
       trainer: {
@@ -604,8 +625,109 @@ function applyBattleOutcome(input: {
       seedDrop,
       levelRewards,
       log,
+      /**
+       * Contra quem foi a luta: o selvagem (segue para a captura) ou um líder
+       * (o marco, se venceu). A tela decide o fluxo depois da luta por aqui.
+       */
+      opponent: leader
+        ? { kind: 'leader' as const, name: leader.name, cleared: leaderOutcome?.cleared ?? null }
+        : { kind: 'wild' as const },
     },
   }
+}
+
+/** Time do líder do encontro, com as características fixas do config; selvagem: undefined. */
+function trainerFoesOf(row: Pick<EncounterRow, 'leaderKey'>) {
+  const leader = row.leaderKey ? leaderByMilestone(row.leaderKey) : undefined
+  return leader?.foes.map((foe) => ({
+    species: loadWildSpecies(foe.speciesId),
+    level: foe.level,
+    traits: leaderFoeTraits(foe),
+  }))
+}
+
+/** Quem estava do outro lado da luta (do setup congelado): o selvagem ou o time do líder. */
+function opponentsOf(setup: BattleSetup, wild: WildBattleRow): { row: WildBattleRow; level: number }[] {
+  if (!setup.foes) return [{ row: wild, level: setup.wild.level }]
+  return setup.foes.map((foe) => ({ row: loadWildSpecies(foe.speciesId), level: foe.level }))
+}
+
+/** Venceu o líder: o marco (e o que ele abre). */
+function clearLeader(userId: number, leader: LeaderConfig, now: number) {
+  const milestone = milestoneByKey(leader.milestoneKey)!
+  getDb()
+    .insert(trainerMilestones)
+    .values({ userId, milestoneKey: milestone.key, clearedAt: now })
+    .onConflictDoNothing()
+    .run()
+  return {
+    cleared: {
+      key: milestone.key,
+      name: milestone.name,
+      opens: milestone.chapter + 1,
+      grants: (milestone.grants ?? []).map((tool) => TOOL_NAMES[tool]),
+    },
+  }
+}
+
+/**
+ * Encontro contra o líder (já no lugar do marco): uma luta só contra o time
+ * todo dele; a linha guarda o 1º. Sem custo de energia: o desafio é a luta.
+ * O time dele já conta como visto na Pokédex.
+ */
+export function createLeaderEncounter(userId: number, leader: LeaderConfig, now: number) {
+  const foe = leader.foes[0]!
+  const milestone = milestoneByKey(leader.milestoneKey)!
+  const db = getDb()
+  const spec = db
+    .select({
+      id: species.id,
+      name: species.name,
+      displayName: species.displayName,
+      baseStatTotal: species.baseStatTotal,
+      captureRate: species.captureRate,
+      type1: species.type1,
+      type2: species.type2,
+    })
+    .from(species)
+    .where(eq(species.id, foe.speciesId))
+    .get()
+  if (!spec) throw new Error(`species ${foe.speciesId} is not seeded`)
+  const expiresAt = now + battleConfig.encounterTtlMs
+  const inserted = db
+    .insert(encounters)
+    .values({
+      userId,
+      regionSlug: milestone.town,
+      speciesId: spec.id,
+      level: foe.level,
+      isShiny: false,
+      rngSeed: randomSeed(),
+      secretSeed: randomSeed(),
+      status: 'pending',
+      createdAt: now,
+      expiresAt,
+      leaderKey: leader.milestoneKey,
+    })
+    .returning({ id: encounters.id })
+    .get()
+  if (!inserted) throw new Error('failed to create leader encounter')
+  for (const speciesId of new Set(leader.foes.map((entry) => entry.speciesId))) markSeen(userId, speciesId, now)
+  return toEncounterView({
+    id: inserted.id,
+    regionSlug: milestone.town,
+    speciesId: spec.id,
+    name: spec.name,
+    displayName: spec.displayName,
+    level: foe.level,
+    isShiny: false,
+    expiresAt,
+    baseStatTotal: spec.baseStatTotal,
+    captureRate: spec.captureRate,
+    type1: spec.type1,
+    type2: spec.type2,
+    leaderKey: leader.milestoneKey,
+  })
 }
 
 /**

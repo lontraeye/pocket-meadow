@@ -24,6 +24,7 @@
     hasEncounter,
     onEngage,
     onUseSpot,
+    onChallenge,
     onGarden,
     onOpenPc,
     extras,
@@ -42,6 +43,8 @@
      * Se a árvore ou a pedra soltar um item no lugar do Pokémon, devolve o nome dele.
      */
     onUseSpot: (regionSlug: string, method: PlaceTool) => Promise<string | null>
+    /** Desafia o líder do marco (na cidade dele): abre a luta com o 1º Pokémon. */
+    onChallenge: (milestoneKey: string) => void
     onGarden: () => void
     /** Abre o PC (nas cidades, como um Centro Pokémon). */
     onOpenPc: () => void
@@ -406,10 +409,26 @@
           <span class="goal-name">{mark.name} · {mark.typeLabel}</span>
         </p>
         <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
+        {#if mark.leader}
+          <!-- O time do líder: cada um é uma luta; o ás vem por último. -->
+          <ul class="leader-team" aria-label="Time do {mark.leader.name}">
+            {#each mark.leader.foes as foe, index (index)}
+              <li class:ace={foe.ace} title="Nv {foe.level}{foe.ace ? ' · ás' : ''}">
+                <img src={showdownSrc(foe.speciesId, false)} alt="" loading="lazy" />
+                <small>Nv {foe.level}</small>
+              </li>
+            {/each}
+          </ul>
+        {/if}
         <div class="goal-meta">
           <span class="goal-level" class:done={mark.ready} title="Nível de treinador">Nível {Math.min(mark.level, mark.needLevel)}/{mark.needLevel}</span>
           {#if mark.ready && mark.here}
-            <button type="button" class="btn btn-primary challenge" disabled={claiming || pending} onclick={() => void claim()}>
+            <button
+              type="button"
+              class="btn btn-primary challenge"
+              disabled={claiming || pending || hasEncounter}
+              onclick={() => (mark.leader ? onChallenge(mark.key) : void claim())}
+            >
               {claiming ? '…' : 'Desafiar'}
             </button>
           {:else if mark.ready}
@@ -1105,6 +1124,38 @@
 
   .field-wait {
     margin: auto;
+  }
+
+  .leader-team {
+    display: flex;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .leader-team li {
+    display: grid;
+    justify-items: center;
+    width: 40px;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+  }
+
+  .leader-team li.ace {
+    border-color: var(--accent, #f8d030);
+  }
+
+  .leader-team img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+
+  .leader-team small {
+    font-size: 0.65rem;
+    line-height: 1.2;
   }
 
   .complete {

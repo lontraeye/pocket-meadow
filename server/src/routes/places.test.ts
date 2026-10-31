@@ -31,7 +31,14 @@ type View = {
     chapter: number
     caught: number
     total: number
-    milestone: { key: string; town: string; needLevel: number; ready: boolean; here: boolean } | null
+    milestone: {
+      key: string
+      town: string
+      needLevel: number
+      ready: boolean
+      here: boolean
+      leader: { name: string; foes: { speciesId: number; level: number; ace: boolean }[] } | null
+    } | null
   }
   places: { slug: string; open: boolean; visited: boolean; links: Link[]; speciesTotal: number }[]
   here: { species: { speciesId: number | null; status: string }[] }
@@ -146,7 +153,7 @@ test('encontro só onde está; não viaja com encontro pendente; espécies do lu
   assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-30' })), 'not_here')
 })
 
-test('marco: só na cidade e com o nível; abre o capítulo seguinte uma vez', async () => {
+test('marco: só na cidade e com o nível; com líder, não sai pelo resgate; abre o capítulo seguinte', async () => {
   const { cookie, userId } = player('lyra')
   const claim = () => app.request('/places/milestones/violet/claim', { method: 'POST', headers: { cookie } }, env)
   assert.equal(await errorOf(await claim()), 'milestone_not_here')
@@ -156,9 +163,11 @@ test('marco: só na cidade e com o nível; abre o capítulo seguinte uma vez', a
   getSqlite().prepare(`update trainers set level = 3 where user_id = ?`).run(userId)
   let places = await view(cookie)
   assert.equal(places.goal.milestone?.ready, true)
-  const ok = await claim()
-  assert.equal(ok.status, 200)
-  assert.deepEqual(await ok.json(), { key: 'violet', opens: 2, grants: [] })
+  // O marco de Violet tem líder: sai vencendo o desafio (leaders.test.ts), não pelo resgate.
+  assert.equal(places.goal.milestone?.leader?.name, 'Líder de Violet')
+  assert.equal(places.goal.milestone?.leader?.foes.length, 2)
+  assert.equal(await errorOf(await claim()), 'leader_required')
+  getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, 'violet', 1)`).run(userId)
   assert.equal(await errorOf(await claim()), 'milestone_cleared')
 
   places = await view(cookie)
