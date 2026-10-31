@@ -32,7 +32,7 @@
   let warnings = $state<string[]>([])
   let dir = $state('')
   let selected = $state<string | null>(null)
-  /** Escala do desenho em px de CSS; múltiplo de 1/devicePixelRatio, para os pixels saírem iguais. */
+  /** Escala do desenho em px de CSS: o que cabe na tela, em pixels inteiros do aparelho. */
   let zoom = $state(2)
   let showGrid = $state(false)
   let debugMasks = $state(false)
@@ -231,17 +231,16 @@
     const available = Math.max(120, window.innerWidth - 24)
     return Math.max(1, Math.floor((available * dpr) / width)) / dpr
   }
-  // Os passos do controle de zoom: do que cabe na tela até 4× isso.
-  const zoomSteps = $derived.by(() => {
-    const base = Math.max(1, Math.round(fitZoom() * dpr))
-    return [1, 1.5, 2, 3, 4].map((m) => Math.max(1, Math.round(base * m)) / dpr)
-  })
-
   onMount(() => {
     zoom = fitZoom()
+    const onResize = () => (zoom = fitZoom())
+    window.addEventListener('resize', onResize)
     void poll()
     const timer = setInterval(() => void poll(), 1000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('resize', onResize)
+    }
   })
 </script>
 
@@ -253,7 +252,7 @@
     </p>
   </header>
 
-  <div class="stage" style:width="{width * zoom}px">
+  <div class="stage">
     <canvas
       bind:this={canvas}
       {width}
@@ -301,14 +300,6 @@
       <label><input type="checkbox" bind:checked={showGrid} /> Grade</label>
       <label><input type="checkbox" bind:checked={debugMasks} /> Bordas em rosa</label>
       <label><input type="checkbox" bind:checked={useVariants} /> Variações</label>
-    </div>
-    <div class="row">
-      <span>Zoom</span>
-      {#each zoomSteps as step, index (index)}
-        <button type="button" class="btn small" class:on={Math.abs(zoom - step) < 0.01} onclick={() => (zoom = step)}>
-          {index === 0 ? 'Caber' : `${[1, 1.5, 2, 3, 4][index]}×`}
-        </button>
-      {/each}
     </div>
 
     <h2>Máscaras das bordas</h2>
@@ -379,9 +370,9 @@
 
   .stage {
     box-sizing: border-box;
+    justify-self: start;
     max-width: 100%;
-    max-height: 70dvh;
-    overflow: auto;
+    overflow: hidden;
     background: #4e7a3a;
     border-radius: 6px;
   }
@@ -396,15 +387,6 @@
   .controls {
     min-width: 0;
     max-width: 40rem;
-  }
-
-  .btn.small {
-    min-width: 44px;
-    padding: 0 0.5rem;
-  }
-
-  .btn.on {
-    border-color: #f2c94c;
   }
 
   details {
