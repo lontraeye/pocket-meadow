@@ -12,7 +12,8 @@
     "phone": "cloudflared tunnel --config scripts/cloudflared-quick.yml --protocol http2 --url http://127.0.0.1:5173",
     "icons": "node scripts/icons.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
-    "tiles:masks": "tsx scripts/tile-masks.ts"
+    "tiles:masks": "tsx scripts/tile-masks.ts",
+    "tiles:gen": "tsx scripts/tile-gen.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
@@ -21,6 +22,7 @@
     "sharp": "^0.34.5",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vite": "^8.3.4"
   },
