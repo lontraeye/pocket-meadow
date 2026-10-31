@@ -299,6 +299,36 @@ export type OwnedPokemon = {
   pet: PetView
 }
 
+/** Quadro de missões diárias (5.20). */
+export type MissionReward = {
+  trainerXp: number
+  genericCandies: number
+  items: { itemKey: string; quantity: number }[]
+  randomSeed?: boolean
+}
+
+export type MissionView = {
+  id: number
+  slot: number
+  kind: string
+  text: string
+  progress: number
+  target: number
+  done: boolean
+  claimed: boolean
+  reward: MissionReward
+  region: string | null
+}
+
+export type MissionsView = {
+  day: string
+  renewsAt: number
+  list: MissionView[]
+  chest: { ready: boolean; claimed: boolean; reward: MissionReward }
+  rerollsLeft: number
+  claimable: number
+}
+
 export type PetView = {
   pokemonId: number
   hunger: number
@@ -422,6 +452,7 @@ export type GameState = {
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
   garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number }
+  missions: MissionsView
   daycare: DaycareState
   plots: PlotState[]
   inventory: InventoryRow[]
@@ -614,6 +645,18 @@ export function errorText(error: ApiError): string {
       return 'Você não tem essa berry.'
     case 'gift_not_found':
       return 'Esse presente já foi pego.'
+    case 'mission_not_found':
+      return 'Essa missão não vale mais. As missões viram à meia-noite.'
+    case 'mission_not_done':
+      return 'Essa missão ainda não foi cumprida.'
+    case 'already_claimed':
+      return 'Isso já foi resgatado.'
+    case 'chest_locked':
+      return 'Resgate as 3 missões para abrir o baú.'
+    case 'no_rerolls':
+      return 'Você já trocou uma missão hoje.'
+    case 'no_other_mission':
+      return 'Não há outra missão para trocar agora.'
     case 'pokemon_not_found':
       return 'Esse Pokémon não está mais com você.'
     case 'in_daycare':

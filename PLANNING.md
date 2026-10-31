@@ -1224,6 +1224,9 @@ Ficam para depois, porque pedem um registro de eventos: colher berries, alimenta
 
 **Objetivos de jardim** (cuidar, colher, produzir) entram quando o cuidado (5.21) e as cadeias (5.16) existirem, com a tabela `trainer_events`.
 
+**Feito em 2026-10-31 (`feat/missoes`):** `server/src/config/missions.ts` (pesos, alvos e prêmios), `game/missions.ts` (sorteio só do possível: área do capítulo atual, tipo que aparece nela, tipo do time, espécie nova), `db/missions.ts` (dia de Brasília pelo mesmo relógio do clima, progresso contado em `encounters` e `pokedex_entries`) e `POST /missions/:id/claim`, `/missions/chest/claim`, `/missions/:id/reroll`; migração `0024_missions` (`daily_missions` e `mission_days`, esta no lugar de `daily_chests`, com a troca usada). Missões de jardim e de mancha ficam para depois. Na tela: ícone de prancheta no topo com selo quando há o que resgatar, quadro com barra de progresso, "Resgatar", "Trocar" e o baú.
+**Bolas (2026-10-31):** pegar Poké Ball era difícil (só o estoque inicial, o nível de treinador e a pedra). Agora vencer um selvagem tem 40% de chance de dar 1–2 Poké Balls ou uma Great (`ballsConfig.battleDrop`), e as missões dão 5 Poké Balls cada (Great na de espécie nova; Great e Ultra no baú).
+
 **Tela:** um quadro no jardim (botão no dock ou no topo), com as 3 missões, a barra de progresso de cada uma, "Resgatar" e "Trocar" e o baú embaixo. Tocar numa missão de área leva ao mapa com o lugar marcado. Mobile primeiro (seção 4.4).
 
 **Pronto quando:** as missões do dia aparecem iguais depois de recarregar; viram no horário certo; o progresso conta só o que veio depois de a missão aparecer; resgatar duas vezes é recusado; o baú só abre com as 3 resgatadas; e a tela funciona em 360px.

@@ -36,6 +36,7 @@ import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 import { currentPlaceOf } from './places.js'
 import { view as petView } from './garden.js'
+import { missionsView } from '../db/missions.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -324,6 +325,7 @@ function readState(userId: number, now: number) {
       }
     }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
+    missions: missionsView(userId, trainer.level, now),
     garden: {
       gifts: db
         .select({

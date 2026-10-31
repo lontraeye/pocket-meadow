@@ -303,6 +303,41 @@ export const gardenGifts = sqliteTable(
   (table) => [index('idx_garden_gifts_user').on(table.userId)],
 )
 
+// Quadro de missões diárias (5.20). `day` = dia de Brasília em AAAA-MM-DD.
+export const dailyMissions = sqliteTable(
+  'daily_missions',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    day: text('day').notNull(),
+    slot: integer('slot').notNull(),
+    kind: text('kind').notNull(),
+    /** JSON: área, tipo (o que a missão pede além do número). */
+    params: text('params').notNull(),
+    target: integer('target').notNull(),
+    /** O progresso só conta o que veio depois disto. */
+    assignedAt: integer('assigned_at').notNull(),
+    claimedAt: integer('claimed_at'),
+  },
+  (table) => [uniqueIndex('uq_daily_missions_slot').on(table.userId, table.day, table.slot)],
+)
+
+/** Por dia: troca de missão usada e baú resgatado. */
+export const missionDays = sqliteTable(
+  'mission_days',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    day: text('day').notNull(),
+    rerollsUsed: integer('rerolls_used').notNull().default(0),
+    chestClaimedAt: integer('chest_claimed_at'),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.day] })],
+)
+
 export const daycareSlots = sqliteTable(
   'daycare_slots',
   {

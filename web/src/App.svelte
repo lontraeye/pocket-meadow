@@ -10,6 +10,7 @@
   import PcBox from './lib/PcBox.svelte'
   import Garden from './lib/Garden.svelte'
   import Modal from './lib/Modal.svelte'
+  import MissionBoard from './lib/MissionBoard.svelte'
   import Pokedex from './lib/Pokedex.svelte'
   import WeatherIcon from './lib/WeatherIcon.svelte'
   import { WEATHER_WITH } from './lib/weather'
@@ -32,6 +33,7 @@
   let volumeLevel = $state(getVolume())
   let configOpen = $state(false)
   let weatherOpen = $state(false)
+  let missionsOpen = $state(false)
   let reloadedForWeather = 0
   // Ícone com X quando não sai som, seja pelo mudo ou pela barra no zero.
   const silent = $derived(muted || volumeLevel === 0)
@@ -60,6 +62,7 @@
   let pokedexHistoryPushed = $state(false)
 
   const claimable = $derived(game?.pokedex.claimable ?? 0)
+  const missionsClaimable = $derived(game?.missions.claimable ?? 0)
 
   /** Progresso visual até o próximo Nv (só a barra do HUD). */
   const trainerXpPct = $derived.by(() => {
@@ -101,6 +104,22 @@
     '.X........X.',
     '.X........X.',
     '..XXXXXXXX..',
+  ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
+
+  // Prancheta com três itens marcados: o quadro de missões.
+  const MISSION_ICON = [
+    '...XXXXXX...',
+    '.XXX....XXX.',
+    '.X.XXXXXX.X.',
+    '.X........X.',
+    '.X.X.XXXX.X.',
+    '.X........X.',
+    '.X.X.XXXX.X.',
+    '.X........X.',
+    '.X.X.XXXX.X.',
+    '.X........X.',
+    '.X........X.',
+    '.XXXXXXXXXX.',
   ].flatMap((line, y) => [...line].flatMap((cell, x) => (cell === 'X' ? [{ x, y }] : [])))
 
   const GEAR_ICON = [
@@ -449,6 +468,24 @@
         <button
           type="button"
           class="btn icon-btn badge-host"
+          aria-label="Missões do dia"
+          aria-pressed={missionsOpen}
+          title="Missões do dia"
+          onclick={() => (missionsOpen = true)}
+        >
+          <svg class="hud-icon" viewBox="0 0 12 12" width={hudIcon} height={hudIcon} aria-hidden="true">
+            {#each MISSION_ICON as px (`${px.x},${px.y}`)}
+              <rect x={px.x} y={px.y} width="1" height="1" />
+            {/each}
+          </svg>
+          {#if missionsClaimable > 0}
+            <span class="dot" aria-hidden="true"></span>
+            <span class="sr-only">{missionsClaimable === 1 ? '1 missão para resgatar' : `${missionsClaimable} para resgatar`}</span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="btn icon-btn badge-host"
           aria-label="Pokédex"
           aria-pressed={pokedexOpen}
           title="Pokédex"
@@ -554,6 +591,12 @@
       >
         <Pokedex {game} onState={loadState} onClose={() => closePokedex()} />
       </div>
+    {/if}
+
+    {#if missionsOpen && game}
+      <Modal label="Missões do dia" onBackdrop={() => (missionsOpen = false)}>
+        <MissionBoard {game} onState={loadState} onClose={() => (missionsOpen = false)} />
+      </Modal>
     {/if}
 
     {#if weatherOpen}
@@ -947,6 +990,13 @@
     gap: 0.4rem;
     flex: none;
     order: 0;
+  }
+
+  /* Cinco ícones no celular estreito: aperta o espaço entre eles para a barra de nível caber. */
+  @media (max-width: 400px) {
+    .hud-actions {
+      gap: 0.2rem;
+    }
   }
 
   /* Ícones do HUD (Pokédex / mochila / config): quadrado com borda e sombra. */
