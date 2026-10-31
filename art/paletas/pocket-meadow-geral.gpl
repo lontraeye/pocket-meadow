@@ -1,0 +1,147 @@
+GIMP Palette
+Name: Pocket Meadow - geral
+Columns: 6
+#
+# Rampas do escuro para o claro. A sombra puxa para o azul e a luz para o amarelo.
+# Contorno
+ 17  17  26	Contorno 1
+ 39  45  56	Contorno 2
+# Grama
+ 29  76  31	Grama 1
+ 48 110  38	Grama 2
+ 78 143  47	Grama 3
+120 176  61	Grama 4
+172 209  85	Grama 5
+227 242 114	Grama 6
+# Grama alta
+ 22  56  36	Grama alta 1
+ 33  92  45	Grama alta 2
+ 45 128  45	Grama alta 3
+ 86 163  67	Grama alta 4
+138 199  97	Grama alta 5
+# Folhagem
+ 21  46  40	Folhagem 1
+ 33  79  58	Folhagem 2
+ 46 112  68	Folhagem 3
+ 67 145  76	Folhagem 4
+103 178  95	Folhagem 5
+# Terra
+ 56  34  27	Terra 1
+ 98  65  44	Terra 2
+140 103  61	Terra 3
+182 153  89	Terra 4
+224 208 125	Terra 5
+# Areia
+140 112  87	Areia 1
+177 149 104	Areia 2
+213 195 131	Areia 3
+250 243 169	Areia 4
+# Barro
+ 64  29  30	Barro 1
+106  52  43	Barro 2
+149  92  65	Barro 3
+191 146 101	Barro 4
+# Madeira
+ 51  27  23	Madeira 1
+ 89  52  37	Madeira 2
+128  85  52	Madeira 3
+166 129  76	Madeira 4
+204 178 108	Madeira 5
+# Pedra
+ 57  58  64	Pedra 1
+ 95  99 106	Pedra 2
+133 141 149	Pedra 3
+173 186 192	Pedra 4
+215 232 235	Pedra 5
+# Concreto
+ 76  74  72	Concreto 1
+115 111 107	Concreto 2
+153 150 143	Concreto 3
+191 189 180	Concreto 4
+230 228 218	Concreto 5
+# Asfalto
+ 31  31  36	Asfalto 1
+ 64  67  75	Asfalto 2
+101 107 115	Asfalto 3
+# Metal
+ 58  62  71	Metal 1
+ 94 103 116	Metal 2
+129 148 161	Metal 3
+169 196 205	Metal 4
+211 247 250	Metal 5
+# Água rasa
+ 57  90 128	Água rasa 1
+ 68 139 168	Água rasa 2
+ 92 204 209	Água rasa 3
+132 250 226	Água rasa 4
+# Água funda
+ 17  17  56	Água funda 1
+ 23  37  90	Água funda 2
+ 30  69 124	Água funda 3
+ 49 116 157	Água funda 4
+ 77 170 191	Água funda 5
+# Gelo e neve
+143 157 178	Gelo e neve 1
+160 185 204	Gelo e neve 2
+183 218 229	Gelo e neve 3
+211 252 255	Gelo e neve 4
+# Lava e fogo
+ 89   9  60	Lava e fogo 1
+122   6  44	Lava e fogo 2
+156   4   7	Lava e fogo 3
+189  61  10	Lava e fogo 4
+222 144  31	Lava e fogo 5
+255 235  59	Lava e fogo 6
+# Energia elétrica
+140  96  20	Energia elétrica 1
+178 144  15	Energia elétrica 2
+217 201  29	Energia elétrica 3
+255 240  70	Energia elétrica 4
+# Psíquico
+ 86  40  89	Psíquico 1
+129  53 119	Psíquico 2
+170  69 136	Psíquico 3
+210  97 149	Psíquico 4
+250 132 164	Psíquico 5
+# Fantasma e sombra
+ 22  20  36	Fantasma e sombra 1
+ 48  37  71	Fantasma e sombra 2
+ 81  55 107	Fantasma e sombra 3
+123  80 143	Fantasma e sombra 4
+169 110 178	Fantasma e sombra 5
+# Veneno
+ 48  32  71	Veneno 1
+ 94  49 120	Veneno 2
+155  74 168	Veneno 3
+217 115 208	Veneno 4
+# Cristal
+ 63 100 115	Cristal 1
+ 83 158 162	Cristal 2
+113 208 189	Cristal 3
+157 255 211	Cristal 4
+# Telhado vermelho
+ 76  24  38	Telhado vermelho 1
+129  34  41	Telhado vermelho 2
+182  72  56	Telhado vermelho 3
+235 144  98	Telhado vermelho 4
+# Telhado azul
+ 34  37  76	Telhado azul 1
+ 52  73 129	Telhado azul 2
+ 80 127 182	Telhado azul 3
+124 198 235	Telhado azul 4
+# Pele
+115  80  71	Pele 1
+160 117  94	Pele 2
+205 164 125	Pele 3
+250 219 169	Pele 4
+# Avulsas
+248 248 240	Branco
+ 24  22  30	Preto
+232  64  64	Flor vermelha
+240 144 168	Flor rosa
+248 208  48	Flor amarela
+ 96 152 240	Flor azul
+168 112 216	Flor roxa
+224 112  56	Miolo da flor
+255 252 220	Brilho
+ 40  48  56	Sombra no chão
