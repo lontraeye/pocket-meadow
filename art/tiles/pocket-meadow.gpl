@@ -1,0 +1,36 @@
+GIMP Palette
+Name: Pocket Meadow
+Columns: 6
+#
+# Grama — usar agora
+200 240 144	grass_hi
+152 224  96	grass_lt
+120 200  80	grass
+104 176  64	grass_b
+ 72 144  48	grass_sh
+ 48 104  40	grass_dp
+# Terra — usar agora
+232 208 168	soil_hi
+196 154  94	soil_lt
+160 128  80	soil
+112  88  48	soil_sh
+ 72  56  32	soil_dp
+# Flor — poucos pixels
+248 248 240	petal
+248 208  48	yellow
+240 144 168	pink
+224 112  56	center
+# Reservadas (pedra, agua, areia, madeira)
+232 232 224	stone_hi
+184 184 176	stone
+120 120 112	stone_sh
+ 72  72  64	stone_dp
+200 232 248	water_hi
+112 192 224	water
+ 56 144 192	water_sh
+ 32  96 136	water_dp
+240 224 176	sand_hi
+208 168 104	sand
+168 128  72	sand_sh
+200 160 112	wood
+140  96  56	wood_sh
