@@ -18,6 +18,7 @@
   } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
+  import { BUBBLES, type BubbleKind } from './bubbles'
   import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
   import PokemonSheet from './PokemonSheet.svelte'
   import WeatherIcon from './WeatherIcon.svelte'
@@ -316,6 +317,8 @@
   // Escala do sprite em pixels inteiros da tela (escala do Windows, zoom do
   // navegador): senão os pixels saem de tamanhos diferentes.
   const pmdScale = $derived(snapPixelScale(2 * scale))
+  /** Pixel do balão: o mesmo tamanho dos pixels do sprite, sem passar de 2× no zoom alto. */
+  const bubblePx = $derived(Math.min(pmdScale, snapPixelScale(2)))
   const halfW = $derived(tileW / 2)
   const halfH = $derived(tileH / 2)
 
@@ -330,19 +333,47 @@
 
   const selected = $derived(game.pokemon.find((mon) => mon.id === selectedId) ?? null)
 
-  // Balão sobre quem está com fome ou pedindo carinho (5.21); a fome vem antes.
-  const needById = $derived(
-    new Map(
-      game.pokemon.map((mon) => [
-        mon.id,
-        mon.pet.hunger < game.garden.needThreshold
-          ? ('hunger' as const)
-          : mon.pet.affection < game.garden.needThreshold
-            ? ('affection' as const)
-            : null,
-      ]),
-    ),
-  )
+  // Balão de diálogo (5.21), como nos jogos de fazenda: o coração fica fixo
+  // enquanto dá para fazer carinho (tocar faz o carinho); depois a fome; a
+  // carinha triste quando a felicidade está baixa; a feliz logo depois do
+  // carinho, por um instante.
+  let happyUntil = $state<Record<number, number>>({})
+  let petting = $state<Record<number, boolean>>({})
+  const bubbleById = $derived.by(() => {
+    const now = clock.now()
+    const out = new Map<number, BubbleKind>()
+    for (const mon of game.pokemon) {
+      if ((happyUntil[mon.id] ?? 0) > Date.now()) out.set(mon.id, 'happy')
+      else if ((mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now) && mon.pet.affection < 90) out.set(mon.id, 'pet')
+      else if (mon.pet.hunger < game.garden.needThreshold) out.set(mon.id, 'hunger')
+      else if (mon.pet.happiness < 35) out.set(mon.id, 'sad')
+    }
+    return out
+  })
+
+  async function onBubble(id: number, kind: BubbleKind) {
+    if (kind !== 'pet') {
+      selectedId = id
+      return
+    }
+    if (petting[id]) return
+    petting[id] = true
+    try {
+      const response = await api(`/api/garden/pets/${id}/pet`, {})
+      if (!response.ok) {
+        showGiftToast(errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError))
+        return
+      }
+      happyUntil[id] = Date.now() + 2500
+      setTimeout(() => {
+        if ((happyUntil[id] ?? 0) <= Date.now()) delete happyUntil[id]
+      }, 2600)
+      play('levelup')
+      await onState()
+    } finally {
+      delete petting[id]
+    }
+  }
 
   // Presentes no chão: cada um numa casa fixa (pelo id), fora dos canteiros.
   const giftSpots = $derived.by(() => {
@@ -1246,7 +1277,6 @@
       {/each}
       {#each walkers as walker (walker.id)}
         {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
-        {@const need = needById.get(walker.id) ?? null}
         {@const spot = place(walker.col, walker.row)}
         <!-- O botão é o ponto do chão (centro do bloco); o sprite cresce a partir dele. -->
         <button
@@ -1263,17 +1293,6 @@
           {#if showLabels}
             <span class="mon-tag" style:top="{tagAnchorY(walker, look)}px" aria-hidden="true">
               {walker.displayName} Lv {walker.level}
-              {#if need === 'hunger'}<img class="tag-need" src={berryIconSrc('oran')} alt="" />{:else if need === 'affection'}<span class="heart tag-heart"></span>{/if}
-            </span>
-          {/if}
-          {#if need && walker.anim !== 'Sleep' && !showLabels}
-            <span
-              class="need"
-              class:hungry={need === 'hunger'}
-              style:top="{tagAnchorY(walker, look)}px"
-              aria-hidden="true"
-            >
-              {#if need === 'hunger'}<img src={berryIconSrc('oran')} alt="" />{:else}<span class="heart"></span>{/if}
             </span>
           {/if}
           {#if look.kind === 'pmd'}
@@ -1312,6 +1331,47 @@
             </span>
           {/if}
         </button>
+      {/each}
+      <!-- Balões fora do botão do Pokémon: são botões próprios (o coração faz carinho). -->
+      {#each walkers as walker (walker.id)}
+        {@const kind = bubbleById.get(walker.id)}
+        {#if kind}
+          {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
+          {@const spot = place(walker.col, walker.row)}
+          {@const art = BUBBLES[kind]}
+          <button
+            type="button"
+            class="bubble"
+            class:tappable={kind === 'pet'}
+            class:busy={petting[walker.id]}
+            style:left="{snapToDevice(spot.x)}px"
+            style:top="{snapToDevice(spot.y + halfH + tagAnchorY(walker, look) - (showLabels ? 16 : 0))}px"
+            style:z-index={depthSpan * 3}
+            aria-label={kind === 'pet'
+              ? `Fazer carinho em ${walker.displayName}`
+              : kind === 'hunger'
+                ? `${walker.displayName} está com fome`
+                : kind === 'sad'
+                  ? `${walker.displayName} está triste`
+                  : `${walker.displayName} está feliz`}
+            onclick={() => void onBubble(walker.id, kind)}
+          >
+            <svg
+              width={art.width * bubblePx}
+              height={art.height * bubblePx}
+              viewBox="0 0 {art.width} {art.height}"
+              shape-rendering="crispEdges"
+              aria-hidden="true"
+            >
+              {#each art.pixels as px, index (index)}
+                <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+              {/each}
+            </svg>
+            {#if kind === 'happy'}
+              <span class="hearts" aria-hidden="true"><i></i><i></i><i></i></span>
+            {/if}
+          </button>
+        {/if}
       {/each}
     </div>
 
@@ -1816,47 +1876,69 @@
     }
   }
 
-  /* Balão de necessidade: base no topo do sprite. */
-  .need {
+  /* Balão de diálogo: a ponta fica sobre a cabeça do Pokémon. */
+  .bubble {
     position: absolute;
-    left: 0;
-    z-index: 2;
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 20px;
+    padding: 0;
+    border: 0;
+    background: none;
     transform: translate(-50%, -100%);
-    background: #fff;
-    border: 2px solid #2b2b2b;
-    border-radius: 6px;
     pointer-events: none;
     animation: gift-bob 1.4s ease-in-out infinite;
   }
 
-  .need img {
-    width: 16px;
-    height: 16px;
-    image-rendering: pixelated;
+  .bubble.tappable {
+    pointer-events: auto;
+    cursor: pointer;
   }
 
-  .heart {
-    width: 10px;
-    height: 9px;
+  .bubble.busy {
+    opacity: 0.6;
+  }
+
+  .bubble svg {
+    display: block;
+  }
+
+  .hearts {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    pointer-events: none;
+  }
+
+  .hearts i {
+    position: absolute;
+    width: 8px;
+    height: 7px;
     background: #e05a7a;
     clip-path: polygon(50% 100%, 0 40%, 0 15%, 20% 0, 50% 18%, 80% 0, 100% 15%, 100% 40%);
+    animation: heart-up 1.1s ease-out forwards;
+    opacity: 0;
   }
 
-  .tag-need {
-    width: 12px;
-    height: 12px;
-    margin-left: 2px;
-    vertical-align: -2px;
-    image-rendering: pixelated;
+  .hearts i:nth-child(2) {
+    left: -12px;
+    animation-delay: 0.15s;
   }
 
-  .tag-heart {
-    display: inline-block;
-    margin-left: 3px;
+  .hearts i:nth-child(3) {
+    left: 10px;
+    animation-delay: 0.3s;
+  }
+
+  @keyframes heart-up {
+    0% {
+      opacity: 0;
+      transform: translateY(6px) scale(0.6);
+    }
+    30% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-20px) scale(1.1);
+    }
   }
 
   .gift-toast {
@@ -1876,7 +1958,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .gift,
-    .need {
+    .bubble,
+    .hearts i {
       animation: none;
     }
   }
