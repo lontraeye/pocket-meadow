@@ -206,6 +206,41 @@
     }
   }
 
+  // ---- Golpes que evoluem (5.18): oferta ao subir de nível e sorteio com doce ----
+
+  async function answerOffer(accept: boolean) {
+    if (!mon.moveOffer || pending) return
+    play('tap')
+    const learned = mon.moveOffer
+    const ok = await send(`/api/pokemon/${mon.id}/moves/offer`, { accept })
+    if (ok && accept) {
+      highlightCards = [{ id: `offer-${learned.name}`, title: `Aprendeu ${learned.displayName}!`, tone: 'good', sound: 'levelup' }]
+    }
+  }
+
+  async function rerollMove(slot: 'fast' | 'charged') {
+    if (pending) return
+    play('tap')
+    pending = true
+    message = ''
+    try {
+      const response = await api(`/api/pokemon/${mon.id}/moves/reroll`, { slot })
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & { move?: MoveView }
+      if (!response.ok) {
+        message = errorText(payload)
+        return
+      }
+      if (payload.move) {
+        highlightCards = [{ id: `reroll-${payload.move.name}`, title: `Aprendeu ${payload.move.displayName}!`, detail: `Poder ${payload.move.power}`, tone: 'good', sound: 'levelup' }]
+      }
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
   async function loadRegions(): Promise<RegionInfo[]> {
     if (regionsCache) return regionsCache
     const response = await api('/api/regions')
@@ -235,6 +270,7 @@
         levelsGained?: number
         level?: number
         learnedMove?: MoveView | null
+        offeredMove?: MoveView | null
       }
       if (!response.ok) {
         message = errorText(payload)
@@ -252,6 +288,7 @@
           level,
           canEvolve: crossedEvolve(beforeLevel, level, evolutions),
           learnedMove: payload.learnedMove ?? null,
+          offeredMove: payload.offeredMove ?? null,
         })
       } else {
         message = 'Alimentado.'
@@ -495,6 +532,24 @@
   </span>
 {/snippet}
 
+{#snippet rerollButton(slot: 'fast' | 'charged')}
+  {@const cost = rules.moveRerollCost[slot]}
+  {@const options = mon.rerollOptions[slot]}
+  <!-- Doce sorteia de novo, só entre golpes iguais ou mais fortes (os fortes são mais raros). -->
+  <button
+    type="button"
+    class="btn reroll"
+    disabled={pending || options === 0 || chainCandies < cost}
+    onclick={() => void rerollMove(slot)}
+  >
+    {#if options === 0}
+      Já tem o golpe mais forte
+    {:else}
+      Sortear outro · {cost} doces{#if chainCandies < cost} (tem {chainCandies}){/if}
+    {/if}
+  </button>
+{/snippet}
+
 {#snippet moveCard(slot: string, move: MoveView)}
   <!-- Um cartão por golpe: faixa na cor do tipo, nome, tipo, poder e classe. -->
   <section class="move-card" style:--type={typeColor(move.type)}>
@@ -682,9 +737,24 @@
     </section>
 
     {:else if tab === 'golpes'}
+    {#if mon.moveOffer}
+      {@const offer = mon.moveOffer}
+      {@const current = offer.slot === 'fast' ? mon.fastMove : mon.chargedMove}
+      <!-- Oferta ao subir de nível: aprende no lugar do golpe do mesmo tipo, ou mantém. -->
+      <section class="offer">
+        <p class="offer-title">Pode aprender{#if current} no lugar de <b>{current.displayName}</b>{/if}</p>
+        {@render moveCard(offer.slot === 'fast' ? 'Golpe rápido novo' : 'Golpe carregado novo', offer)}
+        <div class="offer-actions">
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={() => void answerOffer(true)}>Aprender</button>
+          <button type="button" class="btn" disabled={pending} onclick={() => void answerOffer(false)}>Manter</button>
+        </div>
+      </section>
+    {/if}
     {@render moveCard('Golpe rápido', mon.fastMove)}
+    {@render rerollButton('fast')}
     {#if mon.chargedMove}
       {@render moveCard('Golpe carregado', mon.chargedMove)}
+      {@render rerollButton('charged')}
     {:else}
       <section class="move-card empty">
         <p class="slot">Golpe carregado</p>
@@ -1175,6 +1245,29 @@
   .hint,
   .preview {
     font-size: 16px;
+  }
+
+  /* Oferta de golpe: em destaque, acima dos golpes atuais. */
+  .offer {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.5rem;
+    border: 2px dashed var(--accent, #f8d030);
+  }
+
+  .offer-title {
+    margin: 0;
+  }
+
+  .offer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+
+  .reroll {
+    justify-self: stretch;
+    font-size: 0.85rem;
   }
 
   .candies {

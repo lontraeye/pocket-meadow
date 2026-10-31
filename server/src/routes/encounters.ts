@@ -506,6 +506,7 @@ function applyBattleOutcome(input: {
         )
       : null
     let learnedMove: ReturnType<typeof applyLevelMovesToPokemon>['learned'] = null
+    let offeredMove: ReturnType<typeof applyLevelMovesToPokemon>['offered'] = null
     if (share > 0 || nextEvs) {
       db.update(pokemon)
         .set({
@@ -525,14 +526,16 @@ function applyBattleOutcome(input: {
         .run()
       if (share > 0) bumpMaxLevelReached(userId, mon.speciesId, granted.level)
       if (share > 0 && granted.levelsGained > 0 && mon.fastMove) {
-        learnedMove = applyLevelMovesToPokemon({
+        const moves = applyLevelMovesToPokemon({
           userId,
           pokemonId: mon.id,
           speciesId: mon.speciesId,
           fromLevel: mon.level,
           toLevel: granted.level,
           chargedMove: mon.chargedMove,
-        }).learned
+        })
+        learnedMove = moves.learned
+        offeredMove = moves.offered
       }
     }
     return {
@@ -542,6 +545,8 @@ function applyBattleOutcome(input: {
       xp: share > 0 ? granted.xp : mon.xp,
       levelsGained: share > 0 ? granted.levelsGained : 0,
       learnedMove,
+      /** Golpe oferecido ao subir de nível: aprender ou manter na ficha (5.18). */
+      offeredMove,
     }
   })
 

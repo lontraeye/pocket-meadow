@@ -58,6 +58,7 @@ export function battleHighlightCards(input: {
     if (fighter.xpGained <= 0 && fighter.levelsGained <= 0) continue
     const name = nameOf(fighter.pokemonId)
     if (fighter.learnedMove) cards.push(learnedMoveCard(name, fighter.learnedMove))
+    if (fighter.offeredMove) cards.push(offeredMoveCard(name, fighter.offeredMove))
     if (canEvolve(fighter)) {
       cards.push({
         id: `evolve-${fighter.pokemonId}`,
@@ -225,6 +226,7 @@ export function xpHighlightCards(input: {
   level: number
   canEvolve: boolean
   learnedMove?: MoveView | null
+  offeredMove?: MoveView | null
 }): HighlightCard[] {
   const cards: HighlightCard[] = []
   if (input.levelsGained <= 0 && input.xpGained <= 0) return cards
@@ -239,6 +241,7 @@ export function xpHighlightCards(input: {
     ...(input.levelsGained > 0 ? { sound: 'levelup' as const } : {}),
   })
   if (input.learnedMove) cards.push(learnedMoveCard(input.name, input.learnedMove))
+  if (input.offeredMove) cards.push(offeredMoveCard(input.name, input.offeredMove))
   if (input.canEvolve) {
     cards.push({ id: 'feed-evolve', title: `${input.name} pode evoluir`, tone: 'good' })
   }
@@ -246,6 +249,16 @@ export function xpHighlightCards(input: {
 }
 
 /** O carregado sorteado que entrou no slot vazio ao subir de nível. */
+/** Subiu de nível e saiu uma oferta de golpe: aprender ou manter na ficha (5.18). */
+export function offeredMoveCard(name: string, move: MoveView): HighlightCard {
+  return {
+    id: `offered-${move.name}`,
+    title: `${name} pode aprender ${move.displayName}`,
+    detail: 'Veja na ficha, aba Golpes',
+    tone: 'good',
+  }
+}
+
 export function learnedMoveCard(name: string, move: MoveView): HighlightCard {
   return { id: `learned-${move.name}`, title: `${name} aprendeu ${move.displayName}`, detail: 'Golpe carregado', tone: 'good' }
 }

@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm'
+import { moveProgressionConfig } from '../config/traits.js'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballList, ballsConfig } from '../config/balls.js'
@@ -90,6 +91,7 @@ function readState(userId: number, now: number) {
       abilitySlot: pokemon.abilitySlot,
       fastMove: pokemon.fastMove,
       chargedMove: pokemon.chargedMove,
+      moveOffer: pokemon.moveOffer,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -231,6 +233,8 @@ function readState(userId: number, now: number) {
       levelCap: progressConfig.levelCap,
       candyXp: progressionConfig.candyXp,
       genericPerCandy: progressionConfig.genericPerCandy,
+      /** Doces da linha para sortear de novo cada golpe (5.18). */
+      moveRerollCost: moveProgressionConfig.rerollCost,
       releaseBase: progressionConfig.releaseBase,
       releaseLevelDiv: progressionConfig.releaseLevelDiv,
       releaseShinyMult: progressionConfig.releaseShinyMult,
@@ -273,6 +277,7 @@ function readState(userId: number, now: number) {
           type2: mon.type2,
         },
         ...traits,
+        moveOffer: mon.moveOffer,
       })
       const available = availableMovesFor(mon.speciesId, mon.level)
       return {
@@ -304,6 +309,8 @@ function readState(userId: number, now: number) {
         fastMove: view.fastMove,
         chargedMove: view.chargedMove,
         nextChargedMove: view.nextChargedMove,
+        moveOffer: view.moveOffer,
+        rerollOptions: view.rerollOptions,
         learnset: view.learnset,
         availableMoves: available,
       }

@@ -241,6 +241,11 @@ export const pokemon = sqliteTable(
     abilitySlot: text('ability_slot', { enum: ['1', '2', 'hidden'] }),
     fastMove: text('fast_move'),
     chargedMove: text('charged_move'),
+    /**
+     * Golpe oferecido ao subir de nível (5.18), esperando aprender ou manter;
+     * o slot sai do poder dele. null = nenhuma oferta.
+     */
+    moveOffer: text('move_offer'),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),

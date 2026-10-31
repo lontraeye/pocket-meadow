@@ -1,5 +1,5 @@
 import { natures } from '../config/natures.js'
-import { traitsConfig } from '../config/traits.js'
+import { moveProgressionConfig, traitsConfig } from '../config/traits.js'
 import type { Rng } from './mulberry32.js'
 import type { StatBlock } from './stats.js'
 
@@ -156,6 +156,87 @@ export function nextChargedLearn(
     if (info && isChargedMove(info.power)) return entry
   }
   return null
+}
+
+export type MoveSlot = 'fast' | 'charged'
+
+/** Golpes da linha já liberados no nível, do tipo do slot, sem repetir. */
+function unlockedMoves(learnset: LearnEntry[], level: number, moves: Map<string, MoveInfo>, slot: MoveSlot): MoveInfo[] {
+  const seen = new Set<string>()
+  const out: MoveInfo[] = []
+  for (const entry of learnset) {
+    if (entry.level > level || seen.has(entry.move)) continue
+    const info = moves.get(entry.move)
+    if (!info || !moveFitsSlot(info.power, slot)) continue
+    seen.add(entry.move)
+    out.push(info)
+  }
+  return out
+}
+
+/** Sorteio com peso 1 / poder^expoente: quanto mais forte, mais raro. */
+export function pickWeightedMove(rng: Rng, pool: MoveInfo[]): MoveInfo | null {
+  if (pool.length === 0) return null
+  const exp = moveProgressionConfig.powerWeightExponent
+  const weights = pool.map((info) => 1 / Math.max(1, info.power) ** exp)
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let roll = rng() * total
+  for (let i = 0; i < pool.length; i += 1) {
+    roll -= weights[i]!
+    if (roll < 0) return pool[i]!
+  }
+  return pool[pool.length - 1]!
+}
+
+/**
+ * Ao subir de nível: a cada nível passado em que a linha aprende um golpe,
+ * uma chance de oferecer um golpe sorteado do mesmo tipo (rápido ou
+ * carregado) entre os já liberados, diferente do atual. A primeira que
+ * acertar vale. Carregado vazio não recebe oferta (ele é preenchido direto).
+ */
+export function rollLevelOffer(
+  rng: Rng,
+  input: {
+    fromLevel: number
+    toLevel: number
+    learnset: LearnEntry[]
+    moves: Map<string, MoveInfo>
+    fastMove: string
+    chargedMove: string | null
+  },
+): MoveInfo | null {
+  if (input.toLevel <= input.fromLevel) return null
+  const levels = new Map<number, MoveSlot>()
+  for (const entry of input.learnset) {
+    if (entry.level <= input.fromLevel || entry.level > input.toLevel || levels.has(entry.level)) continue
+    const info = input.moves.get(entry.move)
+    if (info) levels.set(entry.level, isFastMove(info.power) ? 'fast' : 'charged')
+  }
+  for (const [, slot] of [...levels].sort((a, b) => a[0] - b[0])) {
+    if (rng() >= moveProgressionConfig.levelOfferChance) continue
+    const current = slot === 'fast' ? input.fastMove : input.chargedMove
+    if (current === null) continue
+    const pool = unlockedMoves(input.learnset, input.toLevel, input.moves, slot).filter((info) => info.name !== current)
+    const pick = pickWeightedMove(rng, pool)
+    if (pick) return pick
+  }
+  return null
+}
+
+/**
+ * O que o doce pode sortear no slot: golpes já liberados do mesmo tipo, iguais
+ * ou mais fortes que o atual e diferentes dele (nunca piora).
+ */
+export function rerollCandidates(
+  learnset: LearnEntry[],
+  level: number,
+  moves: Map<string, MoveInfo>,
+  slot: MoveSlot,
+  current: string | null,
+): MoveInfo[] {
+  if (current === null) return []
+  const power = moves.get(current)?.power ?? 0
+  return unlockedMoves(learnset, level, moves, slot).filter((info) => info.name !== current && info.power >= power)
 }
 
 function rollIv(rng: Rng): number {

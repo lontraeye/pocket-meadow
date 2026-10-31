@@ -6,6 +6,7 @@ import { moveEffectText } from './moveEffectText.js'
 import {
   isFastMove,
   nextChargedLearn,
+  rerollCandidates,
   resolveAbilityKey,
   type AbilitySlot,
   type MoveInfo,
@@ -23,6 +24,8 @@ export function buildTraitView(input: {
   abilitySlot: AbilitySlot
   fastMove: string
   chargedMove: string | null
+  /** Golpe oferecido ao subir de nível, esperando resposta (5.18). */
+  moveOffer?: string | null
 }) {
   const abilities = abilitiesFor(input.speciesId)
   const abilityKey = resolveAbilityKey(abilities, input.abilitySlot)
@@ -57,6 +60,13 @@ export function buildTraitView(input: {
     }),
     fastMove: moveView(moves.get(input.fastMove), input.fastMove),
     chargedMove: input.chargedMove ? moveView(moves.get(input.chargedMove), input.chargedMove) : null,
+    // A oferta pendente e o slot dela (pelo poder: rápido até 55).
+    moveOffer: input.moveOffer ? { ...moveView(moves.get(input.moveOffer), input.moveOffer), slot: slotOf(moves.get(input.moveOffer)) } : null,
+    // Quantos golpes o doce pode sortear em cada slot (0 = já tem o mais forte).
+    rerollOptions: {
+      fast: rerollCandidates(learnset, input.level, moves, 'fast', input.fastMove).length,
+      charged: rerollCandidates(learnset, input.level, moves, 'charged', input.chargedMove).length,
+    },
     nextChargedMove: nextCharged
       ? {
           move: nextCharged.move,
@@ -111,6 +121,10 @@ function moveView(info: MoveInfo | undefined, fallback: string) {
     damageClass: info?.damageClass ?? 'physical',
     effectText: effect,
   }
+}
+
+function slotOf(info: MoveInfo | undefined): 'fast' | 'charged' {
+  return isFastMove(info?.power ?? 0) ? 'fast' : 'charged'
 }
 
 function titleCase(key: string): string {

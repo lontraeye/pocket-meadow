@@ -197,6 +197,8 @@ export type BattleOutcome = {
     levelsGained: number
     /** Carregado sorteado ao subir de nível, se o slot estava vazio (seção 5.18). */
     learnedMove?: MoveView | null
+    /** Golpe oferecido ao subir de nível: aprender ou manter na ficha. */
+    offeredMove?: MoveView | null
   }[]
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
@@ -285,6 +287,10 @@ export type OwnedPokemon = {
   fastMove: MoveView
   chargedMove: MoveView | null
   nextChargedMove: { move: string; level: number; displayName: string } | null
+  /** Golpe oferecido ao subir de nível, esperando aprender ou manter (5.18). */
+  moveOffer: (MoveView & { slot: 'fast' | 'charged' }) | null
+  /** Quantos golpes o doce pode sortear em cada slot (0 = já tem o mais forte). */
+  rerollOptions: { fast: number; charged: number }
   learnset: LearnEntryView[]
   availableMoves: { fast: MoveView[]; charged: MoveView[] }
 }
@@ -293,6 +299,8 @@ export type ProgressionRules = {
   levelCap: number
   candyXp: number
   genericPerCandy: number
+  /** Doces da linha para sortear de novo cada golpe (5.18). */
+  moveRerollCost: { fast: number; charged: number }
   releaseBase: number
   releaseLevelDiv: number
   releaseShinyMult: number
@@ -511,6 +519,12 @@ export function errorText(error: ApiError): string {
       return 'Aqui não tem mato para procurar.'
     case 'spawn_not_found':
       return 'Esse Pokémon já saiu do campo.'
+    case 'no_better_move':
+      return 'Ele já tem o golpe mais forte desse tipo.'
+    case 'no_move_offer':
+      return 'Essa oferta de golpe já passou.'
+    case 'no_move_to_reroll':
+      return 'Ainda não tem golpe carregado para sortear.'
     case 'field_not_empty':
       return 'Ainda tem Pokémon no campo.'
     case 'spot_not_found':

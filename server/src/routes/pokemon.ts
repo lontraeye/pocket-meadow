@@ -9,7 +9,8 @@ import { getDb, immediate } from '../db/client.js'
 import { grantTrainerLevelRewards } from '../db/inventory.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { candies, evolutions, pokedexEntries, pokemon, species, trainers } from '../db/schema.js'
-import { applyLevelMovesToPokemon, rerollMovesOnEvolve, type MoveView } from '../game/levelMoves.js'
+import { moveProgressionConfig } from '../config/traits.js'
+import { applyLevelMovesToPokemon, rerollMove, rerollMovesOnEvolve, slotOfMove, type MoveView } from '../game/levelMoves.js'
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
 import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
@@ -84,8 +85,32 @@ pokemonRoutes.post('/:id/evolve', requireUser, async (c) => {
   return c.json(result.evolution)
 })
 
+// Oferta de golpe ao subir de nível (5.18): aprender (troca o golpe do mesmo
+// tipo) ou manter (a oferta some).
+pokemonRoutes.post('/:id/moves/offer', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  if (!body || typeof body.accept !== 'boolean') return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => answerOffer(c.get('userId'), id, body.accept as boolean, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.moves)
+})
+
+// Sorteio pago com doces da linha: só entre golpes iguais ou mais fortes.
+pokemonRoutes.post('/:id/moves/reroll', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'pokemon_not_found' }, 404)
+  const body = await readObject(c)
+  const slot = body?.slot
+  if (slot !== 'fast' && slot !== 'charged') return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => rerollSlot(c.get('userId'), id, slot, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json(result.reroll)
+})
+
 // Troca livre na ficha: só em teste (DEV_TOOLS). Em produção o golpe muda
-// só pelos offers ao subir de nível / evoluir.
+// pela oferta ao subir de nível, pelo sorteio com doce e ao evoluir.
 pokemonRoutes.post('/:id/moves', requireUser, async (c) => {
   if (!devToolsEnabled()) return c.json({ error: 'not_found' }, 404)
   const id = parseId(c.req.param('id'))
@@ -171,7 +196,9 @@ function devLevelUp(
   id: number,
   levels: number,
   now: number,
-): Ok<{ level: { level: number; levelsGained: number; learnedMove: MoveView | null } }> | Failure {
+): Ok<{
+  level: { level: number; levelsGained: number; learnedMove: MoveView | null; offeredMove: MoveView | null }
+}> | Failure {
   persistCatchUp(userId, now)
   const db = getDb()
   const mon = db
@@ -193,7 +220,7 @@ function devLevelUp(
     .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
     .run()
   bumpMaxLevelReached(userId, mon.speciesId, level)
-  const learnedMove =
+  const moves =
     level > mon.level && mon.fastMove
       ? applyLevelMovesToPokemon({
           userId,
@@ -202,9 +229,17 @@ function devLevelUp(
           fromLevel: mon.level,
           toLevel: level,
           chargedMove: mon.chargedMove,
-        }).learned
+        })
       : null
-  return { ok: true, level: { level, levelsGained: level - mon.level, learnedMove } }
+  return {
+    ok: true,
+    level: {
+      level,
+      levelsGained: level - mon.level,
+      learnedMove: moves?.learned ?? null,
+      offeredMove: moves?.offered ?? null,
+    },
+  }
 }
 
 function devToggleShiny(userId: number, id: number, now: number): Ok<{ shiny: { isShiny: boolean } }> | Failure {
@@ -431,7 +466,7 @@ function feedOne(
     .run()
   bumpMaxLevelReached(userId, mon.speciesId, plan.level)
 
-  const learnedMove =
+  const levelMoves =
     plan.levelsGained > 0 && mon.fastMove
       ? applyLevelMovesToPokemon({
           userId,
@@ -440,8 +475,10 @@ function feedOne(
           fromLevel: mon.level,
           toLevel: plan.level,
           chargedMove: mon.chargedMove,
-        }).learned
+        })
       : null
+  const learnedMove = levelMoves?.learned ?? null
+  const offeredMove = levelMoves?.offered ?? null
 
   return {
     ok: true,
@@ -456,6 +493,7 @@ function feedOne(
       useGeneric,
       balance,
       learnedMove,
+      offeredMove,
     },
   }
 }
@@ -471,6 +509,7 @@ type FeedResult = {
   useGeneric: boolean
   balance: number
   learnedMove: MoveView | null
+  offeredMove: MoveView | null
 }
 
 function evolveOne(
@@ -590,6 +629,82 @@ type EvolutionResult = {
   levelRewards: { itemKey: string; quantity: number }[]
   newMoves: { fast: MoveView | null; charged: MoveView | null } | null
   evolutions: { toSpeciesId: number; displayName: string; minLevel: number; viaTrade: boolean }[]
+}
+
+function answerOffer(
+  userId: number,
+  id: number,
+  accept: boolean,
+  now: number,
+): Ok<{ moves: { fastMove: string; chargedMove: string | null; moveOffer: null } }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const where = and(eq(pokemon.id, id), eq(pokemon.userId, userId))
+  const mon = db
+    .select({ fastMove: pokemon.fastMove, chargedMove: pokemon.chargedMove, moveOffer: pokemon.moveOffer })
+    .from(pokemon)
+    .where(where)
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (!mon.fastMove) return fail('traits_missing', 400)
+  if (!mon.moveOffer) return fail('no_move_offer', 404)
+  let fastMove: string = mon.fastMove
+  let chargedMove = mon.chargedMove
+  if (accept) {
+    if (slotOfMove(mon.moveOffer) === 'fast') fastMove = mon.moveOffer
+    else chargedMove = mon.moveOffer
+  }
+  db.update(pokemon).set({ fastMove, chargedMove, moveOffer: null }).where(where).run()
+  return { ok: true, moves: { fastMove, chargedMove, moveOffer: null } }
+}
+
+function rerollSlot(
+  userId: number,
+  id: number,
+  slot: 'fast' | 'charged',
+  now: number,
+): Ok<{ reroll: { slot: 'fast' | 'charged'; move: MoveView; spent: number; balance: number } }> | Failure {
+  persistCatchUp(userId, now)
+  const db = getDb()
+  const mon = db
+    .select({
+      speciesId: pokemon.speciesId,
+      level: pokemon.level,
+      location: pokemon.location,
+      fastMove: pokemon.fastMove,
+      chargedMove: pokemon.chargedMove,
+      evolutionChainId: species.evolutionChainId,
+    })
+    .from(pokemon)
+    .innerJoin(species, eq(pokemon.speciesId, species.id))
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .get()
+  if (!mon) return fail('pokemon_not_found', 404)
+  if (!mon.fastMove) return fail('traits_missing', 400)
+  if (mon.location === 'daycare') return fail('in_daycare', 400)
+  const current = slot === 'fast' ? mon.fastMove : mon.chargedMove
+  if (current === null) return fail('no_move_to_reroll', 400)
+
+  const cost = moveProgressionConfig.rerollCost[slot]
+  const row = db
+    .select({ amount: candies.amount })
+    .from(candies)
+    .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, mon.evolutionChainId)))
+    .get()
+  if (!row || row.amount < cost) return fail('not_enough_candies', 400)
+  const move = rerollMove({ speciesId: mon.speciesId, level: mon.level, slot, current })
+  if (!move) return fail('no_better_move', 400)
+
+  const balance = row.amount - cost
+  db.update(candies)
+    .set({ amount: balance })
+    .where(and(eq(candies.userId, userId), eq(candies.evolutionChainId, mon.evolutionChainId)))
+    .run()
+  db.update(pokemon)
+    .set(slot === 'fast' ? { fastMove: move.name } : { chargedMove: move.name })
+    .where(and(eq(pokemon.id, id), eq(pokemon.userId, userId)))
+    .run()
+  return { ok: true, reroll: { slot, move, spent: cost, balance } }
 }
 
 function changeMove(

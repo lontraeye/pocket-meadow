@@ -9,6 +9,23 @@ export const traitsConfig = {
   ivMax: 31,
 } as const
 
+/**
+ * Golpes que evoluem com o Pokémon (PLANNING.md, seção 5.18, revisto em
+ * 2026-10-31). Subir de nível pode oferecer um golpe novo; doces sorteiam de
+ * novo, só para igual ou melhor. Golpe forte sempre é mais raro de cair.
+ */
+export const moveProgressionConfig = {
+  /** Chance de oferta a cada nível em que a linha aprende um golpe. */
+  levelOfferChance: 0.5,
+  /**
+   * Peso de cada golpe nos sorteios (oferta e doce): 1 / poder^expoente.
+   * Com 1, um golpe de 120 cai com metade da chance de um de 60.
+   */
+  powerWeightExponent: 1,
+  /** Doces da linha para sortear de novo cada golpe. */
+  rerollCost: { fast: 10, charged: 20 },
+} as const
+
 /** Fallback quando a espécie não tem nenhum golpe rápido no pool. */
 export const fallbackFastMove = { name: 'tackle', id: 33 } as const
 
