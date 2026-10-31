@@ -16,8 +16,8 @@ const gardenAnims = ['Walk', 'Idle', 'Sleep'] as const satisfies ReadonlyArray<(
 const sheetGlobs = (base: string) => [
   ...anims.map((anim) => `${base}/${anim}-Anim.png`),
   ...anims.map((anim) => `${base}/${anim}-Shadow.png`),
-  // Só o do Sleep: dá a posição da cabeça para o Zzz do jardim.
-  `${base}/Sleep-Offsets.png`,
+  // Posição da cabeça: o Zzz (Sleep) e o nome/balão do jardim (Idle, Walk).
+  ...gardenAnims.map((anim) => `${base}/${anim}-Offsets.png`),
 ]
 const sparse = [
   '/tracker.json',
@@ -34,9 +34,10 @@ const sparse = [
 // branco da folha -Shadow, e anda dentro do quadro durante o Walk. Vem como
 // [x, y] quando é igual em todos os quadros; senão, [x, y] por quadro, linha a
 // linha (direção × quadros).
-// head (só no Sleep): [x, y] do alto da cabeça no 1º quadro, relativo ao canto
-// do quadro. O x é o pixel preto da folha -Offsets (a cabeça); o y é o primeiro
-// pixel visível do sprite naquela faixa, para o Zzz nascer acima dela.
+// head (animações do jardim): [x, y] do alto da cabeça no 1º quadro de cada
+// direção, relativo ao canto do quadro. O x é o pixel preto da folha -Offsets
+// (a cabeça); o y é o primeiro pixel visível do sprite naquela faixa, para o
+// Zzz, o nome e o balão nascerem acima dela.
 type AnimSheet = { w: number; h: number; dirs: number; durations: number[]; ground: number[]; head?: number[] }
 type GardenAnim = (typeof gardenAnims)[number]
 type BattleAnim = Exclude<(typeof anims)[number], GardenAnim>
@@ -205,41 +206,46 @@ function loadSheet(
   const dirs = size.h / resolved.h
   const ground = readGround(folder, resolved.name, resolved.w, resolved.h, resolved.durations.length, dirs, size, label)
   const sheet: AnimSheet = { w: resolved.w, h: resolved.h, dirs, durations: resolved.durations, ground }
-  if (anim === 'Sleep') {
-    const head = readHead(folder, resolved.name, resolved.w, resolved.h, png, label)
+  if ((gardenAnims as readonly string[]).includes(anim)) {
+    const head = readHead(folder, resolved.name, resolved.w, resolved.h, dirs, png, label)
     if (head) sheet.head = head
   }
   return { sheet, png }
 }
 
-function readHead(folder: string, name: string, w: number, h: number, animPng: string, label: string): number[] | undefined {
+function readHead(folder: string, name: string, w: number, h: number, dirs: number, animPng: string, label: string): number[] | undefined {
   const file = materialize(`${folder}/${name}-Offsets.png`)
   if (!file) {
-    warnings.push(`${label}: ${name}-Offsets.png ausente, Zzz na posição padrão`)
+    warnings.push(`${label}: ${name}-Offsets.png ausente, cabeça na posição padrão`)
     return undefined
   }
   const offsets = PNG.sync.read(fs.readFileSync(file))
-  const head = colorPixel(offsets, w, h, [0, 0, 0])
-  if (!head) return undefined
-  const [headX, headY] = head
-  // Alto da cabeça: o pixel visível mais alto numa faixa estreita em volta do x dela.
   const sprite = PNG.sync.read(fs.readFileSync(animPng))
-  let top = headY ?? 0
-  for (let x = Math.max(0, (headX ?? 0) - 2); x <= Math.min(w - 1, (headX ?? 0) + 2); x += 1) {
-    for (let y = 0; y < top; y += 1) {
-      if (sprite.data[(y * sprite.width + x) * 4 + 3] !== 0) {
-        top = y
-        break
+  const out: number[] = []
+  for (let row = 0; row < dirs; row += 1) {
+    const y0 = row * h
+    const head = colorPixel(offsets, w, h, [0, 0, 0], y0)
+    if (!head) return undefined
+    const [headX = 0, headY = 0] = head
+    // Alto da cabeça: o pixel visível mais alto numa faixa estreita em volta do x dela.
+    let top = headY
+    for (let x = Math.max(0, headX - 2); x <= Math.min(w - 1, headX + 2); x += 1) {
+      for (let y = 0; y < top; y += 1) {
+        if (sprite.data[((y0 + y) * sprite.width + x) * 4 + 3] !== 0) {
+          top = y
+          break
+        }
       }
     }
+    out.push(headX, top)
   }
-  return [headX ?? 0, top]
+  return out
 }
 
-function colorPixel(png: PNG, w: number, h: number, rgb: [number, number, number]): number[] | undefined {
+function colorPixel(png: PNG, w: number, h: number, rgb: [number, number, number], y0 = 0): number[] | undefined {
   for (let y = 0; y < h; y += 1) {
     for (let x = 0; x < w; x += 1) {
-      const at = (y * png.width + x) * 4
+      const at = ((y0 + y) * png.width + x) * 4
       if (png.data[at + 3] !== 0 && png.data[at] === rgb[0] && png.data[at + 1] === rgb[1] && png.data[at + 2] === rgb[2]) {
         return [x, y]
       }

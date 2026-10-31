@@ -13,7 +13,7 @@ export type PmdAnim = {
   durations: number[]
   // Ponto do chão no quadro: [x, y] fixo, ou [x, y] por quadro, direção a direção.
   ground: number[]
-  // Só no Sleep: [x, y] do alto da cabeça no 1º quadro (onde nasce o Zzz).
+  // Animações do jardim: [x, y] do alto da cabeça no 1º quadro de cada direção.
   head?: number[]
 }
 

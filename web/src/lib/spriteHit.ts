@@ -40,19 +40,69 @@ function loadMask(url: string): void {
     .catch(() => masks.set(url, 'failed'))
 }
 
-/** Sprites PMD sob o ponto, do mais à frente para o mais atrás. */
-export function spritesAt(x: number, y: number): HTMLElement[] {
+/** O que dá para tocar no jardim: sprites dos Pokémon e as imagens dos presentes. */
+function targetsAt(x: number, y: number): HTMLElement[] {
   return document
     .elementsFromPoint(x, y)
-    .filter((el): el is HTMLElement => el instanceof HTMLElement && el.classList.contains('sprite') && el.closest('.mon') !== null)
+    .filter(
+      (el): el is HTMLElement =>
+        el instanceof HTMLElement &&
+        ((el.classList.contains('sprite') && el.closest('.mon') !== null) || (el instanceof HTMLImageElement && el.closest('.gift') !== null)),
+    )
 }
 
-/** Começa a montar as máscaras das folhas sob o ponto (chamar no pointerdown). */
+function targetUrl(el: HTMLElement): string | null {
+  return el instanceof HTMLImageElement ? el.currentSrc || el.src : sheetUrl(el)
+}
+
+/** Começa a montar as máscaras do que está sob o ponto (chamar no pointerdown). */
 export function warmSpriteMasks(x: number, y: number): void {
-  for (const el of spritesAt(x, y)) {
-    const url = sheetUrl(el)
+  for (const el of targetsAt(x, y)) {
+    const url = targetUrl(el)
     if (url) loadMask(url)
   }
+}
+
+/** Mesmo teste de spriteOpaqueAt, para uma <img> esticada na caixa. */
+function imageOpaqueAt(el: HTMLImageElement, x: number, y: number): boolean | null {
+  const url = targetUrl(el)
+  const mask = url ? masks.get(url) : undefined
+  if (!mask || typeof mask === 'string') {
+    if (url) loadMask(url)
+    return null
+  }
+  const rect = el.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return false
+  const kx = mask.w / rect.width
+  const ky = mask.h / rect.height
+  const cx = Math.floor((x - rect.left) * kx)
+  const cy = Math.floor((y - rect.top) * ky)
+  const slop = Math.ceil(TOUCH_SLOP_PX * Math.max(kx, ky))
+  for (let sy = Math.max(0, cy - slop); sy <= Math.min(mask.h - 1, cy + slop); sy += 1) {
+    for (let sx = Math.max(0, cx - slop); sx <= Math.min(mask.w - 1, cx + slop); sx += 1) {
+      if ((mask.alpha[sy * mask.w + sx] ?? 0) > 0) return true
+    }
+  }
+  return false
+}
+
+export type GardenHit = { kind: 'mon'; id: number } | { kind: 'gift'; id: number }
+
+/**
+ * O primeiro Pokémon ou presente (da frente para trás) com pixel visível sob o
+ * ponto. null: nenhum. undefined: alguma máscara ainda carregando (quem chama
+ * fica com o que recebeu o click).
+ */
+export function pickAt(x: number, y: number): GardenHit | null | undefined {
+  for (const el of targetsAt(x, y)) {
+    const hit = el instanceof HTMLImageElement ? imageOpaqueAt(el, x, y) : spriteOpaqueAt(el, x, y)
+    if (hit === null) return undefined
+    if (!hit) continue
+    const gift = el.closest<HTMLElement>('.gift')
+    if (gift) return { kind: 'gift', id: Number(gift.dataset.gift) }
+    return { kind: 'mon', id: Number(el.closest<HTMLElement>('.mon')?.dataset.walker) }
+  }
+  return null
 }
 
 /**

@@ -24,7 +24,7 @@
   import WeatherIcon from './WeatherIcon.svelte'
   import WeatherLayer from './WeatherLayer.svelte'
   import { play, playCry } from './sound'
-  import { spriteOpaqueAt, spritesAt, warmSpriteMasks } from './spriteHit'
+  import { pickAt, warmSpriteMasks, type GardenHit } from './spriteHit'
   import {
     gardenExtent,
     gardenSprite,
@@ -246,15 +246,21 @@
     return { x: 0, y: -lift, drift: 1 }
   }
 
-  /** Y do nome: logo acima do topo do quadro Idle (px a partir do chão). */
-  function tagAnchorY(walker: Walker, look: GardenLook): number {
+  /**
+   * Ponto do nome e do balão: logo acima do alto da cabeça (px a partir do
+   * chão), pela posição da cabeça que a folha PMD traz para cada direção.
+   */
+  function headAnchor(walker: Walker, look: GardenLook): { x: number; y: number } {
     const gap = Math.max(4, 4 * scale)
-    if (look.kind === 'pmd') {
-      const sheet = look.anims.Idle
-      const ground = groundAt(sheet, walker.dir, 0)
-      return -(ground.y * pmdScale + gap)
-    }
-    return -(showdownSize * scale + gap)
+    if (look.kind !== 'pmd') return { x: 0, y: -(showdownSize * scale + gap) }
+    const sheet = look.anims[walker.anim] ?? look.anims.Idle
+    const row = sheet.dirs <= 1 ? 0 : Math.min(walker.dir, sheet.dirs - 1)
+    const ground = groundAt(sheet, row, 0)
+    const headX = sheet.head?.[row * 2]
+    const headY = sheet.head?.[row * 2 + 1]
+    if (headX === undefined || headY === undefined) return { x: 0, y: -(ground.y * pmdScale + gap) }
+    const flip = sleepFlip(walker) ? -1 : 1
+    return { x: (headX + 0.5 - ground.x) * pmdScale * flip, y: (headY - ground.y) * pmdScale - gap }
   }
 
   function inPlay(col: number, row: number): boolean {
@@ -334,19 +340,36 @@
   const selected = $derived(game.pokemon.find((mon) => mon.id === selectedId) ?? null)
 
   // Balão de diálogo (5.21), como nos jogos de fazenda: o coração fica fixo
-  // enquanto dá para fazer carinho (tocar faz o carinho); depois a fome; a
-  // carinha triste quando a felicidade está baixa; a feliz logo depois do
-  // carinho, por um instante.
+  // enquanto dá para fazer carinho (tocar no balão ou no Pokémon faz o
+  // carinho); a fome aparece de vez em quando; a carinha triste quando a
+  // felicidade está baixa; a feliz logo depois do carinho e, de vez em quando,
+  // em quem está feliz e de barriga cheia.
   let happyUntil = $state<Record<number, number>>({})
   let petting = $state<Record<number, boolean>>({})
+  // Quem está feliz sorri de vez em quando, um por vez em horários diferentes
+  // (a fase vem do id): uns 3 s a cada ~40 s.
+  const SMILE_EVERY_MS = 40_000
+  const SMILE_FOR_MS = 3_000
+  function smileNow(id: number, now: number): boolean {
+    return (now + id * 7919) % SMILE_EVERY_MS < SMILE_FOR_MS
+  }
+  // A fome também só aparece de vez em quando (mais vezes que o sorriso, é um
+  // pedido): uns 4 s a cada ~20 s, para não poluir a tela.
+  const HUNGER_EVERY_MS = 20_000
+  const HUNGER_FOR_MS = 4_000
+  function hungerNow(id: number, now: number): boolean {
+    return (now + id * 4793) % HUNGER_EVERY_MS < HUNGER_FOR_MS
+  }
   const bubbleById = $derived.by(() => {
     const now = clock.now()
     const out = new Map<number, BubbleKind>()
     for (const mon of game.pokemon) {
       if ((happyUntil[mon.id] ?? 0) > Date.now()) out.set(mon.id, 'happy')
       else if ((mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now) && mon.pet.affection < 90) out.set(mon.id, 'pet')
-      else if (mon.pet.hunger < game.garden.needThreshold) out.set(mon.id, 'hunger')
+      else if (mon.pet.hunger < game.garden.needThreshold && hungerNow(mon.id, now)) out.set(mon.id, 'hunger')
       else if (mon.pet.happiness < 35) out.set(mon.id, 'sad')
+      else if (mon.pet.happiness >= 60 && mon.pet.hunger >= game.garden.needThreshold && smileNow(mon.id, now))
+        out.set(mon.id, 'happy')
     }
     return out
   })
@@ -510,24 +533,26 @@
     }
   })
 
-  // O click cai no quadro do sprite da frente, que tem muita folga transparente.
-  // Escolhe o primeiro sprite (da frente para trás) com pixel visível sob o
-  // ponto. Sem pixel em nenhum, ou máscara ainda carregando, fica quem recebeu
-  // o click, como antes. Teclado (detail 0) não tem ponto: fica o botão focado.
-  function pickMon(event: MouseEvent, clicked: Walker) {
-    let picked = clicked
-    if (event.detail > 0) {
-      for (const el of spritesAt(event.clientX, event.clientY)) {
-        const hit = spriteOpaqueAt(el, event.clientX, event.clientY)
-        if (hit === null) break
-        if (!hit) continue
-        const id = Number(el.closest<HTMLElement>('.mon')?.dataset.walker)
-        picked = walkers.find((walker) => walker.id === id) ?? clicked
-        break
-      }
+  // O click cai no quadro do sprite (ou do presente) da frente, que tem muita
+  // folga transparente. Vale o primeiro, da frente para trás, com pixel visível
+  // sob o ponto. Sem pixel em nenhum, ou máscara ainda carregando, fica quem
+  // recebeu o click. Teclado (detail 0) não tem ponto: fica o botão focado.
+  function onGardenTap(event: MouseEvent, clicked: GardenHit) {
+    const hit = (event.detail > 0 ? pickAt(event.clientX, event.clientY) : undefined) ?? clicked
+    if (hit.kind === 'gift') {
+      const gift = game.garden.gifts.find((g) => g.id === hit.id)
+      if (gift) void collectGift(gift)
+      return
     }
-    selectedId = picked.id
-    playCry(picked.speciesId)
+    const walker = walkers.find((w) => w.id === hit.id)
+    if (!walker) return
+    // Como nos jogos de fazenda: tocar em quem quer carinho já faz o carinho.
+    if (bubbleById.get(walker.id) === 'pet') {
+      void onBubble(walker.id, 'pet')
+      return
+    }
+    selectedId = walker.id
+    playCry(walker.speciesId)
   }
 
   function place(col: number, row: number): { x: number; y: number } {
@@ -745,7 +770,7 @@
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.pointerType === 'mouse') return
-      // Prepara as máscaras dos sprites sob o dedo para o click (pickMon).
+      // Prepara as máscaras dos sprites sob o dedo para o click (onGardenTap).
       warmSpriteMasks(event.clientX, event.clientY)
       if (event.pointerType === 'touch') {
         touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
@@ -1270,7 +1295,8 @@
           style:--size="{Math.round(24 * scale)}px"
           style:z-index={cell.col + cell.row + depthSpan}
           aria-label={`Presente: ${giftLabel(gift.itemKey, gift.quantity, game.berries, game.balls.list)}`}
-          onclick={() => void collectGift(gift)}
+          data-gift={gift.id}
+          onclick={(event) => onGardenTap(event, { kind: 'gift', id: gift.id })}
         >
           <img src={giftIconSrc(gift.itemKey)} alt="" />
         </button>
@@ -1288,10 +1314,11 @@
           style:z-index={Math.round(walker.col + walker.row) + depthSpan + 1}
           aria-label={`${walker.displayName}, nível ${walker.level}`}
           data-walker={walker.id}
-          onclick={(event) => pickMon(event, walker)}
+          onclick={(event) => onGardenTap(event, { kind: 'mon', id: walker.id })}
         >
           {#if showLabels}
-            <span class="mon-tag" style:top="{tagAnchorY(walker, look)}px" aria-hidden="true">
+            {@const head = headAnchor(walker, look)}
+            <span class="mon-tag" style:left="{head.x}px" style:top="{head.y}px" aria-hidden="true">
               {walker.displayName} Lv {walker.level}
             </span>
           {/if}
@@ -1339,13 +1366,14 @@
           {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
           {@const spot = place(walker.col, walker.row)}
           {@const art = BUBBLES[kind]}
+          {@const head = headAnchor(walker, look)}
           <button
             type="button"
             class="bubble"
             class:tappable={kind === 'pet'}
             class:busy={petting[walker.id]}
-            style:left="{snapToDevice(spot.x)}px"
-            style:top="{snapToDevice(spot.y + halfH + tagAnchorY(walker, look) - (showLabels ? 16 : 0))}px"
+            style:left="{snapToDevice(spot.x + head.x)}px"
+            style:top="{snapToDevice(spot.y + halfH + head.y - (showLabels ? 16 : 0))}px"
             style:z-index={depthSpan * 3}
             aria-label={kind === 'pet'
               ? `Fazer carinho em ${walker.displayName}`
@@ -1367,7 +1395,7 @@
                 <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
               {/each}
             </svg>
-            {#if kind === 'happy'}
+            {#if kind === 'happy' && (happyUntil[walker.id] ?? 0) > Date.now()}
               <span class="hearts" aria-hidden="true"><i></i><i></i><i></i></span>
             {/if}
           </button>
