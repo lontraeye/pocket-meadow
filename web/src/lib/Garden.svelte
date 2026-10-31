@@ -816,8 +816,25 @@
     }
   })
 
+  // Quem está no jardim e com qual sprite. O passeio só recomeça quando isso
+  // muda: o estado novo (presente, carinho, missão) não pode parar todo mundo.
+  const gardenKey = $derived(gardenPokemon.map((mon) => `${mon.id}:${mon.speciesId}:${mon.isShiny ? 1 : 0}`).join('|'))
+
+  // Nome e nível mudam sem recomeçar o passeio.
   $effect(() => {
-    const mons = gardenPokemon
+    const byId = new Map(gardenPokemon.map((mon) => [mon.id, mon]))
+    for (const walker of untrack(() => walkers)) {
+      const mon = byId.get(walker.id)
+      if (!mon) continue
+      const name = mon.nickname ?? mon.displayName
+      if (walker.displayName !== name) walker.displayName = name
+      if (walker.level !== mon.level) walker.level = mon.level
+    }
+  })
+
+  $effect(() => {
+    void gardenKey
+    const mons = untrack(() => gardenPokemon)
     // Cada um nasce numa casa sorteada do jardim todo, olhando para um lado
     // qualquer (antes saíam em ordem e se amontoavam no canto de cima).
     // Provisório: o PC e os biomas vão decidir onde cada um fica.
