@@ -72,88 +72,78 @@ const flower = (petal: string): Stamp[] => [
   [{ dx: 0, dy: -1, c: petal }, { dx: -1, dy: 0, c: petal }, { dx: 1, dy: 0, c: petal }, { dx: 0, dy: 0, c: 'Miolo da flor' }, { dx: 0, dy: 1, c: 'Grama 2' }],
 ]
 
+// Receitas enxutas: base + no máximo um tom de salpico e poucos detalhes,
+// para o chão ficar calmo e os Pokémon se destacarem.
+const dots = (c: string): Stamp[] => [
+  [{ dx: 0, dy: 0, c }, { dx: 1, dy: 0, c }],
+  [{ dx: 0, dy: 0, c }, { dx: 1, dy: -1, c }],
+]
+
 const recipes: Record<string, Recipe> = {
   grama: {
     base: 'Grama 3',
-    speckles: [{ c: 'Grama 2', p: 0.07 }, { c: 'Grama 4', p: 0.06 }],
-    details: [{ stamps: tuft('Grama 2', 'Grama 5'), count: [2, 3] }],
+    speckles: [{ c: 'Grama 2', p: 0.025 }],
+    details: [{ stamps: dots('Grama 2'), count: [1, 2] }],
     variants: 3,
   },
   'grama-alta': {
     base: 'Grama alta 3',
-    speckles: [{ c: 'Grama alta 2', p: 0.16 }, { c: 'Grama alta 4', p: 0.1 }],
-    details: [{ stamps: tuft('Grama alta 1', 'Grama alta 5'), count: [5, 7] }],
+    speckles: [{ c: 'Grama alta 2', p: 0.05 }],
+    details: [{ stamps: tuft('Grama alta 2', 'Grama alta 4'), count: [2, 3] }],
     variants: 3,
   },
   flores: {
     base: 'Grama 3',
-    speckles: [{ c: 'Grama 2', p: 0.07 }, { c: 'Grama 4', p: 0.06 }],
-    details: [
-      { stamps: [...flower('Flor rosa'), ...flower('Flor amarela'), ...flower('Flor vermelha')], count: [2, 3], margin: 2 },
-      { stamps: tuft('Grama 2', 'Grama 5'), count: [1, 2] },
-    ],
+    speckles: [{ c: 'Grama 2', p: 0.02 }],
+    details: [{ stamps: [...flower('Flor rosa'), ...flower('Flor amarela'), ...flower('Flor vermelha')], count: [1, 2], margin: 2 }],
     variants: 3,
   },
   terra: {
     base: 'Terra 3',
-    speckles: [{ c: 'Terra 2', p: 0.1 }, { c: 'Terra 4', p: 0.07 }],
-    details: [{ stamps: pebble('Terra 2', 'Terra 5'), count: [1, 3] }],
+    speckles: [{ c: 'Terra 2', p: 0.03 }],
+    details: [{ stamps: dots('Terra 2'), count: [0, 1] }],
     variants: 3,
   },
   areia: {
     base: 'Areia 3',
-    speckles: [{ c: 'Areia 2', p: 0.06 }, { c: 'Areia 4', p: 0.1 }],
-    details: [{ stamps: pebble('Areia 2', 'Areia 4'), count: [0, 1] }],
+    speckles: [{ c: 'Areia 4', p: 0.03 }],
     variants: 3,
   },
   pedra: {
     base: 'Pedra 3',
-    speckles: [{ c: 'Pedra 2', p: 0.08 }, { c: 'Pedra 4', p: 0.08 }],
+    speckles: [{ c: 'Pedra 2', p: 0.025 }],
     details: [
-      {
-        stamps: [
-          [{ dx: 0, dy: 0, c: 'Pedra 2' }, { dx: 1, dy: 0, c: 'Pedra 2' }, { dx: 2, dy: 1, c: 'Pedra 2' }, { dx: 3, dy: 1, c: 'Pedra 2' }, { dx: 0, dy: -1, c: 'Pedra 4' }],
-          [{ dx: 0, dy: 0, c: 'Pedra 2' }, { dx: -1, dy: 1, c: 'Pedra 2' }, { dx: -2, dy: 1, c: 'Pedra 2' }],
-        ],
-        count: [1, 2],
-      },
+      { stamps: [[{ dx: 0, dy: 0, c: 'Pedra 2' }, { dx: 1, dy: 0, c: 'Pedra 2' }, { dx: 2, dy: 1, c: 'Pedra 2' }]], count: [0, 1] },
     ],
     variants: 3,
   },
   agua: {
     base: 'Água rasa 2',
-    speckles: [{ c: 'Água rasa 1', p: 0.05 }],
+    speckles: [],
     details: [
-      {
-        stamps: [
-          [{ dx: 0, dy: 0, c: 'Água rasa 3' }, { dx: 1, dy: 0, c: 'Água rasa 3' }, { dx: 2, dy: 0, c: 'Água rasa 3' }],
-          [{ dx: 0, dy: 0, c: 'Água rasa 3' }, { dx: 1, dy: 0, c: 'Água rasa 4' }, { dx: 2, dy: 0, c: 'Água rasa 3' }, { dx: 3, dy: 0, c: 'Água rasa 3' }],
-        ],
-        count: [2, 3],
-      },
+      { stamps: [[{ dx: 0, dy: 0, c: 'Água rasa 3' }, { dx: 1, dy: 0, c: 'Água rasa 3' }, { dx: 2, dy: 0, c: 'Água rasa 3' }]], count: [1, 2] },
     ],
     variants: 3,
+  },
+  'agua-funda': {
+    base: 'Água funda 3',
+    speckles: [],
+    details: [
+      { stamps: [[{ dx: 0, dy: 0, c: 'Água funda 4' }, { dx: 1, dy: 0, c: 'Água funda 4' }, { dx: 2, dy: 0, c: 'Água funda 4' }]], count: [0, 1] },
+    ],
+    variants: 2,
   },
   // Canteiro da horta: terra arada em sulcos, dentro de uma moldura de madeira.
   canteiro: {
     base: 'Terra 3',
-    speckles: [{ c: 'Terra 4', p: 0.05 }],
+    speckles: [],
     paint: (x, y) => {
-      if (onEdge(x, y)) return y < TILE_H / 2 ? 'Madeira 4' : 'Madeira 2'
+      if (onEdge(x, y)) return 'Madeira 2'
       if (onEdge(x - 1, y) || onEdge(x + 1, y)) return 'Madeira 3'
       // Sulcos paralelos ao lado nordeste do losango.
-      const band = (((Math.floor(x / 2) + y) % 3) + 3) % 3
-      return band === 0 ? 'Terra 2' : band === 1 ? 'Terra 4' : null
+      return (((Math.floor(x / 2) + y) % 3) + 3) % 3 === 0 ? 'Terra 2' : null
     },
     variants: 1,
-  },
-  'agua-funda': {
-    base: 'Água funda 3',
-    speckles: [{ c: 'Água funda 2', p: 0.08 }],
-    details: [
-      { stamps: [[{ dx: 0, dy: 0, c: 'Água funda 4' }, { dx: 1, dy: 0, c: 'Água funda 4' }, { dx: 2, dy: 0, c: 'Água funda 4' }]], count: [1, 2] },
-    ],
-    variants: 2,
   },
 }
 

@@ -818,14 +818,28 @@
 
   $effect(() => {
     const mons = gardenPokemon
-    // Lê os canteiros desbloqueados para o efeito recrear se a faixa mudar.
-    void game.plotSlotsUnlocked
     // Cada um nasce numa casa sorteada do jardim todo, olhando para um lado
     // qualquer (antes saíam em ordem e se amontoavam no canto de cima).
     // Provisório: o PC e os biomas vão decidir onde cada um fica.
-    const spots = shuffled(walkableSpots())
-    const created = mons.map((mon, index) => {
-      const spot = spots[index % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
+    // Quem já estava andando fica onde está: o estado novo (coletar um
+    // presente, dar carinho) não pode embaralhar o jardim.
+    const previous = new Map(untrack(() => walkers).map((walker) => [walker.id, walker]))
+    const taken = new Set<string>()
+    const kept = new Map<number, { col: number; row: number; dir: number }>()
+    for (const mon of mons) {
+      const before = previous.get(mon.id)
+      if (!before) continue
+      const col = Math.round(before.col)
+      const row = Math.round(before.row)
+      if (!isWalkable(col, row) || taken.has(`${col},${row}`)) continue
+      taken.add(`${col},${row}`)
+      kept.set(mon.id, { col, row, dir: before.dir })
+    }
+    const spots = shuffled(walkableSpots()).filter((spot) => !taken.has(`${spot.col},${spot.row}`))
+    let nextSpot = 0
+    const created = mons.map((mon) => {
+      const spot =
+        kept.get(mon.id) ?? spots[nextSpot++ % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
       return {
         id: mon.id,
         speciesId: mon.speciesId,
@@ -834,7 +848,7 @@
         isShiny: mon.isShiny,
         col: spot.col,
         row: spot.row,
-        dir: Math.floor(Math.random() * 8),
+        dir: kept.get(mon.id)?.dir ?? Math.floor(Math.random() * 8),
         anim: 'Idle' as const,
       }
     })
