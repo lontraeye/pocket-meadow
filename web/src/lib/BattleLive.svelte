@@ -900,6 +900,10 @@
       if (outcome.seedDrop) {
         steps.push({ kind: 'text', line: `Encontrou ${itemLabel(outcome.seedDrop.itemKey, berries, balls)}!` })
       }
+      if (outcome.ballDrop) {
+        const name = itemLabel(outcome.ballDrop.itemKey, berries, balls)
+        steps.push({ kind: 'text', line: `Achou ${outcome.ballDrop.quantity > 1 ? `${outcome.ballDrop.quantity}× ` : ''}${name}!` })
+      }
       const levelRewards = outcome.levelRewards ?? []
       if (outcome.trainer.levelsGained > 0) {
         const items = levelRewards.map((reward) => {

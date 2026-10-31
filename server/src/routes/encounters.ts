@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { SqliteError } from 'better-sqlite3'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
+import { ballItemKey, ballMultiplier, getBall, isMasterBall, rollBattleBall } from '../config/balls.js'
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
 import { type LeaderConfig, leaderByMilestone } from '../config/leaders.js'
@@ -552,12 +552,16 @@ function applyBattleOutcome(input: {
 
   let catchOdds: number | null = null
   let seedDrop: { itemKey: string; berryKey: string } | null = null
+  let ballDrop: { itemKey: string; quantity: number } | null = null
   const leader = encounter.leaderKey ? leaderByMilestone(encounter.leaderKey) : undefined
   if (won && !leader) {
     // Chance só para a tela; o Pinap só gasta no 1º lançamento (throw).
     catchOdds = catchChance(wild.captureRate, peekBonus(userId, 'catch_boost'))
-    seedDrop = rollBattleSeed(mulberry32(seedDropRngSeed(hiddenSeed(encounter))))
+    const dropRng = mulberry32(seedDropRngSeed(hiddenSeed(encounter)))
+    seedDrop = rollBattleSeed(dropRng)
     if (seedDrop) creditItems(userId, [{ itemKey: seedDrop.itemKey, quantity: 1 }])
+    ballDrop = rollBattleBall(dropRng)
+    if (ballDrop) creditItems(userId, [ballDrop])
   }
 
   // XP de captura fica no throw; aqui só o da vitória.
@@ -628,6 +632,7 @@ function applyBattleOutcome(input: {
         levelsGained: trainerNext.levelsGained,
       },
       seedDrop,
+      ballDrop,
       levelRewards,
       log,
       /**
