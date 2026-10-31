@@ -1324,6 +1324,9 @@ O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A
 
 **Arte:** tiles de chão por material e os objetos, de preferência a pixel art do usuário. Para não travar, a primeira versão usa chão provisório em cores sólidas no estilo do jardim e objetos simples, trocados depois sem mudar regra.
 
+**Chão e transições (feito em 2026-10-31, `feat/tile-lab`):** cada terreno é um tile de 24×12 (o losango, desenhado direto em isométrico; o jardim desenha em 2×, a mesma escala dos sprites do PMD), com variações `terreno-1.png`, `terreno-2.png`… sorteadas por bloco. A borda entre dois terrenos sai de 8 máscaras compartilhadas (`mascara-lado-ne/se/so/no.png` e `mascara-canto-n/l/s/o.png`): o terreno de prioridade maior (`TERRAIN_ORDER` em `web/src/lib/terrain.ts`) entra no vizinho pela máscara do lado ou do canto em que encosta. As máscaras padrão saem de `npm run tiles:masks` (não sobrescreve as do usuário). Os arquivos ficam em `art/tiles/` (paleta `pocket-meadow.gpl`; molde e prévias antigas em `art/tiles/referencia/`).
+**Laboratório de tiles:** `http://<ip>:5173/tiles.html`, só no `npm run dev`. Lê `art/tiles/` pelo plugin `/__tiles` do Vite e recarrega em ~1 s quando um PNG é salvo no Aseprite. Pintar tocando, mapas de teste (clareira, caminho, ilhas, xadrez), grade, bordas em rosa, variações e zoom; avisa tile com tamanho errado e terreno fora da prioridade.
+
 **Ordem sugerida:**
 1. O motor puro com testes (zonas, receitas, capacidade), sem tela.
 2. `garden_tiles`, `habitats`, os 2 habitats iniciais e o limite do jardim, com os moradores andando dentro da zona.

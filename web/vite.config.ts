@@ -32,8 +32,34 @@ function stampServiceWorker(): Plugin {
   }
 }
 
+/**
+ * Laboratório de tiles (`/tiles.html`, só no `npm run dev`): lista os PNGs de
+ * `art/tiles/` com a data de modificação, para a página recarregar sozinha
+ * quando um arquivo é salvo no Aseprite (ou um novo aparece).
+ */
+function tileLabFiles(): Plugin {
+  const dir = path.resolve(root, '../art/tiles')
+  return {
+    name: 'tile-lab-files',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__tiles', (_req, res) => {
+        const files = fs.existsSync(dir)
+          ? fs
+              .readdirSync(dir)
+              .filter((name) => name.toLowerCase().endsWith('.png'))
+              .map((name) => ({ name, url: `/@fs${path.join(dir, name)}`, mtime: fs.statSync(path.join(dir, name)).mtimeMs }))
+          : []
+        res.setHeader('content-type', 'application/json')
+        res.setHeader('cache-control', 'no-store')
+        res.end(JSON.stringify({ dir, files }))
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [svelte(), stampServiceWorker()],
+  plugins: [svelte(), stampServiceWorker(), tileLabFiles()],
   resolve: {
     alias: {
       '@sim': path.resolve(root, '../server/src/game/sim'),

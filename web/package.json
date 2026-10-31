@@ -11,7 +11,8 @@
     "preview:lan": "vite preview --host",
     "phone": "cloudflared tunnel --config scripts/cloudflared-quick.yml --protocol http2 --url http://127.0.0.1:5173",
     "icons": "node scripts/icons.mjs",
-    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "tiles:masks": "tsx scripts/tile-masks.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
