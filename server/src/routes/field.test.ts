@@ -9,7 +9,7 @@ import { createPlayer } from '../auth/accounts.js'
 import { hashToken } from '../auth/session.js'
 import { authConfig } from '../config/auth.js'
 import { battleConfig } from '../config/battle.js'
-import { regionBySlug } from '../config/regions.js'
+import { regionBySlug, regionSpecies } from '../config/regions.js'
 import { spotDropsConfig } from '../config/spotDrops.js'
 import { trainerConfig } from '../config/trainer.js'
 import { getDb, getSqlite, immediate } from '../db/client.js'
@@ -22,6 +22,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pocket-meadow-field-'))
 process.env.DATABASE_PATH = path.join(dir, 'meadow.sqlite')
 const { fieldRoutes } = await import('./field.js')
 const { placeRoutes } = await import('./places.js')
+const { areaProgress } = await import('./encounters.js')
 
 const app = new Hono().route('/field', fieldRoutes).route('/places', placeRoutes)
 const env = { incoming: { socket: { remoteAddress: '203.0.113.7', remotePort: 1, remoteFamily: 'IPv4' } } }
@@ -200,17 +201,32 @@ test('manchas: árvore e água aparecem fechadas sem marco; com a ferramenta, so
   assert.equal(await errorOf(await post('/field/use', cookie, { method: 'oldRod' })), 'encounter_pending')
 })
 
-test('lugar só de água: sem ninguém no mato, só a mancha de água', async () => {
+test('lugar só de água: o campo vem do Surf, sem pesca', async () => {
   const { cookie, userId } = player('sailor')
   const grant = getSqlite().prepare(`insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, 1)`)
   for (const key of ['violet', 'azalea', 'goldenrod', 'ecruteak']) grant.run(userId, key)
   getSqlite().prepare(`update trainers set current_place = 'sea-routes-40-41' where user_id = ?`).run(userId)
   const response = (await (await field(cookie)).json()) as { spawns: Spawn[]; spots: Spot[] }
   assert.equal(response.spawns.length, 0)
+  // No mar não tem poça nem pesca: o Surf é o campo; sobra a pedra.
   assert.deepEqual(
     response.spots.map((spot) => spot.kind),
-    ['water', 'rock'],
+    ['rock'],
   )
+  // Sem Pokémon de Água no time, o campo fica fechado.
+  const blocked = (await (await field(cookie)).json()) as { fieldBlock: string | null; canExplore: boolean }
+  assert.equal(blocked.fieldBlock, 'Surf: precisa de um Pokémon do tipo Água no time')
+  assert.equal(blocked.canExplore, false)
+
+  // Com um Pokémon de Água no time, quem nada no campo vem da tabela de Surf.
+  getSqlite().prepare(`update pokemon set species_id = 7 where user_id = ?`).run(userId)
+  const explored = await post('/field/explore', cookie)
+  assert.equal(explored.status, 200)
+  const swimming = ((await explored.json()) as { spawns: Spawn[]; fieldBlock: string | null })
+  assert.equal(swimming.fieldBlock, null)
+  assert.equal(swimming.spawns.length, battleConfig.fieldSize)
+  const surf = regionBySlug('sea-routes-40-41')!.methods.surf!
+  assert.ok(swimming.spawns.every((spawn) => surf.some((slot) => slot.speciesId === spawn.speciesId)))
 })
 
 
@@ -252,6 +268,30 @@ test('o lugar diz onde cada espécie aparece (mato, água, árvore)', async () =
   const response = await app.request('/places', { headers: { cookie } }, env)
   const { here } = (await response.json()) as { here: { species: { where: string[] }[] } }
   const groups = new Set(here.species.flatMap((entry) => entry.where))
-  assert.ok(groups.has('walk') && groups.has('water') && groups.has('tree'), [...groups].join(','))
+  assert.ok(groups.has('walk') && groups.has('fish') && groups.has('tree'), [...groups].join(','))
+  // Rota de terra: sem Surf (a poça é só pesca).
+  assert.ok(!groups.has('surf'))
   assert.ok(here.species.every((entry) => entry.where.length > 0))
+})
+
+test('progresso da área na captura: conta as espécies dela já suas e fecha a área', () => {
+  const { userId } = player('collector')
+  const ids = regionSpecies(regionBySlug('route-29')!)
+  const caught = getSqlite().prepare(
+    `insert into pokedex_entries (user_id, species_id, seen_count, caught_count, first_seen_at) values (?, ?, 1, 1, 1)
+     on conflict (user_id, species_id) do update set caught_count = 1`,
+  )
+  caught.run(userId, ids[0])
+  assert.deepEqual(areaProgress(userId, 'route-29', true), {
+    name: 'Rota 29',
+    caught: 1,
+    total: ids.length,
+    isNew: true,
+    complete: false,
+  })
+  for (const id of ids) caught.run(userId, id)
+  assert.equal(areaProgress(userId, 'route-29', true)?.complete, true)
+  // Espécie repetida: não é "+1" nem fecha de novo.
+  assert.equal(areaProgress(userId, 'route-29', false)?.complete, false)
+  assert.equal(areaProgress(userId, 'dev', true), null)
 })

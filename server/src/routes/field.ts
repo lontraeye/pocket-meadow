@@ -7,7 +7,7 @@ import { dropsOf, spotDropsConfig } from '../config/spotDrops.js'
 import { trainerConfig } from '../config/trainer.js'
 import { bestRod, type Progress, RODS, toolBlock } from '../config/milestones.js'
 import { placeBySlug } from '../config/places.js'
-import { type FieldMethod, methodSlots, regionBySlug, regionOpen, type Region } from '../config/regions.js'
+import { type FieldMethod, methodSlots, regionBySlug, regionOpen, type Region, type RegionSlot } from '../config/regions.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
@@ -26,8 +26,11 @@ import { currentPlaceOf } from './places.js'
 // "Explorar de novo", que só vale com o campo vazio. Cada um é sorteado e salvo
 // antes de aparecer (sem rerolar) e já conta como visto.
 //
-// Manchas (JORNADA.md, seção 4): água, árvore e pedra, quando a área tem a
-// tabela do método. Usar a ferramenta sorteia na hora, da tabela dela, e já
+// Lugar só de água (rotas do mar, lagos): quem nada no campo vem da tabela de
+// Surf, e só com o Surf liberado; sem ele o campo fica vazio, com o motivo.
+//
+// Manchas (JORNADA.md, seção 4): água (só pesca), árvore e pedra, quando a
+// área tem a tabela do método. Usar a ferramenta sorteia na hora, da tabela dela, e já
 // começa o encontro (o Pokémon só se revela quando morde, cai ou sai da pedra).
 // Árvore e pedra às vezes soltam um item no lugar do Pokémon (spotDrops.ts).
 
@@ -119,7 +122,6 @@ export function spotsOf(region: Region, progress: Progress): FieldSpot[] {
     const rod = usable.at(-1) ?? rods[0]!
     water.push(action(rod, 'Pescar', progress))
   }
-  if (region.methods.surf) water.push(action('surf', 'Surfar', progress))
   if (water.length > 0) spots.push({ kind: 'water', actions: water })
   if (region.methods.headbutt) spots.push({ kind: 'tree', actions: [action('headbutt', 'Sacudir a árvore', progress)] })
   if (region.methods.rockSmash) spots.push({ kind: 'rock', actions: [action('rockSmash', 'Quebrar a pedra', progress)] })
@@ -127,14 +129,25 @@ export function spotsOf(region: Region, progress: Progress): FieldSpot[] {
 }
 
 /**
+ * De onde vêm os Pokémon do campo: o mato; no lugar só de água, o Surf (se
+ * der para usar). `block` diz por que o campo de água está fechado.
+ */
+function fieldSource(region: Region, progress: Progress): { slots: readonly RegionSlot[]; block: string | null } {
+  if (region.slots.length > 0) return { slots: region.slots, block: null }
+  if (!region.methods.surf) return { slots: [], block: null }
+  const block = toolBlock('surf', progress)
+  return block ? { slots: [], block } : { slots: methodSlots(region, 'surf'), block: null }
+}
+
+/**
  * Sorteia um Pokémon para a vaga e salva. A semente fica com ele: o encontro
  * usa a mesma, então o selvagem sai igual no replay. Razz e Lum valem no
  * sorteio (lidos sem gastar); a carga é gasta quando o encontro começa.
  */
-function spawn(userId: number, region: Region, slot: number, now: number): void {
+function spawn(userId: number, region: Region, slots: readonly RegionSlot[], slot: number, now: number): void {
   const rngSeed = randomSeed()
   const wild = rollWild(mulberry32(rngSeed), {
-    slots: region.slots,
+    slots,
     shinyRate: Math.min(1, battleConfig.shinyRate * peekBonus(userId, 'shiny_boost')),
     rareMultiplier: peekBonus(userId, 'rare_boost'),
   })
@@ -165,11 +178,12 @@ function isEmpty(userId: number, region: Region): boolean {
 
 /**
  * Enche o campo, só se estiver vazio (os que já estão ficam até serem
- * enfrentados). Lugar só de água: ninguém anda no mato. Devolve se encheu.
+ * enfrentados). Lugar só de água: enche pelo Surf, se der. Devolve se encheu.
  */
-function fillIfEmpty(userId: number, region: Region, now: number): boolean {
-  if (region.slots.length === 0 || !isEmpty(userId, region)) return false
-  for (let slot = 0; slot < battleConfig.fieldSize; slot += 1) spawn(userId, region, slot, now)
+function fillIfEmpty(userId: number, region: Region, progress: Progress, now: number): boolean {
+  const { slots } = fieldSource(region, progress)
+  if (slots.length === 0 || !isEmpty(userId, region)) return false
+  for (let slot = 0; slot < battleConfig.fieldSize; slot += 1) spawn(userId, region, slots, slot, now)
   return true
 }
 
@@ -178,15 +192,15 @@ export function fillOnArrival(userId: number, slug: string, progress: Progress, 
   const place = placeBySlug(slug)
   const region = regionBySlug(slug)
   if (!place || place.kind === 'town' || !region || !regionOpen(region, progress)) return
-  fillIfEmpty(userId, region, now)
+  fillIfEmpty(userId, region, progress, now)
 }
 
 function explore(userId: number, now: number) {
   const clock = persistCatchUp(userId, now)
   const area = hereArea(userId, clock.level)
   if (!area.ok) return area
-  if (area.region.slots.length === 0) return fail('no_field_here', 400)
-  if (!fillIfEmpty(userId, area.region, now)) return fail('field_not_empty', 409)
+  if (fieldSource(area.region, area.progress).slots.length === 0) return fail('no_field_here', 400)
+  if (!fillIfEmpty(userId, area.region, area.progress, now)) return fail('field_not_empty', 409)
   return fieldView(userId, now)
 }
 
@@ -194,6 +208,7 @@ function fieldView(userId: number, now: number) {
   const clock = persistCatchUp(userId, now)
   const area = hereArea(userId, clock.level)
   if (!area.ok) return area
+  const source = fieldSource(area.region, area.progress)
   const spawns = getDb()
     .select({
       id: fieldSpawns.id,
@@ -217,7 +232,9 @@ function fieldView(userId: number, now: number) {
       spawns,
       spots: spotsOf(area.region, area.progress),
       // Campo vazio numa área com mato: dá para explorar de novo.
-      canExplore: spawns.length === 0 && area.region.slots.length > 0,
+      canExplore: spawns.length === 0 && source.slots.length > 0,
+      // Lugar só de água sem Surf: por que ninguém nada aqui.
+      fieldBlock: source.block,
     },
   }
 }

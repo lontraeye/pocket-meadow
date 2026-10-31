@@ -544,6 +544,7 @@
             trainerXpGained: extra.trainerXpGained,
             trainer: extra.trainer,
             levelRewards: extra.levelRewards,
+            area: extra.area,
             regions,
             berries: game.berries,
             balls: game.balls.list,

@@ -5,7 +5,8 @@ import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/balls.js'
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
-import { type Region, regionBySlug, regionOpen } from '../config/regions.js'
+import { placeBySlug } from '../config/places.js'
+import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
@@ -934,6 +935,11 @@ function throwBall(
       .get()
     if (!inserted) throw new Error('failed to catch pokemon')
 
+    const before = db
+      .select({ caught: pokedexEntries.caughtCount })
+      .from(pokedexEntries)
+      .where(and(eq(pokedexEntries.userId, userId), eq(pokedexEntries.speciesId, encounter.speciesId)))
+      .get()
     const pokedex = db
       .update(pokedexEntries)
       .set({
@@ -991,6 +997,7 @@ function throwBall(
           levelsGained: trainerNext.levelsGained,
         },
         levelRewards,
+        area: areaProgress(userId, encounter.regionSlug, (before?.caught ?? 0) === 0),
       },
     }
   }
@@ -1041,6 +1048,26 @@ function throwBall(
       status: 'pending' as const,
     },
   }
+}
+
+/**
+ * Depois da captura (JORNADA.md, seção 11.2): quantas espécies da área já são
+ * suas, se esta foi a primeira da espécie (o "+1") e se a área ficou completa.
+ * Encontro fora da jornada (teste): null.
+ */
+export function areaProgress(userId: number, regionSlug: string, isNew: boolean) {
+  const region = regionBySlug(regionSlug)
+  const place = placeBySlug(regionSlug)
+  if (!region || !place) return null
+  const ids = regionSpecies(region)
+  const caught = getDb()
+    .select({ id: pokedexEntries.speciesId })
+    .from(pokedexEntries)
+    .where(
+      and(eq(pokedexEntries.userId, userId), inArray(pokedexEntries.speciesId, ids), sql`${pokedexEntries.caughtCount} > 0`),
+    )
+    .all().length
+  return { name: place.name, caught, total: ids.length, isNew, complete: isNew && caught === ids.length }
 }
 
 /** Lê o multiplicador sem consumir cargas (tela de decisão). */

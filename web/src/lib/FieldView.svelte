@@ -11,7 +11,8 @@
    * gramado. Cada um vai até um ponto, para um pouco e escolhe outro. Tocar
    * seleciona; quem enfrenta é o painel de baixo. Só visual: quem aparece e o
    * nível já vieram do servidor. As manchas (água, árvore, pedra) ficam na
-   * faixa de cima, e os Pokémon andam abaixo delas.
+   * faixa de cima, e os Pokémon andam abaixo delas. No lugar só de água, o
+   * campo é o mar (ou o lago) e quem está nele nada (Surf).
    */
   let {
     spawns,
@@ -20,6 +21,7 @@
     spots = [],
     selectedSpot = null,
     onSelectSpot = () => {},
+    water = false,
   }: {
     spawns: FieldSpawn[]
     selected: number | null
@@ -27,6 +29,8 @@
     spots?: FieldSpot[]
     selectedSpot?: FieldSpot['kind'] | null
     onSelectSpot?: (kind: FieldSpot['kind']) => void
+    /** Lugar só de água: fundo de água em vez de grama. */
+    water?: boolean
   } = $props()
 
   const SPOT_NAMES: Record<FieldSpot['kind'], string> = { water: 'Água', tree: 'Árvore', rock: 'Pedra' }
@@ -137,7 +141,7 @@
   )
 </script>
 
-<div class="field" role="group" aria-label="Pokémon no campo" bind:clientWidth={fieldW} bind:clientHeight={fieldH}>
+<div class="field" class:sea={water} role="group" aria-label={water ? 'Pokémon na água' : 'Pokémon no campo'} bind:clientWidth={fieldW} bind:clientHeight={fieldH}>
   {#each spots as entry (entry.kind)}
     {@const open = entry.actions.some((action) => action.open)}
     <button
@@ -233,6 +237,22 @@
       ),
       var(--grass, #8fc25a);
     box-shadow: inset 0 3px 0 #00000022;
+  }
+
+  /* Lugar só de água: as mesmas faixas, em tons de água. */
+  .field.sea {
+    background:
+      repeating-linear-gradient(
+        0deg,
+        transparent 0 14px,
+        color-mix(in srgb, #2a6fb0 30%, transparent) 14px 16px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent 0 22px,
+        color-mix(in srgb, #ffffff 14%, transparent) 22px 24px
+      ),
+      #4f9bd8;
   }
 
   /* Manchas na faixa de cima do campo. */

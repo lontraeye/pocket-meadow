@@ -327,16 +327,23 @@ describe('regiões', () => {
   })
 })
 
-test('métodos: o nível fica no teto do capítulo (a Super Vara do Lake of Rage não dá nível 40)', () => {
-  const lake = regionBySlug('lake-of-rage')!
-  assert.equal(lake.slots.length, 0)
-  const capped = methodSlots(lake, 'superRod')
+test('métodos: o nível fica no teto do capítulo (a Super Vara da Rota 30 não dá nível 40)', () => {
+  const route = regionBySlug('route-30')!
+  const capped = methodSlots(route, 'superRod')
   const walkMax = Math.max(
     ...loadRegions()
-      .filter((region) => region.chapter === lake.chapter)
+      .filter((region) => region.chapter === route.chapter)
       .flatMap((region) => region.slots.map((slot) => slot.maxLevel)),
   )
   assert.ok(capped.length > 0)
   for (const slot of capped) assert.ok(slot.maxLevel <= walkMax && slot.minLevel <= slot.maxLevel)
+})
+
+test('cada água tem um método: poça da rota só pesca; lugar só de água só Surf', () => {
+  const route = regionBySlug('route-30')!
+  assert.ok(route.methods.oldRod && !route.methods.surf)
+  const lake = regionBySlug('lake-of-rage')!
+  assert.equal(lake.slots.length, 0)
+  assert.ok(lake.methods.surf && !lake.methods.oldRod && !lake.methods.goodRod && !lake.methods.superRod)
   assert.ok(regionSpecies(lake).includes(130), 'Gyarados no Lake of Rage')
 })

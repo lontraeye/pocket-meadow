@@ -286,6 +286,11 @@
     else if (y - 40 < el.scrollTop) el.scrollTo({ top: y - 40, behavior: 'smooth' })
   })
 
+  /** Área com todas as espécies capturadas (selo no mapa). */
+  function complete(place: PlaceView): boolean {
+    return place.speciesTotal > 0 && place.speciesCaught === place.speciesTotal
+  }
+
   function showLabel(place: PlaceView): boolean {
     return (
       place.kind === 'town' ||
@@ -336,7 +341,7 @@
         transform="translate({px(place)} {py(place)})"
         role="button"
         tabindex="0"
-        aria-label="{place.name}{place.slug === current ? ' (você está aqui)' : ''}{place.open ? '' : ` · ${place.reason}`}"
+        aria-label="{place.name}{place.slug === current ? ' (você está aqui)' : ''}{complete(place) ? ' · área completa' : ''}{place.open ? '' : ` · ${place.reason}`}"
         aria-pressed={place.slug === selected}
         onclick={() => tap(place.slug)}
         onkeydown={(event) => {
@@ -368,6 +373,13 @@
           <path class="near" d="M-5 -30 h10 v2 h-2 v2 h-2 v2 h-2 v-2 h-2 v-2 h-2 z" />
         {/if}
         {#if near?.isNew}<rect class="new" x="12" y="-22" width="8" height="8" />{/if}
+        {#if complete(place)}
+          <!-- Área completa: todas as espécies dela capturadas. -->
+          <g class="done" transform="translate(-22 8)">
+            <rect x="0" y="0" width="12" height="12" />
+            <path d="M2 6 h2 v2 h2 v-2 h2 v-2 h2 v2 h-2 v2 h-2 v2 h-2 v-2 h-2 z" />
+          </g>
+        {/if}
         {#if place.slug === goalTown}
           <image class="px" href={spriteUrl(`pm-flag`)} x="10" y="-36" width="16" height="16" />
         {/if}
@@ -553,6 +565,16 @@
     stroke: #283028;
     stroke-width: 1.5;
     paint-order: stroke;
+  }
+
+  .done rect {
+    fill: #58b848;
+    stroke: #283028;
+    stroke-width: 2;
+  }
+
+  .done path {
+    fill: #fff;
   }
 
   .new {

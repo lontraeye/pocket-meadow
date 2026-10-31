@@ -1,5 +1,6 @@
 import {
   ballIconSrc,
+  type AreaProgress,
   berryIconSrc,
   itemLabel,
   type BallInfo,
@@ -108,14 +109,25 @@ export function throwRewardCards(input: {
   trainerXpGained?: number
   trainer?: { level: number; xp: number; levelsGained: number }
   levelRewards?: ItemCredit[]
+  area?: AreaProgress | null
   regions: RegionInfo[]
   berries: BerryInfo[]
   balls?: BallInfo[]
 }): HighlightCard[] {
   const cards: HighlightCard[] = []
+  if (input.area) cards.push(...areaCards(input.area))
   if (input.trainer) cards.push(...trainerCards(input.trainer, input.trainerXpGained ?? 0, input.regions))
   cards.push(...rewardCards(input.levelRewards ?? [], input.berries, input.balls))
   return cards.map((card) => ({ ...card, id: `catch-${card.id}` }))
+}
+
+/** "+1 da Rota 30 (5/9)" na espécie nova da área; a área completa ganha o próprio cartão. */
+function areaCards(area: AreaProgress): HighlightCard[] {
+  if (!area.isNew) return []
+  if (area.complete) {
+    return [{ id: 'area', title: `${area.name} completa!`, detail: `Todas as ${area.total} espécies`, tone: 'good' }]
+  }
+  return [{ id: 'area', title: `+1 da ${area.name}`, detail: `${area.caught}/${area.total} espécies`, tone: 'good' }]
 }
 
 /** Nível ou XP do treinador e as regiões que o novo nível liberou. */

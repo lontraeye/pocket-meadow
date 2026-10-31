@@ -100,10 +100,11 @@
   /** O que a árvore ou a pedra acabou de soltar (fica no painel até tocar em outra coisa). */
   let dropText = $state('')
 
-  const WHERE_ORDER: SpeciesWhere[] = ['walk', 'water', 'tree', 'rock']
+  const WHERE_ORDER: SpeciesWhere[] = ['walk', 'surf', 'fish', 'tree', 'rock']
   /**
-   * Espécies daqui na ordem de onde aparecem (mato, água, árvore, pedra). Cada
-   * uma vale pelo primeiro lugar dela: quem sai no mato e na água fica no mato.
+   * Espécies daqui na ordem de onde aparecem (mato, surf, pesca, árvore,
+   * pedra). Cada uma vale pelo primeiro lugar dela: quem sai no mato e na
+   * pesca fica no mato; quem sai no Surf e na pesca fica no Surf.
    * Quem não sai no mato ganha a borda da cor do lugar.
    */
   const hereSpecies = $derived(
@@ -476,6 +477,9 @@
           <h2>
             {selected.name}
             {#if kindLabel(selected)}<small class="kind">{kindLabel(selected)}</small>{/if}
+            {#if selected.speciesTotal > 0 && selected.speciesCaught === selected.speciesTotal}
+              <small class="complete" title="Todas as espécies daqui capturadas">completa ✓</small>
+            {/if}
           </h2>
           {#if selected.wildLevelRange}<small>Nv {selected.wildLevelRange[0]}–{selected.wildLevelRange[1]}</small>{/if}
         </div>
@@ -546,6 +550,7 @@
         {@render goalChip()}
         {#if field}
           <FieldView
+            water={here.kind === 'water'}
             spawns={field.spawns}
             selected={spawnSlot}
             onSelect={pickSpawn}
@@ -608,7 +613,10 @@
         {:else}
           <div class="place-head ghost" aria-hidden="true"><h2>—</h2><small>Nv</small></div>
           <div class="types ghost" aria-hidden="true"><span class="type">—</span></div>
-          {#if field?.canExplore}
+          {#if field?.fieldBlock}
+            <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
+            <p class="hint pick-hint locked">{field.fieldBlock}.</p>
+          {:else if field?.canExplore}
             <p class="hint">O campo ficou vazio.</p>
             <button
               type="button"
@@ -989,8 +997,12 @@
   }
 
   /* Quem não sai no mato: a borda diz onde procurar. */
-  .species li.water {
-    border-color: #3b82c4;
+  .species li.surf {
+    border-color: #3fc1d6;
+  }
+
+  .species li.fish {
+    border-color: #2f56b0;
   }
 
   .species li.tree {
@@ -1093,6 +1105,14 @@
 
   .field-wait {
     margin: auto;
+  }
+
+  .complete {
+    padding: 0 0.3rem;
+    border: 2px solid #283028;
+    background: #58b848;
+    color: #fff;
+    font-size: 0.7rem;
   }
 
   .spot-actions {

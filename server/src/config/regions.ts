@@ -7,7 +7,7 @@ import {
   type RegionSource,
 } from '../seed/regionTable.js'
 
-export type { FieldMethod, RegionSource }
+export type { FieldMethod, RegionSlot, RegionSource }
 export { FIELD_METHODS }
 
 export type GameRegion = 'kanto' | 'johto'
@@ -166,16 +166,22 @@ function sourcesKey(sources: readonly RegionSource[]): string {
 }
 
 /**
- * Área com mato: a água do campo é só uma poça, então dá para pescar, mas não
- * surfar. O Surf fica para os lugares só de água (rotas do mar, lagos).
+ * Cada água tem um método só. Área com mato: a água do campo é uma poça, então
+ * dá para pescar, mas não surfar. Lugar só de água (rotas do mar, lagos): o
+ * campo é a própria água e quem está nele vem do Surf, sem pesca.
  */
-function landMethods(
+function fieldMethods(
   slots: readonly RegionSlot[],
   methods: Readonly<Partial<Record<FieldMethod, readonly RegionSlot[]>>>,
 ): Readonly<Partial<Record<FieldMethod, readonly RegionSlot[]>>> {
-  if (slots.length === 0 || !methods.surf) return methods
-  const { surf: _surf, ...rest } = methods
-  return rest
+  const { surf, oldRod, goodRod, superRod, ...rest } = methods
+  if (slots.length > 0) return { ...rest, ...pick({ oldRod, goodRod, superRod }) }
+  return { ...rest, ...pick({ surf }) }
+}
+
+/** Só as chaves com tabela (sem `undefined` no objeto). */
+function pick<T extends object>(entries: T): Partial<T> {
+  return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined)) as Partial<T>
 }
 
 function assembleRegions(): readonly Region[] {
@@ -203,7 +209,7 @@ function assembleRegions(): readonly Region[] {
       minTrainerLevel: config.minTrainerLevel,
       sources: config.sources,
       slots: entry.slots,
-      methods: landMethods(entry.slots, methods),
+      methods: fieldMethods(entry.slots, methods),
       // Nível do mato; no lugar só de água, de tudo.
       wildLevelRange: wildLevelRange(entry.slots.length > 0 ? entry.slots : Object.values(methods).flat()),
     }
@@ -254,21 +260,24 @@ export function regionSpecies(region: Region): number[] {
   return [...ids]
 }
 
-/** Onde a espécie aparece na área: mato, água (varas e Surf), árvore ou pedra. */
-export type SpeciesWhere = 'walk' | 'water' | 'tree' | 'rock'
+/**
+ * Onde a espécie aparece na área: mato, Surf (quem nada no campo dos lugares
+ * só de água), pesca (as varas, na poça), árvore ou pedra.
+ */
+export type SpeciesWhere = 'walk' | 'surf' | 'fish' | 'tree' | 'rock'
 
 const WHERE_OF: Record<FieldMethod, SpeciesWhere> = {
-  oldRod: 'water',
-  goodRod: 'water',
-  superRod: 'water',
-  surf: 'water',
+  oldRod: 'fish',
+  goodRod: 'fish',
+  superRod: 'fish',
+  surf: 'surf',
   headbutt: 'tree',
   rockSmash: 'rock',
 }
 
-/** Cada espécie da área e os lugares dela, na ordem mato → água → árvore → pedra. */
+/** Cada espécie da área e os lugares dela, na ordem mato → surf → pesca → árvore → pedra. */
 export function regionSpeciesWhere(region: Region): Map<number, SpeciesWhere[]> {
-  const order: SpeciesWhere[] = ['walk', 'water', 'tree', 'rock']
+  const order: SpeciesWhere[] = ['walk', 'surf', 'fish', 'tree', 'rock']
   const found = new Map<number, Set<SpeciesWhere>>()
   const add = (id: number, where: SpeciesWhere) => {
     const set = found.get(id) ?? new Set<SpeciesWhere>()

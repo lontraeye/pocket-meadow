@@ -100,7 +100,8 @@ export type FieldSpawn = {
   type2: string | null
 }
 
-export type SpeciesWhere = 'walk' | 'water' | 'tree' | 'rock'
+/** Mato, Surf (nadando no campo dos lugares só de água), pesca, árvore ou pedra. */
+export type SpeciesWhere = 'walk' | 'surf' | 'fish' | 'tree' | 'rock'
 
 /** Árvore ou pedra que soltou um item em vez de um Pokémon (POST /field/use). */
 export type SpotDrop = { drop: { itemKey: string; quantity: number } }
@@ -117,6 +118,8 @@ export type FieldResponse = {
   spots: FieldSpot[]
   /** Campo vazio numa área com mato: dá para explorar de novo. */
   canExplore: boolean
+  /** Lugar só de água sem Surf: por que ninguém nada no campo. */
+  fieldBlock: string | null
 }
 
 export type PlacesResponse = {
@@ -151,7 +154,7 @@ export type PlacesResponse = {
       speciesId: number | null
       displayName: string | null
       status: 'caught' | 'seen' | 'unknown'
-      /** Onde aparece aqui, na ordem mato → água → árvore → pedra. */
+      /** Onde aparece aqui, na ordem mato → surf → pesca → árvore → pedra. */
       where: SpeciesWhere[]
     }[]
   }
@@ -205,7 +208,11 @@ export type ThrowOutcome = {
   trainerXpGained?: number
   trainer?: { level: number; xp: number; levelsGained: number }
   levelRewards?: ItemCredit[]
+  /** A área da captura: espécies dela já suas, se esta foi nova e se fechou a área. */
+  area?: AreaProgress | null
 }
+
+export type AreaProgress = { name: string; caught: number; total: number; isNew: boolean; complete: boolean }
 
 export type MoveView = {
   name: string
