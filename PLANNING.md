@@ -1300,14 +1300,14 @@ O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constr
    | Campo gelado | gelo ≥ 50% | Gelo |
    | Pradaria | planta ≥ 60% | Normal, Planta, Inseto, Voador, Fada |
 
-   A zona que não bate nenhuma receita é "terreno sem bioma": decoração, sem moradores. A tela diz o que falta ("falta água: 3 de 6").
+   **Habitat básico (decidido em 2026-10-31):** a zona com tamanho que não bate nenhuma receita vira um habitat básico, que **aceita qualquer tipo** e **não dá bônus**. É o que impede a parede do começo (capturou um Geodude e não tem pedra para um Rochedo: ele mora no básico). O bioma certo é o que dá bônus (pureza, felicidade, presentes). A tela diz o que falta para virar bioma ("para Rochedo falta pedra: 0 de 2").
 5. **Capacidade:** 2 vagas a partir de `minTiles` e 3 a partir de `bigTiles` (inicial: 10). Mais de 3 não, para o cuidado continuar em grupos pequenos. Habitat maior que isso só dá mais espaço para andar.
 6. **Pureza** (depois): quanto mais a zona passa da receita, mais rápido a felicidade dos moradores sobe (seção 5.21).
 
 O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A tela roda enquanto o jogador constrói, com o aviso ao vivo: "Isso vai virar um Rochedo · 3 vagas".
 
 **Moradores:**
-- Um Pokémon mora num habitat de um dos tipos dele (dois tipos: escolhe um dos dois). Ele anda só dentro da zona do habitat.
+- Um Pokémon mora num habitat de um dos tipos dele (dois tipos: escolhe um dos dois) ou num habitat básico. Ele anda só dentro da zona do habitat.
 - **O jardim tem o limite que os habitats dão.** Quem não tem casa vai para o PC (5.19). O time também mora nos habitats: quem está no time precisa de vaga.
 - **Começo:** o jardim novo vem com 2 habitats prontos (uma Pradaria e um habitat do tipo do inicial), 6 vagas, o tamanho do time.
 - **Carinho no habitat:** um toque faz carinho em todos os moradores de uma vez (o mesmo intervalo da 5.21).
@@ -1333,13 +1333,13 @@ O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A
 **Laboratório de tiles:** `http://<ip>:5173/tiles.html`, só no `npm run dev`. Lê `art/tiles/` pelo plugin `/__tiles` do Vite e recarrega em ~1 s quando um PNG é salvo no Aseprite. Pintar tocando, mapas de teste (clareira, caminho, ilhas, xadrez), grade, bordas em rosa, variações e zoom; avisa tile com tamanho errado e terreno fora da prioridade.
 
 **Ordem sugerida:**
-1. O motor puro com testes (zonas, receitas, capacidade), sem tela.
+1. O motor puro com testes (zonas, receitas, capacidade), sem tela. **Feito em 2026-10-31:** `server/src/game/habitat/` (config com peças, materiais e receitas; `recognizeHabitats`, `canLiveIn`), importado na tela por `@habitat`. Cada zona sem bioma traz a receita mais perto e o que falta (`nearest.gaps`, em pontos: chão 1, objeto 3).
 2. `garden_tiles`, `habitats`, os 2 habitats iniciais e o limite do jardim, com os moradores andando dentro da zona.
 3. O modo de construção com poucas peças (grama, flores, areia, pedra, água, rocha, árvore) e os materiais saindo das manchas do campo (árvore e pedra já soltam item).
 4. Os outros biomas, objetos e a pureza.
 
 **Pontos a decidir:**
-- O tamanho do jardim (hoje 12×12 casas) e se ele cresce com o nível ou comprando terreno.
+- ~~O tamanho do jardim~~ **Decidido (2026-10-31):** fica fixo em 12×12 por enquanto; mais tarde cresce pagando com recursos.
 - Se o reconhecimento olha só a composição ou também a forma (ex.: Lago precisa de água cercada de margem).
 - Os pesos de cada peça e as frações das receitas, depois de montar os primeiros habitats na prática.
 
