@@ -17,6 +17,7 @@ import {
   berryPlots,
   daycareSlots,
   encounters,
+  gardenStructures,
   pokemon,
   species,
   trainerMilestones,
@@ -236,6 +237,31 @@ devRoutes.post('/plots/advance', requireUser, async (c) => {
 })
 
 /** Dá algumas de cada pokébola (Master: 3) e das berries novas de captura. */
+// Bancada (5.23): sobe o treinador ao nível 12, dá Apricorns e as berries das
+// melhorias e termina na hora uma melhoria em andamento.
+devRoutes.post('/bench/boost', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  immediate(() => {
+    persistCatchUp(userId, now)
+    const db = getDb()
+    db.update(trainers).set({ level: sql`max(${trainers.level}, 12)` }).where(eq(trainers.userId, userId)).run()
+    creditItems(userId, [
+      { itemKey: 'mat:apricorn', quantity: 50 },
+      { itemKey: 'mat:apricorn-blue', quantity: 10 },
+      { itemKey: 'mat:apricorn-yellow', quantity: 10 },
+      { itemKey: 'berry:oran', quantity: 10 },
+      { itemKey: 'berry:pinap', quantity: 10 },
+      { itemKey: 'berry:razz', quantity: 10 },
+    ])
+    db.update(gardenStructures)
+      .set({ upgradeEndsAt: now - 1 })
+      .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench'), sql`${gardenStructures.upgradeTo} is not null`))
+      .run()
+  })
+  return c.json({ ok: true })
+})
+
 // Força o clima do jogador (até reiniciar o servidor); `null` volta ao sorteado.
 devRoutes.post('/weather', requireUser, async (c) => {
   const body = (await readObject(c)) ?? {}

@@ -178,9 +178,8 @@
             gifts: game.garden.gifts,
             pets: game.pokemon.filter((mon) => mon.location === 'garden'),
             needThreshold: game.garden.needThreshold,
-            tree: game.garden.tree,
+            trees: game.garden.trees,
             benchJob: game.garden.bench.job,
-            ballsPerApricorn: game.garden.bench.ballsPerApricorn,
           },
           clock.now(),
         )

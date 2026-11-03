@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
+import { TREES, type TreeDef, treeDef } from '../config/apricorn.js'
 import type { WeatherKey } from '../config/weather.js'
 import { harvestTree, settleTree, treeReadyTimes, treeUnitMs, type WeatherOf } from '../game/apricornTree.js'
 import { currentWeather, weatherDay, weatherForDay } from '../game/weather.js'
@@ -8,11 +8,16 @@ import { recordEvent } from './events.js'
 import { creditItems } from './inventory.js'
 import { gardenStructures, trainers } from './schema.js'
 
-// Árvore de Apricorn (PLANNING.md, seção 5.23). Chamar dentro de immediate().
+// Árvores de Apricorn (PLANNING.md, seção 5.23): a vermelha abre pelo nível de
+// treinador; a azul e a amarela, pelo nível da bancada. Chamar dentro de immediate().
 
 export type TreeView = {
+  key: TreeDef['key']
+  color: TreeDef['color']
+  itemKey: string
   unlocked: boolean
-  unlockLevel: number
+  /** O que abre a árvore, para o texto do cadeado. */
+  unlock: TreeDef['unlock']
   /** Pendurados agora. */
   ready: number
   cap: number
@@ -33,59 +38,74 @@ function weatherFor(userId: number, now: number): { today: WeatherKey; of: Weath
   return { today, of: (day) => (day === todayDay ? today : weatherForDay(row.seed, day)) }
 }
 
-/** A árvore do jogador; nasce (com o primeiro Apricorn) quando o nível abre. */
-function ensureTree(userId: number, level: number, now: number): TreeRow | null {
-  const config = apricornConfig.tree
-  if (level < config.unlockLevel) return null
+/** Nível da bancada, contando uma melhoria que já terminou (e ainda não foi gravada). */
+function benchLevelOf(userId: number, now: number): number {
+  const row = getDb()
+    .select({ level: gardenStructures.level, upgradeTo: gardenStructures.upgradeTo, upgradeEndsAt: gardenStructures.upgradeEndsAt })
+    .from(gardenStructures)
+    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench')))
+    .get()
+  if (!row) return 0
+  return row.upgradeTo !== null && row.upgradeEndsAt !== null && row.upgradeEndsAt <= now ? row.upgradeTo : row.level
+}
+
+export function treeOpen(tree: TreeDef, trainerLevel: number, benchLevel: number): boolean {
+  return 'trainerLevel' in tree.unlock ? trainerLevel >= tree.unlock.trainerLevel : benchLevel >= tree.unlock.benchLevel
+}
+
+/** A árvore do jogador; nasce (com o primeiro Apricorn) quando abre. */
+function ensureTree(userId: number, tree: TreeDef, trainerLevel: number, now: number): TreeRow | null {
+  if (!treeOpen(tree, trainerLevel, benchLevelOf(userId, now))) return null
   const db = getDb()
-  const where = and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree'))
+  const where = and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, tree.key))
   const found = db.select({ progress: gardenStructures.progress, since: gardenStructures.since }).from(gardenStructures).where(where).get()
   if (found) return found
-  const row = { progress: config.startWith, since: now }
-  db.insert(gardenStructures).values({ userId, key: 'apricorn_tree', ...row }).run()
+  const row = { progress: tree.startWith, since: now }
+  db.insert(gardenStructures).values({ userId, key: tree.key, ...row }).run()
   return row
 }
 
-export function treeView(userId: number, level: number, now: number): TreeView {
-  const config = apricornConfig.tree
-  const tree = ensureTree(userId, level, now)
-  if (!tree) {
-    return {
-      unlocked: false,
-      unlockLevel: config.unlockLevel,
-      ready: 0,
-      cap: config.cap,
-      readyAts: [],
-      unitMs: config.intervalMs,
-      raining: false,
-    }
-  }
+function viewOf(userId: number, tree: TreeDef, trainerLevel: number, now: number): TreeView {
+  const base = { key: tree.key, color: tree.color, itemKey: tree.itemKey, unlock: tree.unlock, cap: tree.cap }
+  const row = ensureTree(userId, tree, trainerLevel, now)
+  if (!row) return { ...base, unlocked: false, ready: 0, readyAts: [], unitMs: tree.intervalMs, raining: false }
   const weather = weatherFor(userId, now)
-  const progress = settleTree(tree.progress, tree.since, now, weather.of)
+  const progress = settleTree(row.progress, row.since, now, weather.of, tree)
   return {
+    ...base,
     unlocked: true,
-    unlockLevel: config.unlockLevel,
     ready: Math.floor(progress),
-    cap: config.cap,
-    readyAts: treeReadyTimes(progress, now, weather.today),
-    unitMs: treeUnitMs(weather.today),
+    readyAts: treeReadyTimes(progress, now, weather.today, tree),
+    unitMs: treeUnitMs(weather.today, tree),
     raining: weather.today === 'rain',
   }
 }
 
-/** Colhe tudo o que está pendurado. `null` = nada pronto (ou árvore fechada). */
-export function harvestApricorns(userId: number, level: number, now: number): number | null {
-  const tree = ensureTree(userId, level, now)
+/** Todas as árvores, abertas ou não (as fechadas aparecem com cadeado). */
+export function treesView(userId: number, trainerLevel: number, now: number): TreeView[] {
+  return TREES.map((tree) => viewOf(userId, tree, trainerLevel, now))
+}
+
+/** Só a vermelha (cenário de teste). */
+export function treeView(userId: number, trainerLevel: number, now: number): TreeView {
+  return viewOf(userId, TREES[0]!, trainerLevel, now)
+}
+
+/** Colhe tudo o que está pendurado. `null` = nada pronto, árvore fechada ou desconhecida. */
+export function harvestApricorns(userId: number, trainerLevel: number, now: number, key: string = TREES[0]!.key): number | null {
+  const tree = treeDef(key)
   if (!tree) return null
-  const settled = settleTree(tree.progress, tree.since, now, weatherFor(userId, now).of)
+  const row = ensureTree(userId, tree, trainerLevel, now)
+  if (!row) return null
+  const settled = settleTree(row.progress, row.since, now, weatherFor(userId, now).of, tree)
   const { harvested, progress } = harvestTree(settled)
   if (harvested === 0) return null
   getDb()
     .update(gardenStructures)
     .set({ progress, since: now })
-    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
+    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, tree.key)))
     .run()
-  creditItems(userId, [{ itemKey: APRICORN_ITEM, quantity: harvested }])
+  creditItems(userId, [{ itemKey: tree.itemKey, quantity: harvested }])
   recordEvent(userId, 'apricorn_harvest', harvested, now)
   return harvested
 }

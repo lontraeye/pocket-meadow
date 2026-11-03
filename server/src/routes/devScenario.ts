@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm'
-import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
+import { APRICORN_ITEM, TREES, apricornConfig } from '../config/apricorn.js'
 import { daycareConfig } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb } from '../db/client.js'
@@ -100,11 +100,11 @@ export function applyReadyScenario(userId: number, now: number): void {
     .run()
 
   // Árvore de Apricorn cheia (5.23); sobe o treinador até o nível que abre a árvore.
-  const level = Math.max(trainer.level, apricornConfig.tree.unlockLevel)
+  const level = Math.max(trainer.level, apricornConfig.unlockLevel)
   if (level !== trainer.level) db.update(trainers).set({ level, xp: 0 }).where(eq(trainers.userId, userId)).run()
   treeView(userId, level, now)
   db.update(gardenStructures)
-    .set({ progress: apricornConfig.tree.cap, since: now })
+    .set({ progress: TREES[0]!.cap, since: now })
     .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
     .run()
 
@@ -112,7 +112,7 @@ export function applyReadyScenario(userId: number, now: number): void {
   const operatorId = ids[0]!
   if (setOperator(userId, level, operatorId, now).ok) {
     creditItems(userId, [{ itemKey: APRICORN_ITEM, quantity: 5 }])
-    const started = startJob(userId, level, 5, now)
+    const started = startJob(userId, level, 'poke_ball', 5, now)
     if (started.ok) {
       db.update(craftJobs)
         .set({ startedAt: now - Math.round(started.job.unitMs * 2.5) })

@@ -50,9 +50,9 @@ const harvest = (cookie: string) =>
   app.request('/garden/tree/harvest', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}' }, env)
 const tree = async (cookie: string) => {
   const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as {
-    garden: { tree: { unlocked: boolean; ready: number; cap: number; readyAts: number[] } }
+    garden: { trees: { key: string; unlocked: boolean; ready: number; cap: number; readyAts: number[] }[] }
   }
-  return state.garden.tree
+  return state.garden.trees[0]!
 }
 const apricorns = (userId: number) =>
   (getSqlite().prepare('select quantity from inventory where user_id = ? and item_key = ?').get(userId, APRICORN_ITEM) as
@@ -78,9 +78,9 @@ test('abre com 1 pendurado; colher leva para a mochila e zera', async () => {
 
   const response = await harvest(p.cookie)
   assert.equal(response.status, 200)
-  const body = (await response.json()) as { quantity: number; tree: { ready: number } }
+  const body = (await response.json()) as { quantity: number; trees: { ready: number }[] }
   assert.equal(body.quantity, 1)
-  assert.equal(body.tree.ready, 0)
+  assert.equal(body.trees[0]!.ready, 0)
   assert.equal(apricorns(p.userId), 1)
 
   const again = await harvest(p.cookie)
@@ -184,4 +184,57 @@ test('Headbutt pode soltar Apricorn', async () => {
   const { spotDropsConfig } = await import('../config/spotDrops.js')
   const row = spotDropsConfig.tables.headbutt.find((entry) => entry.itemKey === APRICORN_ITEM)
   assert.ok(row && row.weight > 0)
+})
+
+test('upgrade da bancada: pede nível e itens, leva tempo, libera Great Ball e a árvore azul', async () => {
+  const p = player('bancada-upgrade', 6)
+  const sentret = addMon(p.userId, 161)
+  await bench(p.cookie, 'operator', { pokemonId: sentret })
+  assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'missing_items')
+  assert.equal(await errorOf(await bench(p.cookie, 'start', { recipeKey: 'great_ball', quantity: 1 })), 'recipe_locked')
+
+  giveApricorns(p.userId, 15)
+  getSqlite().prepare("insert into inventory (user_id, item_key, quantity) values (?, 'berry:oran', 5)").run(p.userId)
+  const started = await bench(p.cookie, 'upgrade')
+  assert.equal(started.status, 200)
+  const body = (await started.json()) as { toLevel: number; bench: { upgrade: { toLevel: number } | null; level: number } }
+  assert.equal(body.toLevel, 2)
+  assert.equal(body.bench.level, 1)
+  assert.equal(apricorns(p.userId), 0)
+  // Parada durante o upgrade.
+  giveApricorns(p.userId, 1)
+  assert.equal(await errorOf(await bench(p.cookie, 'start', { quantity: 1 })), 'bench_upgrading')
+
+  // Termina: nível 2, lote de 10, Great Ball liberada e a árvore azul nasce.
+  getSqlite().prepare("update garden_structures set upgrade_ends_at = ? where user_id = ? and key = 'ball_bench'").run(Date.now() - 1, p.userId)
+  const { benchView } = await import('../db/bench.js')
+  const { treesView } = await import('../db/apricorn.js')
+  const state = immediate(() => ({
+    garden: { bench: benchView(p.userId, 6, Date.now()), trees: treesView(p.userId, 6, Date.now()) },
+  }))
+  assert.equal(state.garden.bench.level, 2)
+  assert.equal(state.garden.bench.batchSize, 10)
+  assert.equal(state.garden.bench.upgrade, null)
+  assert.equal(state.garden.bench.recipes.find((r) => r.key === 'great_ball')?.unlocked, true)
+  const blue = state.garden.trees.find((t) => t.key === 'apricorn_tree_blue')!
+  assert.deepEqual([blue.unlocked, blue.ready], [true, 1])
+  assert.equal(state.garden.trees.find((t) => t.key === 'apricorn_tree_yellow')?.unlocked, false)
+
+  // Colhe o azul e faz uma Great Ball.
+  const harvested = (await (
+    await app.request('/garden/tree/harvest', { method: 'POST', headers: { cookie: p.cookie, 'content-type': 'application/json' }, body: JSON.stringify({ key: 'apricorn_tree_blue' }) }, env)
+  ).json()) as { itemKey: string; quantity: number }
+  assert.deepEqual(harvested.itemKey, 'mat:apricorn-blue')
+  const job = ((await (await bench(p.cookie, 'start', { recipeKey: 'great_ball', quantity: 1 })).json()) as { job: { unitMs: number; perUnit: number } }).job
+  assert.equal(job.perUnit, 1)
+  rewindJob(p.userId, job.unitMs)
+  const collected = (await (await bench(p.cookie, 'collect')).json()) as { balls: number; itemKey: string }
+  assert.deepEqual([collected.balls, collected.itemKey], [1, 'ball:great'])
+})
+
+test('upgrade pede o nível de treinador', async () => {
+  const p = player('bancada-nivel', 3)
+  giveApricorns(p.userId, 15)
+  getSqlite().prepare("insert into inventory (user_id, item_key, quantity) values (?, 'berry:oran', 5)").run(p.userId)
+  assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'trainer_level')
 })

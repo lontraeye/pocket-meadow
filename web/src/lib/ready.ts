@@ -9,10 +9,8 @@ export type ReadyInput = {
   /** Só os Pokémon do jardim (quem está no PC ou no daycare não tem necessidades). */
   pets: { id: number; pet: Pick<PetView, 'hunger' | 'affection' | 'petReadyAt'> }[]
   needThreshold: number
-  tree: Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'>
-  benchJob: BenchView['job']
-  /** Poké Balls de cada Apricorn do lote. */
-  ballsPerApricorn: number
+  trees: (Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'> & { key: string })[]
+  benchJob: Pick<NonNullable<BenchView['job']>, 'id' | 'quantity' | 'unitMs' | 'startedAt' | 'collected' | 'perUnit'> | null
 }
 
 /** Para onde o toque no aviso leva: o primeiro item que tem lugar próprio. */
@@ -28,7 +26,7 @@ export type ReadyStatus = {
   giftCount: number
   hungryCount: number
   wantPetCount: number
-  treeFull: boolean
+  treesFull: number
   benchReady: number
   /**
    * Uma chave por coisa pronta (`p0@readyAt`, `d1@fullAt`, `m12`, `c2026-11-03`,
@@ -61,14 +59,14 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
       mon.pet.affection < input.needThreshold && (mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now),
   )
 
-  // Árvore cheia (5.23): o que o servidor contou mais o que amadureceu depois.
-  const tree = input.tree
-  const treeReady = tree.ready + tree.readyAts.filter((at) => at <= now).length
-  const treeFull = tree.unlocked && treeReady >= tree.cap
+  // Árvores cheias (5.23): o que o servidor contou mais o que amadureceu depois.
+  const fullTrees = input.trees.filter(
+    (tree) => tree.unlocked && tree.ready + tree.readyAts.filter((at) => at <= now).length >= tree.cap,
+  )
 
   // Poké Balls prontas na bancada, esperando coletar.
   const job = input.benchJob
-  const benchReady = job ? (benchDone(job, now) - job.collected) * input.ballsPerApricorn : 0
+  const benchReady = job ? (benchDone(job, now) - job.collected) * job.perUnit : 0
 
   const readyPlots = plots.map((plot) => plot.plotIndex)
   const berryCount = readyPlots.length
@@ -83,7 +81,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     ...input.gifts.map((gift) => `g${gift.id}`),
     ...hungry.map((mon) => `h${mon.id}`),
     ...wantPet.map((mon) => `a${mon.id}`),
-    ...(treeFull ? [`t@${tree.readyAts.at(-1) ?? 'cheia'}`] : []),
+    ...fullTrees.map((tree) => `t${tree.key}@${tree.readyAts.at(-1) ?? 'cheia'}`),
     ...deadPlots.map((plot) => `x${plot.plotIndex}@${plot.deadAt}`),
     // Uma chave por lote, e outra quando ele acaba: o lote inteiro pronto volta a avisar.
     ...(job && benchReady > 0 ? [`b${job.id}@${benchDone(job, now) === job.quantity ? 'fim' : 'parcial'}`] : []),
@@ -96,7 +94,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
   if (missionCount > 0) parts.push(count(missionCount, '1 missão pronta', '# missões prontas'))
   if (chestReady) parts.push('baú pronto')
   if (daycareFullCount > 0) parts.push(count(daycareFullCount, 'daycare cheio', '# no daycare cheios'))
-  if (treeFull) parts.push('árvore cheia')
+  if (fullTrees.length > 0) parts.push(count(fullTrees.length, 'árvore cheia', '# árvores cheias'))
   if (deadPlots.length > 0) parts.push(count(deadPlots.length, '1 arbusto seco', '# arbustos secos'))
   if (benchReady > 0) parts.push(count(benchReady, '1 bola pronta', '# bolas prontas'))
   if (giftCount > 0) parts.push(count(giftCount, '1 presente', '# presentes'))
@@ -115,7 +113,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     giftCount,
     hungryCount: hungry.length,
     wantPetCount: wantPet.length,
-    treeFull,
+    treesFull: fullTrees.length,
     benchReady,
     ids,
     target,

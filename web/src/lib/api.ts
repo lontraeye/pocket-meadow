@@ -339,8 +339,12 @@ export type PetView = {
 
 /** Árvore de Apricorn (5.23); `readyAts` = quando cada próximo fica pronto, até encher. */
 export type TreeView = {
+  key: 'apricorn_tree' | 'apricorn_tree_blue' | 'apricorn_tree_yellow'
+  color: 'red' | 'blue' | 'yellow'
+  itemKey: string
   unlocked: boolean
-  unlockLevel: number
+  /** O que abre a árvore: nível de treinador ou nível da bancada. */
+  unlock: { trainerLevel: number } | { benchLevel: number }
   ready: number
   cap: number
   readyAts: number[]
@@ -348,18 +352,51 @@ export type TreeView = {
   raining: boolean
 }
 
+export type BenchJob = {
+  id: number
+  recipeKey: string
+  /** Bolas por Apricorn da receita deste lote. */
+  perUnit: number
+  output: string
+  quantity: number
+  unitMs: number
+  startedAt: number
+  collected: number
+}
+
+export type BenchRecipe = {
+  key: string
+  input: string
+  output: string
+  perUnit: number
+  unitMs: number
+  minBenchLevel: number
+  unlocked: boolean
+}
+
 /** Bancada de bolas (5.23): as bolas do lote ficam prontas uma a uma (`startedAt + k × unitMs`). */
 export type BenchView = {
   unlocked: boolean
   unlockLevel: number
   level: number
+  maxLevel: number
   batchSize: number
-  unitMs: number
   speedBonus: number
-  ballsPerApricorn: number
   operatorTypes: string[]
   operatorId: number | null
-  job: { id: number; quantity: number; unitMs: number; startedAt: number; collected: number } | null
+  recipes: BenchRecipe[]
+  job: BenchJob | null
+  /** Upgrade em andamento: a bancada fica parada até `endsAt`. */
+  upgrade: { toLevel: number; endsAt: number; startedAt: number } | null
+  next: {
+    level: number
+    batchSize: number
+    speed: number
+    trainerLevel: number
+    ms: number
+    cost: { itemKey: string; quantity: number; have: number }[]
+    newRecipes: string[]
+  } | null
 }
 
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
@@ -482,7 +519,7 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
-  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; tree: TreeView; bench: BenchView }
+  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; trees: TreeView[]; bench: BenchView }
   missions: MissionsView
   daycare: DaycareState
   plots: PlotState[]
@@ -549,6 +586,8 @@ export function giftIconSrc(itemKey: string): string {
   if (itemKey.startsWith('ball:')) return ballIconSrc(itemKey.slice(5))
   if (itemKey.startsWith('berry:')) return berryIconSrc(itemKey.slice(6))
   if (itemKey === 'mat:apricorn') return '/sprites/items/red-apricorn.png'
+  if (itemKey === 'mat:apricorn-blue') return '/sprites/items/blue-apricorn.png'
+  if (itemKey === 'mat:apricorn-yellow') return '/sprites/items/yellow-apricorn.png'
   return '/sprites/items/poke-ball.png'
 }
 
@@ -571,6 +610,8 @@ export function itemLabel(itemKey: string, berries: BerryInfo[], balls?: BallInf
     return ball?.displayName ?? itemKey
   }
   if (itemKey === 'mat:apricorn') return 'Apricorn'
+  if (itemKey === 'mat:apricorn-blue') return 'Apricorn azul'
+  if (itemKey === 'mat:apricorn-yellow') return 'Apricorn amarelo'
   return itemKey
 }
 
@@ -722,6 +763,18 @@ export function errorText(error: ApiError): string {
       return 'Quem está no time não pode operar a bancada.'
     case 'wrong_type':
       return 'Esse Pokémon não é de um tipo que opera a bancada.'
+    case 'bench_upgrading':
+      return 'A bancada está sendo melhorada. Espere terminar.'
+    case 'invalid_recipe':
+      return 'Essa receita não existe.'
+    case 'recipe_locked':
+      return 'Essa bola pede a bancada num nível maior.'
+    case 'max_level':
+      return 'A bancada já está no nível máximo.'
+    case 'trainer_level':
+      return 'Seu nível de treinador ainda não basta para essa melhoria.'
+    case 'missing_items':
+      return 'Faltam itens para a melhoria.'
     case 'bench_busy':
       return 'A bancada está trabalhando. Espere o lote acabar ou cancele.'
     case 'no_operator':

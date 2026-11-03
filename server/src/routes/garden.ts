@@ -1,10 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
+import { TREES, treeDef } from '../config/apricorn.js'
 import { berries } from '../config/berries.js'
-import { harvestApricorns, treeView } from '../db/apricorn.js'
-import { benchView, cancelJob, collectJob, setOperator, startJob } from '../db/bench.js'
+import { harvestApricorns, treesView } from '../db/apricorn.js'
+import { benchView, cancelJob, collectJob, setOperator, startJob, startUpgrade } from '../db/bench.js'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -47,19 +47,24 @@ gardenRoutes.post('/gifts/:id/collect', requireUser, (c) => {
   return c.json(result.gift)
 })
 
-// Árvore de Apricorn (5.23): colhe tudo o que está pendurado.
-gardenRoutes.post('/tree/harvest', requireUser, (c) => {
+// Árvores de Apricorn (5.23): colhe tudo o que está pendurado. Sem `key`, a vermelha.
+gardenRoutes.post('/tree/harvest', requireUser, async (c) => {
+  const body = (await readObject(c)) ?? {}
+  const key = body.key === undefined ? TREES[0]!.key : body.key
+  const tree = typeof key === 'string' ? treeDef(key) : null
+  if (!tree) return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
   const result = immediate(() => {
     const clock = persistCatchUp(userId, now)
-    if (clock.level < apricornConfig.tree.unlockLevel) return fail('tree_locked', 400)
-    const harvested = harvestApricorns(userId, clock.level, now)
+    const view = treesView(userId, clock.level, now).find((row) => row.key === tree.key)
+    if (!view?.unlocked) return fail('tree_locked', 400)
+    const harvested = harvestApricorns(userId, clock.level, now, tree.key)
     if (harvested === null) return fail('nothing_ready', 400)
-    return { ok: true as const, harvested, tree: treeView(userId, clock.level, now) }
+    return { ok: true as const, harvested, trees: treesView(userId, clock.level, now) }
   })
   if (!result.ok) return c.json(errorBody(result), result.status)
-  return c.json({ itemKey: APRICORN_ITEM, quantity: result.harvested, tree: result.tree })
+  return c.json({ itemKey: tree.itemKey, quantity: result.harvested, trees: result.trees })
 })
 
 // Bancada de bolas (5.23): operador, lote, coletar e cancelar. Cada ação
@@ -76,9 +81,15 @@ gardenRoutes.post('/bench/operator', requireUser, async (c) => {
 gardenRoutes.post('/bench/start', requireUser, async (c) => {
   const body = await readObject(c)
   const quantity = body?.quantity
-  if (typeof quantity !== 'number') return c.json({ error: 'invalid_body' }, 400)
-  return benchAction(c.get('userId'), (userId, level, now) => startJob(userId, level, quantity, now), c)
+  const recipeKey = body?.recipeKey === undefined ? 'poke_ball' : body.recipeKey
+  if (typeof quantity !== 'number' || typeof recipeKey !== 'string') return c.json({ error: 'invalid_body' }, 400)
+  return benchAction(c.get('userId'), (userId, level, now) => startJob(userId, level, recipeKey, quantity, now), c)
 })
+
+// Upgrade da bancada: gasta o custo agora e ela fica parada até terminar.
+gardenRoutes.post('/bench/upgrade', requireUser, (c) =>
+  benchAction(c.get('userId'), (userId, level, now) => startUpgrade(userId, level, now), c),
+)
 
 gardenRoutes.post('/bench/collect', requireUser, (c) =>
   benchAction(c.get('userId'), (userId, _level, now) => collectJob(userId, now), c),

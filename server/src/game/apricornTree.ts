@@ -2,7 +2,11 @@
 // um número real de Apricorns (a parte inteira está pendurada) guardado no
 // instante `since`, e anda conforme o clima de cada dia. Nada roda em loop.
 
-import { apricornConfig, type TreeConfig } from '../config/apricorn.js'
+import { TREES, type TreeDef } from '../config/apricorn.js'
+
+/** O que o cálculo usa de uma árvore. */
+export type TreeConfig = Pick<TreeDef, 'intervalMs' | 'cap' | 'rainMult'>
+const RED: TreeConfig = TREES[0]!
 import type { WeatherKey } from '../config/weather.js'
 import { nextWeatherChangeAt, weatherDay } from './weather.js'
 
@@ -10,7 +14,7 @@ import { nextWeatherChangeAt, weatherDay } from './weather.js'
 export type WeatherOf = (day: number) => WeatherKey
 
 /** Quanto tempo leva um Apricorn com esse clima. */
-export function treeUnitMs(weather: WeatherKey, config: TreeConfig = apricornConfig.tree): number {
+export function treeUnitMs(weather: WeatherKey, config: TreeConfig = RED): number {
   return weather === 'rain' ? config.intervalMs * config.rainMult : config.intervalMs
 }
 
@@ -20,7 +24,7 @@ export function settleTree(
   since: number,
   now: number,
   weatherOf: WeatherOf,
-  config: TreeConfig = apricornConfig.tree,
+  config: TreeConfig = RED,
 ): number {
   let p = Math.min(config.cap, progress)
   let t = since
@@ -41,7 +45,7 @@ export function treeReadyTimes(
   progress: number,
   now: number,
   weather: WeatherKey,
-  config: TreeConfig = apricornConfig.tree,
+  config: TreeConfig = RED,
 ): number[] {
   const unit = treeUnitMs(weather, config)
   const times: number[] = []

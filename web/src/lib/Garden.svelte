@@ -15,17 +15,18 @@
     type GameState,
     type GardenGift,
     type PlotState,
+    type TreeView,
   } from './api'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
-  import { loadTreeArt, treePixels, type TreeArt } from './apricornTree'
+  import { loadTreeArt, treePixels, type TreeArt, type TreeColor } from './apricornTree'
   import {
     BENCH_FRAMES,
     BENCH_H,
     BENCH_IDLE,
     BENCH_READY,
-    BENCH_SHEET,
+    benchSheet,
     BENCH_W,
     benchDone,
     benchWorkFrame,
@@ -351,9 +352,15 @@
   const TREE_FOOT = 2
   const treeCol = hortaCol0 + hortaCols + 1
   const treeRow = hortaRow0 + 1
+  /** Onde fica cada árvore: a vermelha ao lado da horta, as outras depois da bancada. */
+  const TREE_CELLS: Record<string, { col: number; row: number }> = {
+    apricorn_tree: { col: treeCol, row: treeRow },
+    apricorn_tree_blue: { col: treeCol + 4, row: treeRow },
+    apricorn_tree_yellow: { col: treeCol + 6, row: treeRow },
+  }
 
   function isTreeCell(col: number, row: number): boolean {
-    return col === treeCol && row === treeRow
+    return Object.values(TREE_CELLS).some((cell) => cell.col === col && cell.row === row)
   }
 
   // Bancada de bolas (5.23): ao lado da árvore, com uma casa no meio. O
@@ -506,51 +513,66 @@
   }
 
   // Pendurados agora: o que o servidor contou mais os que ficaram prontos depois.
-  const treeReady = $derived.by(() => {
-    const tree = game.garden.tree
-    const now = clock.now()
+  function readyOf(tree: TreeView, now: number): number {
     return Math.min(tree.cap, tree.ready + tree.readyAts.filter((at) => at <= now).length)
-  })
-  // Marcador de tempo da árvore: quantos estão pendurados, quanto falta para o
-  // próximo nascer e a barrinha dele. Cheia, só "cheia".
-  const treeTimer = $derived.by(() => {
-    const tree = game.garden.tree
-    if (!tree.unlocked || treeReady >= tree.cap) return null
+  }
+  const treeReady = $derived.by(() => {
     const now = clock.now()
-    const next = tree.readyAts.find((at) => at > now)
-    if (next === undefined) return null
-    return {
-      text: `${treeReady}/${tree.cap} · ${formatCountdown(next - now)}`,
-      progress: Math.max(0, Math.min(1, 1 - (next - now) / tree.unitMs)),
-    }
+    return new Map(game.garden.trees.map((tree) => [tree.key, readyOf(tree, now)]))
   })
-  let treeShake = $state(false)
-  let treeArt = $state<TreeArt | null>(null)
+  // Marcador de tempo de cada árvore: quantos estão pendurados, quanto falta
+  // para o próximo nascer e a barrinha dele. Cheia, só "cheia".
+  const treeTimers = $derived.by(() => {
+    const now = clock.now()
+    const out = new Map<string, { text: string; progress: number }>()
+    for (const tree of game.garden.trees) {
+      const ready = treeReady.get(tree.key) ?? 0
+      if (!tree.unlocked || ready >= tree.cap) continue
+      const next = tree.readyAts.find((at) => at > now)
+      if (next === undefined) continue
+      out.set(tree.key, {
+        text: `${ready}/${tree.cap} · ${formatCountdown(next - now)}`,
+        progress: Math.max(0, Math.min(1, 1 - (next - now) / tree.unitMs)),
+      })
+    }
+    return out
+  })
+  let treeShake = $state<string | null>(null)
+  let treeArts = $state<Partial<Record<TreeColor, TreeArt>>>({})
   $effect(() => {
-    void loadTreeArt().then((art) => (treeArt = art))
+    for (const color of ['red', 'blue', 'yellow'] as const) {
+      void loadTreeArt(color).then((art) => (treeArts = { ...treeArts, [color]: art }))
+    }
   })
   let harvestingTree = $state(false)
 
-  async function onTree() {
-    const tree = game.garden.tree
+  function unlockText(tree: TreeView): string {
+    return 'trainerLevel' in tree.unlock
+      ? `abre no nível ${tree.unlock.trainerLevel} de treinador`
+      : `abre com a bancada no nível ${tree.unlock.benchLevel}`
+  }
+
+  async function onTree(tree: TreeView) {
+    const name = itemLabel(tree.itemKey, game.berries)
     if (!tree.unlocked) {
-      showGiftToast(`A árvore de Apricorn abre no nível ${tree.unlockLevel} de treinador.`)
+      showGiftToast(`A árvore de ${name} ${unlockText(tree)}.`)
       return
     }
-    if (treeReady === 0) {
+    const ready = treeReady.get(tree.key) ?? 0
+    if (ready === 0) {
       const next = tree.readyAts.find((at) => at > clock.now())
-      showGiftToast(next ? `Próximo Apricorn em ${formatCountdown(next - clock.now())}.` : 'Nada para colher agora.')
+      showGiftToast(next ? `Próximo ${name} em ${formatCountdown(next - clock.now())}.` : 'Nada para colher agora.')
       return
     }
     if (harvestingTree) return
     harvestingTree = true
-    treeShake = true
-    setTimeout(() => (treeShake = false), 450)
+    treeShake = tree.key
+    setTimeout(() => (treeShake = null), 450)
     try {
-      const response = await api('/api/garden/tree/harvest', {})
+      const response = await api('/api/garden/tree/harvest', { key: tree.key })
       if (response.ok) {
-        const body = (await response.json()) as { quantity: number }
-        showGiftToast(`Colheu ${body.quantity} ${body.quantity === 1 ? 'Apricorn' : 'Apricorns'}!`)
+        const body = (await response.json()) as { quantity: number; itemKey: string }
+        showGiftToast(`Colheu ${body.quantity} ${itemLabel(body.itemKey, game.berries)}${body.quantity === 1 ? '' : ' ×' + body.quantity}!`)
         play('harvest')
       } else {
         showGiftToast(errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError))
@@ -575,15 +597,24 @@
   /** Poké Balls prontas no lote, esperando coletar. */
   const benchReady = $derived.by(() => {
     const job = game.garden.bench.job
-    return job ? (benchDone(job, clock.now()) - job.collected) * game.garden.bench.ballsPerApricorn : 0
+    return job ? (benchDone(job, clock.now()) - job.collected) * job.perUnit : 0
   })
   let benchOpen = $state(false)
   // Marcador de tempo da máquina: bolas já prontas, quanto falta para o lote
   // acabar e a barrinha do lote. Acabado, fica só "N prontas".
   const benchTimer = $derived.by(() => {
-    const job = game.garden.bench.job
-    if (!job || benchState !== 'working') return null
+    const bench = game.garden.bench
     const now = clock.now()
+    // Upgrade em andamento: o nível novo e quanto falta.
+    if (bench.upgrade) {
+      const total = Math.max(1, bench.upgrade.endsAt - bench.upgrade.startedAt)
+      return {
+        text: `Nv ${bench.upgrade.toLevel} · ${formatCountdown(bench.upgrade.endsAt - now)}`,
+        progress: Math.max(0, Math.min(1, (now - bench.upgrade.startedAt) / total)),
+      }
+    }
+    const job = bench.job
+    if (!job || benchState !== 'working') return null
     const endsAt = job.startedAt + job.quantity * job.unitMs
     return {
       text: `${benchReady > 0 ? `${benchReady} · ` : ''}${formatCountdown(endsAt - now)}`,
@@ -1504,46 +1535,51 @@
           {/if}
         {/if}
       {/each}
-      {#if game.garden.tree}
-        {@const spot = place(treeCol, treeRow)}
-        {@const tree = game.garden.tree}
-        <button
-          type="button"
-          class="tree"
-          class:locked={!tree.unlocked}
-          class:shake={treeShake}
-          style:left="{snapToDevice(spot.x)}px"
-          style:top="{snapToDevice(spot.y + halfH + TREE_FOOT * pmdScale)}px"
-          style:z-index={treeCol + treeRow + depthSpan + 1}
-          aria-label={!tree.unlocked
-            ? `Árvore de Apricorn, abre no nível ${tree.unlockLevel}`
-            : `Árvore de Apricorn: ${treeReady} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
-          onclick={() => void onTree()}
-        >
-          {#if treeArt}
-            <svg
-              width={treeArt.width * pmdScale}
-              height={treeArt.height * pmdScale}
-              viewBox="0 0 {treeArt.width} {treeArt.height}"
-              shape-rendering="crispEdges"
-              aria-hidden="true"
-            >
-              {#each treePixels(treeArt, tree.unlocked ? treeReady : 0) as px, index (index)}
-                <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
-              {/each}
-            </svg>
-          {/if}
-          {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
-          {#if tree.unlocked && treeReady >= tree.cap}
-            <span class="tree-full" aria-hidden="true">cheia</span>
-          {:else if treeTimer}
-            <span class="tree-full timer" aria-hidden="true">
-              {treeTimer.text}
-              <i style:width="{treeTimer.progress * 100}%"></i>
-            </span>
-          {/if}
-        </button>
-      {/if}
+      {#each game.garden.trees as tree (tree.key)}
+        {@const cell = TREE_CELLS[tree.key]}
+        {@const art = treeArts[tree.color]}
+        {#if cell}
+          {@const spot = place(cell.col, cell.row)}
+          {@const ready = treeReady.get(tree.key) ?? 0}
+          {@const timer = treeTimers.get(tree.key)}
+          <button
+            type="button"
+            class="tree"
+            class:locked={!tree.unlocked}
+            class:shake={treeShake === tree.key}
+            style:left="{snapToDevice(spot.x)}px"
+            style:top="{snapToDevice(spot.y + halfH + TREE_FOOT * pmdScale)}px"
+            style:z-index={cell.col + cell.row + depthSpan + 1}
+            aria-label={!tree.unlocked
+              ? `Árvore de ${itemLabel(tree.itemKey, game.berries)}, ${unlockText(tree)}`
+              : `Árvore de ${itemLabel(tree.itemKey, game.berries)}: ${ready} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
+            onclick={() => void onTree(tree)}
+          >
+            {#if art}
+              <svg
+                width={art.width * pmdScale}
+                height={art.height * pmdScale}
+                viewBox="0 0 {art.width} {art.height}"
+                shape-rendering="crispEdges"
+                aria-hidden="true"
+              >
+                {#each treePixels(art, tree.unlocked ? ready : 0) as px, index (index)}
+                  <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+                {/each}
+              </svg>
+            {/if}
+            {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
+            {#if tree.unlocked && ready >= tree.cap}
+              <span class="tree-full" aria-hidden="true">cheia</span>
+            {:else if timer}
+              <span class="tree-full timer" aria-hidden="true">
+                {timer.text}
+                <i style:width="{timer.progress * 100}%"></i>
+              </span>
+            {/if}
+          </button>
+        {/if}
+      {/each}
       {#if game.garden.bench}
         {@const spot = place(benchCol, benchRow)}
         {@const bench = game.garden.bench}
@@ -1597,7 +1633,7 @@
             class="bench-sprite"
             style:width="{BENCH_W * pmdScale}px"
             style:height="{BENCH_H * pmdScale}px"
-            style:background-image="url({BENCH_SHEET})"
+            style:background-image="url({benchSheet(bench.job?.recipeKey)})"
             style:background-size="{BENCH_W * BENCH_FRAMES * pmdScale}px {BENCH_H * pmdScale}px"
             style:background-position-x="{-(benchWork ?? (benchState === 'ready' && bench.unlocked ? BENCH_READY : BENCH_IDLE)) * BENCH_W * pmdScale}px"
             aria-hidden="true"

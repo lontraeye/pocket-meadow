@@ -5,8 +5,16 @@
 // Ball, em loop enquanto trabalha; o 25, a bola pronta.
 
 import sheetUrl from '../../../art/jardim/maquina-apricorn.png?url'
+import greatSheetUrl from '../../../art/jardim/maquina-apricorn-great.png?url'
+import ultraSheetUrl from '../../../art/jardim/maquina-apricorn-ultra.png?url'
 
 export const BENCH_SHEET = sheetUrl
+/** A folha da receita do lote (Great e Ultra são recolorações, recolorir-apricorn.py). */
+export function benchSheet(recipeKey: string | null | undefined): string {
+  if (recipeKey === 'great_ball') return greatSheetUrl
+  if (recipeKey === 'ultra_ball') return ultraSheetUrl
+  return sheetUrl
+}
 export const BENCH_W = 24
 export const BENCH_H = 32
 export const BENCH_FRAMES = 26

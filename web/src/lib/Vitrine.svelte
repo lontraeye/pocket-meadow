@@ -59,6 +59,14 @@
       { label: 'Trabalhando', src: BENCH_SHEET, frame: 'work', floor: 'grama', foot: 6 },
       { label: 'Pronta', src: BENCH_SHEET, frame: 'ready', floor: 'grama', foot: 6 },
     ],
+    [
+      { label: 'Árvore azul', src: find(art, 'arvore-apricorn-frutos-azul.png'), floor: 'grama', foot: 2 },
+      { label: 'Árvore amarela', src: find(art, 'arvore-apricorn-frutos-amarelo.png'), floor: 'grama', foot: 2 },
+      { label: 'Great Ball', src: find(art, 'maquina-apricorn-great.png'), frame: 'work', floor: 'grama', foot: 6 },
+      { label: 'Great pronta', src: find(art, 'maquina-apricorn-great.png'), frame: 'ready', floor: 'grama', foot: 6 },
+      { label: 'Ultra Ball', src: find(art, 'maquina-apricorn-ultra.png'), frame: 'work', floor: 'grama', foot: 6 },
+      { label: 'Ultra pronta', src: find(art, 'maquina-apricorn-ultra.png'), frame: 'ready', floor: 'grama', foot: 6 },
+    ],
   ]
 
   const COLS = Math.max(...rows.map((row) => row.length))

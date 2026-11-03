@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     'luxury-ball.png',
   ]
   // Doce genérico (presentes do jardim, 5.21): ícone da Rare Candy.
-  const otherFiles = ['rare-candy.png', 'red-apricorn.png']
+  const otherFiles = ['rare-candy.png', 'red-apricorn.png', 'blue-apricorn.png', 'yellow-apricorn.png']
   const itemFiles = [...berryList.map((berry) => `${berry.key}-berry.png`), ...ballFiles, ...otherFiles]
   let itemsDownloaded = 0
   for (const name of itemFiles) {

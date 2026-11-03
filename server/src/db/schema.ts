@@ -348,11 +348,14 @@ export const gardenStructures = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    key: text('key', { enum: ['apricorn_tree', 'ball_bench'] }).notNull(),
+    key: text('key', { enum: ['apricorn_tree', 'apricorn_tree_blue', 'apricorn_tree_yellow', 'ball_bench'] }).notNull(),
     level: integer('level').notNull().default(1),
     since: integer('since').notNull(),
     progress: real('progress').notNull().default(0),
     operatorPokemonId: integer('operator_pokemon_id').references(() => pokemon.id, { onDelete: 'set null' }),
+    /** Upgrade da bancada em andamento: para qual nível e quando termina. */
+    upgradeTo: integer('upgrade_to'),
+    upgradeEndsAt: integer('upgrade_ends_at'),
   },
   (table) => [primaryKey({ columns: [table.userId, table.key] })],
 )

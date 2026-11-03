@@ -5,7 +5,13 @@
 
 import type { Pixel } from './bubbles'
 import baseUrl from '../../../art/jardim/arvore-apricorn.png?url'
-import fruitsUrl from '../../../art/jardim/arvore-apricorn-frutos.png?url'
+import fruitsRedUrl from '../../../art/jardim/arvore-apricorn-frutos.png?url'
+import fruitsBlueUrl from '../../../art/jardim/arvore-apricorn-frutos-azul.png?url'
+import fruitsYellowUrl from '../../../art/jardim/arvore-apricorn-frutos-amarelo.png?url'
+
+/** Frutos de cada cor (os azuis e amarelos são recolorações dos vermelhos, recolorir-apricorn.py). */
+const FRUITS = { red: fruitsRedUrl, blue: fruitsBlueUrl, yellow: fruitsYellowUrl } as const
+export type TreeColor = keyof typeof FRUITS
 
 export type TreeArt = { width: number; height: number; base: Pixel[]; fruits: Pixel[][] }
 
@@ -24,11 +30,13 @@ async function readPixels(url: string): Promise<{ width: number; height: number;
 const hex = (data: Uint8ClampedArray, i: number) =>
   `#${[data[i]!, data[i + 1]!, data[i + 2]!].map((v) => v.toString(16).padStart(2, '0')).join('')}`
 
-let loading: Promise<TreeArt> | null = null
+const loading = new Map<TreeColor, Promise<TreeArt>>()
 
-/** As duas imagens lidas uma vez; os frutos em ordem de cima para baixo. */
-export function loadTreeArt(): Promise<TreeArt> {
-  loading ??= Promise.all([readPixels(baseUrl), readPixels(fruitsUrl)]).then(([base, ripe]) => {
+/** As duas imagens lidas uma vez por cor; os frutos em ordem de cima para baixo. */
+export function loadTreeArt(color: TreeColor = 'red'): Promise<TreeArt> {
+  const cached = loading.get(color)
+  if (cached) return cached
+  const promise = Promise.all([readPixels(baseUrl), readPixels(FRUITS[color])]).then(([base, ripe]) => {
     const { width, height } = base
     const basePixels: Pixel[] = []
     const changed = new Map<number, Pixel>()
@@ -68,7 +76,8 @@ export function loadTreeArt(): Promise<TreeArt> {
     fruits.sort((a, b) => top(a) - top(b))
     return { width, height, base: basePixels, fruits }
   })
-  return loading
+  loading.set(color, promise)
+  return promise
 }
 
 /** A árvore com `count` frutos pendurados (por cima da copa). */

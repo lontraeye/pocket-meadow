@@ -52,7 +52,7 @@ export function missionContext(userId: number, level: number): MissionContext {
     areaTypes: [...types].sort(),
     teamTypes: [...progress.teamTypes].sort(),
     hasNewSpecies: [...speciesIds].some((id) => !caught.has(id)),
-    gardenOpen: level >= apricornConfig.tree.unlockLevel,
+    gardenOpen: level >= apricornConfig.unlockLevel,
   }
 }
 
