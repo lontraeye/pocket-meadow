@@ -147,3 +147,28 @@ test('rotas: carinho com intervalo, berry como comida, coletar presente', async 
   const twice = await post(cookie, `/garden/gifts/${gift.lastInsertRowid}/collect`)
   assert.equal(twice.status, 404)
 })
+
+test('alimentar todos: 1 berry por Pokémon com fome, do mais faminto, até a berry acabar', async () => {
+  const { cookie, userId } = player('feedall')
+  const sqlite = getSqlite()
+  const add = (hunger: number) =>
+    Number(
+      sqlite
+        .prepare('insert into pokemon (user_id, species_id, level, caught_at, original_species_id, hunger, pet_at) values (?, 161, 5, ?, 161, ?, ?)')
+        .run(userId, Date.now(), hunger, Date.now()).lastInsertRowid,
+    )
+  const a = add(10)
+  const b = add(30)
+  const c = add(95)
+  sqlite.prepare("update pokemon set hunger = 85, pet_at = ? where user_id = ? and team_slot = 0").run(Date.now(), userId)
+  sqlite.prepare("insert into inventory (user_id, item_key, quantity) values (?, 'berry:oran', 2)").run(userId)
+  const response = await post(cookie, '/garden/pets/feed-all', { berryKey: 'oran' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { fed: 2, hungry: 3 })
+  const hunger = (id: number) => (sqlite.prepare('select hunger from pokemon where id = ?').get(id) as { hunger: number }).hunger
+  assert.equal(Math.round(hunger(a)), 50)
+  assert.equal(Math.round(hunger(b)), 70)
+  assert.equal(Math.round(hunger(c)), 95)
+  const none = await post(cookie, '/garden/pets/feed-all', { berryKey: 'oran' })
+  assert.equal(((await none.json()) as { error: string }).error, 'no_berry')
+})

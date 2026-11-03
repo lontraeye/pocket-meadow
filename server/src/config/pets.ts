@@ -30,6 +30,12 @@ export const petConfig = {
   berryFill: 40,
   fullAt: 90,
   /**
+   * Fome e luta (PROGRESSAO.md, 4.2): abaixo disso o Pokémon não luta (fica
+   * fora do time da luta); cada luta tira `battleHungerCost` de quem entrou.
+   */
+  fightMinHunger: 20,
+  battleHungerCost: 8,
+  /**
    * XP do jardim: `xpPerLevelHour × nível × felicidade/100` por hora. Bem
    * abaixo do daycare (3 × nível), que é o treino focado (5.21).
    */

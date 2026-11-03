@@ -536,7 +536,17 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
-  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; trees: TreeView[]; bench: BenchView }
+  garden: {
+    gifts: GardenGift[]
+    needThreshold: number
+    fullAt: number
+    /** Abaixo disso o Pokémon não luta (fica fora do time da luta). */
+    fightMinHunger: number
+    /** Quanto uma berry enche a fome. */
+    berryFill: number
+    trees: TreeView[]
+    bench: BenchView
+  }
   missions: MissionsView
   daycare: DaycareState
   plots: PlotState[]
@@ -730,6 +740,8 @@ export function errorText(error: ApiError): string {
       return 'Ele está no PC. Traga para o jardim antes.'
     case 'pet_cooldown':
       return 'Ele acabou de ganhar carinho. Volte daqui a pouco.'
+    case 'team_hungry':
+      return 'Todo o time está com fome. Alimente antes de lutar.'
     case 'not_hungry':
       return 'Ele está de barriga cheia.'
     case 'no_berry':

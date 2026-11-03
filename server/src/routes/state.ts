@@ -391,6 +391,8 @@ function readState(userId: number, now: number) {
         .all(),
       needThreshold: petConfig.needThreshold,
       fullAt: petConfig.fullAt,
+      fightMinHunger: petConfig.fightMinHunger,
+      berryFill: petConfig.berryFill,
       trees: treesView(userId, trainer.level, now),
       bench: benchView(userId, trainer.level, now),
     },

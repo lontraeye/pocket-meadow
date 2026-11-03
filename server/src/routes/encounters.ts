@@ -10,6 +10,7 @@ import { milestoneByKey, TOOL_NAMES } from '../config/milestones.js'
 import { placeBySlug } from '../config/places.js'
 import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
+import { petConfig } from '../config/pets.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
@@ -552,6 +553,15 @@ function applyBattleOutcome(input: {
     }
   })
 
+  // Lutar dá fome: quem entrou em campo perde `battleHungerCost`.
+  for (const mon of team) {
+    if (!enteredSlots.includes(mon.slot)) continue
+    db.update(pokemon)
+      .set({ hunger: sql`max(0, ${pokemon.hunger} - ${petConfig.battleHungerCost})` })
+      .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
+      .run()
+  }
+
   let catchOdds: number | null = null
   let seedDrop: { itemKey: string; berryKey: string } | null = null
   let ballDrop: { itemKey: string; quantity: number } | null = null
@@ -768,8 +778,19 @@ function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows:
   const rows = selectTeamRows(userId, pokemonIds)
   if (rows.length !== pokemonIds.length) return fail('invalid_team', 400)
   const byId = new Map(rows.map((row) => [row.id, row]))
+  // Faminto não luta (PROGRESSAO.md, 4.2): fica fora; se ninguém sobra, não há luta.
+  const hungerOf = new Map(
+    getDb()
+      .select({ id: pokemon.id, hunger: pokemon.hunger })
+      .from(pokemon)
+      .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, pokemonIds)))
+      .all()
+      .map((row) => [row.id, row.hunger]),
+  )
+  const fed = pokemonIds.filter((id) => (hungerOf.get(id) ?? 100) >= petConfig.fightMinHunger)
+  if (fed.length === 0) return fail('team_hungry', 400)
   const team: TeamBattleRow[] = []
-  for (const id of pokemonIds) {
+  for (const id of fed) {
     const mon = byId.get(id)
     if (!mon || mon.location !== 'garden') return fail('invalid_team', 400)
     const ready = toTeamBattleRow(mon)

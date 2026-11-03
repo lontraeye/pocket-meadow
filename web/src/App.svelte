@@ -11,6 +11,7 @@
   import Garden from './lib/Garden.svelte'
   import Modal from './lib/Modal.svelte'
   import MissionBoard from './lib/MissionBoard.svelte'
+  import FeedPanel from './lib/FeedPanel.svelte'
   import Pokedex from './lib/Pokedex.svelte'
   import WeatherIcon from './lib/WeatherIcon.svelte'
   import { WEATHER_WITH } from './lib/weather'
@@ -34,6 +35,7 @@
   let configOpen = $state(false)
   let weatherOpen = $state(false)
   let missionsOpen = $state(false)
+  let feedOpen = $state(false)
   let reloadedForWeather = 0
   // Ícone com X quando não sai som, seja pelo mudo ou pela barra no zero.
   const silent = $derived(muted || volumeLevel === 0)
@@ -333,7 +335,8 @@
       screen = 'meadow'
     } else if (ready.target === 'missions') missionsOpen = true
     else if (ready.target === 'daycare') screen = 'daycare'
-    // Presentes, fome e carinho já estão à vista no jardim: o toque só fecha.
+    // Fome: abre o "Alimentar todos"; presentes e carinho já estão à vista no jardim.
+    else if (ready.hungryCount > 0) feedOpen = true
     else dismissReady()
   }
 
@@ -606,6 +609,12 @@
       >
         <Pokedex {game} onState={loadState} onClose={() => closePokedex()} />
       </div>
+    {/if}
+
+    {#if feedOpen && game}
+      <Modal label="Alimentar" wide onBackdrop={() => (feedOpen = false)}>
+        <FeedPanel {game} title="Alimentar o jardim" onState={loadState} onClose={() => (feedOpen = false)} />
+      </Modal>
     {/if}
 
     {#if missionsOpen && game}

@@ -31,13 +31,14 @@ describe('arrancar', () => {
 })
 
 describe('colheita', () => {
-  test('o yield fica no intervalo e a semente extra respeita a chance', () => {
+  test('o yield fica no intervalo do config (só berries)', () => {
     const berry = berries.oran
+    const [min, max] = berry.yield
     const low = planHarvest(berry, { yieldUnit: 0 })
-    assert.equal(low.berryAmount, 2)
+    assert.equal(low.berryAmount, min)
     assert.deepEqual(low.credits.map((row) => row.itemKey), ['berry:oran'])
     const high = planHarvest(berry, { yieldUnit: 0.999 })
-    assert.equal(high.berryAmount, 3)
+    assert.equal(high.berryAmount, max)
   })
 
   test('arbusto: as primeiras colheitas são garantidas e a chance de secar cresce', () => {

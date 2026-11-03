@@ -40,6 +40,45 @@ gardenRoutes.post('/pets/:id/snack', requireUser, async (c) => {
   return c.json(result.pet)
 })
 
+// Alimentar todos (PROGRESSAO.md, 4.2): 1 berry por Pokémon com fome, do mais
+// faminto ao menos, até a berry acabar. `ids` limita (ex.: só o time).
+gardenRoutes.post('/pets/feed-all', requireUser, async (c) => {
+  const body = await readObject(c)
+  const berryKey = body?.berryKey
+  const ids = body?.ids
+  if (typeof berryKey !== 'string' || !(berryKey in berries)) return c.json({ error: 'invalid_body' }, 400)
+  if (ids !== undefined && (!Array.isArray(ids) || !ids.every((id) => typeof id === 'number' && Number.isInteger(id)))) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const userId = c.get('userId')
+  const now = Date.now()
+  const fed = immediate(() => {
+    persistCatchUp(userId, now)
+    const db = getDb()
+    const only = ids ? new Set(ids as number[]) : null
+    const hungry = db
+      .select({ id: pokemon.id, hunger: pokemon.hunger })
+      .from(pokemon)
+      .where(and(eq(pokemon.userId, userId), eq(pokemon.location, 'garden'), eq(pokemon.inPc, false)))
+      .all()
+      .filter((row) => row.hunger < petConfig.fullAt && (!only || only.has(row.id)))
+      .sort((a, b) => a.hunger - b.hunger)
+    let count = 0
+    for (const row of hungry) {
+      if (!debitItem(userId, `berry:${berryKey}`)) break
+      db.update(pokemon)
+        .set({ hunger: Math.min(100, row.hunger + petConfig.berryFill) })
+        .where(eq(pokemon.id, row.id))
+        .run()
+      count += 1
+    }
+    if (count > 0) recordEvent(userId, 'pet_fed', count, now)
+    return { fed: count, hungry: hungry.length }
+  })
+  if (fed.fed === 0) return c.json({ error: fed.hungry === 0 ? 'not_hungry' : 'no_berry' }, 400)
+  return c.json(fed)
+})
+
 gardenRoutes.post('/gifts/:id/collect', requireUser, (c) => {
   const id = parseId(c.req.param('id'))
   if (id === null) return c.json({ error: 'invalid_body' }, 400)

@@ -45,6 +45,8 @@
   import { loadBattleFx } from './fx'
   import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
   import { simConfig, type BattleInput } from './sim'
+  import FeedPanel from './FeedPanel.svelte'
+  import Modal from './Modal.svelte'
 
   let {
     game,
@@ -78,6 +80,8 @@
   let result = $state<Result | null>(null)
   let message = $state('')
   let pending = $state(false)
+  /** "Alimentar o time" antes da luta (faminto não luta). */
+  let feedOpen = $state(false)
   // Região tocada, enquanto o encontro e o sprite do selvagem chegam.
   let searching = $state<string | null>(null)
   // "Batalhar" tocado, até a cena estar pronta para começar.
@@ -1179,9 +1183,15 @@
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
                 <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
+                {#if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
               </button>
             {/each}
           </div>
+          {#if roster.some((mon) => mon.pet.hunger < game.garden.fullAt)}
+            <button type="button" class="btn feed-team" disabled={pending} onclick={() => (feedOpen = true)}>
+              Alimentar o time
+            </button>
+          {/if}
         {/if}
       </section>
     </div>
@@ -1515,6 +1525,19 @@
     </div>
   {/if}
 </div>
+
+{#if feedOpen}
+  <Modal label="Alimentar o time" wide onBackdrop={() => (feedOpen = false)}>
+    <FeedPanel
+      {game}
+      ids={roster.map((mon) => mon.id)}
+      title="Alimentar o time"
+      {onState}
+      onClose={() => (feedOpen = false)}
+    />
+  </Modal>
+{/if}
+
 
 <style>
   .flow {
@@ -2059,6 +2082,17 @@
   .roster {
     display: grid;
     gap: 0.4rem;
+  }
+
+  .starving {
+    color: #c0392b;
+    font-weight: 700;
+  }
+
+  .feed-team {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 0.4rem;
   }
 
   .member {
