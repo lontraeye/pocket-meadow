@@ -19,7 +19,7 @@
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
-  import { TREE_H, TREE_W, treePixels } from './apricornTree'
+  import { loadTreeArt, treePixels, type TreeArt } from './apricornTree'
   import { BENCH_H, BENCH_W, benchDone, benchPixels } from './bench'
   import BenchPanel from './BenchPanel.svelte'
   import Modal from './Modal.svelte'
@@ -450,6 +450,10 @@
     return Math.min(tree.cap, tree.ready + tree.readyAts.filter((at) => at <= now).length)
   })
   let treeShake = $state(false)
+  let treeArt = $state<TreeArt | null>(null)
+  $effect(() => {
+    void loadTreeArt().then((art) => (treeArt = art))
+  })
   let harvestingTree = $state(false)
 
   async function onTree() {
@@ -1380,17 +1384,19 @@
             : `Árvore de Apricorn: ${treeReady} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
           onclick={() => void onTree()}
         >
-          <svg
-            width={TREE_W * pmdScale}
-            height={TREE_H * pmdScale}
-            viewBox="0 0 {TREE_W} {TREE_H}"
-            shape-rendering="crispEdges"
-            aria-hidden="true"
-          >
-            {#each treePixels(tree.unlocked ? treeReady : 0) as px, index (index)}
-              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
-            {/each}
-          </svg>
+          {#if treeArt}
+            <svg
+              width={treeArt.width * pmdScale}
+              height={treeArt.height * pmdScale}
+              viewBox="0 0 {treeArt.width} {treeArt.height}"
+              shape-rendering="crispEdges"
+              aria-hidden="true"
+            >
+              {#each treePixels(treeArt, tree.unlocked ? treeReady : 0) as px, index (index)}
+                <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+              {/each}
+            </svg>
+          {/if}
           {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
           {#if tree.unlocked && treeReady >= tree.cap}<span class="tree-full" aria-hidden="true">cheia</span>{/if}
         </button>

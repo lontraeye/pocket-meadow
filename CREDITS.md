@@ -14,6 +14,7 @@ Pocket Meadow é um fan project sem fins comerciais. Pokémon é marca da Ninten
 | Efeitos sonoros | `web/public/sounds/sfx/` (convertidos para MP3; arquivo de origem de cada um em `server/src/config/sfx.ts`) | [Kenney](https://kenney.nl): [Interface Sounds](https://kenney.nl/assets/interface-sounds) | CC0 |
 | Efeitos visuais da luta (21 dos 44) | `web/public/fx/` (sprite sheets em grade, sem alteração; quadros, pivô e marcadores em `web/src/lib/fxManifest.json`; licença em `web/public/fx/LICENSE-PVFX-Foundry.txt`) | [PVFX Foundry](https://nerijs.itch.io/pvfx-foundry) 0.10.0, de Pixel VFX Studio (nerijs). "VFX from PVFX Foundry by Pixel VFX Studio" | CC0 1.0 |
 | Sprites do jardim | `web/public/sprites/pmd/` | PMD Sprite Collab. Autores em [CREDITS-PMD.md](CREDITS-PMD.md) | CC BY-NC 4.0; folhas oficiais da Spike Chunsoft |
+| Árvore de Apricorn | `art/jardim/arvore-apricorn*.png` (fonte em `arvore-apricorn.piskel`) | lontraeye (arte própria do projeto) | CC0 1.0 (uso livre, sem exigir crédito) |
 | Dados das espécies | `server/snapshots/species.json` | [PokéAPI](https://pokeapi.co) | Dados de propriedade da Nintendo / Game Freak |
 
 Todo asset novo entra aqui junto com a licença. O repositório é público, então só entram assets que permitem redistribuição.
