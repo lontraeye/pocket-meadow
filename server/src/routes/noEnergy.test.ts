@@ -46,41 +46,28 @@ after(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-test('com a energia desligada, o encontro sai mesmo com 0 e não gasta nada', async () => {
-  assert.equal(trainerConfig.energyEnabled, false)
+test('a energia está ligada; procurar no mato gasta 1 e, sem energia, é recusado', async () => {
+  assert.equal(trainerConfig.energyEnabled, true)
   const { cookie, userId } = player('janine')
-  // Energia zerada agora (sem tempo para recarregar).
-  getDb().update(trainers).set({ energy: 0, energyUpdatedAt: Date.now() }).where(eq(trainers.userId, userId)).run()
-
-  // Encontro só onde o jogador está (JORNADA.md, seção 11).
   getSqlite().prepare(`update trainers set current_place = 'route-29' where user_id = ?`).run(userId)
+  getDb().update(trainers).set({ energy: 1, energyUpdatedAt: Date.now() }).where(eq(trainers.userId, userId)).run()
   const first = await post('/encounters', cookie, { regionSlug: 'route-29' })
   assert.equal(first.status, 201)
   const encounter = (await first.json()) as { id: number }
   assert.equal((await post(`/encounters/${encounter.id}/flee`, cookie)).status, 200)
-  assert.equal((await post('/encounters', cookie, { regionSlug: 'route-29' })).status, 201)
-
   const row = getDb().select({ energy: trainers.energy }).from(trainers).where(eq(trainers.userId, userId)).get()
   assert.equal(row?.energy, 0)
-
-  const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as {
-    trainer: { energyEnabled: boolean }
-  }
-  assert.equal(state.trainer.energyEnabled, false)
+  const refused = await post('/encounters', cookie, { regionSlug: 'route-29' })
+  assert.equal(refused.status, 400)
+  assert.equal(((await refused.json()) as { error: string }).error, 'no_energy')
 })
 
-test('a Oran não se usa na mochila sem energia: só na captura', async () => {
+test('a Oran restaura energia pela mochila', async () => {
   const { cookie, userId } = player('koga')
+  getDb().update(trainers).set({ energy: 3, energyUpdatedAt: Date.now() }).where(eq(trainers.userId, userId)).run()
   getDb().insert(inventory).values({ userId, itemKey: 'berry:oran', quantity: 1 }).run()
-
   const response = await post('/items/berry:oran/use', cookie)
-  assert.equal(response.status, 400)
-  assert.equal(((await response.json()) as { error: string }).error, 'berry_not_usable')
-
-  const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as {
-    berries: { key: string; bagUsable: boolean; effectDescription: string; capture: { description: string } | null }[]
-  }
-  const oran = state.berries.find((berry) => berry.key === 'oran')
-  assert.equal(oran?.bagUsable, false)
-  assert.equal(oran?.effectDescription, oran?.capture?.description)
+  assert.equal(response.status, 200)
+  const row = getDb().select({ energy: trainers.energy }).from(trainers).where(eq(trainers.userId, userId)).get()
+  assert.equal(row?.energy, 5)
 })

@@ -187,20 +187,25 @@ function fillIfEmpty(userId: number, region: Region, progress: Progress, now: nu
   return true
 }
 
-/** Chegou numa área (viagem): o campo vazio se enche. Cidade ou área fechada: nada. */
-export function fillOnArrival(userId: number, slug: string, progress: Progress, now: number): void {
-  const place = placeBySlug(slug)
-  const region = regionBySlug(slug)
-  if (!place || place.kind === 'town' || !region || !regionOpen(region, progress)) return
-  fillIfEmpty(userId, region, progress, now)
-}
-
+/**
+ * Revela o campo (vazio) da área: gasta 1 de energia, e todos os Pokémon que
+ * aparecem saem com ela (PROGRESSAO.md, 4.2). Chegar numa área não revela nada.
+ */
 function explore(userId: number, now: number) {
   const clock = persistCatchUp(userId, now)
   const area = hereArea(userId, clock.level)
   if (!area.ok) return area
   if (fieldSource(area.region, area.progress).slots.length === 0) return fail('no_field_here', 400)
-  if (!fillIfEmpty(userId, area.region, area.progress, now)) return fail('field_not_empty', 409)
+  if (!isEmpty(userId, area.region)) return fail('field_not_empty', 409)
+  if (trainerConfig.energyEnabled && clock.energy < 1) return fail('no_energy', 400)
+  fillIfEmpty(userId, area.region, area.progress, now)
+  if (trainerConfig.energyEnabled) {
+    getDb()
+      .update(trainers)
+      .set({ energy: clock.energy - 1, updatedAt: now })
+      .where(eq(trainers.userId, userId))
+      .run()
+  }
   return fieldView(userId, now)
 }
 
@@ -258,7 +263,8 @@ function engage(userId: number, slot: number, now: number) {
     area.region,
     now,
     { speciesId: chosen.speciesId, level: chosen.level, isShiny: chosen.isShiny },
-    { rngSeed: chosen.rngSeed, countSeen: false },
+    // A energia foi paga ao revelar o campo: cada luta dele sai de graça.
+    { rngSeed: chosen.rngSeed, countSeen: false, free: true },
   )
   if (!created.ok) return created
   // Saiu do gramado para a luta; a vaga fica vazia (os outros continuam).

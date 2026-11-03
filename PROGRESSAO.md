@@ -122,8 +122,8 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 ## 5. O que falta construir (em ordem)
 
-1. **Marco = só o líder:** tirar o nível de treinador do requisito; o painel do marco mostra o líder.
-2. **Energia por campo revelado:** religar a energia, gastando ao revelar o campo (não na luta); recarga por tempo e pelas berries.
+1. ~~**Marco = só o líder**~~ (feito em 2026-11-03).
+2. ~~**Energia por campo revelado**~~ (feito em 2026-11-03): chegar numa área não revela nada; "Revelar campo" gasta 1 e as lutas daquele campo saem de graça; procurar no mato e usar mancha (pesca, árvore, pedra) gastam 1; líder não gasta. Máximo 10, volta 1 por hora; a Oran dá +2.
 3. **Fome trava a luta:** pet com fome não entra em luta; colheita com mais berries; alimentar vários de uma vez.
 4. **HP persistente e máquina de cura:** HP fica depois da luta; cura por berry, por descanso no jardim e pela máquina de cura (estrutura do jardim).
 5. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, missões e nível.
@@ -137,4 +137,4 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 ## 6. Pontos a decidir
 
 - Quanto mais lento o jardim fica e quantas berries a colheita passa a dar (sai do balanço do item 7).
-- A máquina de cura: cura na hora com tempo de recarga, ou cura por tempo (mais rápido que o descanso).
+- ~~A máquina de cura~~: decidido em 2026-11-03: cura na hora, com usos limitados que recarregam com o tempo.

@@ -60,6 +60,9 @@ test('cidade não tem campo; na rota aparecem 4 da área, já vistos, e o campo 
   assert.equal(await errorOf(await field(cookie)), 'no_field_here')
 
   await post('/places/travel', cookie, { to: 'route-29' })
+  // Chegar não revela: o campo começa vazio e revelar gasta 1 de energia.
+  assert.equal((await spawnsOf(cookie)).length, 0)
+  assert.equal((await post('/field/explore', cookie)).status, 200)
   const spawns = await spawnsOf(cookie)
   assert.equal(spawns.length, battleConfig.fieldSize)
   assert.deepEqual(
@@ -89,6 +92,7 @@ test('cidade não tem campo; na rota aparecem 4 da área, já vistos, e o campo 
 test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e a vaga fica vazia', async () => {
   const { cookie } = player('kris')
   await post('/places/travel', cookie, { to: 'route-29' })
+  await post('/field/explore', cookie)
   const before = await spawnsOf(cookie)
   const target = before[1]!
 
@@ -119,9 +123,14 @@ test('enfrentar leva o Pokémon do campo para o encontro, com a mesma semente, e
   assert.equal((await spawnsOf(cookie)).find((spawn) => spawn.slot === 2)?.id, other.id)
 })
 
-test('explorar de novo: só com o campo vazio; chegar na área enche o campo vazio', async () => {
+test('revelar o campo gasta 1 de energia; as lutas dele não gastam; sem energia, não revela', async () => {
   const { cookie, userId } = player('lyra')
   await post('/places/travel', cookie, { to: 'route-29' })
+  const energyOf = () =>
+    (getSqlite().prepare(`select energy from trainers where user_id = ?`).get(userId) as { energy: number }).energy
+  const before = energyOf()
+  assert.equal((await post('/field/explore', cookie)).status, 200)
+  assert.equal(energyOf(), before - 1)
   const response = (await (await field(cookie)).json()) as { spawns: Spawn[]; canExplore: boolean }
   assert.equal(response.canExplore, false)
   assert.equal(await errorOf(await post('/field/explore', cookie)), 'field_not_empty')
@@ -131,6 +140,8 @@ test('explorar de novo: só com o campo vazio; chegar na área enche o campo vaz
     assert.equal((await post(`/field/${spawn.slot}/engage`, cookie)).status, 201)
     clearEncounter.run(userId)
   }
+  // As 4 lutas saíram com a mesma energia do revelar.
+  assert.equal(energyOf(), before - 1)
   // Vazio: o GET não repõe ninguém, mas oferece explorar.
   const empty = (await (await field(cookie)).json()) as { spawns: Spawn[]; canExplore: boolean }
   assert.equal(empty.spawns.length, 0)
@@ -142,11 +153,11 @@ test('explorar de novo: só com o campo vazio; chegar na área enche o campo vaz
   assert.equal(filled.spawns.length, battleConfig.fieldSize)
   assert.equal(filled.canExplore, false)
 
-  // Esvazia de novo, sai e volta: a chegada enche.
+  // Sem energia, não revela (e nada é gasto).
   getSqlite().prepare(`delete from field_spawns where user_id = ?`).run(userId)
-  await post('/places/travel', cookie, { to: 'new-bark' })
-  await post('/places/travel', cookie, { to: 'route-29' })
-  assert.equal((await spawnsOf(cookie)).length, battleConfig.fieldSize)
+  getSqlite().prepare(`update trainers set energy = 0, energy_updated_at = ? where user_id = ?`).run(Date.now(), userId)
+  assert.equal(await errorOf(await post('/field/explore', cookie)), 'no_energy')
+  assert.equal((await spawnsOf(cookie)).length, 0)
 })
 
 test('vaga inexistente e área fechada são recusadas', async () => {

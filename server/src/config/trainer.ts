@@ -1,8 +1,9 @@
 export const trainerConfig = {
-  // Desligada em 2026-10-29: o freio da energia atrapalhava mais do que
-  // ajudava. Com false, encontro não gasta nem exige energia, e a tela some
-  // com ela. Religar (ou trocar por outro freio) é só voltar para true.
-  energyEnabled: false,
+  // Religada em 2026-11-03 com outra regra (PROGRESSAO.md, 4.2): gasta 1 ao
+  // revelar um campo (todos os Pokémon dele saem com ela) e ao usar uma mancha
+  // (pesca, árvore, pedra); a luta do campo e o líder não gastam. Volta por
+  // tempo e pelas berries (Oran).
+  energyEnabled: true,
   energyMax: 10,
   /** Tamanho máximo do time (o time inteiro vai para a luta). */
   teamMax: 6,

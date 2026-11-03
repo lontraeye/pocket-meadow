@@ -1044,6 +1044,8 @@
   {#if step === 'regions'}
     {#key journeyKey}
     <Journey
+      energy={game.trainer.energyEnabled ? game.trainer.energy : null}
+      onEnergySpent={() => void onState()}
       busy={pending}
       {searching}
       hasEncounter={game.encounter !== null}

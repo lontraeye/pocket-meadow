@@ -30,6 +30,8 @@
     extras,
     startOnField = false,
     onMapView,
+    energy = null,
+    onEnergySpent,
   }: {
     /** Outra ação em andamento na exploração (procura, luta). */
     busy: boolean
@@ -54,6 +56,10 @@
     startOnField?: boolean
     /** A jornada (mapa ou campo) está na tela (true) ou não (carregando, luta, saiu). */
     onMapView?: (shown: boolean) => void
+    /** Energia do treinador (revelar o campo gasta 1); null = desligada. */
+    energy?: number | null
+    /** Revelou o campo: o estado do jogo (a energia) precisa recarregar. */
+    onEnergySpent?: () => void
   } = $props()
 
   let data = $state<PlacesResponse | null>(null)
@@ -174,6 +180,7 @@
       }
       field = payload as FieldResponse
       spawnSlot = null
+      onEnergySpent?.()
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -634,15 +641,20 @@
             <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>
             <p class="hint pick-hint locked">{field.fieldBlock}.</p>
           {:else if field?.canExplore}
-            <p class="hint">O campo ficou vazio.</p>
+            <!-- Revelar gasta 1 de energia; as lutas deste campo saem com ela. -->
+            <p class="hint">
+              {energy !== null && energy < 1
+                ? 'Sem energia: volta 1 por hora, ou use uma Oran Berry.'
+                : 'Revelar o campo gasta 1 de energia; as lutas dele não gastam.'}
+            </p>
             <button
               type="button"
               class="btn btn-primary"
               aria-busy={exploring}
-              disabled={pending || exploring || hasEncounter}
+              disabled={pending || exploring || hasEncounter || (energy !== null && energy < 1)}
               onclick={exploreAgain}
             >
-              {exploring ? 'Procurando…' : 'Explorar de novo'}
+              {exploring ? 'Procurando…' : energy !== null ? 'Revelar campo · 1 de energia' : 'Revelar campo'}
             </button>
           {:else}
             <button type="button" class="btn btn-primary ghost" tabindex="-1" aria-hidden="true">Batalhar</button>

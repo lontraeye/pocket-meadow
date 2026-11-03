@@ -211,7 +211,8 @@ export type ForcedWild = { speciesId: number; level: number; isShiny: boolean }
  * Opções do campo de encontro: a semente já sorteada com o Pokémon do
  * gramado (o replay continua batendo) e o "visto", que já contou ao aparecer.
  */
-export type EncounterOptions = { rngSeed?: number; countSeen?: boolean }
+/** `free`: a energia já foi paga antes (o campo revelado); a luta não gasta. */
+export type EncounterOptions = { rngSeed?: number; countSeen?: boolean; free?: boolean }
 
 export function createEncounter(
   userId: number,
@@ -229,7 +230,8 @@ export function createEncounter(
     .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .get()
   if (pending) return fail('encounter_pending', 409)
-  if (trainerConfig.energyEnabled && clock.energy < 1) return fail('no_energy', 400)
+  const spendsEnergy = trainerConfig.energyEnabled && !options.free
+  if (spendsEnergy && clock.energy < 1) return fail('no_energy', 400)
   // Lugar só de água: sem mato para procurar (vem pela mancha, já sorteado).
   if (!forced && region.slots.length === 0) return fail('no_grass', 400)
 
@@ -281,7 +283,7 @@ export function createEncounter(
 
   db.update(trainers)
     .set({
-      energy: trainerConfig.energyEnabled ? clock.energy - 1 : clock.energy,
+      energy: spendsEnergy ? clock.energy - 1 : clock.energy,
       totalEncounters: sql`${trainers.totalEncounters} + 1`,
       updatedAt: now,
     })
