@@ -169,7 +169,19 @@
   const clock = serverClock(() => game?.now ?? 0)
 
   const ready = $derived(
-    game ? readyStatus({ plots: game.plots, daycare: game.daycare }, clock.now()) : null,
+    game
+      ? readyStatus(
+          {
+            plots: game.plots,
+            daycare: game.daycare,
+            missions: game.missions,
+            gifts: game.garden.gifts,
+            pets: game.pokemon.filter((mon) => mon.location === 'garden'),
+            needThreshold: game.garden.needThreshold,
+          },
+          clock.now(),
+        )
+      : null,
   )
   const showReadyBanner = $derived(
     screen === 'meadow' && ready !== null && shouldShowReadyBanner(ready, dismissedReady),
@@ -314,12 +326,13 @@
 
   function onReadyBanner() {
     if (!ready) return
-    if (ready.berryCount > 0) {
+    if (ready.target === 'plot') {
       focusPlot = ready.readyPlots[0] ?? null
       screen = 'meadow'
-      return
-    }
-    if (ready.daycareFullCount > 0) screen = 'daycare'
+    } else if (ready.target === 'missions') missionsOpen = true
+    else if (ready.target === 'daycare') screen = 'daycare'
+    // Presentes, fome e carinho já estão à vista no jardim: o toque só fecha.
+    else dismissReady()
   }
 
   function dismissReady() {

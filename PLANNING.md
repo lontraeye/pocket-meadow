@@ -80,6 +80,13 @@ Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar.
 6. **Amaciar os muros** em paralelo: o painel do marco diz quanto falta, e o balanço dos líderes entra com o playtest (seção 11).
 7. **Congelar sistemas novos do mundo** até os itens 1 a 3 estarem no ar e jogados por alguns dias. Ficam parados: Liga contínua, rival, Equipe Rocket, Kanto, breed e personagem (5.17).
 
+#### Mais idle, menos exploração (decidido em 2026-11-03)
+Com o pet, as missões e o jardim em tiles no ar, o jogo se aproxima mais da proposta **idle**: progresso que corre pelo tempo e motivo para voltar várias vezes ao dia.
+- **A exploração fica como está, mas sai da prioridade.** Mapa, campo, ferramentas e luta continuam funcionando e recebem só correções. Nenhuma feature nova do mundo até segunda ordem; o item 7 acima vale para tudo do mundo, não só para a lista.
+- **A captura continua ativa** (lançar a bola, seção 5.6). Não vira automática.
+- **A jornada e os marcos continuam como objetivo de longo prazo.** O balanço deles vai mudar com o tempo para servir ao retorno: o avanço depende mais do que o jardim rendeu enquanto o jogador estava fora e menos de repetir luta (liga com o item 6).
+- **Prioridade:** o que gera progresso por tempo e chama de volta (avisos de "pronto", cadeias de produção, habitats, visitantes) vem antes de qualquer coisa ativa.
+
 ---
 
 ## 2. Princípios de arquitetura (importante)
@@ -1470,6 +1477,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
   - energia cheia: no próprio HUD.
 - Tudo calculado com o `serverClock` (mesmo relógio das outras telas). Quando um contador chega a zero na tela, o aviso aparece sem recarregar. O servidor continua decidindo na próxima ação.
 - Sem rota nova e sem mudança de schema.
+- **Ampliado em 2026-11-03** (`web/src/lib/ready.ts`): o aviso junta berries prontas, missões e baú para resgatar, daycare cheio, presentes no chão, pets do jardim com fome e pets com carinho abaixo do limite (`needThreshold`) que já aceitam carinho. Ex.: "1 berry pronta · 1 missão pronta · 2 presentes · 2 com fome". O toque leva ao primeiro item que tem lugar (canteiro, quadro de missões, daycare); se só há presentes e pets, que já estão à vista no jardim, o toque fecha o aviso. A fome usa o valor do último `GET /state`, sem projetar a queda na tela.
 
 *6.2 — Captura com suspense e destaques de progresso*
 - **A resposta da batalha chega inteira antes da cena.** A animação só encena um resultado já decidido. Nada de nova requisição nem rolagem no meio.
@@ -1566,7 +1574,7 @@ Na primeira entrada pelo Google: escolher o nome de treinador e 1 inicial entre 
 - Decisões: `BerryDef.effect` opcional; bônus = `catch_boost` × berry × qualidade × curva; fuga com `fleeBase`/`fleeStep`/`fleeMax`; servidor confia na qualidade enviada (jogo solo). A física da 9.4 foi refeita na revisão (auxílio de mira, arco único, giro com inércia): ver "Feito em 2026-10-28" na seção 5.6.
 - ~~*Anel colorido pela chance* (seção 5.6):~~ feito em 2026-10-28 (`ringColorFor`, cores `#3ecf5a` / `#e8c547` / `#ef7a2e` / `#e05a4a`).
 
-**Jardim no centro (decidido em 2026-10-30, seção 1.1):** vem antes de qualquer sistema novo do mundo. Na ordem: cuidado como pet (5.21), avisos de "pronto" e quadro de missões (6.1 e 5.20), primeira cadeia de produção em lugares fixos (5.16), construção e decoração, visitantes.
+**Jardim no centro (decidido em 2026-10-30, seção 1.1):** vem antes de qualquer sistema novo do mundo. Na ordem: cuidado como pet (5.21), avisos de "pronto" e quadro de missões (6.1 e 5.20), primeira cadeia de produção em lugares fixos (5.16), construção e decoração, visitantes. **Mais idle (2026-11-03, seção 1.1):** a exploração fica como está e sai da prioridade; captura segue ativa; a jornada continua como objetivo, com o balanço puxado para o retorno.
 
 **Jornada (mapeada em 2026-10-29, `JORNADA.md`):** região inicial à escolha, capítulos e marcos por região, ~65 áreas, ferramentas (pesca, Surf, Headbutt, Rock Smash) e o caminho de cada espécie especial. É a próxima frente; a ordem de implementação está na seção 9 de lá.
 
