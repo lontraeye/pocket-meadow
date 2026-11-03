@@ -587,6 +587,13 @@
             <span class="badge" aria-label={`${ready.daycareFullCount} prontos`}>{ready.daycareFullCount}</span>
           {/if}
         </button>
+        <!-- Alimentar todos (faminto não luta): sempre à mão, com quantos estão com fome. -->
+        <button type="button" class="btn badge-host" onclick={() => (feedOpen = true)}>
+          Alimentar
+          {#if ready && ready.hungryCount > 0}
+            <span class="badge" aria-label={`${ready.hungryCount} com fome`}>{ready.hungryCount}</span>
+          {/if}
+        </button>
         <button
           type="button"
           class="btn btn-primary"
@@ -1516,7 +1523,7 @@
 
   .docks {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1.4fr;
     gap: 0.35rem;
     flex: none;
   }
@@ -1528,6 +1535,15 @@
     padding-left: 0.35rem;
     padding-right: 0.35rem;
     font-size: 16px;
+  }
+
+  /* Quatro botões no celular estreito: a letra desce um pouco para caber. */
+  @media (max-width: 399px) {
+    .docks .btn {
+      padding-left: 0.2rem;
+      padding-right: 0.2rem;
+      font-size: 14px;
+    }
   }
 
   .badge {
