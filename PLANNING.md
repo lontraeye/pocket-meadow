@@ -20,6 +20,8 @@ Loop principal: **encontro → batalha (XP) → captura → time mais forte → 
 
 O jogo é online. Dá para ver o jardim de outra pessoa. Não há batalha direta entre jogadores. As interações sociais previstas são adicionar amigos, deixar um presente para um amigo e trocar Pokémon. O schema e a fase disso ficam para depois do loop single-player. Presente e troca seguem as regras que já existem: o servidor resolve, a operação roda em transação, e um jogador não pode ficar com zero Pokémon.
 
+> **Progressão e prioridades (2026-11-03):** o mapa atual das features, a simulação da campanha e a ordem do que falta estão em [PROGRESSAO.md](PROGRESSAO.md). Ele vale mais que as listas de prioridade antigas deste arquivo.
+
 ### 1.1 Pilares e mapa das features (2026-10-30)
 Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar. O jogo ganhou muitas features, mas elas não empurram o jogador para a frente nem o fazem voltar. E o jogo virou dois jogos paralelos: a exploração do mundo, que cresceu muito, e o cuidado com o jardim, que ficou pequeno. O jardim era a ideia inicial e o diferencial. Esta seção junta os dois, encaixa cada feature e diz o que arrumar antes de qualquer sistema novo.
 
