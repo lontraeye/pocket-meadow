@@ -38,13 +38,12 @@
       { key: 'jardim', title: 'Jardim', list: pets.filter((mon) => mon.teamSlot === null && !roleOf(mon)).sort(byHunger) },
     ].filter((group) => group.list.length > 0),
   )
-  const average = (pick: (mon: OwnedPokemon) => number) =>
-    pets.length === 0 ? 0 : Math.round(pets.reduce((sum, mon) => sum + pick(mon), 0) / pets.length)
-  const summary = $derived([
-    { key: 'fome', label: 'Fome', value: average((mon) => mon.pet.hunger), color: '#e8a13a' },
-    { key: 'carinho', label: 'Carinho', value: average((mon) => mon.pet.affection), color: '#e0708e' },
-    { key: 'felicidade', label: 'Felicidade', value: average((mon) => mon.pet.happiness), color: '#6fc46a' },
-  ])
+  /** As três barrinhas de cada Pokémon, na mesma ordem da legenda. */
+  const STATS = [
+    { key: 'hunger', label: 'Fome', color: '#e8a13a' },
+    { key: 'affection', label: 'Carinho', color: '#e0708e' },
+    { key: 'happiness', label: 'Felicidade', color: '#6fc46a' },
+  ] as const
   const hungryCount = $derived(pets.filter((mon) => mon.pet.hunger < game.garden.fullAt).length)
   const berries = $derived(
     game.inventory
@@ -114,16 +113,12 @@
   {#if pets.length === 0}
     <p class="hint">Nenhum Pokémon no jardim.</p>
   {:else}
-    <!-- Resumo: médias do jardim (ou do time, quando aberto antes da luta). -->
-    <div class="summary">
-      {#each summary as item (item.key)}
-        <div class="sum">
-          <span class="sum-label">{item.label}</span>
-          <span class="bar" aria-hidden="true"><i style:width="{item.value}%" style:background={item.color}></i></span>
-          <span class="sum-value">{item.value}</span>
-        </div>
+    <!-- Legenda das três barrinhas de cada Pokémon. -->
+    <p class="legend">
+      {#each STATS as stat (stat.key)}
+        <span><i style:background={stat.color}></i>{stat.label}</span>
       {/each}
-    </div>
+    </p>
 
     <div class="all">
       <button
@@ -146,7 +141,6 @@
         <h3>{group.title}</h3>
         <ul class="list">
           {#each group.list as mon (mon.id)}
-            {@const hunger = Math.round(mon.pet.hunger)}
             {@const starving = mon.pet.hunger < game.garden.fightMinHunger}
             {@const full = mon.pet.hunger >= game.garden.fullAt}
             {@const role = roleOf(mon)}
@@ -155,10 +149,15 @@
               <div class="info">
                 <span class="name">{mon.nickname ?? mon.displayName} <small>Nv {mon.level}</small></span>
                 {#if role}<small class="role">{role}</small>{/if}
-                <span class="hunger">
-                  <span class="bar" class:low={starving} aria-label="Fome {hunger}"><i style:width="{hunger}%"></i></span>
-                  <small class:warn={starving}>{starving ? `${hunger} · não luta` : hunger}</small>
+                <span class="stats">
+                  {#each STATS as stat (stat.key)}
+                    {@const value = Math.round(mon.pet[stat.key])}
+                    <span class="mini" aria-label="{stat.label} {value}" title="{stat.label} {value}">
+                      <i style:width="{value}%" style:background={stat.key === 'hunger' && starving ? '#d9534f' : stat.color}></i>
+                    </span>
+                  {/each}
                 </span>
+                {#if starving}<small class="warn">com fome · não luta</small>{/if}
               </div>
               <button
                 type="button"
@@ -221,41 +220,44 @@
     opacity: 0.75;
   }
 
-  .summary {
-    display: grid;
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0;
+    font-size: 0.8rem;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
     gap: 0.25rem;
   }
 
-  .sum {
+  .legend i {
+    display: inline-block;
+    width: 10px;
+    height: 6px;
+  }
+
+  /* Três barrinhas finas por Pokémon: fome, carinho, felicidade. */
+  .stats {
     display: grid;
-    grid-template-columns: 5.5rem minmax(0, 1fr) 2rem;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
+    gap: 2px;
+    max-width: 9rem;
   }
 
-  .sum-value {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .bar {
+  .mini {
     position: relative;
     display: block;
-    height: 10px;
-    border: 2px solid var(--panel-edge, #2b2b2b);
-    background: #e6e2d6;
+    height: 4px;
+    background: #00000022;
     overflow: hidden;
   }
 
-  .bar i {
+  .mini i {
     position: absolute;
     inset: 0 auto 0 0;
-    background: #e8a13a;
-  }
-
-  .bar.low i {
-    background: #d9534f;
   }
 
   .all {
@@ -310,15 +312,8 @@
     font-weight: 700;
   }
 
-  .hunger {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.8rem;
-  }
-
   .warn {
+    font-size: 0.75rem;
     color: #c0392b;
     font-weight: 700;
   }
