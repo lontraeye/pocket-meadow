@@ -180,6 +180,7 @@
             needThreshold: game.garden.needThreshold,
             tree: game.garden.tree,
             benchJob: game.garden.bench.job,
+            ballsPerApricorn: game.garden.bench.ballsPerApricorn,
           },
           clock.now(),
         )

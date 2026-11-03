@@ -152,14 +152,15 @@ test('lote de Poké Balls: começa, coleta as prontas, cancela devolvendo o rest
 
   rewindJob(p.userId, job.unitMs * 2)
   const collected = (await (await bench(p.cookie, 'collect')).json()) as { balls: number }
-  assert.equal(collected.balls, 2)
-  assert.equal(balls(p.userId), before + 2)
+  // Cada Apricorn vira 2 Poké Balls.
+  assert.equal(collected.balls, 4)
+  assert.equal(balls(p.userId), before + 4)
 
   rewindJob(p.userId, job.unitMs)
   const cancelled = (await (await bench(p.cookie, 'cancel')).json()) as { balls: number; refunded: number; bench: { job: unknown } }
-  assert.deepEqual([cancelled.balls, cancelled.refunded], [1, 2])
+  assert.deepEqual([cancelled.balls, cancelled.refunded], [2, 2])
   assert.equal(cancelled.bench.job, null)
-  assert.equal(balls(p.userId), before + 3)
+  assert.equal(balls(p.userId), before + 6)
   assert.equal(apricorns(p.userId), 2)
 })
 
@@ -177,4 +178,10 @@ test('operador feliz trabalha mais rápido; operador não vai para o time, PC ne
   assert.deepEqual(immediate(() => movePokemon(p.userId, sentret, 'team')), { ok: false, error: 'operating' })
   assert.deepEqual(immediate(() => movePokemon(p.userId, sentret, 'pc')), { ok: false, error: 'operating' })
   assert.deepEqual(immediate(() => setTeam(p.userId, [starter, sentret])), { ok: false, error: 'operating' })
+})
+
+test('Headbutt pode soltar Apricorn', async () => {
+  const { spotDropsConfig } = await import('../config/spotDrops.js')
+  const row = spotDropsConfig.tables.headbutt.find((entry) => entry.itemKey === APRICORN_ITEM)
+  assert.ok(row && row.weight > 0)
 })

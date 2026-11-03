@@ -32,8 +32,9 @@ export const apricornConfig = {
     ],
     /** Operador com felicidade 100 faz cada bola nesta fração a menos de tempo. */
     speedBonus: 0.25,
-    /** O que sai de cada Apricorn. */
+    /** O que sai de cada Apricorn, e quantas. */
     output: 'ball:poke',
+    ballsPerApricorn: 2,
   },
 }
 

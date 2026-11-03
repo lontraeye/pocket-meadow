@@ -1,5 +1,5 @@
 import type { BenchView, DaycareState, GardenGift, MissionsView, PetView, PlotState, TreeView } from './api'
-import { benchDone } from './bench'
+import { benchDone } from './benchJob'
 
 export type ReadyInput = {
   plots: Pick<PlotState, 'plotIndex' | 'readyAt'>[]
@@ -11,6 +11,8 @@ export type ReadyInput = {
   needThreshold: number
   tree: Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'>
   benchJob: BenchView['job']
+  /** Poké Balls de cada Apricorn do lote. */
+  ballsPerApricorn: number
 }
 
 /** Para onde o toque no aviso leva: o primeiro item que tem lugar próprio. */
@@ -62,7 +64,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
 
   // Poké Balls prontas na bancada, esperando coletar.
   const job = input.benchJob
-  const benchReady = job ? benchDone(job, now) - job.collected : 0
+  const benchReady = job ? (benchDone(job, now) - job.collected) * input.ballsPerApricorn : 0
 
   const readyPlots = plots.map((plot) => plot.plotIndex)
   const berryCount = readyPlots.length

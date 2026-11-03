@@ -1404,6 +1404,10 @@ A primeira cadeia de produção (seção 1.1, item 3; 5.16, "Crafting"). Uma ár
 
 **Feito em 2026-11-03 (parte 2, `feat/apricorn`):** `db/bench.ts` e `POST /garden/bench/operator`, `/start`, `/collect`, `/cancel` (cada um devolve a bancada); migração `0026_craft_jobs`. A bancada nasce junto com a árvore (mesmo nível). O operador sai do time e fica travado: time, PC, daycare e soltar respondem `operating` até ele sair da bancada. O tempo de cada bola sai da felicidade do operador no começo do lote. Na tela: bancada provisória em pixel art (`web/src/lib/bench.ts`) a uma casa da árvore, o operador parado atrás dela (fora do passeio e sem balão por enquanto), "N prontas" sobre a mesa; tocar abre o painel (`BenchPanel.svelte`): escolher, trocar ou tirar o operador, quantidade de 1 até o lote com o horário de pronto, barra do lote, "Coletar" e "Cancelar". O aviso ganha "N bolas prontas". O cenário de teste põe o Sentret operando um lote de 5 com 2 prontas.
 
+**Ajustes de 2026-11-03:** **1 Apricorn = 2 Poké Balls** (`ballsPerApricorn`; o lote continua contando Apricorns, até 5, e o painel mostra "5 Apricorns → 10 Poké Balls"). O **Headbutt** do campo passa a soltar Apricorn (peso 50 contra 100 das berries: ~1/3 dos itens da árvore), para complementar a árvore do jardim. Arte própria do usuário na árvore e na máquina (`art/jardim/`, CC0); a máquina é uma folha de 26 quadros (parada, 24 de trabalho, pronta) com tempo por quadro em `web/src/lib/bench.ts`.
+
+**Ideia para depois (2026-11-03, exploração fora da prioridade, seção 1.1):** trocar o campo de encontro da exploração (5.14) por um campo isométrico com os mesmos tiles do jardim, e as manchas de árvore (Headbutt) e de água (pesca, Surf) pela arte isométrica (a árvore de Apricorn e um lago).
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")

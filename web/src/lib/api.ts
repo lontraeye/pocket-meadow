@@ -355,6 +355,7 @@ export type BenchView = {
   batchSize: number
   unitMs: number
   speedBonus: number
+  ballsPerApricorn: number
   operatorTypes: string[]
   operatorId: number | null
   job: { id: number; quantity: number; unitMs: number; startedAt: number; collected: number } | null

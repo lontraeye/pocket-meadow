@@ -20,6 +20,8 @@ export type BenchView = {
   /** Tempo de cada bola no nível, antes do bônus do operador. */
   unitMs: number
   speedBonus: number
+  /** Poké Balls que saem de cada Apricorn. */
+  ballsPerApricorn: number
   operatorTypes: string[]
   operatorId: number | null
   job: BenchJobView | null
@@ -96,6 +98,7 @@ export function benchView(userId: number, level: number, now: number): BenchView
     batchSize: tier.batchSize,
     unitMs: tier.unitMs,
     speedBonus: config.speedBonus,
+    ballsPerApricorn: config.ballsPerApricorn,
     operatorTypes: config.operatorTypes,
     operatorId: bench?.operatorId ?? null,
     job: bench ? activeJob(userId) : null,
@@ -170,12 +173,12 @@ export function startJob(userId: number, level: number, quantity: number, now: n
   return { ok: true, job: { id: row.id, quantity, unitMs, startedAt: now, collected: 0 } }
 }
 
-/** Entrega as bolas prontas; o resto do lote segue. */
+/** Entrega as bolas prontas; o resto do lote segue. O lote conta Apricorns. */
 export function collectJob(userId: number, now: number): Result<{ balls: number }> {
   const job = activeJob(userId)
   if (!job) return { ok: false, error: 'no_job' }
   const done = jobDone(job, now)
-  const balls = done - job.collected
+  const balls = (done - job.collected) * apricornConfig.bench.ballsPerApricorn
   if (balls <= 0) return { ok: false, error: 'nothing_ready' }
   getDb().update(craftJobs).set({ collected: done }).where(eq(craftJobs.id, job.id)).run()
   creditItems(userId, [{ itemKey: apricornConfig.bench.output, quantity: balls }])
@@ -187,7 +190,7 @@ export function cancelJob(userId: number, now: number): Result<{ balls: number; 
   const job = activeJob(userId)
   if (!job) return { ok: false, error: 'no_job' }
   const done = jobDone(job, now)
-  const balls = done - job.collected
+  const balls = (done - job.collected) * apricornConfig.bench.ballsPerApricorn
   const refunded = job.quantity - done
   getDb().update(craftJobs).set({ collected: done, cancelledAt: now }).where(eq(craftJobs.id, job.id)).run()
   creditItems(userId, [

@@ -2,7 +2,7 @@
   // Bancada de bolas (PLANNING.md, seção 5.23): escolher o operador, pôr os
   // Apricorns num lote, coletar as Poké Balls prontas e cancelar.
   import { api, errorText, type ApiError, type GameState } from './api'
-  import { benchDone } from './bench'
+  import { benchDone } from './benchJob'
   import { serverClock } from './serverClock.svelte'
   import { play } from './sound'
   import { spriteLoading } from './spriteLoading'
@@ -17,6 +17,9 @@
   const operator = $derived(game.pokemon.find((mon) => mon.id === bench.operatorId) ?? null)
   const apricorns = $derived(game.inventory.find((row) => row.itemKey === 'mat:apricorn')?.quantity ?? 0)
   const maxQuantity = $derived(Math.min(bench.batchSize, apricorns))
+  /** Poké Balls de cada Apricorn. */
+  const per = $derived(bench.ballsPerApricorn)
+  const ballsText = (n: number) => `${n} ${n === 1 ? 'Poké Ball' : 'Poké Balls'}`
   /** Quem pode operar: do jardim, fora do time, de um dos tipos aceitos. */
   const candidates = $derived(
     game.pokemon.filter(
@@ -94,7 +97,7 @@
     <h2>Bancada de bolas</h2>
     <button type="button" class="btn close" aria-label="Fechar" onclick={onClose}>✕</button>
   </header>
-  <p class="hint">Cada Apricorn vira uma Poké Ball. Até {bench.batchSize} por lote.</p>
+  <p class="hint">Cada Apricorn vira {per === 1 ? 'uma Poké Ball' : `${per} Poké Balls`}. Até {bench.batchSize} Apricorns por lote.</p>
 
   <section class="panel block">
     <h3>Operador</h3>
@@ -141,11 +144,11 @@
       {@const job = bench.job}
       {@const now = clock.now()}
       {@const done = benchDone(job, now)}
-      {@const ready = done - job.collected}
+      {@const ready = (done - job.collected) * per}
       {@const endsAt = job.startedAt + job.quantity * job.unitMs}
       <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={job.quantity} aria-valuenow={done}>
         <span style:width="{(done / job.quantity) * 100}%"></span>
-        <b>{done}/{job.quantity} prontas</b>
+        <b>{done * per}/{job.quantity * per} Poké Balls</b>
       </div>
       <p class="hint">
         {#if done < job.quantity}
@@ -170,7 +173,7 @@
       <p class="hint">Apricorns na mochila: {apricorns}</p>
       <div class="stepper">
         <button type="button" class="btn" aria-label="Menos" disabled={quantity <= 1} onclick={() => (quantity -= 1)}>−</button>
-        <strong>{quantity} {quantity === 1 ? 'Poké Ball' : 'Poké Balls'}</strong>
+        <strong>{quantity} {quantity === 1 ? 'Apricorn' : 'Apricorns'} → {ballsText(quantity * per)}</strong>
         <button type="button" class="btn" aria-label="Mais" disabled={quantity >= maxQuantity} onclick={() => (quantity += 1)}>+</button>
       </div>
       <p class="hint">Pronto às {formatClockTime(clock.now() + quantity * unitMs)} ({formatCountdown(quantity * unitMs)})</p>

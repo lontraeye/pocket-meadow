@@ -4,7 +4,6 @@
 // primeiro quadro do GIF); do 1 ao 24, a alavanca e o Apricorn virando Poké
 // Ball, em loop enquanto trabalha; o 25, a bola pronta.
 
-import type { BenchView } from './api'
 import sheetUrl from '../../../art/jardim/maquina-apricorn.png?url'
 
 export const BENCH_SHEET = sheetUrl
@@ -33,7 +32,4 @@ export function benchWorkFrame(time: number): number {
   return BENCH_WORK_FIRST + index
 }
 
-/** Quantas do lote já ficaram prontas em `now` (igual ao servidor). */
-export function benchDone(job: Pick<NonNullable<BenchView['job']>, 'quantity' | 'unitMs' | 'startedAt'>, now: number): number {
-  return Math.max(0, Math.min(job.quantity, Math.floor((now - job.startedAt) / job.unitMs)))
-}
+export { benchDone } from './benchJob'

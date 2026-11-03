@@ -14,6 +14,7 @@ function input(over: Partial<ReadyInput> = {}): ReadyInput {
     needThreshold: 40,
     tree: { unlocked: true, ready: 0, cap: 5, readyAts: [now + 1000] },
     benchJob: null,
+    ballsPerApricorn: 1,
     ...over,
   }
 }
@@ -97,4 +98,6 @@ test('bolas prontas na bancada, sem contar as já coletadas', () => {
   assert.deepEqual(ready.ids, ['b3@parcial'])
   assert.equal(readyStatus(input({ benchJob: { ...job, collected: 3 } }), now).summary, null)
   assert.deepEqual(readyStatus(input({ benchJob: job }), now + 2000).ids, ['b3@fim'])
+  // Com 2 Poké Balls por Apricorn, o aviso conta bolas.
+  assert.equal(readyStatus(input({ benchJob: job, ballsPerApricorn: 2 }), now).summary, '4 bolas prontas')
 })

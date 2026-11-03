@@ -516,7 +516,7 @@
   /** Poké Balls prontas no lote, esperando coletar. */
   const benchReady = $derived.by(() => {
     const job = game.garden.bench.job
-    return job ? benchDone(job, clock.now()) - job.collected : 0
+    return job ? (benchDone(job, clock.now()) - job.collected) * game.garden.bench.ballsPerApricorn : 0
   })
   let benchOpen = $state(false)
 
