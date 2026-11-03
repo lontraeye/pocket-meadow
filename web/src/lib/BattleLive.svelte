@@ -374,9 +374,13 @@
     status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0 && !allyLocked,
   )
   // Troca: o servidor só exige o cooldown de switch (não o do golpe nem sleep/freeze).
-  // Desmaio no manual: a simulação para e espera a escolha (o relógio congela).
-  // No automático, entra o primeiro vivo na hora.
+  // Desmaio: a simulação para e espera a escolha (o relógio da luta congela).
+  // No automático, a escolha fica aberta por AUTO_SEND_MS; sem toque, entra o
+  // primeiro vivo e a luta segue.
+  const AUTO_SEND_MS = 4000
   const awaitingSend = $derived(status === 'live' && snap.awaitingSend)
+  let autoSendAt = $state<number | null>(null)
+  let autoSendTimer = 0
   $effect(() => {
     if (!awaitingSend) return
     untrack(() => {
@@ -385,15 +389,21 @@
       simBase = snap.t
       wallBase = performance.now()
       if (battleAuto) {
-        const next = snap.team.find((side) => !side.fainted && side.slot !== snap.activeSlot)
-        if (next) sendNext(next.slot)
+        autoSendAt = performance.now() + AUTO_SEND_MS
+        autoSendTimer = window.setTimeout(() => {
+          const next = snap.team.find((side) => !side.fainted && side.slot !== snap.activeSlot)
+          if (next) sendNext(next.slot)
+        }, AUTO_SEND_MS)
       }
     })
   })
+  const autoSendLeft = $derived(autoSendAt === null ? 0 : Math.max(0, Math.ceil((autoSendAt - clock) / 1000)))
 
   function sendNext(slot: number) {
     const side = snap.team[slot]
     if (!awaitingSend || !side || side.fainted || slot === snap.activeSlot) return
+    window.clearTimeout(autoSendTimer)
+    autoSendAt = null
     play('tap')
     paused = false
     wallBase = performance.now()
@@ -793,6 +803,7 @@
       alive = false
       cancelAnimationFrame(frame)
       window.clearTimeout(flashClear)
+      window.clearTimeout(autoSendTimer)
       clearSwitchTimers()
     }
   })
@@ -1890,7 +1901,11 @@
         </button>
       {:else}
         <div class="party" role="group" aria-label="Escolher Pokémon">
-          {#if awaitingSend}<p class="party-title">Quem vai agora?</p>{/if}
+          {#if awaitingSend}
+            <p class="party-title">
+              Quem vai agora?{#if autoSendAt !== null} <small>(automático em {autoSendLeft}s)</small>{/if}
+            </p>
+          {/if}
           <div class="party-list">
             {#each setup.team as fighter, slot (slot)}
               {@const side = snap.team[slot]!}

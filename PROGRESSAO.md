@@ -124,7 +124,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 1. ~~**Marco = só o líder**~~ (feito em 2026-11-03).
 2. ~~**Energia por campo revelado**~~ (feito em 2026-11-03): chegar numa área não revela nada; "Revelar campo" gasta 1 e as lutas daquele campo saem de graça; procurar no mato e usar mancha (pesca, árvore, pedra) gastam 1; líder não gasta. Máximo 10, volta 1 por hora; a Oran dá +2.
-2.1. ~~**Desmaio pausa a luta**~~ (feito em 2026-11-03): no manual, quando o Pokémon do jogador desmaia, a luta pausa e pergunta quem entra; no automático, entra o próximo vivo.
+2.1. ~~**Desmaio pausa a luta**~~ (feito em 2026-11-03): no manual, quando o Pokémon do jogador desmaia, a luta pausa e pergunta quem entra; no automático também pausa, com 4 s para escolher; sem toque, entra o próximo vivo e a luta segue.
 3. **Fome trava a luta:** pet com fome não entra em luta; colheita com mais berries; alimentar vários de uma vez.
 4. **HP persistente e máquina de cura:** HP fica depois da luta; cura por berry, por descanso no jardim e pela máquina de cura (estrutura do jardim).
 5. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, missões e nível.
