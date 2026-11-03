@@ -3,6 +3,7 @@
 // O pet feliz ganha XP no jardim e deixa presentes no chão. Tudo por
 // timestamp, calculado no pedido (seção 2): nada roda em loop.
 
+import { APRICORN_ITEM } from './apricorn.js'
 import { SEED_DROP_WEIGHTS } from './berries.js'
 
 const hourMs = 60 * 60 * 1000
@@ -48,6 +49,8 @@ export const petConfig = {
       ),
       { kind: 'genericCandy', min: 1, max: 3, weight: 60 },
       { kind: 'item', itemKey: 'ball:poke', min: 1, max: 2, weight: 40 },
+      // Apricorn (5.23): mais um caminho além da árvore e do Headbutt.
+      { kind: 'item', itemKey: APRICORN_ITEM, min: 1, max: 2, weight: 30 },
       { kind: 'item', itemKey: 'ball:great', min: 1, max: 1, weight: 10 },
     ] as readonly GiftDef[],
   },

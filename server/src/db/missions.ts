@@ -2,6 +2,7 @@ import { and, eq, lt, sql } from 'drizzle-orm'
 import { currentChapter } from '../config/milestones.js'
 import { type MissionKind, type MissionReward, missionConfig } from '../config/missions.js'
 import { loadRegions, regionOpen } from '../config/regions.js'
+import { apricornConfig } from '../config/apricorn.js'
 import { trainerXpToNext } from '../config/trainer.js'
 import { pickSeedByWeight } from '../game/berries.js'
 import { type MissionContext, type MissionParams, drawDay, drawMission, missionText } from '../game/missions.js'
@@ -9,6 +10,7 @@ import { mulberry32, randomSeed } from '../game/rng.js'
 import { nextWeatherChangeAt, weatherDay } from '../game/weather.js'
 import { grantXp } from '../game/xp.js'
 import { getDb, getSqlite } from './client.js'
+import { sumEvents } from './events.js'
 import { creditItems, grantTrainerLevelRewards } from './inventory.js'
 import { loadProgress } from './milestones.js'
 import { dailyMissions, missionDays, pokedexEntries, species, trainers } from './schema.js'
@@ -50,6 +52,7 @@ export function missionContext(userId: number, level: number): MissionContext {
     areaTypes: [...types].sort(),
     teamTypes: [...progress.teamTypes].sort(),
     hasNewSpecies: [...speciesIds].some((id) => !caught.has(id)),
+    gardenOpen: level >= apricornConfig.tree.unlockLevel,
   }
 }
 
@@ -114,6 +117,10 @@ export function missionProgress(userId: number, row: Pick<MissionRow, 'kind' | '
         params.type ?? '',
         params.type ?? '',
       )
+    case 'harvest_apricorn':
+      return sumEvents(userId, 'apricorn_harvest', since)
+    case 'make_balls':
+      return sumEvents(userId, 'balls_made', since)
   }
 }
 

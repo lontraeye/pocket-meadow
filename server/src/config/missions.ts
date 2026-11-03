@@ -2,7 +2,17 @@
 // primeiro acesso do dia (meia-noite de Brasília, a mesma do clima) e contadas
 // pelo que o jogo já guarda (encontros, Pokédex). Completar as 3 abre o baú.
 
-export type MissionKind = 'win_any' | 'win_area' | 'catch_any' | 'catch_type' | 'catch_new' | 'win_with_type'
+import { APRICORN_ITEM } from './apricorn.js'
+
+export type MissionKind =
+  | 'win_any'
+  | 'win_area'
+  | 'catch_any'
+  | 'catch_type'
+  | 'catch_new'
+  | 'win_with_type'
+  | 'harvest_apricorn'
+  | 'make_balls'
 
 export type MissionReward = {
   trainerXp: number
@@ -23,6 +33,9 @@ export const missionConfig = {
     catch_type: 2,
     catch_new: 2,
     win_with_type: 2,
+    // Jardim (5.23): só quando a árvore e a bancada estão abertas.
+    harvest_apricorn: 2,
+    make_balls: 2,
   } satisfies Record<MissionKind, number>,
   /** Quantas vezes cada missão pede, pelo nível de treinador. Alvo: 5 a 10 minutos de jogo. */
   target(kind: MissionKind, level: number): number {
@@ -38,12 +51,25 @@ export const missionConfig = {
         return 2
       case 'catch_new':
         return 1
+      // A árvore dá 1 a cada 3 h (até 5): 3 é um dia de voltar algumas vezes.
+      case 'harvest_apricorn':
+        return 3
+      // 2 Apricorns na bancada.
+      case 'make_balls':
+        return 4
     }
   },
   reward(kind: MissionKind, level: number): MissionReward {
     const trainerXp = 15 + 3 * level
     if (kind === 'catch_new') {
       return { trainerXp, genericCandies: 3, items: [{ itemKey: 'ball:great', quantity: 2 }] }
+    }
+    // Quem já produz Poké Balls ganha uma Great; quem colhe ganha mais Apricorn.
+    if (kind === 'make_balls') {
+      return { trainerXp, genericCandies: 2, items: [{ itemKey: 'ball:great', quantity: 1 }] }
+    }
+    if (kind === 'harvest_apricorn') {
+      return { trainerXp, genericCandies: 2, items: [{ itemKey: APRICORN_ITEM, quantity: 2 }] }
     }
     return { trainerXp, genericCandies: 2, items: [{ itemKey: 'ball:poke', quantity: 5 }] }
   },
@@ -55,6 +81,7 @@ export const missionConfig = {
       items: [
         { itemKey: 'ball:great', quantity: 3 },
         { itemKey: 'ball:ultra', quantity: 1 },
+        { itemKey: APRICORN_ITEM, quantity: 3 },
       ],
       randomSeed: true,
     }

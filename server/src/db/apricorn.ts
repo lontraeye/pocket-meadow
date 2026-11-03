@@ -4,6 +4,7 @@ import type { WeatherKey } from '../config/weather.js'
 import { harvestTree, settleTree, treeReadyTimes, type WeatherOf } from '../game/apricornTree.js'
 import { currentWeather, weatherDay, weatherForDay } from '../game/weather.js'
 import { getDb } from './client.js'
+import { recordEvent } from './events.js'
 import { creditItems } from './inventory.js'
 import { gardenStructures, trainers } from './schema.js'
 
@@ -74,5 +75,6 @@ export function harvestApricorns(userId: number, level: number, now: number): nu
     .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
     .run()
   creditItems(userId, [{ itemKey: APRICORN_ITEM, quantity: harvested }])
+  recordEvent(userId, 'apricorn_harvest', harvested, now)
   return harvested
 }

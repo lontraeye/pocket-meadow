@@ -379,6 +379,24 @@ export const craftJobs = sqliteTable(
   (table) => [index('idx_craft_jobs_user').on(table.userId, table.structureKey)],
 )
 
+/**
+ * Registro de ações que o jogo não guarda em outro lugar (5.20): colher
+ * Apricorns, produzir bolas. As missões somam `quantity` desde que apareceram.
+ */
+export const trainerEvents = sqliteTable(
+  'trainer_events',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['apricorn_harvest', 'balls_made'] }).notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    at: integer('at').notNull(),
+  },
+  (table) => [index('idx_trainer_events_kind').on(table.userId, table.kind, table.at)],
+)
+
 export const daycareSlots = sqliteTable(
   'daycare_slots',
   {

@@ -1406,6 +1406,8 @@ A primeira cadeia de produção (seção 1.1, item 3; 5.16, "Crafting"). Uma ár
 
 **Ajustes de 2026-11-03:** **1 Apricorn = 2 Poké Balls** (`ballsPerApricorn`; o lote continua contando Apricorns, até 5, e o painel mostra "5 Apricorns → 10 Poké Balls"). O **Headbutt** do campo passa a soltar Apricorn (peso 50 contra 100 das berries: ~1/3 dos itens da árvore), para complementar a árvore do jardim. Arte própria do usuário na árvore e na máquina (`art/jardim/`, CC0); a máquina é uma folha de 26 quadros (parada, 24 de trabalho, pronta) com tempo por quadro em `web/src/lib/bench.ts`.
 
+**Feito em 2026-11-03 (parte 3, direto na main):** Apricorn nos presentes dos pets (peso 30, 1 a 2) e no baú das missões (3). Missões novas "Colha 3 Apricorns da árvore" (prêmio: 2 Apricorns) e "Produza 4 Poké Balls na bancada" (prêmio: 1 Great Ball), sorteadas só com a árvore e a bancada abertas. Elas contam pela tabela `trainer_events` (`user_id`, `kind`, `quantity`, `at`; migração `0027_trainer_events`), que a colheita (`apricorn_harvest`) e a bancada ao coletar ou cancelar (`balls_made`) passam a gravar. Os Apricorns do Headbutt e dos presentes não contam como colheita. A mesma tabela serve às próximas missões de jardim (alimentar, colher berries).
+
 **Ideia para depois (2026-11-03, exploração fora da prioridade, seção 1.1):** trocar o campo de encontro da exploração (5.14) por um campo isométrico com os mesmos tiles do jardim, e as manchas de árvore (Headbutt) e de água (pesca, Surf) pela arte isométrica (a árvore de Apricorn e um lago).
 
 ---

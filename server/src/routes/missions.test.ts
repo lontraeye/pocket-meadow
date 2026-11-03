@@ -62,6 +62,7 @@ const ctx: MissionContext = {
   areaTypes: ['normal', 'flying'],
   teamTypes: ['grass'],
   hasNewSpecies: true,
+  gardenOpen: false,
 }
 
 test('drawDay: 3 missões de tipos diferentes, só as possíveis', () => {
@@ -72,6 +73,32 @@ test('drawDay: 3 missões de tipos diferentes, só as possíveis', () => {
   }
   const poor = drawDay({ ...ctx, areas: [], areaTypes: [], teamTypes: [], hasNewSpecies: false }, mulberry32(3))
   assert.deepEqual(poor.map((m) => m.kind).sort(), ['catch_any', 'win_any'])
+})
+
+test('missões do jardim só com a árvore e a bancada abertas', () => {
+  const kinds = new Set<string>()
+  for (let seed = 1; seed < 200; seed += 1) for (const m of drawDay(ctx, mulberry32(seed))) kinds.add(m.kind)
+  assert.ok(!kinds.has('harvest_apricorn') && !kinds.has('make_balls'))
+  const open = { ...ctx, gardenOpen: true }
+  for (let seed = 1; seed < 200; seed += 1) for (const m of drawDay(open, mulberry32(seed))) kinds.add(m.kind)
+  assert.ok(kinds.has('harvest_apricorn') && kinds.has('make_balls'))
+  assert.equal(missionText('harvest_apricorn', {}, 3), 'Colha 3 Apricorns da árvore')
+  assert.equal(missionText('make_balls', {}, 4), 'Produza 4 Poké Balls na bancada')
+})
+
+test('progresso das missões do jardim vem do registro de ações', async () => {
+  const { userId } = player('missao-jardim')
+  const { missionProgress } = await import('../db/missions.js')
+  const { recordEvent } = await import('../db/events.js')
+  const since = Date.now() - 1000
+  immediate(() => {
+    recordEvent(userId, 'apricorn_harvest', 2, since - 5000)
+    recordEvent(userId, 'apricorn_harvest', 2, since + 10)
+    recordEvent(userId, 'apricorn_harvest', 1, since + 20)
+    recordEvent(userId, 'balls_made', 4, since + 30)
+  })
+  assert.equal(missionProgress(userId, { kind: 'harvest_apricorn', params: '{}', assignedAt: since }), 3)
+  assert.equal(missionProgress(userId, { kind: 'make_balls', params: '{}', assignedAt: since }), 4)
 })
 
 test('missionText: textos em português', () => {

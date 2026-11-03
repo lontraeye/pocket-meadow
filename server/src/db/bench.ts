@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { APRICORN_ITEM, apricornConfig, benchLevel, benchUnitMs } from '../config/apricorn.js'
 import { getDb } from './client.js'
+import { recordEvent } from './events.js'
 import { creditItems, debitItem } from './inventory.js'
 import { craftJobs, gardenStructures, pokemon, species } from './schema.js'
 
@@ -182,6 +183,7 @@ export function collectJob(userId: number, now: number): Result<{ balls: number 
   if (balls <= 0) return { ok: false, error: 'nothing_ready' }
   getDb().update(craftJobs).set({ collected: done }).where(eq(craftJobs.id, job.id)).run()
   creditItems(userId, [{ itemKey: apricornConfig.bench.output, quantity: balls }])
+  recordEvent(userId, 'balls_made', balls, now)
   return { ok: true, balls }
 }
 
@@ -197,5 +199,6 @@ export function cancelJob(userId: number, now: number): Result<{ balls: number; 
     { itemKey: apricornConfig.bench.output, quantity: balls },
     { itemKey: APRICORN_ITEM, quantity: refunded },
   ].filter((item) => item.quantity > 0))
+  recordEvent(userId, 'balls_made', balls, now)
   return { ok: true, balls, refunded }
 }

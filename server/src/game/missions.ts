@@ -12,6 +12,8 @@ export type MissionContext = {
   teamTypes: string[]
   /** Há espécie dessas áreas que o jogador nunca capturou. */
   hasNewSpecies: boolean
+  /** Árvore de Apricorn e bancada abertas (5.23). */
+  gardenOpen: boolean
 }
 
 export type MissionParams = { region?: string; regionName?: string; type?: string }
@@ -27,6 +29,9 @@ function possible(kind: MissionKind, ctx: MissionContext): boolean {
       return ctx.hasNewSpecies
     case 'win_with_type':
       return ctx.teamTypes.length > 0
+    case 'harvest_apricorn':
+    case 'make_balls':
+      return ctx.gardenOpen
     default:
       return true
   }
@@ -92,5 +97,9 @@ export function missionText(kind: MissionKind, params: MissionParams, target: nu
       return 'Capture uma espécie que você ainda não tem'
     case 'win_with_type':
       return `Vença ${target} lutas com um Pokémon ${typeName(params.type)} no time`
+    case 'harvest_apricorn':
+      return target === 1 ? 'Colha 1 Apricorn da árvore' : `Colha ${target} Apricorns da árvore`
+    case 'make_balls':
+      return `Produza ${target} Poké Balls na bancada`
   }
 }
