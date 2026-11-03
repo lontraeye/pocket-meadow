@@ -40,14 +40,15 @@ function loadMask(url: string): void {
     .catch(() => masks.set(url, 'failed'))
 }
 
-/** O que dá para tocar no jardim: sprites dos Pokémon e as imagens dos presentes. */
+/** O que dá para tocar no jardim: sprites dos Pokémon, imagens dos presentes e os arbustos dos canteiros. */
 function targetsAt(x: number, y: number): HTMLElement[] {
   return document
     .elementsFromPoint(x, y)
     .filter(
       (el): el is HTMLElement =>
         el instanceof HTMLElement &&
-        ((el.classList.contains('sprite') && el.closest('.mon') !== null) || (el instanceof HTMLImageElement && el.closest('.gift') !== null)),
+        ((el.classList.contains('sprite') && el.closest('.mon') !== null) ||
+          (el instanceof HTMLImageElement && (el.closest('.gift') !== null || el.closest('.bush-art') !== null))),
     )
 }
 
@@ -86,7 +87,15 @@ function imageOpaqueAt(el: HTMLImageElement, x: number, y: number): boolean | nu
   return false
 }
 
-export type GardenHit = { kind: 'mon'; id: number } | { kind: 'gift'; id: number }
+export type GardenHit = { kind: 'mon'; id: number } | { kind: 'gift'; id: number } | { kind: 'plot'; id: number }
+
+/** O canteiro (losango) sob o ponto, sem contar os arbustos por cima. */
+export function plotTileAt(x: number, y: number): number | null {
+  const tile = document
+    .elementsFromPoint(x, y)
+    .find((el): el is HTMLElement => el instanceof HTMLElement && el.classList.contains('plot') && el.dataset.plot !== undefined)
+  return tile ? Number(tile.dataset.plot) : null
+}
 
 /**
  * O primeiro Pokémon ou presente (da frente para trás) com pixel visível sob o
@@ -100,6 +109,8 @@ export function pickAt(x: number, y: number): GardenHit | null | undefined {
     if (!hit) continue
     const gift = el.closest<HTMLElement>('.gift')
     if (gift) return { kind: 'gift', id: Number(gift.dataset.gift) }
+    const bush = el.closest<HTMLElement>('.bush-art')
+    if (bush) return { kind: 'plot', id: Number(bush.dataset.plot) }
     return { kind: 'mon', id: Number(el.closest<HTMLElement>('.mon')?.dataset.walker) }
   }
   return null

@@ -37,7 +37,7 @@
   import WeatherIcon from './WeatherIcon.svelte'
   import WeatherLayer from './WeatherLayer.svelte'
   import { play, playCry } from './sound'
-  import { pickAt, warmSpriteMasks, type GardenHit } from './spriteHit'
+  import { pickAt, plotTileAt, warmSpriteMasks, type GardenHit } from './spriteHit'
   import {
     gardenExtent,
     gardenSprite,
@@ -718,7 +718,19 @@
   // sob o ponto. Sem pixel em nenhum, ou máscara ainda carregando, fica quem
   // recebeu o click. Teclado (detail 0) não tem ponto: fica o botão focado.
   function onGardenTap(event: MouseEvent, clicked: GardenHit) {
-    const hit = (event.detail > 0 ? pickAt(event.clientX, event.clientY) : undefined) ?? clicked
+    const picked = event.detail > 0 ? pickAt(event.clientX, event.clientY) : undefined
+    // O arbusto é um retângulo com muito vazio por cima dos canteiros de trás:
+    // tocado no vazio, vale o canteiro (losango) sob o dedo, se houver.
+    if (picked === null && clicked.kind === 'plot') {
+      const under = plotTileAt(event.clientX, event.clientY)
+      if (under !== null) openPlot(under)
+      return
+    }
+    const hit = picked ?? clicked
+    if (hit.kind === 'plot') {
+      openPlot(hit.id)
+      return
+    }
     if (hit.kind === 'gift') {
       const gift = game.garden.gifts.find((g) => g.id === hit.id)
       if (gift) void collectGift(gift)
@@ -1453,6 +1465,7 @@
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row + depthSpan}
             class:locked
+            data-plot={locked ? undefined : plotIdx}
             aria-label={locked ? `Canteiro ${plotIdx + 1}, fechado` : `Canteiro ${plotIdx + 1}`}
             onclick={() => (locked ? showLockedPlot() : openPlot(plotIdx))}
           >
@@ -1472,17 +1485,21 @@
           {#if plot}
             {@const bush = bushSrc(plot.berryKey, bushLook(plot))}
             {#if bush}
-              <img
+              <!-- Tocar no arbusto também abre o canteiro (pixel a pixel, como os Pokémon). -->
+              <button
+                type="button"
                 class="bush-art"
                 class:ripe={stage === 'ready'}
-                src={bush}
-                alt=""
-                width={24 * pmdScale}
-                height={32 * pmdScale}
+                data-plot={plotIdx}
+                tabindex="-1"
+                aria-hidden="true"
                 style:left="{snapToDevice(spot.x)}px"
                 style:top="{snapToDevice(spot.y + halfH + BUSH_FOOT * pmdScale)}px"
                 style:z-index={tile.col + tile.row + depthSpan + 1}
-              />
+                onclick={(event) => onGardenTap(event, { kind: 'plot', id: plotIdx })}
+              >
+                <img src={bush} alt="" width={24 * pmdScale} height={32 * pmdScale} />
+              </button>
             {/if}
           {/if}
         {/if}
@@ -2134,9 +2151,18 @@
 
   .bush-art {
     position: absolute;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
     transform: translate(-50%, -100%);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .bush-art img {
+    display: block;
     image-rendering: pixelated;
-    pointer-events: none;
     filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.25));
   }
 
