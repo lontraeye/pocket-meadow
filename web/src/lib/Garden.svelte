@@ -121,6 +121,15 @@
     return progress < 0.2 ? 'planted' : 'growing'
   }
 
+  /** Duração de crescimento legível: "48 min", "4h", "1h 30m". */
+  function growText(ms: number): string {
+    const min = Math.round(ms / 60000)
+    if (min < 60) return `${min} min`
+    const h = Math.floor(min / 60)
+    const m = min % 60
+    return m === 0 ? `${h}h` : `${h}h ${String(m).padStart(2, '0')}m`
+  }
+
   function remainingMs(readyAt: number): number {
     return Math.max(0, readyAt - clock.now())
   }
@@ -1916,10 +1925,8 @@
                             <WeatherIcon weather={info.favoriteWeather} size={12} />
                           </span>
                           <!-- Primeiros frutos (o arbusto cresce antes); depois, a cada growMs. -->
-                          {formatCountdown(
-                            (favorite ? info.growMs * game.weatherGrowFactor : info.growMs) * game.firstGrowthMult,
-                          )}
-                          · depois {Math.round(info.growMs / 60000)} min
+                          {growText((favorite ? info.growMs * game.weatherGrowFactor : info.growMs) * game.firstGrowthMult)}
+                          · depois {growText(info.growMs)}
                           {#if favorite}· −{Math.round((1 - game.weatherGrowFactor) * 100)}% hoje{/if}
                         </small>
                       {/if}
@@ -2679,13 +2686,21 @@
     gap: 0.35rem;
   }
 
+  /* Ícone à esquerda; nome em cima e tempo embaixo (quebra em tela estreita). */
   .seed-list .choice {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr;
     align-items: center;
-    gap: 0.5rem;
+    column-gap: 0.5rem;
+    row-gap: 0.1rem;
     width: 100%;
+    min-width: 0;
     min-height: 44px;
     text-align: left;
+  }
+
+  .seed-list .choice img {
+    grid-row: span 2;
   }
 
   .seed-list img {
@@ -2699,11 +2714,13 @@
 
   /* Tempo de crescimento com o ícone do clima favorito na frente. */
   .seed-list .seed-time {
-    display: inline-flex;
-    flex: none;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.25rem;
-    white-space: nowrap;
+    min-width: 0;
+    font-size: 0.8rem;
+    opacity: 0.85;
   }
 
   .seed-list .seed-weather {
