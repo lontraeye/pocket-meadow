@@ -65,6 +65,8 @@ type BattleState = {
   autoRng: Rng
   wildActAt: number | null
   playerActAt: number | null
+  /** Pausada esperando a escolha de quem entra depois de um desmaio (manual). */
+  awaitingSend: boolean
 }
 
 export type RunBattleOptions = {
@@ -109,6 +111,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
     autoRng,
     wildActAt: null,
     playerActAt: null,
+    awaitingSend: false,
   }
 
   enter(state, 'player', 0, false)
@@ -165,7 +168,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
 
     const player = state.team[state.activeSlot]!
     if (player.hp <= 0) {
-      const next = nextLivingSlot(state)
+      let next = nextLivingSlot(state)
       if (next === null) {
         result = 'lose'
         break
@@ -180,6 +183,28 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       if (state.t >= simConfig.timeLimitMs) {
         result = 'timeout'
         break
+      }
+      // Manual: a luta pausa até o jogador escolher quem entra (uma troca
+      // gravada no instante da pausa). Toques durante o desmaio são ignorados.
+      if (!auto) {
+        while (inputIndex < inputs.length && inputs[inputIndex]!.t <= switchAt && inputs[inputIndex]!.action !== 'switch') {
+          state.recordedInputs.push({ ...inputs[inputIndex]! })
+          state.log.push({ t: state.t, kind: 'ignored', side: 'player', reason: 'switching' })
+          inputIndex += 1
+        }
+        const choice = inputs[inputIndex]
+        if (choice && choice.action === 'switch' && choice.t <= switchAt) {
+          inputIndex += 1
+          state.recordedInputs.push({ ...choice })
+          const slot = choice.slot
+          if (slot !== undefined && slot !== state.activeSlot && state.team[slot] && state.team[slot]!.hp > 0) next = slot
+        } else if (untilMs !== null) {
+          // Na tela: para aqui esperando a escolha (o relógio da luta congela).
+          state.awaitingSend = true
+          stoppedEarly = true
+          break
+        }
+        // Sem escolha numa luta inteira (servidor): entra o próximo vivo, como antes.
       }
       enter(state, 'player', next, false)
       state.playerActAt = null
@@ -359,6 +384,7 @@ function takeSnapshot(state: BattleState, result: BattleResultKind | null): Batt
     foeSlot: state.foeSlot,
     foes: state.foes.map((side) => snapshotSide(side, state.t)),
     result,
+    awaitingSend: state.awaitingSend,
   }
 }
 

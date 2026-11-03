@@ -161,6 +161,8 @@ export type BattleSnapshot = {
   foes: BattleSnapshotSide[]
   /** null = luta ainda em andamento (parou em untilMs). */
   result: BattleResultKind | null
+  /** O Pokémon do jogador desmaiou e a luta espera a escolha de quem entra (só no manual). */
+  awaitingSend: boolean
 }
 
 export type BattleResult = {

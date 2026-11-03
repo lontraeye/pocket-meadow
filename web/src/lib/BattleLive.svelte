@@ -315,7 +315,11 @@
     return simConfig.autoReactionMinMs + Math.floor(autoRoll() * span)
   }
 
+  /** Pausada esperando a escolha de quem entra depois de um desmaio: o relógio da luta para. */
+  let paused = false
+
   function elapsedAt(now: number): number {
+    if (paused) return Math.min(timeLimit, Math.max(0, Math.floor(simBase)))
     return Math.min(timeLimit, Math.max(0, Math.floor(simBase + (now - wallBase) * speed)))
   }
 
@@ -370,6 +374,33 @@
     status === 'live' && !battleAuto && !active.fainted && !snap.wild.fainted && waitMs <= 0 && !allyLocked,
   )
   // Troca: o servidor só exige o cooldown de switch (não o do golpe nem sleep/freeze).
+  // Desmaio no manual: a simulação para e espera a escolha (o relógio congela).
+  // No automático, entra o primeiro vivo na hora.
+  const awaitingSend = $derived(status === 'live' && snap.awaitingSend)
+  $effect(() => {
+    if (!awaitingSend) return
+    untrack(() => {
+      if (paused) return
+      paused = true
+      simBase = snap.t
+      wallBase = performance.now()
+      if (battleAuto) {
+        const next = snap.team.find((side) => !side.fainted && side.slot !== snap.activeSlot)
+        if (next) sendNext(next.slot)
+      }
+    })
+  })
+
+  function sendNext(slot: number) {
+    const side = snap.team[slot]
+    if (!awaitingSend || !side || side.fainted || slot === snap.activeSlot) return
+    play('tap')
+    paused = false
+    wallBase = performance.now()
+    partyOpen = false
+    push('switch', slot)
+  }
+
   const canSwitch = $derived(
     status === 'live' && !active.fainted && !snap.wild.fainted && switchWait <= 0,
   )
@@ -1802,7 +1833,7 @@
   {:else}
     <!-- Sem golpe carregado, o botão nem aparece e o rápido ocupa a linha.
          Escolhendo a troca, os golpes saem para o time caber na tela. -->
-    <div class="moves" class:solo={!activeFighter.chargedMove} hidden={partyOpen}>
+    <div class="moves" class:solo={!activeFighter.chargedMove} hidden={partyOpen || awaitingSend}>
       <button
         type="button"
         class="btn act typed"
@@ -1843,7 +1874,7 @@
     </div>
 
     {#if setup.team.length > 1}
-      {#if !partyOpen}
+      {#if !partyOpen && !awaitingSend}
         <button
           type="button"
           class="btn party-toggle"
@@ -1859,6 +1890,7 @@
         </button>
       {:else}
         <div class="party" role="group" aria-label="Escolher Pokémon">
+          {#if awaitingSend}<p class="party-title">Quem vai agora?</p>{/if}
           <div class="party-list">
             {#each setup.team as fighter, slot (slot)}
               {@const side = snap.team[slot]!}
@@ -1870,9 +1902,9 @@
                   type="button"
                   class="chip"
                   class:down={side.fainted}
-                  disabled={side.fainted || !canSwitch}
-                  aria-label="Trocar para {nameOf(fighter)}"
-                  onclick={() => swap(slot)}
+                  disabled={side.fainted || (!canSwitch && !awaitingSend)}
+                  aria-label="{awaitingSend ? 'Mandar' : 'Trocar para'} {nameOf(fighter)}"
+                  onclick={() => (awaitingSend ? sendNext(slot) : swap(slot))}
                 >
                   <span class="chip-sprite" aria-hidden="true">
                     {#if look.kind === 'pmd'}
@@ -1903,7 +1935,9 @@
               {/if}
             {/each}
           </div>
-          <button type="button" class="btn-link party-cancel" onclick={closeParty}>Cancelar</button>
+          {#if !awaitingSend}
+            <button type="button" class="btn-link party-cancel" onclick={closeParty}>Cancelar</button>
+          {/if}
         </div>
       {/if}
     {/if}
@@ -1913,6 +1947,12 @@
 <style>
   /* No PC a arena esticava na tela toda e os dois ficavam longe um do outro:
      largura de celular, centralizada. */
+  .party-title {
+    margin: 0 0 0.35rem;
+    font-weight: 700;
+    text-align: center;
+  }
+
   .live {
     /* Cores dos selos e dos números de dano (um lugar só). */
     --seal-burn: #c04020;

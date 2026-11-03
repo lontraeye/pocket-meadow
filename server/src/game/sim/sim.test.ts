@@ -717,3 +717,37 @@ test('treinador: perdeu no meio, os que sobraram ficam de pé', () => {
     [false, false],
   )
 })
+
+test('manual: depois do desmaio a luta pausa até escolher quem entra; a escolha vale', () => {
+  const fragile = fighter({
+    id: 1,
+    speciesId: 1,
+    level: 5,
+    stats: { hp: 1, attack: 5, defense: 5, spAttack: 5, spDefense: 5, speed: 40 },
+  })
+  const second = fighter({ id: 2, speciesId: 2, level: 30, stats: { hp: 80, attack: 70, defense: 50, spAttack: 50, spDefense: 50, speed: 80 } })
+  const third = fighter({ id: 3, speciesId: 3, level: 30, stats: { hp: 80, attack: 70, defense: 50, spAttack: 50, spDefense: 50, speed: 80 } })
+  const boss = fighter({
+    speciesId: 150,
+    level: 50,
+    stats: { hp: 200, attack: 120, defense: 80, spAttack: 120, spDefense: 80, speed: 100 },
+    fastMove: move({ name: 'psychic', type: 'psychic', power: 40, damageClass: 'special' }),
+    chargedMove: null,
+  })
+  const base = setup([fragile, second, third], boss)
+  // Na tela (untilMs): sem escolha, para esperando.
+  const live = runBattle({ setup: base, seed: 1, inputs: [], untilMs: 60_000 })
+  assert.equal(live.snapshot.awaitingSend, true)
+  assert.equal(live.result, null)
+  const pausedAt = live.durationMs
+  // Escolhe o 3º (slot 2) no instante da pausa: ele entra, não o 2º.
+  const chosen = runBattle({ setup: base, seed: 1, inputs: [{ t: pausedAt, action: 'switch', slot: 2 }], untilMs: pausedAt + 1 })
+  assert.equal(chosen.snapshot.awaitingSend, false)
+  assert.equal(chosen.snapshot.activeSlot, 2)
+  // Luta inteira (servidor) sem escolha: entra o próximo vivo, como antes.
+  const full = runBattle({ setup: base, seed: 1, inputs: [] })
+  assert.ok(full.log.some((e) => e.kind === 'enter' && e.side === 'player' && e.slot === 1))
+  // Automático: não pausa.
+  const auto = runBattle({ setup: base, seed: 1, untilMs: 60_000 })
+  assert.equal(auto.snapshot.awaitingSend, false)
+})
