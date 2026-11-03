@@ -25,49 +25,67 @@ def build(profile, leaves, wood, fruit=None):
     px = im.load()
     L0, L1, L2, L3, L4 = leaves  # escuro → claro
     occ = {}
-    y = profile['top']
-    canopy_bottom = None
     tiers = profile['tiers']
     total_rows = sum(len(t) for t in tiers)
     max_hw = max(max(t) for t in tiers)
     canopy_top = profile['top']
+    # Linha de cada camada (de cima para baixo).
+    starts = []
+    y = canopy_top
     for tier in tiers:
+        starts.append(y)
+        y += len(tier)
+    canopy_bottom = y - 1
+
+    def tone_at(x, yy, hw, i, n):
+        # Volume arredondado com luz de cima à esquerda.
+        nx = (x + 0.5 - C) / max_hw
+        ny = ((yy - canopy_top) / max(1, total_rows - 1)) * 2 - 1
+        lx = (x + 0.5 - C) / max(1, hw)
+        s_ = 0.55 * nx + 0.35 * ny
+        if i == 0 and abs(lx) < 0.7:
+            s_ -= 0.25
+        if s_ < -0.45:
+            return 4
+        if s_ < -0.1:
+            return 3
+        if s_ < 0.3:
+            return 2
+        if s_ < 0.65:
+            return 1
+        return 0
+
+    # De baixo para cima: cada camada passa por cima do topo da de baixo com a
+    # borda de baixo em arco (desce no meio, sobe nas pontas) e umas ondinhas,
+    # como uma saia vista um pouco de cima. A divisória escura segue essa borda.
+    for t in range(len(tiers) - 1, -1, -1):
+        tier = tiers[t]
         n = len(tier)
+        y0 = starts[t]
         for i, hw in enumerate(tier):
+            yy = y0 + i
             left = int(C + 0.5 - hw)
             right = int(C + 0.5 + hw) - 1
             for x in range(left, right + 1):
-                # Volume arredondado com luz de cima à esquerda: posição na copa
-                # inteira (nx, ny de -1 a 1) e, na camada, o arco da sombra de
-                # baixo (mais grosso nas pontas, fino no meio, como um disco visto de cima).
-                nx = (x + 0.5 - C) / max_hw
-                ny = ((y - canopy_top) / max(1, total_rows - 1)) * 2 - 1
-                lx = (x + 0.5 - C) / max(1, hw)
-                v = i / max(1, n - 1) if n > 1 else 0.0
-                s_ = 0.55 * nx + 0.35 * ny
-                lit_until = 0.45 + 0.4 * (1 - lx * lx)
-                if n > 1 and v > lit_until:
-                    s_ += 0.55
-                if i == 0 and abs(lx) < 0.7:
-                    s_ -= 0.25
-                if s_ < -0.45:
-                    tone = 4
-                elif s_ < -0.1:
-                    tone = 3
-                elif s_ < 0.3:
-                    tone = 2
-                elif s_ < 0.65:
-                    tone = 1
-                else:
-                    tone = 0
-                occ[(x, y)] = leaves[tone]
-            y += 1
-        canopy_bottom = y - 1
-    # pontas caídas embaixo da copa
-    for dx in profile['tips']:
-        x = int(C + 0.5 + dx) - 1
-        for xx in (x, x + 1):
-            occ[(xx, canopy_bottom + 1)] = L1 if dx > 0 else L2
+                occ[(x, yy)] = leaves[tone_at(x, yy, hw, i, n)]
+        # saia em arco embaixo da camada
+        hw = tier[-1]
+        yb = y0 + n - 1
+        left = int(C + 0.5 - hw)
+        right = int(C + 0.5 + hw) - 1
+        last = t == len(tiers) - 1
+        for x in range(left + 1, right):
+            lx = (x + 0.5 - C) / max(1, hw)
+            depth = 1 if abs(lx) < 0.55 else 0
+            if abs(lx) < 0.85 and (x - left) % 4 in (1, 2):
+                depth += 1
+            # A saia leva a cor da própria camada; só a ponta de baixo é a
+            # divisória (um tom abaixo), que assim acompanha a curva.
+            for d in range(0, depth):
+                occ[(x, yb + d)] = leaves[tone_at(x, yb + d, hw, n - 1, n)]
+            tone = tone_at(x, yb + depth, hw, n - 1, n)
+            occ[(x, yb + depth)] = leaves[max(0, min(tone, 2) - 1)]
+        canopy_bottom = max(canopy_bottom, yb + (1 if last else 0))
     # tronco: 2 de largura até o pé
     trunk_top = canopy_bottom + 1
     trunk = set()
