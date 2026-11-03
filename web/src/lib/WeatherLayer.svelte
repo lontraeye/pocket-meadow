@@ -31,12 +31,47 @@
     delay: rand(-3.5, 0),
     duration: rand(2.2, 3.5),
   }))
-  const clouds = Array.from({ length: 3 }, (_, i) => ({
-    top: rand(5, 70),
-    delay: -i * 9 - rand(0, 6),
-    duration: rand(24, 32),
-    size: rand(180, 260),
-  }))
+  // Nublado: sombras de nuvem em pixel art. Cada uma é um punhado de elipses
+  // numa grade (o miolo), com uma borda pontilhada mais clara em volta (dither),
+  // e vira dois paths de SVG: nada de desfoque, só bordas em degrau.
+  const CLOUD_PX = 4
+  function cloudShape(cols: number, rows: number): { core: string; rim: string } {
+    const blobs = Array.from({ length: 4 }, (_, i) => ({
+      x: cols * (0.22 + 0.56 * (i / 3)) + rand(-2, 2),
+      y: rows * rand(0.42, 0.58),
+      rx: cols * rand(0.16, 0.24),
+      ry: rows * rand(0.3, 0.42),
+    }))
+    const inside = (x: number, y: number) =>
+      blobs.some((b) => ((x + 0.5 - b.x) / b.rx) ** 2 + ((y + 0.5 - b.y) / b.ry) ** 2 <= 1)
+    let core = ''
+    let rim = ''
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < cols; x += 1) {
+        const cell = `M${x} ${y}h1v1h-1z`
+        if (inside(x, y)) {
+          const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)
+          if (edge) rim += cell
+          else core += cell
+        } else if ((x + y) % 2 === 0 && (inside(x - 1, y) || inside(x + 1, y) || inside(x, y - 1) || inside(x, y + 1))) {
+          rim += cell
+        }
+      }
+    }
+    return { core, rim }
+  }
+  const clouds = Array.from({ length: 4 }, (_, i) => {
+    const cols = Math.round(rand(50, 70))
+    const rows = Math.round(cols * rand(0.42, 0.52))
+    return {
+      top: rand(-10, 60),
+      delay: -i * 8 - rand(0, 5),
+      duration: rand(26, 34),
+      cols,
+      rows,
+      ...cloudShape(cols, rows),
+    }
+  })
 </script>
 
 <div class="weather {weather}" aria-hidden="true">
@@ -71,14 +106,19 @@
       {/each}
     {:else if weather === 'cloudy'}
       {#each clouds as cloud, i (i)}
-        <span
+        <svg
           class="cloud"
+          width={cloud.cols * CLOUD_PX}
+          height={cloud.rows * CLOUD_PX}
+          viewBox="0 0 {cloud.cols} {cloud.rows}"
+          shape-rendering="crispEdges"
           style:top="{cloud.top}%"
-          style:width="{cloud.size}px"
-          style:height="{cloud.size * 0.55}px"
           style:animation-delay="{cloud.delay}s"
           style:animation-duration="{cloud.duration}s"
-        ></span>
+        >
+          <path class="rim" d={cloud.rim} />
+          <path class="core" d={cloud.core} />
+        </svg>
       {/each}
     {/if}
   {/if}
@@ -176,19 +216,30 @@
     }
   }
 
-  /* Nublado: sombras de nuvem passando devagar pelo gramado. */
+  /*
+   * Nublado: sombras de nuvem em pixel passando devagar pelo gramado, na
+   * diagonal do isométrico (para a direita e um pouco para baixo). O miolo é
+   * a sombra; a borda pontilhada, mais clara, faz a transição sem desfoque.
+   */
   .cloud {
     position: absolute;
-    left: -40%;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, #1f283324, transparent);
+    left: -45%;
+    display: block;
     animation: drift linear infinite;
     will-change: transform;
   }
 
+  .cloud .core {
+    fill: #18202b47;
+  }
+
+  .cloud .rim {
+    fill: #18202b24;
+  }
+
   @keyframes drift {
     to {
-      transform: translateX(180vw);
+      transform: translate(190vw, 45vh);
     }
   }
 </style>
