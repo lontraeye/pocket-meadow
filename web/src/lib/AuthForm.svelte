@@ -67,7 +67,9 @@
 
   async function submitDev(event: SubmitEvent) {
     event.preventDefault()
-    await send('/api/dev/login', { username, starter })
+    // O botão "com cenário pronto" monta berries, missão, daycare, presentes e pets esperando.
+    const scenario = (event.submitter as HTMLButtonElement | null)?.value === 'ready' ? 'ready' : undefined
+    await send('/api/dev/login', { username, starter, scenario })
   }
 
   async function send(path: string, body: unknown) {
@@ -153,6 +155,7 @@
         {@render nameField()}
         {@render starterPicker()}
         <button class="btn submit" type="submit" disabled={pending}>Entrar</button>
+        <button class="btn submit" type="submit" value="ready" disabled={pending}>Entrar com cenário pronto</button>
       </form>
     {/if}
   {/if}

@@ -24,6 +24,7 @@ import {
   trainers,
   users,
 } from '../db/schema.js'
+import { applyReadyScenario } from './devScenario.js'
 import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
 
@@ -47,12 +48,14 @@ devRoutes.post('/login', async (c) => {
   if (!username) return c.json({ error: 'invalid_username' }, 400)
   const starter = body.starter === undefined ? 'chikorita' : body.starter
   if (!isStarter(starter)) return c.json({ error: 'invalid_starter' }, 400)
+  // `scenario: 'ready'` deixa a conta com um pouco de tudo esperando (aviso de "pronto").
+  const scenario = body.scenario === 'ready'
   const now = Date.now()
   const token = immediate(() => {
     const existing = getDb().select({ id: users.id }).from(users).where(eq(users.username, username)).get()
-    if (existing) return openSession(c, existing.id, 'login', now)
-    const created = createPlayer({ username, googleSub: null, starter, now })
-    return openSession(c, created.userId, 'register', now)
+    const userId = existing?.id ?? createPlayer({ username, googleSub: null, starter, now }).userId
+    if (scenario) applyReadyScenario(userId, now)
+    return openSession(c, userId, existing ? 'login' : 'register', now)
   })
   setSessionCookie(c, token)
   return c.json({ username })
