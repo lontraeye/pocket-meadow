@@ -27,24 +27,38 @@ def build(profile, leaves, wood, fruit=None):
     occ = {}
     y = profile['top']
     canopy_bottom = None
-    for tier in profile['tiers']:
+    tiers = profile['tiers']
+    total_rows = sum(len(t) for t in tiers)
+    max_hw = max(max(t) for t in tiers)
+    canopy_top = profile['top']
+    for tier in tiers:
         n = len(tier)
         for i, hw in enumerate(tier):
             left = int(C + 0.5 - hw)
             right = int(C + 0.5 + hw) - 1
             for x in range(left, right + 1):
-                t = (x - left) / max(1, right - left)
-                v = i / max(1, n - 1)
-                tone = 2
-                if t < 0.4 and v < 0.6:
-                    tone = 3
-                if t < 0.25 and i == 0:
+                # Volume arredondado com luz de cima à esquerda: posição na copa
+                # inteira (nx, ny de -1 a 1) e, na camada, o arco da sombra de
+                # baixo (mais grosso nas pontas, fino no meio, como um disco visto de cima).
+                nx = (x + 0.5 - C) / max_hw
+                ny = ((y - canopy_top) / max(1, total_rows - 1)) * 2 - 1
+                lx = (x + 0.5 - C) / max(1, hw)
+                v = i / max(1, n - 1) if n > 1 else 0.0
+                s_ = 0.55 * nx + 0.35 * ny
+                lit_until = 0.45 + 0.4 * (1 - lx * lx)
+                if n > 1 and v > lit_until:
+                    s_ += 0.55
+                if i == 0 and abs(lx) < 0.7:
+                    s_ -= 0.25
+                if s_ < -0.45:
                     tone = 4
-                if t > 0.62:
+                elif s_ < -0.1:
+                    tone = 3
+                elif s_ < 0.3:
+                    tone = 2
+                elif s_ < 0.65:
                     tone = 1
-                if v >= 0.99 and n > 1:
-                    tone = min(tone, 1)
-                if t > 0.8 and v > 0.5:
+                else:
                     tone = 0
                 occ[(x, y)] = leaves[tone]
             y += 1
@@ -57,7 +71,8 @@ def build(profile, leaves, wood, fruit=None):
     # tronco: 2 de largura até o pé
     trunk_top = canopy_bottom + 1
     trunk = set()
-    for yy in range(trunk_top + 1, 27):
+    # O tronco começa colado na copa (na linha das pontas), sem buraco entre os dois.
+    for yy in range(trunk_top, 27):
         for x, c in ((10, CONTORNO), (11, wood[2]), (12, wood[1]), (13, CONTORNO)):
             if (x, yy) not in occ:
                 occ[(x, yy)] = c
