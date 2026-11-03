@@ -1,4 +1,4 @@
-import { daycareXpPerHour } from '../config/daycare.js'
+import { catchUpMult, daycareXpPerHour } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { xpUntilCap } from './progression.js'
 import { grantXp } from './xp.js'
@@ -59,18 +59,30 @@ export function boostForHour(
   return 1 + (boost.multiplier - 1) * Math.min(1, overlap / hourMs)
 }
 
+/** O que o daycare olha do jogador: o time (alcance e teto) e o cuidador. */
+export type DaycareContext = {
+  /** Média de nível do time (null = sem time: sem bônus de alcance). */
+  teamAverage: number | null
+  /** Nível mais alto do time: ninguém passa dele no daycare. */
+  teamMax: number | null
+  /** Bônus do Pokémon cuidador (1 = sem cuidador). */
+  caretakerMult: number
+}
+
 /**
  * Aplica `hours` horas de daycare. `boost` pode ser um número fixo (testes) ou
- * uma janela timed: cada hora olha o seu próprio multiplicador.
+ * uma janela timed: cada hora olha o seu próprio multiplicador. O bônus de
+ * alcance é recalculado a cada hora (diminui conforme o Pokémon se aproxima do time).
  */
 export function applyDaycareHours(
   level: number,
   xp: number,
   hours: number,
   boost: number | DaycareTimedBoost | ((hourIndex: number) => number) = 1,
-  options: { from?: number; cap?: number } = {},
+  options: { from?: number; cap?: number; context?: DaycareContext } = {},
 ): { level: number; xp: number; xpGained: number } {
-  const cap: number = options.cap ?? progressConfig.levelCap
+  const context = options.context
+  const cap: number = Math.min(options.cap ?? progressConfig.levelCap, context?.teamMax ?? progressConfig.levelCap)
   const from = options.from ?? 0
   let nextLevel = level
   let nextXp = xp
@@ -83,7 +95,10 @@ export function applyDaycareHours(
         : typeof boost === 'number'
           ? boost
           : boostForHour(from + hour * hourMs, boost)
-    const rate = daycareXpPerHour(nextLevel, mult)
+    const rate = daycareXpPerHour(
+      nextLevel,
+      mult * catchUpMult(nextLevel, context?.teamAverage ?? null) * (context?.caretakerMult ?? 1),
+    )
     const applied = Math.min(rate, xpUntilCap(nextLevel, nextXp, cap))
     const progressed = grantXp(nextLevel, nextXp, rate, xpToNext, cap)
     xpGained += applied

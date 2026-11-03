@@ -78,6 +78,7 @@ export type BenchError =
   | 'max_level'
   | 'trainer_level'
   | 'missing_items'
+  | 'operating'
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: BenchError }
 
@@ -200,7 +201,13 @@ export function operatorAmong(userId: number, ids: readonly number[]): number | 
   const row = getDb()
     .select({ id: gardenStructures.operatorPokemonId })
     .from(gardenStructures)
-    .where(and(benchWhere(userId), inArray(gardenStructures.operatorPokemonId, [...ids])))
+    .where(
+      and(
+        eq(gardenStructures.userId, userId),
+        inArray(gardenStructures.key, ['ball_bench', 'daycare_keeper']),
+        inArray(gardenStructures.operatorPokemonId, [...ids]),
+      ),
+    )
     .get()
   return row?.id ?? null
 }
@@ -231,6 +238,13 @@ export function setOperator(userId: number, level: number, pokemonId: number | n
     if (!types.includes(mon.type1) && !(mon.type2 !== null && types.includes(mon.type2))) {
       return { ok: false, error: 'wrong_type' }
     }
+    // Quem cuida do daycare não opera a bancada ao mesmo tempo.
+    const keeper = getDb()
+      .select({ id: gardenStructures.operatorPokemonId })
+      .from(gardenStructures)
+      .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'daycare_keeper')))
+      .get()
+    if (keeper?.id === pokemonId) return { ok: false, error: 'operating' }
   }
   getDb().update(gardenStructures).set({ operatorPokemonId: pokemonId }).where(benchWhere(userId)).run()
   return { ok: true }

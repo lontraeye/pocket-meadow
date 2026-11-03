@@ -6,19 +6,56 @@
   import { serverClock } from './serverClock.svelte'
   import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
+  import { simulateStay } from './daycareSim'
 
   let { game, onClose, onState }: { game: GameState; onClose: () => void; onState: () => Promise<void> } = $props()
 
   let pickingSlot = $state<number | null>(null)
+  let pickingCaretaker = $state(false)
+  let showTiers = $state(false)
   let message = $state('')
   let pending = $state(false)
   let highlightCards = $state<HighlightCard[]>([])
 
   const byId = $derived(new Map(game.pokemon.map((mon) => [mon.id, mon])))
   const occupied = $derived(new Map(game.daycare.slots.map((slot) => [slot.slotIndex, slot])))
+  /** Quem trabalha (bancada ou cuidador) não vai para o daycare. */
+  const working = $derived(new Set([game.garden.bench.operatorId, game.daycare.caretaker?.pokemonId].filter((id) => id != null)))
   const garden = $derived(
-    game.pokemon.filter((mon) => mon.location === 'garden').sort((a, b) => b.level - a.level || a.id - b.id),
+    game.pokemon
+      .filter((mon) => mon.location === 'garden' && !working.has(mon.id))
+      .sort((a, b) => b.level - a.level || a.id - b.id),
   )
+  // Cuidador (5.21): faixa de cada espécie e quem do jardim pode cuidar agora.
+  const tierBySpecies = $derived(
+    new Map(game.daycare.caretakerTiers.flatMap((tier) => tier.species.map((sp) => [sp.id, tier] as const))),
+  )
+  const caretaker = $derived(game.daycare.caretaker ? byId.get(game.daycare.caretaker.pokemonId) ?? null : null)
+  const caretakerCandidates = $derived(
+    game.pokemon
+      .filter(
+        (mon) =>
+          mon.location === 'garden' &&
+          mon.teamSlot === null &&
+          mon.id !== game.garden.bench.operatorId &&
+          mon.id !== game.daycare.caretaker?.pokemonId &&
+          tierBySpecies.has(mon.speciesId),
+      )
+      .sort((a, b) => (tierBySpecies.get(b.speciesId)?.mult ?? 0) - (tierBySpecies.get(a.speciesId)?.mult ?? 0)),
+  )
+  /** Prévia de quem ainda vai entrar: uma estadia cheia com o time e o cuidador de agora. */
+  function stayPreview(mon: OwnedPokemon): { level: number; xpGained: number } {
+    return simulateStay(mon.level, mon.xp, game.daycare.rules, game.daycare.context)
+  }
+  const atTeamCap = (level: number) => game.daycare.context.teamMax !== null && level >= game.daycare.context.teamMax
+
+  async function pickCaretaker(id: number | null) {
+    const ok = await run('/api/daycare/caretaker', { pokemonId: id })
+    if (ok) {
+      pickingCaretaker = false
+      message = id === null ? 'O daycare ficou sem cuidador.' : ''
+    }
+  }
 
   type Card =
     | { kind: 'locked'; slotIndex: number; opensAt: number }
@@ -124,17 +161,69 @@
         {:else}
           <div class="list">
             {#each garden as mon (mon.id)}
+              {@const stay = stayPreview(mon)}
               <button type="button" class="choice" disabled={pending} onclick={() => void place(pickingSlot!, mon.id)}>
                 <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
                 <span>{mon.nickname ?? mon.displayName}</span>
-                <small>Nv {mon.level}</small>
+                <small>Nv {mon.level} → {stay.level}</small>
+                {#if atTeamCap(mon.level)}<small class="note">já no nível do time</small>{/if}
               </button>
             {/each}
           </div>
         {/if}
         <button type="button" class="btn" disabled={pending} onclick={() => (pickingSlot = null)}>Cancelar</button>
       </section>
+    {:else if pickingCaretaker}
+      <section class="panel pick" aria-label="Escolher cuidador">
+        <h2>Quem cuida do daycare</h2>
+        {#if caretakerCandidates.length === 0}
+          <p class="hint">Nenhum Pokémon do jardim (fora do time) pode cuidar agora. Veja a lista de quem pode.</p>
+        {:else}
+          <div class="list">
+            {#each caretakerCandidates as mon (mon.id)}
+              {@const tier = tierBySpecies.get(mon.speciesId)}
+              <button type="button" class="choice" disabled={pending} onclick={() => void pickCaretaker(mon.id)}>
+                <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
+                <span>{mon.nickname ?? mon.displayName}</span>
+                <small>{tier?.name} · ×{tier?.mult}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <button type="button" class="btn" disabled={pending} onclick={() => (pickingCaretaker = false)}>Cancelar</button>
+      </section>
     {:else}
+      <section class="panel keeper" aria-label="Cuidador">
+        {#if caretaker && game.daycare.caretaker}
+          <img use:spriteLoading={showdownSrc(caretaker.speciesId, caretaker.isShiny)} src={showdownSrc(caretaker.speciesId, caretaker.isShiny)} alt="" width="48" height="48" />
+          <div class="keeper-info">
+            <strong>{caretaker.nickname ?? caretaker.displayName} cuida do daycare</strong>
+            <small>{game.daycare.caretaker.tierName} · ×{game.daycare.caretaker.mult} de XP</small>
+          </div>
+          <div class="keeper-actions">
+            <button type="button" class="btn" disabled={pending} onclick={() => (pickingCaretaker = true)}>Trocar</button>
+            <button type="button" class="btn" disabled={pending} onclick={() => void pickCaretaker(null)}>Tirar</button>
+          </div>
+        {:else}
+          <div class="keeper-info">
+            <strong>Sem cuidador</strong>
+            <small>Um Pokémon que cuida dos outros acelera o daycare (até ×2).</small>
+          </div>
+          <div class="keeper-actions">
+            <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (pickingCaretaker = true)}>Escolher</button>
+          </div>
+        {/if}
+        <button type="button" class="link" onclick={() => (showTiers = !showTiers)}>
+          {showTiers ? 'Esconder' : 'Quem pode cuidar?'}
+        </button>
+        {#if showTiers}
+          <ul class="tiers">
+            {#each game.daycare.caretakerTiers as tier (tier.key)}
+              <li><strong>{tier.name} ×{tier.mult}:</strong> {tier.species.map((sp) => sp.name).join(', ')}</li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
       <div class="cards">
         {#each cards as card (card.slotIndex)}
           {#if card.kind === 'locked'}
@@ -174,6 +263,13 @@
                     {/if}
                   </div>
                   <p class="preview">+{card.slot.xpGained} XP até agora</p>
+                  {#if card.slot.projected.level > card.mon.level || card.slot.projected.xpGained > 0}
+                    <p class="preview">
+                      Ao fim: Nv {card.slot.projected.level} (+{card.slot.projected.xpGained.toLocaleString('pt-BR')} XP)
+                    </p>
+                  {:else if atTeamCap(card.mon.level)}
+                    <p class="preview note">Já no nível do time: não ganha mais aqui.</p>
+                  {/if}
                 </div>
               </div>
               <div class="time">
@@ -206,6 +302,65 @@
 </div>
 
 <style>
+  .keeper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .keeper img {
+    image-rendering: pixelated;
+    object-fit: contain;
+  }
+
+  .keeper-info {
+    display: grid;
+    flex: 1;
+    min-width: 10rem;
+  }
+
+  .keeper-info small {
+    opacity: 0.8;
+  }
+
+  .keeper-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .keeper-actions .btn {
+    min-height: 44px;
+  }
+
+  .link {
+    width: 100%;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    text-decoration: underline;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .tiers {
+    display: grid;
+    gap: 0.25rem;
+    width: 100%;
+    margin: 0;
+    padding-left: 1rem;
+    font-size: 0.85rem;
+  }
+
+  .note {
+    opacity: 0.75;
+    font-style: italic;
+  }
+
   .daycare {
     display: flex;
     flex: 1;

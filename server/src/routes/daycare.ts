@@ -6,6 +6,7 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { daycareSlots, pokemon } from '../db/schema.js'
 import { operatorAmong } from '../db/bench.js'
+import { caretakerOf, setCaretaker } from '../db/caretaker.js'
 import { leaveTeam } from '../db/team.js'
 import { levelsGainedFromStay } from '../game/daycare.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
@@ -15,6 +16,25 @@ type Ok<T> = { ok: true } & T
 const hourMs = 60 * 60 * 1000
 
 export const daycareRoutes = new Hono<AuthEnv>()
+
+// Cuidador (5.21): antes de '/:slot', senão "caretaker" seria lido como vaga.
+daycareRoutes.post('/caretaker', requireUser, async (c) => {
+  const body = await readObject(c)
+  const pokemonId = body?.pokemonId
+  if (pokemonId !== null && (typeof pokemonId !== 'number' || !Number.isInteger(pokemonId))) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const userId = c.get('userId')
+  const now = Date.now()
+  // O catch-up liquida as horas passadas com o cuidador antigo antes da troca.
+  const result = immediate(() => {
+    persistCatchUp(userId, now)
+    const out = setCaretaker(userId, pokemonId, now)
+    return out.ok ? { ok: true as const, caretaker: caretakerOf(userId) } : out
+  })
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  return c.json({ caretaker: result.caretaker })
+})
 
 daycareRoutes.post('/:slot', requireUser, async (c) => {
   const slotIndex = parseSlot(c.req.param('slot'))

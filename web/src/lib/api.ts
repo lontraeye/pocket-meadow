@@ -431,12 +431,31 @@ export type DaycareSlot = {
   lastSettledAt: number
   xpGained: number
   fullAt: number
+  /** Prévia do fim do prazo, com o time e o cuidador de agora. */
+  projected: { level: number; xpGained: number }
 }
+
+export type DaycareRules = {
+  levelsPerHour: number
+  catchUpPerLevel: number
+  catchUpMax: number
+  maxHours: number
+  xpBase: number
+  xpExponent: number
+  levelCap: number
+}
+
+export type DaycareContext = { teamAverage: number | null; teamMax: number | null; caretakerMult: number }
 
 export type DaycareState = {
   slotsUnlocked: number
   nextSlotLevel: number | null
   slots: DaycareSlot[]
+  /** Cuidador (5.21): acelera o daycare conforme a espécie. */
+  caretaker: { pokemonId: number; speciesId: number; tier: string; tierName: string; mult: number } | null
+  caretakerTiers: { key: string; name: string; mult: number; species: { id: number; name: string }[] }[]
+  rules: DaycareRules
+  context: DaycareContext
 }
 
 export type CaptureBerryInfo = {
@@ -756,7 +775,9 @@ export function errorText(error: ApiError): string {
     case 'plot_locked':
       return 'Esse canteiro ainda está bloqueado.'
     case 'operating':
-      return 'Esse Pokémon está operando a bancada. Tire-o de lá primeiro.'
+      return 'Esse Pokémon está trabalhando (bancada ou daycare). Tire-o de lá primeiro.'
+    case 'not_caretaker':
+      return 'Esse Pokémon não cuida do daycare.'
     case 'bench_locked':
       return 'A bancada ainda está fechada.'
     case 'in_team':

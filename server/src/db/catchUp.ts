@@ -3,6 +3,7 @@ import { applyCatchUp } from '../game/catchUp.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { getDb } from './client.js'
+import { daycareContext } from './caretaker.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 
@@ -61,6 +62,7 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
     {
       trainer: { energy: trainer.energy, energyUpdatedAt: trainer.energyUpdatedAt },
       daycare,
+      daycareContext: daycareContext(userId),
       effects,
       encounters: pending,
     },

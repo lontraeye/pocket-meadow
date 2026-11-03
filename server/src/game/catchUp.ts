@@ -1,7 +1,7 @@
 import { daycareConfig } from '../config/daycare.js'
 import { progressConfig } from '../config/progress.js'
 import { trainerConfig } from '../config/trainer.js'
-import { applyDaycareHours, type DaycareTimedBoost } from './daycare.js'
+import { applyDaycareHours, type DaycareContext, type DaycareTimedBoost } from './daycare.js'
 
 export type CatchUpState = {
   trainer: { energy: number; energyUpdatedAt: number }
@@ -12,6 +12,8 @@ export type CatchUpState = {
     enteredAt: number
     lastSettledAt: number
   }[]
+  /** Time e cuidador, para o bônus de alcance, o teto e o bônus do cuidador. */
+  daycareContext?: DaycareContext
   effects: {
     id: number
     effectKey: string
@@ -41,7 +43,7 @@ export function applyCatchUp(state: CatchUpState, now: number): CatchUpResult {
   // usam a janela do Nanab (PLANNING.md, seção 5.10).
   const daycareBoost = timedDaycareBoost(state.effects) ?? 1
   const daycare = state.daycare.flatMap((slot) => {
-    const settled = settleDaycare(slot, now, daycareBoost)
+    const settled = settleDaycare(slot, now, daycareBoost, state.daycareContext)
     return settled === undefined ? [] : [settled]
   })
   // O Nanab vencido só sai quando nenhum slot tem mais hora a liquidar dentro
@@ -103,6 +105,7 @@ export function settleDaycare(
   slot: CatchUpState['daycare'][number],
   now: number,
   boost: number | DaycareTimedBoost = 1,
+  context?: DaycareContext,
 ): CatchUpResult['daycare'][number] | undefined {
   const end = Math.min(now, slot.enteredAt + daycareConfig.maxMs)
   const hours = Math.floor((end - slot.lastSettledAt) / hourMs)
@@ -110,6 +113,7 @@ export function settleDaycare(
 
   const { level, xp, xpGained } = applyDaycareHours(slot.level, slot.xp, hours, boost, {
     from: slot.lastSettledAt,
+    context,
   })
   return {
     pokemonId: slot.pokemonId,

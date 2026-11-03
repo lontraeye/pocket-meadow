@@ -82,17 +82,16 @@ describe('daycare', () => {
   })
 
   test('a taxa sobe quando o nível sobe no meio da liquidação', () => {
-    // 8 h no Nv 5: 7×15 = 105, na 8ª hora sobe e sobra 9 XP no Nv 6.
-    // A 9ª hora já rende no Nv 6: +18, fica 27.
+    // O XP por hora é uma fração do XP do próximo nível: sobe junto com o nível.
+    assert.ok(daycareXpPerHour(6) > daycareXpPerHour(5))
     const result = applyCatchUp(
       state({ daycare: [{ ...slot, level: 5, xp: 0, lastSettledAt: now - 9 * hour }] }),
       now,
     )
-    assert.equal(result.daycare[0]?.level, 6)
-    assert.equal(result.daycare[0]?.xp, 27)
-    assert.equal(result.daycare[0]?.xpGained, 8 * 15 + 18)
-    assert.equal(daycareXpPerHour(5), 15)
-    assert.equal(daycareXpPerHour(6), 18)
+    const expected = applyDaycareHours(5, 0, 9)
+    assert.equal(result.daycare[0]?.level, expected.level)
+    assert.equal(result.daycare[0]?.xp, expected.xp)
+    assert.ok((result.daycare[0]?.level ?? 0) > 5)
   })
 
   test('sobe de nível e carrega o XP que sobrou', () => {
@@ -162,8 +161,7 @@ describe('daycare', () => {
   })
 
   test('Nanab desalinhada: 2 h de efeito valem 2 h de bônus, divididas entre 3 horas', () => {
-    // Nv 50: 150 XP/h. Janela de settledFrom+0,5h a +2,5h: horas com 0,5, 1 e 0,5
-    // de bônus → 225 + 300 + 225 = 750, ou seja, 450 normais + 300 (2 h de bônus).
+    // Janela de settledFrom+0,5h a +2,5h: horas com ×1,5, ×2 e ×1,5 (Nv 50, sem subir de nível).
     const settledFrom = now - 3 * hour
     const result = applyCatchUp(
       state({
@@ -180,8 +178,8 @@ describe('daycare', () => {
       }),
       now,
     )
-    assert.equal(daycareXpPerHour(50), 150)
-    assert.equal(result.daycare[0]?.xpGained, 750)
+    const expected = 2 * daycareXpPerHour(50, 1.5) + daycareXpPerHour(50, 2)
+    assert.equal(result.daycare[0]?.xpGained, expected)
   })
 
   test('Nanab: hora ganha bônus na fração dentro da janela', () => {
@@ -282,16 +280,31 @@ describe('daycare', () => {
     assert.deepEqual(result.deleteEffectIds, [6])
   })
 
-  test('um dia cheio no Nv 5 rende cerca de 3 níveis e no Nv 50 cerca de 1', () => {
-    const from5 = applyDaycareHours(5, 0, daycareConfig.maxHours)
-    // Dois level ups + quase o terceiro (~2,9 da tabela da seção 5.9).
-    assert.equal(from5.level, 7)
-    assert.ok(from5.xp / xpToNext(7) > 0.8)
+  test('um dia cheio rende uns 4 níveis em qualquer nível (sem time nem cuidador)', () => {
+    for (const start of [5, 50]) {
+      const day = applyDaycareHours(start, 0, daycareConfig.maxHours)
+      const gained = day.level - start
+      assert.ok(gained >= 3 && gained <= 5, `Nv ${start}: +${gained}`)
+    }
+  })
 
-    const from50 = applyDaycareHours(50, 0, daycareConfig.maxHours)
-    assert.equal(from50.level, 51)
-    assert.ok(from50.xp < xpToNext(51))
-    assert.equal(levelsGainedFromStay(from50.level, from50.xp, from50.xpGained), 1)
+  test('bônus de alcance: quem está abaixo do time sobe mais rápido, sem passar do time', () => {
+    const alone = applyDaycareHours(5, 0, daycareConfig.maxHours)
+    const behind = applyDaycareHours(5, 0, daycareConfig.maxHours, 1, {
+      context: { teamAverage: 30, teamMax: 32, caretakerMult: 1 },
+    })
+    assert.ok(behind.level > alone.level + 3, `${behind.level} vs ${alone.level}`)
+    // Teto: o nível mais alto do time.
+    const capped = applyDaycareHours(5, 0, daycareConfig.maxHours, 1, {
+      context: { teamAverage: 30, teamMax: 8, caretakerMult: 1 },
+    })
+    assert.equal(capped.level, 8)
+  })
+
+  test('cuidador multiplica o ganho', () => {
+    const base = applyDaycareHours(20, 0, 6)
+    const blissey = applyDaycareHours(20, 0, 6, 1, { context: { teamAverage: null, teamMax: null, caretakerMult: 2 } })
+    assert.ok(blissey.xpGained > base.xpGained * 1.8)
   })
 })
 

@@ -1,11 +1,13 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { moveProgressionConfig } from '../config/traits.js'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballList, ballsConfig } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
 import { FIRST_GROWTH_MULT, berryConfig, berryList, energyBerryOff, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
-import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
+import { CARETAKER_TIERS, daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
+import { caretakerOf, daycareContext } from '../db/caretaker.js'
+import { applyDaycareHours } from '../game/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
 import { trainerConfig, trainerXpToNext } from '../config/trainer.js'
@@ -120,19 +122,65 @@ function readState(userId: number, now: number) {
     .where(eq(daycareSlots.userId, userId))
     .all()
   const slotsUnlocked = daycareSlotsUnlocked(trainer.level)
+  // Cuidador e time (5.21): o bônus de alcance, o teto e a prévia de cada vaga.
+  const context = daycareContext(userId)
+  const speciesNames = new Map(
+    db
+      .select({ id: species.id, displayName: species.displayName })
+      .from(species)
+      .where(inArray(species.id, CARETAKER_TIERS.flatMap((tier) => [...tier.species])))
+      .all()
+      .map((row) => [row.id, row.displayName]),
+  )
+  const levelOf = new Map(
+    db
+      .select({ id: pokemon.id, level: pokemon.level, xp: pokemon.xp })
+      .from(pokemon)
+      .where(eq(pokemon.userId, userId))
+      .all()
+      .map((row) => [row.id, row]),
+  )
   const daycare = {
     slotsUnlocked,
     nextSlotLevel: nextDaycareSlotLevel(trainer.level),
     slots: daycareRows
-      .map((row) => ({
-        slotIndex: row.slotIndex,
-        pokemonId: row.pokemonId,
-        enteredAt: row.enteredAt,
-        lastSettledAt: row.lastSettledAt,
-        xpGained: row.xpGained,
-        fullAt: row.enteredAt + daycareConfig.maxMs,
-      }))
+      .map((row) => {
+        const fullAt = row.enteredAt + daycareConfig.maxMs
+        const mon = levelOf.get(row.pokemonId)
+        // Prévia: as horas que faltam até o fim do prazo, com o time e o cuidador de agora.
+        const hoursLeft = Math.max(0, Math.floor((fullAt - row.lastSettledAt) / (60 * 60 * 1000)))
+        const projected = mon
+          ? applyDaycareHours(mon.level, mon.xp, hoursLeft, 1, { context })
+          : { level: 0, xp: 0, xpGained: 0 }
+        return {
+          slotIndex: row.slotIndex,
+          pokemonId: row.pokemonId,
+          enteredAt: row.enteredAt,
+          lastSettledAt: row.lastSettledAt,
+          xpGained: row.xpGained,
+          fullAt,
+          projected: { level: projected.level, xpGained: projected.xpGained },
+        }
+      })
       .sort((a, b) => a.slotIndex - b.slotIndex),
+    caretaker: caretakerOf(userId),
+    caretakerTiers: CARETAKER_TIERS.map((tier) => ({
+      key: tier.key,
+      name: tier.name,
+      mult: tier.mult,
+      species: tier.species.map((id) => ({ id, name: speciesNames.get(id) ?? `#${id}` })),
+    })),
+    /** Para a tela simular a estadia de quem ainda vai entrar. */
+    rules: {
+      levelsPerHour: daycareConfig.levelsPerHour,
+      catchUpPerLevel: daycareConfig.catchUpPerLevel,
+      catchUpMax: daycareConfig.catchUpMax,
+      maxHours: daycareConfig.maxHours,
+      xpBase: progressConfig.xpBase,
+      xpExponent: progressConfig.xpExponent,
+      levelCap: progressConfig.levelCap,
+    },
+    context,
   }
 
   const effects = db.select().from(activeEffects).where(eq(activeEffects.userId, userId)).all()

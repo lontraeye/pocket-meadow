@@ -348,7 +348,9 @@ export const gardenStructures = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    key: text('key', { enum: ['apricorn_tree', 'apricorn_tree_blue', 'apricorn_tree_yellow', 'ball_bench'] }).notNull(),
+    key: text('key', {
+      enum: ['apricorn_tree', 'apricorn_tree_blue', 'apricorn_tree_yellow', 'ball_bench', 'daycare_keeper'],
+    }).notNull(),
     level: integer('level').notNull().default(1),
     since: integer('since').notNull(),
     progress: real('progress').notNull().default(0),
