@@ -1557,6 +1557,11 @@
                 onclick={(event) => onGardenTap(event, { kind: 'plot', id: plotIdx })}
               >
                 <img src={bush} alt="" width={24 * pmdScale} height={32 * pmdScale} />
+                {#if stage === 'ready'}
+                  <span class="tree-full" aria-hidden="true">pronta</span>
+                {:else if stage === 'dead'}
+                  <span class="tree-full dry" aria-hidden="true">seca</span>
+                {/if}
               </button>
             {/if}
           {/if}
@@ -2403,6 +2408,11 @@
   }
 
   /* Marcador com tempo: a barrinha corre no pé da etiqueta. */
+  .tree-full.dry {
+    background: #eadfcf;
+    color: #6a4a2a;
+  }
+
   .tree-full.timer {
     padding-bottom: 7px;
     font-variant-numeric: tabular-nums;
