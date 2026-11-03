@@ -432,7 +432,7 @@
 
   // Balão de diálogo (5.21), como nos jogos de fazenda: o coração fica fixo
   // enquanto dá para fazer carinho (tocar no balão ou no Pokémon faz o
-  // carinho); a fome aparece de vez em quando; a carinha triste quando a
+  // carinho); a fruta fica fixa enquanto está com fome; a carinha triste quando a
   // felicidade está baixa; a feliz logo depois do carinho e, de vez em quando,
   // em quem está feliz e de barriga cheia.
   let happyUntil = $state<Record<number, number>>({})
@@ -444,20 +444,22 @@
   function smileNow(id: number, now: number): boolean {
     return (now + id * 7919) % SMILE_EVERY_MS < SMILE_FOR_MS
   }
-  // A fome também só aparece de vez em quando (mais vezes que o sorriso, é um
-  // pedido): uns 4 s a cada ~20 s, para não poluir a tela.
-  const HUNGER_EVERY_MS = 20_000
-  const HUNGER_FOR_MS = 4_000
-  function hungerNow(id: number, now: number): boolean {
-    return (now + id * 4793) % HUNGER_EVERY_MS < HUNGER_FOR_MS
+  // A fome fica fixa, como o coração; quando os dois valem, trocam a cada 3 s.
+  const ALTERNATE_MS = 3_000
+  function alternateNow(id: number, now: number): boolean {
+    return Math.floor((now + id * 977) / ALTERNATE_MS) % 2 === 0
   }
   const bubbleById = $derived.by(() => {
     const now = clock.now()
     const out = new Map<number, BubbleKind>()
     for (const mon of game.pokemon) {
+      const hungry = mon.pet.hunger < game.garden.needThreshold
+      const canPet = (mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now) && mon.pet.affection < 90
       if ((happyUntil[mon.id] ?? 0) > Date.now()) out.set(mon.id, 'happy')
-      else if ((mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now) && mon.pet.affection < 90) out.set(mon.id, 'pet')
-      else if (mon.pet.hunger < game.garden.needThreshold && hungerNow(mon.id, now)) out.set(mon.id, 'hunger')
+      // Com fome e querendo carinho, os dois balões se alternam (cada um no seu ritmo, pelo id).
+      else if (hungry && canPet) out.set(mon.id, alternateNow(mon.id, now) ? 'hunger' : 'pet')
+      else if (hungry) out.set(mon.id, 'hunger')
+      else if (canPet) out.set(mon.id, 'pet')
       else if (mon.pet.happiness < 35) out.set(mon.id, 'sad')
       else if (mon.pet.happiness >= 60 && mon.pet.hunger >= game.garden.needThreshold && smileNow(mon.id, now))
         out.set(mon.id, 'happy')
@@ -1500,7 +1502,6 @@
             aria-label={locked ? `Canteiro ${plotIdx + 1}, fechado` : `Canteiro ${plotIdx + 1}`}
             onclick={() => (locked ? showLockedPlot() : openPlot(plotIdx))}
           >
-            {#if locked}<span class="lock" aria-hidden="true"></span>{/if}
             <!-- Sem arte para a berry: o desenho antigo do canteiro. -->
             {#if plot && !bushSrc(plot.berryKey, bushLook(plot))}
               {#if stage === 'planted'}
@@ -1568,7 +1569,6 @@
                 {/each}
               </svg>
             {/if}
-            {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
             {#if tree.unlocked && ready >= tree.cap}
               <span class="tree-full" aria-hidden="true">cheia</span>
             {:else if timer}
@@ -1638,7 +1638,6 @@
             style:background-position-x="{-(benchWork ?? (benchState === 'ready' && bench.unlocked ? BENCH_READY : BENCH_IDLE)) * BENCH_W * pmdScale}px"
             aria-hidden="true"
           ></span>
-          {#if !bench.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
           {#if benchTimer}
             <span class="tree-full timer" aria-hidden="true">
               {benchTimer.text}
@@ -2061,32 +2060,6 @@
     background: rgb(20 16 10 / 0.35);
   }
 
-  .lock {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 8px;
-    height: 7px;
-    transform: translate(-50%, -30%);
-    background: #e8d6a8;
-    border: 1px solid #3a2a14;
-    border-radius: 1px;
-    pointer-events: none;
-  }
-
-  .lock::before {
-    content: '';
-    position: absolute;
-    left: 1px;
-    top: -5px;
-    width: 4px;
-    height: 4px;
-    border: 1px solid #3a2a14;
-    border-bottom: 0;
-    border-radius: 3px 3px 0 0;
-    background: transparent;
-  }
-
   .tile.plot:focus-visible {
     outline: var(--px) dashed var(--ink);
     outline-offset: 2px;
@@ -2336,10 +2309,6 @@
     filter: grayscale(0.7) brightness(0.6);
   }
 
-  .tree .lock {
-    top: 40%;
-  }
-
   .tree.shake svg {
     transform-origin: 50% 100%;
     animation: tree-shake 0.45s steps(6, jump-none);
@@ -2389,10 +2358,6 @@
 
   .bench.locked .bench-sprite {
     filter: grayscale(0.7) brightness(0.6);
-  }
-
-  .bench .lock {
-    top: 55%;
   }
 
 
