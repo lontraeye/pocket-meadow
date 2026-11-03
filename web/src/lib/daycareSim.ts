@@ -1,7 +1,7 @@
 // Prévia da estadia no daycare (PLANNING.md, 5.21), com as mesmas regras do
 // servidor (config/daycare.ts e game/daycare.ts): o XP por hora é uma fração do
-// XP do próximo nível, com o bônus de alcance e o do cuidador, até o nível mais
-// alto do time. O servidor manda as regras e o time no estado.
+// XP do próximo nível, com o bônus de alcance e o do cuidador. O servidor manda
+// as regras e o time no estado.
 import type { DaycareContext, DaycareRules } from './api'
 
 function xpToNext(level: number, rules: DaycareRules): number {
@@ -21,7 +21,7 @@ export function simulateStay(
   context: DaycareContext,
   hours = rules.maxHours,
 ): { level: number; xpGained: number } {
-  const cap = Math.min(rules.levelCap, context.teamMax ?? rules.levelCap)
+  const cap = rules.levelCap
   let lv = level
   let cur = xp
   let gained = 0

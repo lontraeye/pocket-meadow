@@ -445,7 +445,7 @@ export type DaycareRules = {
   levelCap: number
 }
 
-export type DaycareContext = { teamAverage: number | null; teamMax: number | null; caretakerMult: number }
+export type DaycareContext = { teamAverage: number | null; caretakerMult: number }
 
 export type DaycareState = {
   slotsUnlocked: number

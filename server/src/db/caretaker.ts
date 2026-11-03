@@ -32,7 +32,7 @@ export function caretakerOf(userId: number): CaretakerView | null {
   return { pokemonId: row.pokemonId, speciesId: row.speciesId, tier: tier.key, tierName: tier.name, mult: tier.mult }
 }
 
-/** O time (média e nível mais alto) e o bônus do cuidador, para o catch-up do daycare. */
+/** A média do time e o bônus do cuidador, para o catch-up do daycare. */
 export function daycareContext(userId: number): DaycareContext {
   const levels = getDb()
     .select({ level: pokemon.level })
@@ -42,7 +42,6 @@ export function daycareContext(userId: number): DaycareContext {
     .map((row) => row.level)
   return {
     teamAverage: levels.length > 0 ? levels.reduce((sum, level) => sum + level, 0) / levels.length : null,
-    teamMax: levels.length > 0 ? Math.max(...levels) : null,
     caretakerMult: caretakerOf(userId)?.mult ?? 1,
   }
 }

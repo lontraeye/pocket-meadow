@@ -288,22 +288,20 @@ describe('daycare', () => {
     }
   })
 
-  test('bônus de alcance: quem está abaixo do time sobe mais rápido, sem passar do time', () => {
+  test('bônus de alcance: quem está abaixo do time sobe mais rápido; acima, segue no ritmo normal', () => {
     const alone = applyDaycareHours(5, 0, daycareConfig.maxHours)
     const behind = applyDaycareHours(5, 0, daycareConfig.maxHours, 1, {
-      context: { teamAverage: 30, teamMax: 32, caretakerMult: 1 },
+      context: { teamAverage: 30, caretakerMult: 1 },
     })
     assert.ok(behind.level > alone.level + 3, `${behind.level} vs ${alone.level}`)
-    // Teto: o nível mais alto do time.
-    const capped = applyDaycareHours(5, 0, daycareConfig.maxHours, 1, {
-      context: { teamAverage: 30, teamMax: 8, caretakerMult: 1 },
-    })
-    assert.equal(capped.level, 8)
+    // Acima do time não há teto: sobe como sem time.
+    const ahead = applyDaycareHours(20, 0, daycareConfig.maxHours, 1, { context: { teamAverage: 5, caretakerMult: 1 } })
+    assert.equal(ahead.level, applyDaycareHours(20, 0, daycareConfig.maxHours).level)
   })
 
   test('cuidador multiplica o ganho', () => {
     const base = applyDaycareHours(20, 0, 6)
-    const blissey = applyDaycareHours(20, 0, 6, 1, { context: { teamAverage: null, teamMax: null, caretakerMult: 2 } })
+    const blissey = applyDaycareHours(20, 0, 6, 1, { context: { teamAverage: null, caretakerMult: 2 } })
     assert.ok(blissey.xpGained > base.xpGained * 1.8)
   })
 })

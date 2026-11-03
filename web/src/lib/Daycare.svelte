@@ -49,7 +49,6 @@
   }
   /** Retrato do PMD Sprite Collab (só das espécies que cuidam do daycare). */
   const portraitSrc = (speciesId: number) => `/sprites/pmd-portrait/${speciesId}.png`
-  const atTeamCap = (level: number) => game.daycare.context.teamMax !== null && level >= game.daycare.context.teamMax
 
   async function pickCaretaker(id: number | null) {
     const ok = await run('/api/daycare/caretaker', { pokemonId: id })
@@ -168,7 +167,6 @@
                 <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
                 <span>{mon.nickname ?? mon.displayName}</span>
                 <small>Nv {mon.level} → {stay.level}</small>
-                {#if atTeamCap(mon.level)}<small class="note">já no nível do time</small>{/if}
               </button>
             {/each}
           </div>
@@ -266,12 +264,10 @@
                     {/if}
                   </div>
                   <p class="preview">+{card.slot.xpGained} XP até agora</p>
-                  {#if card.slot.projected.level > card.mon.level || card.slot.projected.xpGained > 0}
+                  {#if card.slot.projected.xpGained > 0}
                     <p class="preview">
                       Ao fim: Nv {card.slot.projected.level} (+{card.slot.projected.xpGained.toLocaleString('pt-BR')} XP)
                     </p>
-                  {:else if atTeamCap(card.mon.level)}
-                    <p class="preview note">Já no nível do time: não ganha mais aqui.</p>
                   {/if}
                 </div>
               </div>
@@ -358,11 +354,6 @@
     margin: 0;
     padding-left: 1rem;
     font-size: 0.85rem;
-  }
-
-  .note {
-    opacity: 0.75;
-    font-style: italic;
   }
 
   .daycare {

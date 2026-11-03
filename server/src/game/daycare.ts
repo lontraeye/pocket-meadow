@@ -59,12 +59,10 @@ export function boostForHour(
   return 1 + (boost.multiplier - 1) * Math.min(1, overlap / hourMs)
 }
 
-/** O que o daycare olha do jogador: o time (alcance e teto) e o cuidador. */
+/** O que o daycare olha do jogador: a média do time (bônus de alcance) e o cuidador. */
 export type DaycareContext = {
   /** Média de nível do time (null = sem time: sem bônus de alcance). */
   teamAverage: number | null
-  /** Nível mais alto do time: ninguém passa dele no daycare. */
-  teamMax: number | null
   /** Bônus do Pokémon cuidador (1 = sem cuidador). */
   caretakerMult: number
 }
@@ -82,7 +80,7 @@ export function applyDaycareHours(
   options: { from?: number; cap?: number; context?: DaycareContext } = {},
 ): { level: number; xp: number; xpGained: number } {
   const context = options.context
-  const cap: number = Math.min(options.cap ?? progressConfig.levelCap, context?.teamMax ?? progressConfig.levelCap)
+  const cap: number = options.cap ?? progressConfig.levelCap
   const from = options.from ?? 0
   let nextLevel = level
   let nextXp = xp
