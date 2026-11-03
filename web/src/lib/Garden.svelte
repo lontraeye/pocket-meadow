@@ -74,6 +74,22 @@
 
   const clock = serverClock(() => game.now)
 
+  // Arbustos de berry (arte em art/jardim/arbustos/): um por berry, sem frutas
+  // enquanto cresce e com frutas quando fica pronto. Sem arte, fica o desenho antigo.
+  const bushFiles = import.meta.glob('../../../art/jardim/arbustos/arbusto-*.png', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }) as Record<string, string>
+  const bushArt = new Map(
+    Object.entries(bushFiles).map(([file, url]) => [file.slice(file.lastIndexOf('/') + 1, -'.png'.length), url]),
+  )
+  function bushSrc(berryKey: string, ripe: boolean): string | null {
+    return bushArt.get(`arbusto-${berryKey}${ripe ? '-frutos' : ''}`) ?? null
+  }
+  /** Centro das raízes, em pixels da arte, acima da última linha (igual à árvore). */
+  const BUSH_FOOT = 2
+
   function plotStage(plot: PlotState | undefined): 'empty' | 'planted' | 'growing' | 'ready' {
     if (!plot) return 'empty'
     const now = clock.now()
@@ -1413,12 +1429,29 @@
             {#if locked}<span class="lock" aria-hidden="true"></span>{/if}
             {#if stage === 'planted'}
               <span class="crop sprout" aria-hidden="true"></span>
-            {:else if stage === 'growing'}
+            {:else if stage === 'growing' && !(plot && bushSrc(plot.berryKey, false))}
               <span class="crop bush" aria-hidden="true"></span>
-            {:else if stage === 'ready' && plot}
+            {:else if stage === 'ready' && plot && !bushSrc(plot.berryKey, true)}
               <img class="crop berry" src={berryIconSrc(plot.berryKey)} alt="" />
             {/if}
           </button>
+          <!-- O arbusto passa do losango do canteiro: fica fora do botão, sem pegar toque. -->
+          {#if plot && (stage === 'growing' || stage === 'ready')}
+            {@const bush = bushSrc(plot.berryKey, stage === 'ready')}
+            {#if bush}
+              <img
+                class="bush-art"
+                class:ripe={stage === 'ready'}
+                src={bush}
+                alt=""
+                width={24 * pmdScale}
+                height={32 * pmdScale}
+                style:left="{snapToDevice(spot.x)}px"
+                style:top="{snapToDevice(spot.y + halfH + BUSH_FOOT * pmdScale)}px"
+                style:z-index={tile.col + tile.row + depthSpan + 1}
+              />
+            {/if}
+          {/if}
         {/if}
       {/each}
       {#if game.garden.tree}
@@ -2046,6 +2079,14 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.4rem;
+  }
+
+  .bush-art {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    image-rendering: pixelated;
+    pointer-events: none;
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.25));
   }
 
   .crop.sprout {
