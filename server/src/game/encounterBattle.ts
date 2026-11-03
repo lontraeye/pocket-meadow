@@ -41,6 +41,8 @@ export type TeamMonRow = {
   abilitySlot: AbilitySlot
   fastMove: string
   chargedMove: string | null
+  /** Fração do HP ao entrar; omitido = cheio. */
+  startHpRatio?: number
 }
 
 export type WildSpeciesRow = {
@@ -106,6 +108,7 @@ export function buildBattleSetup(input: {
       fastMove: mon.fastMove,
       chargedMove: mon.chargedMove,
       moves,
+      ...(mon.startHpRatio !== undefined ? { startHpRatio: mon.startHpRatio } : {}),
     }),
   )
 

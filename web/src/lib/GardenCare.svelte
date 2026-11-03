@@ -38,12 +38,19 @@
       { key: 'jardim', title: 'Jardim', list: pets.filter((mon) => mon.teamSlot === null && !roleOf(mon)).sort(byHunger) },
     ].filter((group) => group.list.length > 0),
   )
-  /** As três barrinhas de cada Pokémon, na mesma ordem da legenda. */
+  /** Barrinhas de cada Pokémon, na mesma ordem da legenda. */
   const STATS = [
     { key: 'hunger', label: 'Fome', color: '#e8a13a' },
     { key: 'affection', label: 'Carinho', color: '#e0708e' },
     { key: 'happiness', label: 'Felicidade', color: '#6fc46a' },
   ] as const
+  /** Cor da mini-barra de HP conforme a fração (verde → amarelo → vermelho). */
+  function hpColor(ratio: number): string {
+    if (ratio <= 0) return '#d9534f'
+    if (ratio < 0.25) return '#d9534f'
+    if (ratio < 0.5) return '#e8a13a'
+    return '#4caf7a'
+  }
   const hungryCount = $derived(pets.filter((mon) => mon.pet.hunger < game.garden.fullAt).length)
   const berries = $derived(
     game.inventory
@@ -113,11 +120,12 @@
   {#if pets.length === 0}
     <p class="hint">Nenhum Pokémon no jardim.</p>
   {:else}
-    <!-- Legenda das três barrinhas de cada Pokémon. -->
+    <!-- Legenda das barrinhas de cada Pokémon. -->
     <p class="legend">
       {#each STATS as stat (stat.key)}
         <span><i style:background={stat.color}></i>{stat.label}</span>
       {/each}
+      <span><i style:background="#4caf7a"></i>HP</span>
     </p>
 
     <div class="all">
@@ -142,8 +150,10 @@
         <ul class="list">
           {#each group.list as mon (mon.id)}
             {@const starving = mon.pet.hunger < game.garden.fightMinHunger}
+            {@const fainted = mon.hpRatio <= 0}
             {@const full = mon.pet.hunger >= game.garden.fullAt}
             {@const role = roleOf(mon)}
+            {@const hpPct = Math.round(Math.max(0, Math.min(1, mon.hpRatio)) * 100)}
             <li class="row">
               <img class="portrait" src={portraitSrc(mon.speciesId)} alt="" width="40" height="40" />
               <div class="info">
@@ -156,8 +166,12 @@
                       <i style:width="{value}%" style:background={stat.key === 'hunger' && starving ? '#d9534f' : stat.color}></i>
                     </span>
                   {/each}
+                  <span class="mini" aria-label="HP {hpPct}" title="HP {hpPct}">
+                    <i style:width="{hpPct}%" style:background={hpColor(mon.hpRatio)}></i>
+                  </span>
                 </span>
-                {#if starving}<small class="warn">com fome · não luta</small>{/if}
+                {#if fainted}<small class="warn">desmaiado · não luta</small>
+                {:else if starving}<small class="warn">com fome · não luta</small>{/if}
               </div>
               <button
                 type="button"

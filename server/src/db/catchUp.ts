@@ -4,6 +4,7 @@ import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { getDb } from './client.js'
 import { daycareContext } from './caretaker.js'
+import { ensureHealMachine } from './healMachine.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 
@@ -132,6 +133,8 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   }
 
   settleGarden(userId, now)
+  // Máquina de cura: linha criada no catch-up para contas antigas (PROGRESSAO.md, item 4).
+  ensureHealMachine(userId, now)
 
   return {
     level: trainer.level,

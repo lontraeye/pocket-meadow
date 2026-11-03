@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { progressConfig } from '../config/progress.js'
+import { restHpRatio } from '../game/heal.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { gardenXp, pickGift, settlePet } from '../game/pets.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
@@ -33,6 +34,8 @@ export function settleGarden(userId: number, now: number): void {
       happiness: pokemon.happiness,
       petAt: pokemon.petAt,
       lastGiftAt: pokemon.lastGiftAt,
+      hpRatio: pokemon.hpRatio,
+      hpUpdatedAt: pokemon.hpUpdatedAt,
     })
     .from(pokemon)
     .where(eq(pokemon.userId, userId))
@@ -50,7 +53,15 @@ export function settleGarden(userId: number, now: number): void {
     const inGarden = row.location === 'garden' && !row.inPc
     if (row.petAt === null) {
       if (inGarden) {
-        db.update(pokemon).set({ petAt: now, lastGiftAt: now }).where(eq(pokemon.id, row.id)).run()
+        // Entra no jardim: começa a contar fome/carinho e o descanso de HP.
+        db.update(pokemon)
+          .set({
+            petAt: now,
+            lastGiftAt: now,
+            hpUpdatedAt: row.hpUpdatedAt ?? now,
+          })
+          .where(eq(pokemon.id, row.id))
+          .run()
       }
       continue
     }
@@ -62,6 +73,18 @@ export function settleGarden(userId: number, now: number): void {
       xpUntilCap(row.level, row.xp, progressConfig.levelCap),
     )
     const grown = gain > 0 ? grantXp(row.level, row.xp, gain) : { level: row.level, xp: row.xp }
+
+    // Descanso: HP volta com o tempo só no jardim (cheio em restFullMs a partir de 0).
+    let hpRatio = row.hpRatio
+    let hpUpdatedAt: number | null = row.hpUpdatedAt
+    if (inGarden) {
+      const from = row.hpUpdatedAt ?? row.petAt
+      hpRatio = restHpRatio(row.hpRatio, now - from)
+      hpUpdatedAt = now
+    } else {
+      // Fora do jardim o HP congela (como pet_at).
+      hpUpdatedAt = null
+    }
 
     let lastGiftAt = row.lastGiftAt ?? row.petAt
     if (
@@ -94,6 +117,8 @@ export function settleGarden(userId: number, now: number): void {
         lastGiftAt,
         level: grown.level,
         xp: grown.xp,
+        hpRatio,
+        hpUpdatedAt,
       })
       .where(and(eq(pokemon.id, row.id), eq(pokemon.userId, userId)))
       .run()

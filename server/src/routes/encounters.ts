@@ -11,6 +11,7 @@ import { placeBySlug } from '../config/places.js'
 import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/regions.js'
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { petConfig } from '../config/pets.js'
+import { clampRatio } from '../game/heal.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
@@ -45,7 +46,13 @@ import { mulberry32, randomSeed } from '../game/rng.js'
 import { isFinishTooEarly, simConfig } from '../game/sim/config.js'
 import { battleRngSeed, seedDropRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
 import { parseBattleSetup, serializeBattleSetup } from '../game/sim/setupJson.js'
-import type { BattleEvent, BattleInput, BattleResult, BattleSetup } from '../game/sim/types.js'
+import type {
+  BattleEvent,
+  BattleInput,
+  BattleResult,
+  BattleSetup,
+  BattleSnapshotSide,
+} from '../game/sim/types.js'
 import { calmAgitation, fleeChanceAt } from '../game/flee.js'
 import { rollThrow } from '../game/throwCapture.js'
 import { traitColumns } from '../game/traitValues.js'
@@ -344,6 +351,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
     faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+    teamSnapshot: result.snapshot.team,
     now,
     log: result.log,
   })
@@ -439,6 +447,7 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
       won: false,
       enteredSlots: result.enteredSlots,
       faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+      teamSnapshot: result.snapshot.team,
       now,
       log: result.log.length > 0 ? result.log : [{ t: 0, kind: 'end', result: 'lose' }],
     })
@@ -459,6 +468,7 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
     won: result.result === 'win',
     enteredSlots: result.enteredSlots,
     faintedSlots: result.snapshot.team.filter((side) => side.fainted).map((side) => side.slot),
+    teamSnapshot: result.snapshot.team,
     now,
     log: result.log,
   })
@@ -480,10 +490,13 @@ function applyBattleOutcome(input: {
   enteredSlots: number[]
   /** Slots que terminaram desmaiados (não recebem XP). */
   faintedSlots: number[]
+  /** Snapshot do time: grava hp_ratio no fim (PROGRESSAO.md, 4.2). */
+  teamSnapshot: BattleSnapshotSide[]
   now: number
   log: BattleEvent[]
 }) {
-  const { userId, clock, encounter, team, wild, opponents, won, enteredSlots, faintedSlots, now, log } = input
+  const { userId, clock, encounter, team, wild, opponents, won, enteredSlots, faintedSlots, teamSnapshot, now, log } =
+    input
   const db = getDb()
   // Só quem entrou e não desmaiou. Bench e KO ficam de fora; Exp Share (futuro) muda isso.
   const sharers = battleXpSharers(enteredSlots, faintedSlots)
@@ -558,6 +571,19 @@ function applyBattleOutcome(input: {
     if (!enteredSlots.includes(mon.slot)) continue
     db.update(pokemon)
       .set({ hunger: sql`max(0, ${pokemon.hunger} - ${petConfig.battleHungerCost})` })
+      .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
+      .run()
+  }
+
+  // HP que fica depois da luta: fração do snapshot (desmaiado = 0).
+  const snapBySlot = new Map(teamSnapshot.map((side) => [side.slot, side]))
+  for (const mon of team) {
+    const side = snapBySlot.get(mon.slot)
+    if (!side) continue
+    const hpRatio =
+      side.fainted || side.hp <= 0 || side.maxHp <= 0 ? 0 : clampRatio(side.hp / side.maxHp)
+    db.update(pokemon)
+      .set({ hpRatio, hpUpdatedAt: now })
       .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
       .run()
   }
@@ -778,19 +804,21 @@ function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows:
   const rows = selectTeamRows(userId, pokemonIds)
   if (rows.length !== pokemonIds.length) return fail('invalid_team', 400)
   const byId = new Map(rows.map((row) => [row.id, row]))
-  // Faminto não luta (PROGRESSAO.md, 4.2): fica fora; se ninguém sobra, não há luta.
-  const hungerOf = new Map(
+  // Faminto / desmaiado não luta (PROGRESSAO.md, 4.2): fica fora; se ninguém sobra, não há luta.
+  const statusOf = new Map(
     getDb()
-      .select({ id: pokemon.id, hunger: pokemon.hunger })
+      .select({ id: pokemon.id, hunger: pokemon.hunger, hpRatio: pokemon.hpRatio })
       .from(pokemon)
       .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, pokemonIds)))
       .all()
-      .map((row) => [row.id, row.hunger]),
+      .map((row) => [row.id, row]),
   )
-  const fed = pokemonIds.filter((id) => (hungerOf.get(id) ?? 100) >= petConfig.fightMinHunger)
+  const fed = pokemonIds.filter((id) => (statusOf.get(id)?.hunger ?? 100) >= petConfig.fightMinHunger)
   if (fed.length === 0) return fail('team_hungry', 400)
+  const standing = fed.filter((id) => (statusOf.get(id)?.hpRatio ?? 1) > 0)
+  if (standing.length === 0) return fail('team_fainted', 400)
   const team: TeamBattleRow[] = []
-  for (const id of fed) {
+  for (const id of standing) {
     const mon = byId.get(id)
     if (!mon || mon.location !== 'garden') return fail('invalid_team', 400)
     const ready = toTeamBattleRow(mon)
@@ -851,6 +879,7 @@ function selectTeamRows(userId: number, pokemonIds: number[]) {
       abilitySlot: pokemon.abilitySlot,
       fastMove: pokemon.fastMove,
       chargedMove: pokemon.chargedMove,
+      hpRatio: pokemon.hpRatio,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -873,6 +902,7 @@ function toTeamBattleRow(row: ReturnType<typeof selectTeamRows>[number]): TeamBa
   ) {
     return null
   }
+  const hpRatio = clampRatio(row.hpRatio)
   return {
     id: row.id,
     speciesId: row.speciesId,
@@ -903,6 +933,8 @@ function toTeamBattleRow(row: ReturnType<typeof selectTeamRows>[number]): TeamBa
     abilitySlot: row.abilitySlot,
     fastMove: row.fastMove,
     chargedMove: row.chargedMove,
+    // Sempre manda a fração: o sim usa startHpRatio (1 = cheio).
+    startHpRatio: hpRatio,
   }
 }
 

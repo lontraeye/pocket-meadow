@@ -41,6 +41,7 @@ import { view as petView } from './garden.js'
 import { missionsView } from '../db/missions.js'
 import { treesView } from '../db/apricorn.js'
 import { benchView } from '../db/bench.js'
+import { healMachineView } from '../db/healMachine.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -104,6 +105,7 @@ function readState(userId: number, now: number) {
       affection: pokemon.affection,
       happiness: pokemon.happiness,
       lastPetAt: pokemon.lastPetAt,
+      hpRatio: pokemon.hpRatio,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -373,6 +375,8 @@ function readState(userId: number, now: number) {
         learnset: view.learnset,
         availableMoves: available,
         pet: petView(mon, now),
+        /** Fração do HP de luta (0..1); já liquidada no catch-up. */
+        hpRatio: mon.hpRatio,
       }
     }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),
@@ -395,6 +399,7 @@ function readState(userId: number, now: number) {
       berryFill: petConfig.berryFill,
       trees: treesView(userId, trainer.level, now),
       bench: benchView(userId, trainer.level, now),
+      healMachine: healMachineView(userId, now),
     },
     daycare,
     plots: db

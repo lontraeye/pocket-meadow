@@ -255,6 +255,14 @@ export const pokemon = sqliteTable(
     lastPetAt: integer('last_pet_at'),
     /** Último presente (ou a entrada no jardim): o próximo sai `intervalMs` depois. */
     lastGiftAt: integer('last_gift_at'),
+    /**
+     * Fração do HP de luta (0..1). Absoluto mudaria com nível/evolução;
+     * desmaiado = 0 (fica fora da luta). Atualizado no fim da luta, no
+     * descanso do jardim e na máquina de cura (PROGRESSAO.md, 4.2).
+     */
+    hpRatio: real('hp_ratio').notNull().default(1),
+    /** Até quando o HP de descanso foi liquidado; null = fora do jardim (congelado). */
+    hpUpdatedAt: integer('hp_updated_at'),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),
@@ -340,7 +348,8 @@ export const missionDays = sqliteTable(
 
 /**
  * Estruturas fixas do jardim (5.23): `apricorn_tree` usa `progress` (Apricorns,
- * real) no instante `since`; `ball_bench` usa `level` e o operador.
+ * real) no instante `since`; `ball_bench` usa `level` e o operador;
+ * `heal_machine` usa `progress` (cargas, real) no instante `since`.
  */
 export const gardenStructures = sqliteTable(
   'garden_structures',
@@ -349,7 +358,14 @@ export const gardenStructures = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     key: text('key', {
-      enum: ['apricorn_tree', 'apricorn_tree_blue', 'apricorn_tree_yellow', 'ball_bench', 'daycare_keeper'],
+      enum: [
+        'apricorn_tree',
+        'apricorn_tree_blue',
+        'apricorn_tree_yellow',
+        'ball_bench',
+        'daycare_keeper',
+        'heal_machine',
+      ],
     }).notNull(),
     level: integer('level').notNull().default(1),
     since: integer('since').notNull(),

@@ -5,6 +5,7 @@ import { TREES, treeDef } from '../config/apricorn.js'
 import { berries } from '../config/berries.js'
 import { harvestApricorns, treesView } from '../db/apricorn.js'
 import { benchView, cancelJob, collectJob, setOperator, startJob, startUpgrade } from '../db/bench.js'
+import { useHealMachine } from '../db/healMachine.js'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -138,6 +139,20 @@ gardenRoutes.post('/bench/collect', requireUser, (c) =>
 gardenRoutes.post('/bench/cancel', requireUser, (c) =>
   benchAction(c.get('userId'), (userId, _level, now) => cancelJob(userId, now), c),
 )
+
+// Máquina de cura (PROGRESSAO.md, item 4): 1 carga cura a equipe toda.
+gardenRoutes.post('/heal-machine/use', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => {
+    persistCatchUp(userId, now)
+    const out = useHealMachine(userId, now)
+    if (!out.ok) return out
+    return { ok: true as const, healed: out.healed, healMachine: out.view }
+  })
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  return c.json({ healed: result.healed, healMachine: result.healMachine })
+})
 
 function benchAction(
   userId: number,

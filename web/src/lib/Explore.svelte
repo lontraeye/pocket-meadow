@@ -82,6 +82,7 @@
   let pending = $state(false)
   /** "Alimentar o time" antes da luta (faminto não luta). */
   let feedOpen = $state(false)
+  let healPending = $state(false)
   // Região tocada, enquanto o encontro e o sprite do selvagem chegam.
   let searching = $state<string | null>(null)
   // "Batalhar" tocado, até a cena estar pronta para começar.
@@ -682,6 +683,24 @@
     }
   }
 
+  async function healTeamFromMachine() {
+    healPending = true
+    message = ''
+    try {
+      const response = await api('/api/garden/heal-machine/use', {})
+      if (!response.ok) {
+        message = errorText(await readError(response))
+        return
+      }
+      play('harvest')
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      healPending = false
+    }
+  }
+
   function pickLead(id: number) {
     play('tap')
     lead = id
@@ -1183,10 +1202,22 @@
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
                 <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
-                {#if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
+                {#if mon.hpRatio <= 0}<small class="starving">desmaiado · fica fora</small>
+                {:else if mon.hpRatio < 1}<small class="hurt">ferido · {Math.round(mon.hpRatio * 100)}% HP</small>
+                {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
               </button>
             {/each}
           </div>
+          {#if roster.some((mon) => mon.hpRatio < 1)}
+            <button
+              type="button"
+              class="btn feed-team"
+              disabled={pending || healPending || game.garden.healMachine.charges < 1}
+              onclick={() => void healTeamFromMachine()}
+            >
+              Curar na máquina ({game.garden.healMachine.charges} carga{game.garden.healMachine.charges === 1 ? '' : 's'})
+            </button>
+          {/if}
           {#if roster.some((mon) => mon.pet.hunger < game.garden.fullAt)}
             <button type="button" class="btn feed-team" disabled={pending} onclick={() => (feedOpen = true)}>
               Alimentar o time
@@ -2086,6 +2117,11 @@
 
   .starving {
     color: #c0392b;
+    font-weight: 700;
+  }
+
+  .hurt {
+    color: #b86a1c;
     font-weight: 700;
   }
 

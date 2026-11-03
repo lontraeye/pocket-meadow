@@ -20,6 +20,8 @@ export type SerializedFighter = {
   fastMove: Partial<SimMove> & Pick<SimMove, 'name' | 'type' | 'power' | 'damageClass'>
   chargedMove: (Partial<SimMove> & Pick<SimMove, 'name' | 'type' | 'power' | 'damageClass'>) | null
   abilityKey: string
+  /** Ausente em setups antigos = HP cheio. */
+  startHpRatio?: number
 }
 
 export function serializeBattleSetup(setup: BattleSetup): SerializedBattleSetup {
@@ -57,6 +59,7 @@ function serializeFighter(fighter: SimFighter): SerializedFighter {
     fastMove: { ...fighter.fastMove },
     chargedMove: fighter.chargedMove ? { ...fighter.chargedMove } : null,
     abilityKey: fighter.abilityKey,
+    ...(fighter.startHpRatio !== undefined ? { startHpRatio: fighter.startHpRatio } : {}),
   }
 }
 
@@ -65,6 +68,10 @@ function parseFighter(raw: SerializedFighter): SimFighter {
     throw new Error('invalid_battle_setup')
   }
   const types = parseTypes(raw.types)
+  const startHpRatio =
+    typeof raw.startHpRatio === 'number' && Number.isFinite(raw.startHpRatio)
+      ? Math.min(1, Math.max(0, raw.startHpRatio))
+      : undefined
   return {
     id: raw.id ?? null,
     speciesId: raw.speciesId,
@@ -74,6 +81,7 @@ function parseFighter(raw: SerializedFighter): SimFighter {
     fastMove: parseMove(raw.fastMove),
     chargedMove: raw.chargedMove ? parseMove(raw.chargedMove) : null,
     abilityKey: typeof raw.abilityKey === 'string' ? raw.abilityKey : 'none',
+    ...(startHpRatio !== undefined ? { startHpRatio } : {}),
   }
 }
 

@@ -126,7 +126,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 2. ~~**Energia por campo revelado**~~ (feito em 2026-11-03): chegar numa área não revela nada; "Revelar campo" gasta 1 e as lutas daquele campo saem de graça; procurar no mato e usar mancha (pesca, árvore, pedra) gastam 1; líder não gasta. Máximo 10, volta 1 por hora; a Oran dá +2.
 2.1. ~~**Desmaio pausa a luta**~~ (feito em 2026-11-03): no manual, quando o Pokémon do jogador desmaia, a luta pausa e pergunta quem entra; no automático também pausa, com 4 s para escolher; sem toque, entra o próximo vivo e a luta segue.
 3. ~~**Fome trava a luta**~~ (feito em 2026-11-03): com fome abaixo de 20 (`fightMinHunger`) o Pokémon fica fora do time da luta (todos famintos: não há luta); cada luta tira 8 de fome de quem entrou (`battleHungerCost`); colheita com +2 berries; "Alimentar todos" (`POST /garden/pets/feed-all`) dá 1 berry a cada um, do mais faminto ao menos; abre pelo aviso "N com fome" e antes da luta ("Alimentar o time").
-4. **HP persistente e máquina de cura:** HP fica depois da luta; cura por berry, por descanso no jardim e pela máquina de cura (estrutura do jardim).
+4. ~~**HP persistente e máquina de cura**~~ (feito): HP fica depois da luta; cura por descanso no jardim e pela máquina de cura (estrutura do jardim; 1 carga cura a equipe toda; liberada desde o início). Berry de HP fica para depois.
 5. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, missões e nível.
 6. **Desbloqueios do jardim por marco** (4.3).
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script.

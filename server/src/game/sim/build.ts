@@ -20,6 +20,8 @@ export type FighterSources = {
   fastMove: string
   chargedMove: string | null
   moves: Map<string, MoveInfo>
+  /** Fração do HP ao entrar; omitido = cheio. */
+  startHpRatio?: number
 }
 
 export function buildSimFighter(source: FighterSources): SimFighter {
@@ -44,6 +46,7 @@ export function buildSimFighter(source: FighterSources): SimFighter {
     fastMove: fast,
     chargedMove: charged,
     abilityKey: resolveAbilityKey(source.abilities, source.abilitySlot),
+    ...(source.startHpRatio !== undefined ? { startHpRatio: source.startHpRatio } : {}),
   }
 }
 

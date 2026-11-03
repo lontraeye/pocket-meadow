@@ -63,6 +63,32 @@ function setup(team: SimFighter[], wild: SimFighter): BattleSetup {
   return { team, wild }
 }
 
+test('startHpRatio: luta começa com a fração guardada (sem o campo = cheio)', () => {
+  const base = fighter({
+    id: 1,
+    speciesId: 19,
+    level: 20,
+    stats: { hp: 50, attack: 10, defense: 80, spAttack: 10, spDefense: 80, speed: 40 },
+  })
+  const maxHp = Math.max(1, Math.floor(50 * simConfig.battleHpMultiplier))
+  const full = runBattle({
+    setup: setup([base], fighter({ speciesId: 16, level: 1, stats: { hp: 200, attack: 1, defense: 200, spAttack: 1, spDefense: 200, speed: 1 } })),
+    seed: 1,
+    untilMs: 0,
+  })
+  assert.equal(full.snapshot.team[0]!.hp, maxHp)
+
+  const half = runBattle({
+    setup: setup(
+      [{ ...base, startHpRatio: 0.5 }],
+      fighter({ speciesId: 16, level: 1, stats: { hp: 200, attack: 1, defense: 200, spAttack: 1, spDefense: 200, speed: 1 } }),
+    ),
+    seed: 1,
+    untilMs: 0,
+  })
+  assert.equal(half.snapshot.team[0]!.hp, Math.max(1, Math.round(maxHp * 0.5)))
+})
+
 test('mesma seed + setup + inputs → mesmo resultado e log', () => {
   const s = setup(
     [fighter({ id: 1, speciesId: 19, level: 20, stats: { hp: 60, attack: 55, defense: 30, spAttack: 30, spDefense: 30, speed: 80 } })],

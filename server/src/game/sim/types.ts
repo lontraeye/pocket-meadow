@@ -31,6 +31,11 @@ export type SimFighter = {
   chargedMove: SimMove | null
   /** Nome da habilidade já resolvido pela posição. */
   abilityKey: string
+  /**
+   * Fração do HP máx. ao entrar (0..1). Sem o campo = cheio (selvagem,
+   * lutas de teste). Na luta: hp = max(1, round(maxHp * startHpRatio)).
+   */
+  startHpRatio?: number
 }
 
 export type BattleSetup = {

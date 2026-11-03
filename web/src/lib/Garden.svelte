@@ -32,6 +32,16 @@
     benchWorkFrame,
   } from './bench'
   import BenchPanel from './BenchPanel.svelte'
+  import HealMachinePanel from './HealMachinePanel.svelte'
+  import {
+    HEAL_ANIM_TOTAL_MS,
+    HEAL_FRAMES,
+    HEAL_H,
+    HEAL_IDLE,
+    HEAL_SHEET,
+    HEAL_W,
+    healAnimFrame,
+  } from './healMachine'
   import Modal from './Modal.svelte'
   import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
   import PokemonSheet from './PokemonSheet.svelte'
@@ -384,8 +394,23 @@
     return (col === benchCol && row === benchRow) || (hasOperator && col === operatorCol && row === operatorRow)
   }
 
+  // Máquina de cura (PROGRESSAO.md, item 4): na mesma fileira da bancada,
+  // na casa livre entre a bancada e a árvore azul (como as outras estruturas).
+  const healCol = benchCol + 1
+  const healRow = benchRow
+
+  function isHealCell(col: number, row: number): boolean {
+    return col === healCol && row === healRow
+  }
+
   function isWalkable(col: number, row: number): boolean {
-    return inPlay(col, row) && !isPlotCell(col, row) && !isTreeCell(col, row) && !isBenchCell(col, row)
+    return (
+      inPlay(col, row) &&
+      !isPlotCell(col, row) &&
+      !isTreeCell(col, row) &&
+      !isBenchCell(col, row) &&
+      !isHealCell(col, row)
+    )
   }
 
   type Walker = {
@@ -628,6 +653,25 @@
     return job ? (benchDone(job, clock.now()) - job.collected) * job.perUnit : 0
   })
   let benchOpen = $state(false)
+  let healOpen = $state(false)
+  /** Relógio da animação de cura (`time`); null = idle vazia. */
+  let healAnimAt = $state<number | null>(null)
+  const healCharges = $derived(game.garden.healMachine.charges)
+  const healSpriteFrame = $derived.by(() => {
+    if (healAnimAt === null) return HEAL_IDLE
+    return healAnimFrame(time - healAnimAt) ?? HEAL_IDLE
+  })
+  const healTimer = $derived.by(() => {
+    const machine = game.garden.healMachine
+    const next = machine.nextChargeAt
+    if (next === null) return null
+    const left = next - clock.now()
+    if (left <= 0) return null
+    return {
+      text: formatCountdown(left),
+      progress: Math.max(0, Math.min(1, 1 - left / Math.max(1, machine.unitMs))),
+    }
+  })
   // Marcador de tempo da máquina: bolas já prontas, quanto falta para o lote
   // acabar e a barrinha do lote. Acabado, fica só "N prontas".
   const benchTimer = $derived.by(() => {
@@ -658,6 +702,20 @@
     }
     play('tap')
     benchOpen = true
+  }
+
+  function onHealMachine() {
+    play('tap')
+    healOpen = true
+  }
+
+  /** Depois de curar: enche as bolas, brilha e volta vazia. */
+  function playHealAnim() {
+    const started = time
+    healAnimAt = started
+    window.setTimeout(() => {
+      if (healAnimAt === started) healAnimAt = null
+    }, HEAL_ANIM_TOTAL_MS + 50)
   }
 
   function showLockedPlot() {
@@ -1679,6 +1737,37 @@
           {/if}
         </button>
       {/if}
+      {#if game.garden.healMachine}
+        {@const spot = place(healCol, healRow)}
+        {@const charges = healCharges}
+        <button
+          type="button"
+          class="heal-machine"
+          style:left="{snapToDevice(spot.x)}px"
+          style:top="{snapToDevice(spot.y + tileH)}px"
+          style:z-index={healCol + healRow + depthSpan + 1}
+          aria-label={`Máquina de cura: ${charges} carga${charges === 1 ? '' : 's'}`}
+          onclick={onHealMachine}
+        >
+          <span
+            class="heal-sprite"
+            style:width="{HEAL_W * pmdScale}px"
+            style:height="{HEAL_H * pmdScale}px"
+            style:background-image="url({HEAL_SHEET})"
+            style:background-size="{HEAL_W * HEAL_FRAMES * pmdScale}px {HEAL_H * pmdScale}px"
+            style:background-position-x="{-healSpriteFrame * HEAL_W * pmdScale}px"
+            aria-hidden="true"
+          ></span>
+          {#if healTimer}
+            <span class="tree-full timer" aria-hidden="true">
+              {healTimer.text}
+              <i style:width="{healTimer.progress * 100}%"></i>
+            </span>
+          {:else if charges > 0}
+            <span class="tree-full" aria-hidden="true">{charges} carga{charges === 1 ? '' : 's'}</span>
+          {/if}
+        </button>
+      {/if}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
         {@const spot = place(cell.col, cell.row)}
         <button
@@ -1703,7 +1792,7 @@
               ? 'horta'
               : isTreeCell(cell.col, cell.row)
                 ? 'arvore'
-                : isBenchCell(cell.col, cell.row)
+                : isBenchCell(cell.col, cell.row) || isHealCell(cell.col, cell.row)
                   ? 'maquina'
                   : null}
             <polygon
@@ -1900,6 +1989,17 @@
   {#if benchOpen}
     <Modal label="Bancada de bolas" wide onBackdrop={() => (benchOpen = false)}>
       <BenchPanel {game} {onState} onClose={() => (benchOpen = false)} />
+    </Modal>
+  {/if}
+
+  {#if healOpen}
+    <Modal label="Máquina de cura" onBackdrop={() => (healOpen = false)}>
+      <HealMachinePanel
+        {game}
+        {onState}
+        onClose={() => (healOpen = false)}
+        onHealed={playHealAnim}
+      />
     </Modal>
   {/if}
 
@@ -2343,7 +2443,8 @@
     animation: tree-shake 0.45s steps(6, jump-none);
   }
 
-  .bench {
+  .bench,
+  .heal-machine {
     position: absolute;
     padding: 0;
     border: 0;
@@ -2351,6 +2452,13 @@
     transform: translate(-50%, -100%);
     cursor: pointer;
     touch-action: manipulation;
+  }
+
+  .heal-sprite {
+    display: block;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
   }
 
   .grid {

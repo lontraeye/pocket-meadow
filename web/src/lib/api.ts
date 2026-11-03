@@ -295,6 +295,8 @@ export type OwnedPokemon = {
   availableMoves: { fast: MoveView[]; charged: MoveView[] }
   /** Cuidado como pet (5.21): de 0 a 100; `petReadyAt` = quando o carinho volta (null = já). */
   pet: PetView
+  /** Fração do HP de luta (0..1); 0 = desmaiado (não luta). */
+  hpRatio: number
 }
 
 /** Quadro de missões diárias (5.20). */
@@ -395,6 +397,14 @@ export type BenchView = {
     cost: { itemKey: string; quantity: number; have: number }[]
     newRecipes: string[]
   } | null
+}
+
+/** Máquina de cura do jardim: cargas que voltam com o tempo. */
+export type HealMachineView = {
+  charges: number
+  max: number
+  nextChargeAt: number | null
+  unitMs: number
 }
 
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
@@ -546,6 +556,8 @@ export type GameState = {
     berryFill: number
     trees: TreeView[]
     bench: BenchView
+    /** Máquina de cura do jardim (PROGRESSAO.md, item 4). */
+    healMachine: HealMachineView
   }
   missions: MissionsView
   daycare: DaycareState
@@ -742,6 +754,12 @@ export function errorText(error: ApiError): string {
       return 'Ele acabou de ganhar carinho. Volte daqui a pouco.'
     case 'team_hungry':
       return 'Todo o time está com fome. Alimente antes de lutar.'
+    case 'team_fainted':
+      return 'Todo o time está desmaiado. Cure no jardim antes de lutar.'
+    case 'no_charge':
+      return 'A máquina de cura está sem cargas. Espere recarregar.'
+    case 'team_healthy':
+      return 'A equipe já está com o HP cheio.'
     case 'not_hungry':
       return 'Ele está de barriga cheia.'
     case 'no_berry':

@@ -407,9 +407,14 @@ function snapshotSide(side: SideState, t: number): BattleSnapshotSide {
 
 function makeSide(fighter: SimFighter, slot: number): SideState {
   const maxHp = Math.max(1, Math.floor(fighter.stats.hp * simConfig.battleHpMultiplier))
+  const ratio = fighter.startHpRatio
+  const hp =
+    ratio === undefined
+      ? maxHp
+      : Math.max(1, Math.round(maxHp * Math.min(1, Math.max(0, ratio))))
   return {
     fighter,
-    hp: maxHp,
+    hp: Math.min(maxHp, hp),
     maxHp,
     energy: 0,
     readyAt: 0,

@@ -211,6 +211,13 @@
       "when": 1793800000000,
       "tag": "0029_bench_upgrade",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1793810000000,
+      "tag": "0030_hp_heal",
+      "breakpoints": true
     }
   ]
 }
