@@ -35,36 +35,16 @@ export const balls = {
 export const ballList: BallDef[] = Object.values(balls)
 
 export const ballsConfig = {
-  /** Estoque inicial e backfill da migração. */
-  startingPokeBalls: 30,
+  /**
+   * Estoque inicial (PROGRESSAO.md, item 5). Depois disso as bolas vêm da
+   * bancada: a luta contra selvagem não dá bola, e nível, missões e baú dão
+   * Apricorns no lugar.
+   */
+  startingPokeBalls: 15,
   /** Quantidade por tipo no painel de teste (Master: 3). */
   devGrantEach: 10,
   devGrantMaster: 3,
-  /**
-   * Bolas achadas ao vencer um selvagem: o jeito comum de repor o estoque
-   * enquanto se joga (antes só vinham do nível de treinador e da pedra).
-   */
-  battleDrop: {
-    chance: 0.4,
-    table: [
-      { key: 'poke', min: 1, max: 2, weight: 85 },
-      { key: 'great', min: 1, max: 1, weight: 15 },
-    ],
-  },
 } as const
-
-/** Sorteio da bola achada na vitória; `rng` continua o da semente (replay estável). */
-export function rollBattleBall(rng: () => number): { itemKey: string; quantity: number } | null {
-  const drop = ballsConfig.battleDrop
-  if (rng() >= drop.chance) return null
-  const total = drop.table.reduce((sum, row) => sum + row.weight, 0)
-  let cursor = rng() * total
-  for (const row of drop.table) {
-    cursor -= row.weight
-    if (cursor < 0) return { itemKey: ballItemKey(row.key), quantity: row.min + Math.floor(rng() * (row.max - row.min + 1)) }
-  }
-  return null
-}
 
 export function ballItemKey(key: string): string {
   return `ball:${key}`

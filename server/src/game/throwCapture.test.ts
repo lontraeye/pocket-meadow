@@ -115,7 +115,7 @@ test('chance alta só escapa na primeira; chance baixa pode quebrar em qualquer 
   let highEscape = 0
   const low = { 1: 0, 2: 0, 3: 0 }
   for (let seed = 1; seed <= 4000; seed += 1) {
-    const easy = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: 200, fleeChance: 0 })
+    const easy = rollThrow({ encounterSeed: seed, throwIndex: 0, captureRate: 255, fleeChance: 0 })
     if (easy.caught) assert.equal(easy.shakes, 3)
     else {
       highEscape += 1

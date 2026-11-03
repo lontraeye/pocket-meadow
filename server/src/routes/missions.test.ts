@@ -131,12 +131,13 @@ test('missões do dia: gravadas uma vez, progresso, resgate, baú e troca', asyn
 
   win(userId)
   win(userId, true)
-  const balls = () =>
-    (sqlite.prepare("select coalesce(sum(quantity), 0) q from inventory where user_id = ? and item_key = 'ball:poke'").get(userId) as { q: number }).q
-  const before = balls()
+  // A missão comum paga com Apricorn (a bola sai da bancada).
+  const apricorns = () =>
+    (sqlite.prepare("select coalesce(sum(quantity), 0) q from inventory where user_id = ? and item_key = 'mat:apricorn'").get(userId) as { q: number }).q
+  const before = apricorns()
   const ok = await post(cookie, `/missions/${ids[0]}/claim`)
   assert.equal(ok.status, 200)
-  assert.equal(balls(), before + 5)
+  assert.equal(apricorns(), before + 2)
   assert.equal((await post(cookie, `/missions/${ids[0]}/claim`)).status, 409)
 
   assert.equal((await post(cookie, '/missions/chest/claim')).status, 400, 'baú só com as 3')

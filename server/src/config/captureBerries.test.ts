@@ -50,7 +50,7 @@ test('bola + berry mudam odds sem alterar a sequência RNG', () => {
     const first = rollThrow({
       encounterSeed: s,
       throwIndex: 0,
-      captureRate: 3,
+      captureRate: 6,
       fleeChance: 0,
       berryBonus: berryMult,
       ballMult: 2,
@@ -64,14 +64,14 @@ test('bola + berry mudam odds sem alterar a sequência RNG', () => {
   const a = rollThrow({
     encounterSeed: stay,
     throwIndex: 1,
-    captureRate: 3,
+    captureRate: 6,
     fleeChance: 0.25,
     berryBonus: 1,
   })
   const b = rollThrow({
     encounterSeed: stay,
     throwIndex: 1,
-    captureRate: 3,
+    captureRate: 6,
     fleeChance: 0.25,
     berryBonus: berryMult,
     ballMult: 2,

@@ -1,4 +1,5 @@
 // Berries e efeitos (PLANNING.md, seção 5.10).
+import { APRICORN_BLUE, APRICORN_ITEM, APRICORN_YELLOW } from './apricorn.js'
 import { trainerConfig } from './trainer.js'
 import type { WeatherKey } from './weather.js'
 export const SEED_EXTRA_CHANCE = 0.25
@@ -160,19 +161,22 @@ export type LevelRewardSpec =
   | { itemKey: string; quantity: number }
   | { kind: 'random_seed' }
 
-/** Recompensas ao atingir exatamente este nível de treinador. */
+/**
+ * Recompensas ao atingir exatamente este nível de treinador. Apricorn no lugar
+ * de bola (PROGRESSAO.md, item 5): a bola sai da bancada.
+ */
 export function trainerLevelRewards(level: number): LevelRewardSpec[] {
   const rewards: LevelRewardSpec[] = [
     { itemKey: 'seed:oran', quantity: 1 },
-    { itemKey: 'ball:poke', quantity: 5 },
+    { itemKey: APRICORN_ITEM, quantity: 2 },
   ]
   if (level === 3) rewards.push({ itemKey: 'seed:razz', quantity: 1 })
   if (level === 5) rewards.push({ itemKey: 'seed:nanab', quantity: 1 })
   if (level === 8) rewards.push({ itemKey: 'seed:lum', quantity: 1 })
   if (level === 15) rewards.push({ itemKey: 'seed:silver-pinap', quantity: 1 })
   if (level === 20) rewards.push({ itemKey: 'seed:golden-razz', quantity: 1 })
-  if (level % 5 === 0) rewards.push({ itemKey: 'ball:great', quantity: 3 })
-  if (level % 10 === 0) rewards.push({ itemKey: 'ball:ultra', quantity: 2 })
+  if (level % 5 === 0) rewards.push({ itemKey: APRICORN_BLUE, quantity: 2 })
+  if (level % 10 === 0) rewards.push({ itemKey: APRICORN_YELLOW, quantity: 2 })
   if (level >= 10 && level % 5 === 0) rewards.push({ kind: 'random_seed' })
   return rewards
 }

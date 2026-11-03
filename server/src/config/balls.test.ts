@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ballMultiplier, ballsConfig, isMasterBall, rollBattleBall } from './balls.js'
+import { ballMultiplier, isMasterBall } from './balls.js'
 import { mulberry32 } from '../game/mulberry32.js'
 
 test('multiplicadores fixos', () => {
@@ -46,19 +46,4 @@ test('Nest Ball: forte em nível baixo, teto ×4', () => {
   assert.equal(ballMultiplier({ key: 'nest', throwIndex: 0, wildLevel: 31, types }), 1)
   assert.equal(ballMultiplier({ key: 'nest', throwIndex: 0, wildLevel: 41, types }), 1)
   assert.equal(ballMultiplier({ key: 'nest', throwIndex: 0, wildLevel: 50, types }), 1)
-})
-
-test('rollBattleBall: acha bola na chance do config, com quantidade da tabela', () => {
-  let found = 0
-  let rolls = 0
-  for (let seed = 1; seed <= 2000; seed += 1) {
-    const drop = rollBattleBall(mulberry32(seed))
-    rolls += 1
-    if (!drop) continue
-    found += 1
-    assert.ok(drop.itemKey === 'ball:poke' || drop.itemKey === 'ball:great')
-    assert.ok(drop.quantity >= 1 && drop.quantity <= 2)
-  }
-  const rate = found / rolls
-  assert.ok(Math.abs(rate - ballsConfig.battleDrop.chance) < 0.05, `taxa ${rate}`)
 })

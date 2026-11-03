@@ -54,13 +54,13 @@ export const petConfig = {
         (row): GiftDef => ({ kind: 'item', itemKey: `seed:${row.berryKey}`, min: 1, max: 1, weight: row.weight }),
       ),
       { kind: 'genericCandy', min: 1, max: 3, weight: 60 },
-      { kind: 'item', itemKey: 'ball:poke', min: 1, max: 2, weight: 40 },
+      { kind: 'item', itemKey: 'ball:poke', min: 1, max: 2, weight: 15 },
       // Apricorn (5.23): mais um caminho além da árvore e do Headbutt.
       { kind: 'item', itemKey: APRICORN_ITEM, min: 1, max: 2, weight: 30 },
       // Os coloridos, raros: um gostinho da Great e da Ultra antes das árvores.
       { kind: 'item', itemKey: APRICORN_BLUE, min: 1, max: 1, weight: 8 },
       { kind: 'item', itemKey: APRICORN_YELLOW, min: 1, max: 1, weight: 3 },
-      { kind: 'item', itemKey: 'ball:great', min: 1, max: 1, weight: 10 },
+      { kind: 'item', itemKey: 'ball:great', min: 1, max: 1, weight: 4 },
     ] as readonly GiftDef[],
   },
 } as const

@@ -28,7 +28,9 @@ export const battleConfig = {
   teamWeights: [1, 0.6, 0.4] as const,
   xpDiv: BATTLE_XP_DIV,
   xpLevelExp: BATTLE_XP_LEVEL_EXP,
-  catchMult: 1.2,
+  // 0,8 desde o item 5 do PROGRESSAO.md (era 1,2): capture rate 255 sai em 80%,
+  // 190 em 60%, 45 em 14%, para a bola da bancada ter valor.
+  catchMult: 0.8,
   catchMin: 0.03,
   /** Qualidade do arremesso (Fase 9.4). Multiplica a chance junto da bola/berry. */
   throwQualityMult: {

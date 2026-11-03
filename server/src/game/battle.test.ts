@@ -157,7 +157,7 @@ describe('batalha', () => {
     assert.deepEqual(battleConfig.teamWeights, [1, 0.6, 0.4])
     assert.equal(battleConfig.xpDiv, BATTLE_XP_DIV)
     assert.equal(battleConfig.xpLevelExp, BATTLE_XP_LEVEL_EXP)
-    assert.equal(catchChance(255), 1)
+    assert.equal(catchChance(255), 255 / 255 * battleConfig.catchMult)
     assert.equal(catchChance(3), battleConfig.catchMin)
     assert.equal(catchChance(45), (45 / 255) * battleConfig.catchMult)
     assert.equal(catchChance(45, 1.5), (45 / 255) * battleConfig.catchMult * 1.5)

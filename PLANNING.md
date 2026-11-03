@@ -513,7 +513,7 @@ A lista completa de áreas, a ordem em que abrem e as fontes de cada uma estão 
   ```
   catchChance = clamp((captureRate / 255) * CATCH_MULT * berryBonus, CATCH_MIN, 1)
   ```
-  `captureRate` vem da PokéAPI (3 para lendários, 255 para comuns). Inicial: `CATCH_MULT = 1.2`, `CATCH_MIN = 0.03`.
+  `captureRate` vem da PokéAPI (3 para lendários, 255 para comuns). Inicial: `CATCH_MULT = 1.2`, `CATCH_MIN = 0.03`. `CATCH_MULT = 0.8` desde 2026-11-03 (PROGRESSAO.md, item 5).
 - Sucesso: o Pokémon entra na coleção (no jardim). Falha: ele pode fugir; dá para lançar de novo (seção 5.18, parte 8.4).
 - Com a Fase 9, cada lançamento gasta uma bola, a bola entra na fórmula e a fuga cresce com os erros (ver "Pokébolas" abaixo).
 
@@ -589,7 +589,7 @@ Hoje a Poké Ball é infinita e cada erro tem 25% fixos de fuga (`throwFleeChanc
 - **Painel de teste:** "Ganhar bolas (teste)" dá algumas de cada tipo, só com `DEV_TOOLS=1`, como os outros botões de teste.
 
 **De onde vêm as bolas até a compra e o craft** (números iniciais em config, para revisar jogando):
-- **Estoque inicial:** 30 Poké Balls para treinador novo e para quem já joga (pela migração).
+- **Estoque inicial:** 30 Poké Balls para treinador novo e para quem já joga (pela migração). 15 desde 2026-11-03 (PROGRESSAO.md, item 5).
 - **Nível de treinador:** +5 Poké Balls em todo nível; +3 Great Balls a cada 5 níveis; +2 Ultra Balls a cada 10.
 - **Álbum (seção 5.12):** bloco de região +5 Poké Balls; linha evolutiva +2 Great Balls; jogo completo +5 Ultra Balls e 1 Master Ball.
 - **Vitória (opcional):** chance pequena de cair uma Poké Ball, como a semente da seção 5.10. Decidir depois de jogar se o estoque está curto.
@@ -1234,7 +1234,7 @@ Ficam para depois, porque pedem um registro de eventos: colher berries, alimenta
 **Objetivos de jardim** (cuidar, colher, produzir) entram quando o cuidado (5.21) e as cadeias (5.16) existirem, com a tabela `trainer_events`.
 
 **Feito em 2026-10-31 (`feat/missoes`):** `server/src/config/missions.ts` (pesos, alvos e prêmios), `game/missions.ts` (sorteio só do possível: área do capítulo atual, tipo que aparece nela, tipo do time, espécie nova), `db/missions.ts` (dia de Brasília pelo mesmo relógio do clima, progresso contado em `encounters` e `pokedex_entries`) e `POST /missions/:id/claim`, `/missions/chest/claim`, `/missions/:id/reroll`; migração `0024_missions` (`daily_missions` e `mission_days`, esta no lugar de `daily_chests`, com a troca usada). Missões de jardim e de mancha ficam para depois. Na tela: ícone de prancheta no topo com selo quando há o que resgatar, quadro com barra de progresso, "Resgatar", "Trocar" e o baú.
-**Bolas (2026-10-31):** pegar Poké Ball era difícil (só o estoque inicial, o nível de treinador e a pedra). Agora vencer um selvagem tem 40% de chance de dar 1–2 Poké Balls ou uma Great (`ballsConfig.battleDrop`), e as missões dão 5 Poké Balls cada (Great na de espécie nova; Great e Ultra no baú).
+**Bolas (2026-10-31):** pegar Poké Ball era difícil (só o estoque inicial, o nível de treinador e a pedra). Agora vencer um selvagem tem 40% de chance de dar 1–2 Poké Balls ou uma Great (`ballsConfig.battleDrop`), e as missões dão 5 Poké Balls cada (Great na de espécie nova; Great e Ultra no baú). **Revertido em 2026-11-03** (PROGRESSAO.md, item 5): a bola passa a vir da bancada; a vitória não dá bola e nível, missões e baú dão Apricorn.
 
 **Tela:** um quadro no jardim (botão no dock ou no topo), com as 3 missões, a barra de progresso de cada uma, "Resgatar" e "Trocar" e o baú embaixo. Tocar numa missão de área leva ao mapa com o lugar marcado. Mobile primeiro (seção 4.4).
 

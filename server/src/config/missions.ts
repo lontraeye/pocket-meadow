@@ -71,7 +71,14 @@ export const missionConfig = {
   reward(kind: MissionKind, level: number): MissionReward {
     const trainerXp = 15 + 3 * level
     if (kind === 'catch_new') {
-      return { trainerXp, genericCandies: 3, items: [{ itemKey: 'ball:great', quantity: 2 }] }
+      return {
+        trainerXp,
+        genericCandies: 3,
+        items: [
+          { itemKey: 'ball:great', quantity: 1 },
+          { itemKey: APRICORN_BLUE, quantity: 1 },
+        ],
+      }
     }
     // Quem já produz Poké Balls ganha uma Great; quem colhe ganha mais Apricorn.
     if (kind === 'make_balls') {
@@ -87,7 +94,8 @@ export const missionConfig = {
     if (kind === 'feed_pets') {
       return { trainerXp, genericCandies: 3, items: [] }
     }
-    return { trainerXp, genericCandies: 2, items: [{ itemKey: 'ball:poke', quantity: 5 }] }
+    // Apricorn no lugar de bola (PROGRESSAO.md, item 5): a bola sai da bancada.
+    return { trainerXp, genericCandies: 2, items: [{ itemKey: APRICORN_ITEM, quantity: 2 }] }
   },
   /** Baú do dia, ao resgatar as 3. */
   chest(level: number): MissionReward {
@@ -95,10 +103,9 @@ export const missionConfig = {
       trainerXp: 40 + 6 * level,
       genericCandies: 8,
       items: [
-        { itemKey: 'ball:great', quantity: 3 },
-        { itemKey: 'ball:ultra', quantity: 1 },
+        { itemKey: 'ball:great', quantity: 1 },
         { itemKey: APRICORN_ITEM, quantity: 3 },
-        { itemKey: APRICORN_BLUE, quantity: 1 },
+        { itemKey: APRICORN_BLUE, quantity: 2 },
         ...(level >= 12 ? [{ itemKey: APRICORN_YELLOW, quantity: 1 }] : []),
       ],
       randomSeed: true,

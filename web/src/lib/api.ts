@@ -201,8 +201,6 @@ export type BattleOutcome = {
   trainerXpGained: number
   trainer: { level: number; xp: number; levelsGained: number }
   seedDrop: { itemKey: string; berryKey: string } | null
-  /** Bolas achadas na vitória sobre um selvagem. */
-  ballDrop?: { itemKey: string; quantity: number } | null
   levelRewards: ItemCredit[]
   /** Contra quem foi a luta; ausente em resposta antiga = selvagem (ver battleFlow.ts). */
   opponent?:
