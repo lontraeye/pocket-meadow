@@ -416,7 +416,8 @@
   .bench {
     display: grid;
     gap: 0.6rem;
-    width: min(100%, 26rem);
+    width: 100%;
+    min-width: 0;
   }
 
   .head {

@@ -1868,7 +1868,7 @@
   </div>
 
   {#if benchOpen}
-    <Modal label="Bancada de bolas" onBackdrop={() => (benchOpen = false)}>
+    <Modal label="Bancada de bolas" wide onBackdrop={() => (benchOpen = false)}>
       <BenchPanel {game} {onState} onClose={() => (benchOpen = false)} />
     </Modal>
   {/if}

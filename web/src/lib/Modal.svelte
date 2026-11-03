@@ -13,11 +13,14 @@
     onBackdrop,
     /** No celular, o painel ocupa a tela toda (config, etc.). */
     fullMobile = false,
+    /** Painel mais largo no computador (bancada, missões); no celular é sempre a tela. */
+    wide = false,
     children,
   }: {
     label?: string
     onBackdrop?: () => void
     fullMobile?: boolean
+    wide?: boolean
     children: Snippet
   } = $props()
 
@@ -39,7 +42,7 @@
   {:else}
     <div class="backdrop" aria-hidden="true"></div>
   {/if}
-  <div class="panel body" role="dialog" aria-modal="true" aria-label={label}>
+  <div class="panel body" class:wide role="dialog" aria-modal="true" aria-label={label}>
     {@render children()}
   </div>
 </div>
@@ -74,12 +77,27 @@
     pointer-events: auto;
   }
 
+  /*
+   * Nunca passa da tela: o que não couber rola dentro do painel (e a rolagem
+   * não vaza para o jardim atrás). Sem isto, painel comprido era cortado embaixo.
+   */
   .body {
     position: relative;
     z-index: 1;
+    box-sizing: border-box;
     width: min(100%, 22rem);
+    max-height: calc(100vh - 1.5rem);
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.5rem);
     margin: 0;
     padding: 0.85rem 0.75rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .body.wide {
+    width: min(100%, 26rem);
   }
 
   @media (max-width: 699px) {
@@ -98,6 +116,8 @@
       width: 100%;
       min-height: 100%;
       min-height: 100dvh;
+      max-height: 100vh;
+      max-height: 100dvh;
       box-sizing: border-box;
       padding:
         calc(env(safe-area-inset-top) + 0.75rem)

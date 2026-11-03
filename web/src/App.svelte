@@ -609,7 +609,7 @@
     {/if}
 
     {#if missionsOpen && game}
-      <Modal label="Missões do dia" onBackdrop={() => (missionsOpen = false)}>
+      <Modal label="Missões do dia" wide onBackdrop={() => (missionsOpen = false)}>
         <MissionBoard {game} onState={loadState} onClose={() => (missionsOpen = false)} />
       </Modal>
     {/if}
