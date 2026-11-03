@@ -595,6 +595,23 @@
   }
 
   const benchOperator = $derived(game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null)
+  /** O operador como um "walker" parado na casa dele, para ganhar os mesmos balões. */
+  const operatorWalker = $derived.by((): Walker | null => {
+    const mon = benchOperator
+    if (!mon) return null
+    return {
+      id: mon.id,
+      speciesId: mon.speciesId,
+      displayName: mon.nickname ?? mon.displayName,
+      level: mon.level,
+      isShiny: mon.isShiny,
+      col: operatorCol,
+      row: operatorRow,
+      dir: 1,
+      anim: 'Idle',
+    }
+  })
+  const bubbleWalkers = $derived(operatorWalker ? [...walkers, operatorWalker] : walkers)
   /** Quadro parado da máquina: pronta (lote acabado com bolas esperando) ou parada. */
   const benchState = $derived.by((): 'idle' | 'working' | 'ready' => {
     const job = game.garden.bench.job
@@ -1604,7 +1621,7 @@
             style:--size="{showdownSize * scale}px"
             style:z-index={operatorCol + operatorRow + depthSpan + 1}
             aria-label={`${benchOperator.nickname ?? benchOperator.displayName} operando a bancada`}
-            onclick={onBench}
+            onclick={() => (bubbleById.get(benchOperator.id) === 'pet' ? void onBubble(benchOperator.id, 'pet') : onBench())}
           >
             {#if look.kind === 'pmd'}
               <PmdSprite
@@ -1750,7 +1767,7 @@
         </button>
       {/each}
       <!-- Balões fora do botão do Pokémon: são botões próprios (o coração faz carinho). -->
-      {#each walkers as walker (walker.id)}
+      {#each bubbleWalkers as walker (walker.id)}
         {@const kind = bubbleById.get(walker.id)}
         {#if kind}
           {@const look = gardenSprite(walker.speciesId, walker.isShiny)}

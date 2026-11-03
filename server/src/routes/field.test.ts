@@ -249,7 +249,8 @@ test('árvore e pedra podem soltar item: gasta a energia, credita e não abre en
   energy.energyEnabled = energyWas
   assert.equal(response.status, 200)
   const { drop } = (await response.json()) as { drop: { itemKey: string; quantity: number } }
-  assert.ok(drop.itemKey.startsWith('berry:'), drop.itemKey)
+  // A árvore solta berry ou Apricorn (5.23).
+  assert.ok(drop.itemKey.startsWith('berry:') || drop.itemKey === 'mat:apricorn', drop.itemKey)
   assert.equal(drop.quantity, 1)
   assert.equal(energyOf(), before - 1)
   const pending = getSqlite().prepare(`select count(*) as n from encounters where user_id = ? and status = 'pending'`).get(userId) as {

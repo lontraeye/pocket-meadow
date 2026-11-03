@@ -2,7 +2,7 @@
 // primeiro acesso do dia (meia-noite de Brasília, a mesma do clima) e contadas
 // pelo que o jogo já guarda (encontros, Pokédex). Completar as 3 abre o baú.
 
-import { APRICORN_ITEM } from './apricorn.js'
+import { APRICORN_BLUE, APRICORN_ITEM, APRICORN_YELLOW } from './apricorn.js'
 
 export type MissionKind =
   | 'win_any'
@@ -13,6 +13,8 @@ export type MissionKind =
   | 'win_with_type'
   | 'harvest_apricorn'
   | 'make_balls'
+  | 'harvest_berries'
+  | 'feed_pets'
 
 export type MissionReward = {
   trainerXp: number
@@ -36,6 +38,8 @@ export const missionConfig = {
     // Jardim (5.23): só quando a árvore e a bancada estão abertas.
     harvest_apricorn: 2,
     make_balls: 2,
+    harvest_berries: 2,
+    feed_pets: 2,
   } satisfies Record<MissionKind, number>,
   /** Quantas vezes cada missão pede, pelo nível de treinador. Alvo: 5 a 10 minutos de jogo. */
   target(kind: MissionKind, level: number): number {
@@ -57,6 +61,11 @@ export const missionConfig = {
       // 2 Apricorns na bancada.
       case 'make_balls':
         return 4
+      // Umas duas colheitas da horta.
+      case 'harvest_berries':
+        return 5
+      case 'feed_pets':
+        return 3
     }
   },
   reward(kind: MissionKind, level: number): MissionReward {
@@ -71,6 +80,13 @@ export const missionConfig = {
     if (kind === 'harvest_apricorn') {
       return { trainerXp, genericCandies: 2, items: [{ itemKey: APRICORN_ITEM, quantity: 2 }] }
     }
+    // Semente é rara (só sai do arbusto seco): colher berries paga com uma.
+    if (kind === 'harvest_berries') {
+      return { trainerXp, genericCandies: 2, items: [], randomSeed: true }
+    }
+    if (kind === 'feed_pets') {
+      return { trainerXp, genericCandies: 3, items: [] }
+    }
     return { trainerXp, genericCandies: 2, items: [{ itemKey: 'ball:poke', quantity: 5 }] }
   },
   /** Baú do dia, ao resgatar as 3. */
@@ -82,6 +98,8 @@ export const missionConfig = {
         { itemKey: 'ball:great', quantity: 3 },
         { itemKey: 'ball:ultra', quantity: 1 },
         { itemKey: APRICORN_ITEM, quantity: 3 },
+        { itemKey: APRICORN_BLUE, quantity: 1 },
+        ...(level >= 12 ? [{ itemKey: APRICORN_YELLOW, quantity: 1 }] : []),
       ],
       randomSeed: true,
     }

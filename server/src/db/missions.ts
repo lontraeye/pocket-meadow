@@ -121,6 +121,10 @@ export function missionProgress(userId: number, row: Pick<MissionRow, 'kind' | '
       return sumEvents(userId, 'apricorn_harvest', since)
     case 'make_balls':
       return sumEvents(userId, 'balls_made', since)
+    case 'harvest_berries':
+      return sumEvents(userId, 'berry_harvest', since)
+    case 'feed_pets':
+      return sumEvents(userId, 'pet_fed', since)
   }
 }
 

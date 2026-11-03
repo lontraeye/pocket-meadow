@@ -4,6 +4,7 @@ import { type AuthEnv, requireUser } from '../auth/session.js'
 import { FIRST_GROWTH_MULT, bushDeathChance, getBerry, plotSlotsUnlocked, seedKey } from '../config/berries.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
+import { recordEvent } from '../db/events.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { loadWeather } from '../db/weather.js'
 import { berryPlots } from '../db/schema.js'
@@ -130,6 +131,7 @@ function harvest(
     .where(and(eq(berryPlots.userId, userId), eq(berryPlots.plotIndex, plotIndex)))
     .run()
   creditItems(userId, plan.credits)
+  recordEvent(userId, 'berry_harvest', plan.berryAmount, now)
 
   return {
     ok: true,

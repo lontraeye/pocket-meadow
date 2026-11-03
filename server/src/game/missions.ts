@@ -32,6 +32,9 @@ function possible(kind: MissionKind, ctx: MissionContext): boolean {
     case 'harvest_apricorn':
     case 'make_balls':
       return ctx.gardenOpen
+    case 'harvest_berries':
+    case 'feed_pets':
+      return true
     default:
       return true
   }
@@ -101,5 +104,9 @@ export function missionText(kind: MissionKind, params: MissionParams, target: nu
       return target === 1 ? 'Colha 1 Apricorn da árvore' : `Colha ${target} Apricorns da árvore`
     case 'make_balls':
       return `Produza ${target} Poké Balls na bancada`
+    case 'harvest_berries':
+      return `Colha ${target} berries na horta`
+    case 'feed_pets':
+      return target === 1 ? 'Alimente 1 Pokémon do jardim' : `Alimente ${target} Pokémon do jardim`
   }
 }

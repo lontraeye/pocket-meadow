@@ -393,7 +393,7 @@ export const trainerEvents = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    kind: text('kind', { enum: ['apricorn_harvest', 'balls_made'] }).notNull(),
+    kind: text('kind', { enum: ['apricorn_harvest', 'balls_made', 'berry_harvest', 'pet_fed'] }).notNull(),
     quantity: integer('quantity').notNull().default(1),
     at: integer('at').notNull(),
   },

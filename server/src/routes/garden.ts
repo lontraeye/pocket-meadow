@@ -8,6 +8,7 @@ import { benchView, cancelJob, collectJob, setOperator, startJob, startUpgrade }
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
+import { recordEvent } from '../db/events.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { gardenGifts, pokemon, trainers } from '../db/schema.js'
 import { petReadyAt } from '../game/pets.js'
@@ -159,6 +160,7 @@ function snack(userId: number, pokemonId: number, berryKey: string, now: number)
   if (!debitItem(userId, `berry:${berryKey}`)) return fail('no_berry', 400)
   const hunger = Math.min(100, found.row.hunger + petConfig.berryFill)
   getDb().update(pokemon).set({ hunger }).where(eq(pokemon.id, pokemonId)).run()
+  recordEvent(userId, 'pet_fed', 1, now)
   return { ok: true, pet: view({ ...found.row, hunger }, now) }
 }
 

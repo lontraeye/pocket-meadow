@@ -72,7 +72,9 @@ test('drawDay: 3 missões de tipos diferentes, só as possíveis', () => {
     assert.equal(new Set(day.map((m) => m.kind)).size, 3)
   }
   const poor = drawDay({ ...ctx, areas: [], areaTypes: [], teamTypes: [], hasNewSpecies: false }, mulberry32(3))
-  assert.deepEqual(poor.map((m) => m.kind).sort(), ['catch_any', 'win_any'])
+  // Sem área, tipo nem espécie nova: só as que sempre valem (luta, captura, horta, alimentar).
+  assert.equal(poor.length, 3)
+  for (const m of poor) assert.ok(['catch_any', 'win_any', 'harvest_berries', 'feed_pets'].includes(m.kind))
 })
 
 test('missões do jardim só com a árvore e a bancada abertas', () => {
@@ -155,4 +157,19 @@ test('missões do dia: gravadas uma vez, progresso, resgate, baú e troca', asyn
   const view = immediate(() => missionsView(userId, 5, Date.now()))
   assert.equal(view.claimable, 0)
   assert.ok(view.chest.claimed)
+})
+
+test('missões de horta e de alimentar contam pelo registro', async () => {
+  const { userId } = player('missao-horta')
+  const { missionProgress } = await import('../db/missions.js')
+  const { recordEvent } = await import('../db/events.js')
+  const since = Date.now() - 1000
+  immediate(() => {
+    recordEvent(userId, 'berry_harvest', 3, since + 1)
+    recordEvent(userId, 'berry_harvest', 2, since + 2)
+    recordEvent(userId, 'pet_fed', 1, since + 3)
+  })
+  assert.equal(missionProgress(userId, { kind: 'harvest_berries', params: '{}', assignedAt: since }), 5)
+  assert.equal(missionProgress(userId, { kind: 'feed_pets', params: '{}', assignedAt: since }), 1)
+  assert.equal(missionText('feed_pets', {}, 3), 'Alimente 3 Pokémon do jardim')
 })
