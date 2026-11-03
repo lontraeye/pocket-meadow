@@ -1,7 +1,7 @@
 import {
   SEED_DROP_CHANCE,
   SEED_DROP_WEIGHTS,
-  SEED_EXTRA_CHANCE,
+  bushConfig,
   UPROOT_SEED_RETURN_CHANCE,
   berryItemKey,
   getBerry,
@@ -17,29 +17,36 @@ import type { Rng } from './rng.js'
 export type HarvestPlan = {
   berryKey: string
   berryAmount: number
-  seedAmount: number
   credits: { itemKey: string; quantity: number }[]
 }
 
-/** Colheita: yield no intervalo e 1 semente + chance de outra. Os sorteios vêm de fora. */
-export function planHarvest(
-  berry: BerryDef,
-  rolls: { yieldUnit: number; extraSeed: number },
-): HarvestPlan {
+/** Colheita: só berries, no intervalo do config (a semente sai do arbusto seco). */
+export function planHarvest(berry: BerryDef, rolls: { yieldUnit: number }): HarvestPlan {
   const [min, max] = berry.yield
   if (!(rolls.yieldUnit >= 0 && rolls.yieldUnit < 1)) throw new Error('yieldUnit must be in [0, 1)')
-  if (!(rolls.extraSeed >= 0 && rolls.extraSeed < 1)) throw new Error('extraSeed must be in [0, 1)')
   const berryAmount = min + Math.floor(rolls.yieldUnit * (max - min + 1))
-  const seedAmount = 1 + (rolls.extraSeed < SEED_EXTRA_CHANCE ? 1 : 0)
   return {
     berryKey: berry.key,
     berryAmount,
-    seedAmount,
-    credits: [
-      { itemKey: berryItemKey(berry.key), quantity: berryAmount },
-      { itemKey: seedKey(berry.key), quantity: seedAmount },
-    ],
+    credits: [{ itemKey: berryItemKey(berry.key), quantity: berryAmount }],
   }
+}
+
+/** Limpar o arbusto seco: 0, 1 ou 2 sementes pelos pesos do config. */
+export function planClear(berryKey: string, roll: number): { seeds: number; credits: ItemCredit[] } {
+  if (!(roll >= 0 && roll < 1)) throw new Error('roll must be in [0, 1)')
+  const weights = bushConfig.clearSeedWeights
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let cursor = roll * total
+  let seeds = 0
+  for (let i = 0; i < weights.length; i += 1) {
+    cursor -= weights[i]!
+    if (cursor < 0) {
+      seeds = i
+      break
+    }
+  }
+  return { seeds, credits: seeds > 0 ? [{ itemKey: seedKey(berryKey), quantity: seeds }] : [] }
 }
 
 /** Arrancar antes de ficar pronta: a semente volta com UPROOT_SEED_RETURN_CHANCE. */

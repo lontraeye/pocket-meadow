@@ -39,15 +39,20 @@
      */
     foot: number
   }
-  const rows: Item[][] = [
-    BERRIES.map(([key, name]) => ({ label: name, src: find(art, `arbusto-${key}.png`), floor: 'canteiro', foot: 1 })),
-    BERRIES.map(([key, name]) => ({
-      label: `${name} pronta`,
-      src: find(art, `arbusto-${key}-frutos.png`),
+  const stage = (suffix: string, tag: string) =>
+    BERRIES.map(([key, name]): Item => ({
+      label: tag ? `${name} ${tag}` : name,
+      src: find(art, `arbusto-${key}${suffix}.png`),
       floor: 'canteiro',
       foot: 1,
-    })),
+    }))
+  const rows: Item[][] = [
+    stage('-semente', 'semente'),
+    stage('-muda', 'muda'),
+    stage('', ''),
+    stage('-frutos', 'pronta'),
     [
+      { label: 'Arbusto seco', src: find(art, 'arbusto-seco.png'), floor: 'canteiro', foot: 1 },
       { label: 'Árvore', src: find(art, 'arvore-apricorn.png'), floor: 'grama', foot: 2 },
       { label: 'Árvore cheia', src: find(art, 'arvore-apricorn-frutos.png'), floor: 'grama', foot: 2 },
       { label: 'Máquina parada', src: BENCH_SHEET, frame: 'idle', floor: 'grama', foot: 6 },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
   SEED_DROP_CHANCE,
-  SEED_EXTRA_CHANCE,
+  bushDeathChance,
   UPROOT_SEED_RETURN_CHANCE,
   berries,
   getBerry,
@@ -14,6 +14,7 @@ import { mulberry32 } from './rng.js'
 import {
   applyEnergyBerry,
   planBerryUse,
+  planClear,
   planHarvest,
   planUproot,
   pickSeedByWeight,
@@ -32,13 +33,25 @@ describe('arrancar', () => {
 describe('colheita', () => {
   test('o yield fica no intervalo e a semente extra respeita a chance', () => {
     const berry = berries.oran
-    const low = planHarvest(berry, { yieldUnit: 0, extraSeed: 0.99 })
+    const low = planHarvest(berry, { yieldUnit: 0 })
     assert.equal(low.berryAmount, 2)
-    assert.equal(low.seedAmount, 1)
-    const high = planHarvest(berry, { yieldUnit: 0.999, extraSeed: SEED_EXTRA_CHANCE - 0.001 })
+    assert.deepEqual(low.credits.map((row) => row.itemKey), ['berry:oran'])
+    const high = planHarvest(berry, { yieldUnit: 0.999 })
     assert.equal(high.berryAmount, 3)
-    assert.equal(high.seedAmount, 2)
-    assert.deepEqual(high.credits.map((row) => row.itemKey), ['berry:oran', 'seed:oran'])
+  })
+
+  test('arbusto: as primeiras colheitas são garantidas e a chance de secar cresce', () => {
+    assert.equal(bushDeathChance(1), 0)
+    assert.equal(bushDeathChance(2), 0)
+    assert.equal(bushDeathChance(3), 0.2)
+    assert.ok(Math.abs(bushDeathChance(4) - 0.35) < 1e-9)
+    assert.equal(bushDeathChance(20), 1)
+  })
+
+  test('limpar o arbusto seco dá 0, 1 ou 2 sementes pelos pesos', () => {
+    assert.deepEqual(planClear('oran', 0), { seeds: 0, credits: [] })
+    assert.deepEqual(planClear('oran', 0.5), { seeds: 1, credits: [{ itemKey: 'seed:oran', quantity: 1 }] })
+    assert.equal(planClear('oran', 0.99).seeds, 2)
   })
 })
 

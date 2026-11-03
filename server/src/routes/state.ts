@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballList, ballsConfig } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
-import { berryConfig, berryList, energyBerryOff, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
+import { FIRST_GROWTH_MULT, berryConfig, berryList, energyBerryOff, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
 import { daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
 import { progressionConfig } from '../config/progression.js'
@@ -196,6 +196,7 @@ function readState(userId: number, now: number) {
     plotSlotsUnlocked: plotSlotsUnlocked(trainer.level),
     nextPlotSlotLevel: nextPlotSlotLevel(trainer.level),
     uprootSeedReturnChance: berryConfig.uprootSeedReturnChance,
+    firstGrowthMult: FIRST_GROWTH_MULT,
     weather: loadWeather(userId, now),
     weatherGrowFactor: weatherConfig.favoriteGrowFactor,
     berries: berryList.map((berry) => ({
@@ -352,6 +353,8 @@ function readState(userId: number, now: number) {
         berryKey: berryPlots.berryKey,
         plantedAt: berryPlots.plantedAt,
         readyAt: berryPlots.readyAt,
+        harvests: berryPlots.harvests,
+        deadAt: berryPlots.deadAt,
       })
       .from(berryPlots)
       .where(eq(berryPlots.userId, userId))

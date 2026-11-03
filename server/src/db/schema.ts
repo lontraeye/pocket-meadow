@@ -536,6 +536,10 @@ export const berryPlots = sqliteTable(
     berryKey: text('berry_key').notNull(),
     plantedAt: integer('planted_at').notNull(),
     readyAt: integer('ready_at').notNull(),
+    /** Colheitas feitas: 0 = ainda no primeiro crescimento (semente, muda, crescida). */
+    harvests: integer('harvests').notNull().default(0),
+    /** Quando o arbusto secou (depois de uma colheita); seco não frutifica, só se limpa. */
+    deadAt: integer('dead_at'),
   },
   (table) => [primaryKey({ columns: [table.userId, table.plotIndex] })],
 )

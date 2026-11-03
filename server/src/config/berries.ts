@@ -2,6 +2,29 @@
 import { trainerConfig } from './trainer.js'
 import type { WeatherKey } from './weather.js'
 export const SEED_EXTRA_CHANCE = 0.25
+/**
+ * O arbusto fica no canteiro e frutifica de novo (2026-11-03). O primeiro
+ * crescimento (semente → muda → crescida → frutos) leva FIRST_GROWTH_MULT vezes
+ * o tempo da berry; as colheitas seguintes, o tempo normal. A colheita não dá
+ * semente: depois de algumas, o arbusto seca, e limpar o arbusto seco é que
+ * dá (com sorte) uma ou duas.
+ */
+export const FIRST_GROWTH_MULT = 2
+export const bushConfig = {
+  /** Colheitas garantidas antes de o arbusto poder secar. */
+  safeHarvests: 2,
+  /** Chance de secar depois da colheita n (n > safeHarvests): base + passo por colheita, até 100%. */
+  deathBase: 0.2,
+  deathStep: 0.15,
+  /** Sementes ao limpar o arbusto seco: pesos de 0, 1 e 2. */
+  clearSeedWeights: [20, 55, 25] as const,
+}
+
+/** Chance de o arbusto secar logo depois da colheita número `harvest` (1 = a primeira). */
+export function bushDeathChance(harvest: number): number {
+  if (harvest <= bushConfig.safeHarvests) return 0
+  return Math.min(1, bushConfig.deathBase + bushConfig.deathStep * (harvest - bushConfig.safeHarvests - 1))
+}
 export const SEED_DROP_CHANCE = 0.1
 // Arrancar antes de ficar pronta (clique errado): chance de a semente voltar.
 export const UPROOT_SEED_RETURN_CHANCE = 0.5

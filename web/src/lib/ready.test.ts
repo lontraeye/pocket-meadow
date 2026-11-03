@@ -101,3 +101,10 @@ test('bolas prontas na bancada, sem contar as já coletadas', () => {
   // Com 2 Poké Balls por Apricorn, o aviso conta bolas.
   assert.equal(readyStatus(input({ benchJob: job, ballsPerApricorn: 2 }), now).summary, '4 bolas prontas')
 })
+
+test('arbusto seco não conta como berry pronta, mas avisa', () => {
+  const ready = readyStatus(input({ plots: [{ plotIndex: 1, readyAt: now - 10, deadAt: now - 5 }] }), now)
+  assert.equal(ready.berryCount, 0)
+  assert.equal(ready.summary, '1 arbusto seco')
+  assert.equal(ready.target, null)
+})

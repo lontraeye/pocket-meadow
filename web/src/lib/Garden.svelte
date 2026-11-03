@@ -63,7 +63,7 @@
   let plotIndex = $state<number | null>(null)
   let plotMessage = $state('')
   let plotPending = $state(false)
-  let harvestResult = $state<{ berryKey: string; berries: number; seeds: number } | null>(null)
+  let harvestResult = $state<{ berryKey: string; berries: number; died: boolean } | null>(null)
   let confirmUproot = $state(false)
   let selectedId = $state<number | null>(null)
 
@@ -84,8 +84,24 @@
   const bushArt = new Map(
     Object.entries(bushFiles).map(([file, url]) => [file.slice(file.lastIndexOf('/') + 1, -'.png'.length), url]),
   )
-  function bushSrc(berryKey: string, ripe: boolean): string | null {
-    return bushArt.get(`arbusto-${berryKey}${ripe ? '-frutos' : ''}`) ?? null
+  /** Desenho do canteiro no estágio: semente, muda, crescida, com frutos ou seco. */
+  function bushSrc(berryKey: string, look: BushLook): string | null {
+    if (look === 'seco') return bushArt.get('arbusto-seco') ?? null
+    const suffix = look === 'crescida' ? '' : `-${look}`
+    return bushArt.get(`arbusto-${berryKey}${suffix}`) ?? null
+  }
+  type BushLook = 'semente' | 'muda' | 'crescida' | 'frutos' | 'seco'
+  /**
+   * No primeiro crescimento (antes da primeira colheita) o arbusto passa por
+   * semente, muda e crescida; depois disso fica crescido até dar frutos de novo.
+   */
+  function bushLook(plot: PlotState): BushLook {
+    if (plot.deadAt !== null) return 'seco'
+    const now = clock.now()
+    if (now >= plot.readyAt) return 'frutos'
+    if (plot.harvests > 0) return 'crescida'
+    const progress = (now - plot.plantedAt) / Math.max(1, plot.readyAt - plot.plantedAt)
+    return progress < 0.25 ? 'semente' : progress < 0.6 ? 'muda' : 'crescida'
   }
   /**
    * Quanto o pé do arbusto (a borda de baixo da imagem) desce do centro do
@@ -94,8 +110,9 @@
    */
   const BUSH_FOOT = 1
 
-  function plotStage(plot: PlotState | undefined): 'empty' | 'planted' | 'growing' | 'ready' {
+  function plotStage(plot: PlotState | undefined): 'empty' | 'planted' | 'growing' | 'ready' | 'dead' {
     if (!plot) return 'empty'
+    if (plot.deadAt !== null) return 'dead'
     const now = clock.now()
     if (now >= plot.readyAt) return 'ready'
     const total = Math.max(1, plot.readyAt - plot.plantedAt)
@@ -176,7 +193,16 @@
         return
       }
       await onState()
-      plotMessage = payload.seedReturned ? 'Arrancou. A semente voltou para a mochila.' : 'Arrancou. A semente se perdeu.'
+      const cleared = (payload as { cleared?: boolean }).cleared === true
+      const seeds = Number((payload as { seeds?: number }).seeds ?? 0)
+      plotMessage = cleared
+        ? seeds > 0
+          ? `Limpou o arbusto seco e achou ${seeds} semente${seeds === 1 ? '' : 's'}!`
+          : 'Limpou o arbusto seco. Não sobrou semente.'
+        : payload.seedReturned
+          ? 'Arrancou. A semente voltou para a mochila.'
+          : 'Arrancou. A semente se perdeu.'
+      if (cleared && seeds > 0) play('harvest')
     } catch {
       plotMessage = 'Sem conexão com o servidor.'
     } finally {
@@ -193,7 +219,7 @@
       const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
         berryKey?: string
         berries?: number
-        seeds?: number
+        died?: boolean
       }
       if (!response.ok) {
         plotMessage = errorText(payload)
@@ -202,7 +228,7 @@
       harvestResult = {
         berryKey: String(payload.berryKey ?? ''),
         berries: Number(payload.berries ?? 0),
-        seeds: Number(payload.seeds ?? 0),
+        died: payload.died === true,
       }
       play('harvest')
       await onState()
@@ -1431,17 +1457,20 @@
             onclick={() => (locked ? showLockedPlot() : openPlot(plotIdx))}
           >
             {#if locked}<span class="lock" aria-hidden="true"></span>{/if}
-            {#if stage === 'planted'}
-              <span class="crop sprout" aria-hidden="true"></span>
-            {:else if stage === 'growing' && !(plot && bushSrc(plot.berryKey, false))}
-              <span class="crop bush" aria-hidden="true"></span>
-            {:else if stage === 'ready' && plot && !bushSrc(plot.berryKey, true)}
-              <img class="crop berry" src={berryIconSrc(plot.berryKey)} alt="" />
+            <!-- Sem arte para a berry: o desenho antigo do canteiro. -->
+            {#if plot && !bushSrc(plot.berryKey, bushLook(plot))}
+              {#if stage === 'planted'}
+                <span class="crop sprout" aria-hidden="true"></span>
+              {:else if stage === 'growing' || stage === 'dead'}
+                <span class="crop bush" aria-hidden="true"></span>
+              {:else if stage === 'ready'}
+                <img class="crop berry" src={berryIconSrc(plot.berryKey)} alt="" />
+              {/if}
             {/if}
           </button>
           <!-- O arbusto passa do losango do canteiro: fica fora do botão, sem pegar toque. -->
-          {#if plot && (stage === 'growing' || stage === 'ready')}
-            {@const bush = bushSrc(plot.berryKey, stage === 'ready')}
+          {#if plot}
+            {@const bush = bushSrc(plot.berryKey, bushLook(plot))}
             {#if bush}
               <img
                 class="bush-art"
@@ -1806,9 +1835,13 @@
           {#if plotMessage}<p class="alert" role="status">{plotMessage}</p>{/if}
           {#if harvestResult}
             <p class="good">
-              Colheu {harvestResult.berries} {itemLabel(`berry:${harvestResult.berryKey}`, game.berries)}
-              e {harvestResult.seeds} semente{harvestResult.seeds === 1 ? '' : 's'}.
+              Colheu {harvestResult.berries} {itemLabel(`berry:${harvestResult.berryKey}`, game.berries)}.
             </p>
+            {#if harvestResult.died}
+              <p class="hint">O arbusto secou depois desta colheita. Limpe o canteiro: com sorte, sai 1 ou 2 sementes.</p>
+            {:else}
+              <p class="hint">O arbusto continua no canteiro e vai dar frutos de novo.</p>
+            {/if}
             <button type="button" class="btn btn-primary" onclick={closePlot}>Ok</button>
           {:else if stage === 'empty'}
             <p class="hint">Escolha uma semente para plantar.</p>
@@ -1830,7 +1863,11 @@
                           <span class="seed-weather" title="Clima favorito">
                             <WeatherIcon weather={info.favoriteWeather} size={12} />
                           </span>
-                          {Math.round((favorite ? info.growMs * game.weatherGrowFactor : info.growMs) / 60000)} min
+                          <!-- Primeiros frutos (o arbusto cresce antes); depois, a cada growMs. -->
+                          {formatCountdown(
+                            (favorite ? info.growMs * game.weatherGrowFactor : info.growMs) * game.firstGrowthMult,
+                          )}
+                          · depois {Math.round(info.growMs / 60000)} min
                           {#if favorite}· −{Math.round((1 - game.weatherGrowFactor) * 100)}% hoje{/if}
                         </small>
                       {/if}
@@ -1843,7 +1880,10 @@
             {@const left = remainingMs(plot.readyAt)}
             {@const total = Math.max(1, plot.readyAt - plot.plantedAt)}
             {@const progress = Math.min(1, 1 - left / total)}
-            <p class="hint">{berry?.name ?? plot.berryKey} crescendo…</p>
+            <p class="hint">
+              {berry?.name ?? plot.berryKey}
+              {plot.harvests > 0 ? 'dando frutos de novo…' : 'crescendo…'}
+            </p>
             <div class="bar" aria-hidden="true"><span style:width="{progress * 100}%"></span></div>
             <p class="timer">{formatCountdown(left)}</p>
             {#if game.devTools}
@@ -1862,6 +1902,13 @@
             {:else}
               <button type="button" class="btn" disabled={plotPending} onclick={() => (confirmUproot = true)}>Arrancar</button>
             {/if}
+          {:else if plot && stage === 'dead'}
+            <p class="hint">
+              O arbusto de {berry?.name ?? plot.berryKey} secou depois de {plot.harvests}
+              {plot.harvests === 1 ? 'colheita' : 'colheitas'}. Limpe o canteiro para plantar de novo: com sorte,
+              sai 1 ou 2 sementes.
+            </p>
+            <button type="button" class="btn btn-primary" disabled={plotPending} onclick={() => void uproot()}>Limpar</button>
           {:else if plot && stage === 'ready'}
             <p class="hint">{berry?.name ?? plot.berryKey} pronta.</p>
             <button type="button" class="btn btn-primary" disabled={plotPending} onclick={() => void harvest()}>

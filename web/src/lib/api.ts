@@ -429,6 +429,10 @@ export type PlotState = {
   berryKey: string
   plantedAt: number
   readyAt: number
+  /** Colheitas feitas: 0 = ainda no primeiro crescimento (semente, muda, crescida). */
+  harvests: number
+  /** O arbusto secou: não frutifica mais, só se limpa (rende 0 a 2 sementes). */
+  deadAt: number | null
 }
 
 export type InventoryRow = { itemKey: string; quantity: number }
@@ -455,6 +459,8 @@ export type GameState = {
   berries: BerryInfo[]
   balls: BallsConfig
   uprootSeedReturnChance: number
+  /** O primeiro crescimento leva este tanto de vezes o tempo da berry. */
+  firstGrowthMult: number
   battle: BattleRules
   progression: ProgressionRules
   trainer: {
@@ -730,6 +736,8 @@ export function errorText(error: ApiError): string {
       return 'A árvore de Apricorn ainda está fechada.'
     case 'nothing_ready':
       return 'Ainda não há nada pronto.'
+    case 'bush_dead':
+      return 'O arbusto secou. Limpe o canteiro para plantar de novo.'
     case 'plot_empty':
       return 'Não há nada plantado aqui.'
     case 'already_ready':

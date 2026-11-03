@@ -2,7 +2,7 @@ import type { BenchView, DaycareState, GardenGift, MissionsView, PetView, PlotSt
 import { benchDone } from './benchJob'
 
 export type ReadyInput = {
-  plots: Pick<PlotState, 'plotIndex' | 'readyAt'>[]
+  plots: (Pick<PlotState, 'plotIndex' | 'readyAt'> & { deadAt?: number | null })[]
   daycare: Pick<DaycareState, 'slots'>
   missions: Pick<MissionsView, 'day' | 'list' | 'chest'>
   gifts: Pick<GardenGift, 'id'>[]
@@ -45,7 +45,11 @@ const count = (n: number, one: string, many: string) => (n === 1 ? one : many.re
 
 /** O que está pronto agora, pelo relógio do servidor no cliente. */
 export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
-  const plots = input.plots.filter((plot) => plot.readyAt <= now).sort((a, b) => a.plotIndex - b.plotIndex)
+  // Arbusto seco não dá berry: entra à parte, para lembrar de limpar e replantar.
+  const plots = input.plots
+    .filter((plot) => !plot.deadAt && plot.readyAt <= now)
+    .sort((a, b) => a.plotIndex - b.plotIndex)
+  const deadPlots = input.plots.filter((plot) => !!plot.deadAt)
   const fullSlots = input.daycare.slots.filter((slot) => slot.fullAt <= now)
   const missions = input.missions.list.filter((mission) => mission.done && !mission.claimed)
   const chestReady = input.missions.chest.ready && !input.missions.chest.claimed
@@ -80,6 +84,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     ...hungry.map((mon) => `h${mon.id}`),
     ...wantPet.map((mon) => `a${mon.id}`),
     ...(treeFull ? [`t@${tree.readyAts.at(-1) ?? 'cheia'}`] : []),
+    ...deadPlots.map((plot) => `x${plot.plotIndex}@${plot.deadAt}`),
     // Uma chave por lote, e outra quando ele acaba: o lote inteiro pronto volta a avisar.
     ...(job && benchReady > 0 ? [`b${job.id}@${benchDone(job, now) === job.quantity ? 'fim' : 'parcial'}`] : []),
   ]
@@ -92,6 +97,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
   if (chestReady) parts.push('baú pronto')
   if (daycareFullCount > 0) parts.push(count(daycareFullCount, 'daycare cheio', '# no daycare cheios'))
   if (treeFull) parts.push('árvore cheia')
+  if (deadPlots.length > 0) parts.push(count(deadPlots.length, '1 arbusto seco', '# arbustos secos'))
   if (benchReady > 0) parts.push(count(benchReady, '1 bola pronta', '# bolas prontas'))
   if (giftCount > 0) parts.push(count(giftCount, '1 presente', '# presentes'))
   if (hungry.length > 0) parts.push(`${hungry.length} com fome`)

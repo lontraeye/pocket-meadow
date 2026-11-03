@@ -1,13 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { getBerry, plotSlotsUnlocked, seedKey } from '../config/berries.js'
+import { FIRST_GROWTH_MULT, bushDeathChance, getBerry, plotSlotsUnlocked, seedKey } from '../config/berries.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { loadWeather } from '../db/weather.js'
 import { berryPlots } from '../db/schema.js'
-import { planHarvest, planUproot } from '../game/berries.js'
+import { planClear, planHarvest, planUproot } from '../game/berries.js'
 import { growMsFor } from '../game/weather.js'
 import { unitRoll } from '../game/rng.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
@@ -76,7 +76,8 @@ function plant(
   // Clima favorito da berry no dia do plantio: cresce mais rápido. Decidido
   // aqui e gravado no readyAt, então não muda se o clima virar no meio.
   const weather = loadWeather(userId, now).key
-  const readyAt = now + growMsFor(berry.growMs, berry.favoriteWeather, weather)
+  // Primeiro crescimento: semente, muda e arbusto antes dos primeiros frutos.
+  const readyAt = now + growMsFor(berry.growMs * FIRST_GROWTH_MULT, berry.favoriteWeather, weather)
   db.insert(berryPlots)
     .values({ userId, plotIndex, berryKey: berry.key, plantedAt: now, readyAt })
     .run()
@@ -96,8 +97,10 @@ function harvest(
     plotIndex: number
     berryKey: string
     berries: number
-    seeds: number
     credits: { itemKey: string; quantity: number }[]
+    /** O arbusto secou depois desta colheita: não frutifica mais, só se limpa. */
+    died: boolean
+    readyAt: number
   }
 }> | Failure {
   persistCatchUp(userId, now)
@@ -108,14 +111,22 @@ function harvest(
     .where(and(eq(berryPlots.userId, userId), eq(berryPlots.plotIndex, plotIndex)))
     .get()
   if (!plot) return fail('plot_empty', 404)
+  if (plot.deadAt !== null) return fail('bush_dead', 400)
 
   if (now < plot.readyAt) return fail('not_ready', 400, { readyAt: plot.readyAt })
 
   const berry = getBerry(plot.berryKey)
   if (!berry) throw new Error(`unknown berry planted: ${plot.berryKey}`)
 
-  const plan = planHarvest(berry, { yieldUnit: unitRoll(), extraSeed: unitRoll() })
-  db.delete(berryPlots)
+  const plan = planHarvest(berry, { yieldUnit: unitRoll() })
+  // O arbusto fica e frutifica de novo no tempo da berry (com o clima de hoje),
+  // a menos que seque: a chance cresce a cada colheita depois das garantidas.
+  const harvests = plot.harvests + 1
+  const died = unitRoll() < bushDeathChance(harvests)
+  const weather = loadWeather(userId, now).key
+  const nextReadyAt = now + growMsFor(berry.growMs, berry.favoriteWeather, weather)
+  db.update(berryPlots)
+    .set({ readyAt: nextReadyAt, harvests, deadAt: died ? now : null })
     .where(and(eq(berryPlots.userId, userId), eq(berryPlots.plotIndex, plotIndex)))
     .run()
   creditItems(userId, plan.credits)
@@ -126,18 +137,20 @@ function harvest(
       plotIndex,
       berryKey: plan.berryKey,
       berries: plan.berryAmount,
-      seeds: plan.seedAmount,
       credits: plan.credits,
+      died,
+      readyAt: nextReadyAt,
     },
   }
 }
 
-// Pronta não se arranca: o caminho é colher, para não perder a colheita.
+// Arrancar: vivo e antes de ficar pronto, a semente volta com uma chance (pronto
+// não se arranca, o caminho é colher). Seco, é limpar: sorteia 0, 1 ou 2 sementes.
 function uproot(
   userId: number,
   plotIndex: number,
   now: number,
-): Ok<{ uprooted: { plotIndex: number; berryKey: string; seedReturned: boolean } }> | Failure {
+): Ok<{ uprooted: { plotIndex: number; berryKey: string; seedReturned: boolean; seeds: number; cleared: boolean } }> | Failure {
   persistCatchUp(userId, now)
   const db = getDb()
   const plot = db
@@ -146,13 +159,18 @@ function uproot(
     .where(and(eq(berryPlots.userId, userId), eq(berryPlots.plotIndex, plotIndex)))
     .get()
   if (!plot) return fail('plot_empty', 404)
-  if (now >= plot.readyAt) return fail('already_ready', 400)
+  const dead = plot.deadAt !== null
+  if (!dead && now >= plot.readyAt) return fail('already_ready', 400)
 
-  const plan = planUproot(plot.berryKey, unitRoll())
+  const credits = dead ? planClear(plot.berryKey, unitRoll()).credits : planUproot(plot.berryKey, unitRoll()).credits
+  const seeds = credits.reduce((sum, row) => sum + row.quantity, 0)
   db.delete(berryPlots)
     .where(and(eq(berryPlots.userId, userId), eq(berryPlots.plotIndex, plotIndex)))
     .run()
-  creditItems(userId, plan.credits)
+  creditItems(userId, credits)
 
-  return { ok: true, uprooted: { plotIndex, berryKey: plot.berryKey, seedReturned: plan.seedReturned } }
+  return {
+    ok: true,
+    uprooted: { plotIndex, berryKey: plot.berryKey, seedReturned: seeds > 0, seeds, cleared: dead },
+  }
 }
