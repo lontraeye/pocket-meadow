@@ -47,6 +47,8 @@
   function stayPreview(mon: OwnedPokemon): { level: number; xpGained: number } {
     return simulateStay(mon.level, mon.xp, game.daycare.rules, game.daycare.context)
   }
+  /** Retrato do PMD Sprite Collab (só das espécies que cuidam do daycare). */
+  const portraitSrc = (speciesId: number) => `/sprites/pmd-portrait/${speciesId}.png`
   const atTeamCap = (level: number) => game.daycare.context.teamMax !== null && level >= game.daycare.context.teamMax
 
   async function pickCaretaker(id: number | null) {
@@ -183,7 +185,7 @@
             {#each caretakerCandidates as mon (mon.id)}
               {@const tier = tierBySpecies.get(mon.speciesId)}
               <button type="button" class="choice" disabled={pending} onclick={() => void pickCaretaker(mon.id)}>
-                <img use:spriteLoading={showdownSrc(mon.speciesId, mon.isShiny)} src={showdownSrc(mon.speciesId, mon.isShiny)} alt="" width="64" height="64" />
+                <img class="portrait-pmd" src={portraitSrc(mon.speciesId)} alt="" width="80" height="80" />
                 <span>{mon.nickname ?? mon.displayName}</span>
                 <small>{tier?.name} · ×{tier?.mult}</small>
               </button>
@@ -195,7 +197,8 @@
     {:else}
       <section class="panel keeper" aria-label="Cuidador">
         {#if caretaker && game.daycare.caretaker}
-          <img use:spriteLoading={showdownSrc(caretaker.speciesId, caretaker.isShiny)} src={showdownSrc(caretaker.speciesId, caretaker.isShiny)} alt="" width="48" height="48" />
+          <!-- Retrato do PMD Sprite Collab (40×40, em 2×). -->
+          <img class="portrait-pmd" src={portraitSrc(caretaker.speciesId)} alt="" width="80" height="80" />
           <div class="keeper-info">
             <strong>{caretaker.nickname ?? caretaker.displayName} cuida do daycare</strong>
             <small>{game.daycare.caretaker.tierName} · ×{game.daycare.caretaker.mult} de XP</small>
@@ -309,9 +312,10 @@
     gap: 0.5rem;
   }
 
-  .keeper img {
+  .portrait-pmd {
     image-rendering: pixelated;
-    object-fit: contain;
+    border: 2px solid var(--panel-edge, #2b2b2b);
+    background: #f4efe0;
   }
 
   .keeper-info {

@@ -54,3 +54,26 @@ Entram autores com crédito atual (`CUR`) em Walk, Idle, Sleep, Attack, Hurt, Ch
 | Top_Kec | @topkec.bsky.social | 26 |
 | Uni | https://github.com/ArianaCastro01 | 194 |
 | XModxGodX |  | 28 |
+
+<!-- retratos: gerado por npm run sprites:portraits -->
+
+## Retratos (cuidadores do daycare)
+
+Retrato "Normal" de `portrait/<dex>/`, mesmo commit. Arquivos em `web/public/sprites/pmd-portrait/`.
+
+| Autor | Contato | Dex |
+|---|---|---|
+| Spike Chunsoft (retratos originais de Pokémon Mystery Dungeon) | https://www.spike-chunsoft.com/ | 35, 36, 39, 40, 113, 115, 124, 161, 162, 163, 164, 165, 166, 173, 174, 175, 176, 183, 184, 209, 210, 216, 217, 238, 241, 242 |
+| estelstarlight | https://estelstarlight.tumblr.com/post/186838449949 | 35 |
+| jackolanternjackalope | https://www.instagram.com/jackolanternjackalope/ | 36 |
+| Mojo |  | 39, 113 |
+| Emboarger |  | 39, 241 |
+| Top_Kec | @topkec.bsky.social | 115 |
+| JFain |  | 161, 163, 165, 166, 173, 175, 242 |
+| Deleca7755 | <https://www.deviantart.com/deleca-7755> | 161, 173 |
+| RelicCipher | <@739304144552198285> | 162 |
+| Emmuffin | https://twitter.com/Ernmuffin | 176, 184 |
+| baronessfaron |  | 217 |
+| Vex |  | 241 |
+
+<!-- /retratos -->

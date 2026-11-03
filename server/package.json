@@ -11,6 +11,7 @@
     "seed:regions": "tsx scripts/seed-regions.ts",
     "sprites:download": "tsx scripts/download-sprites.ts",
     "sprites:pmd": "tsx scripts/pmd-sprites.ts",
+    "sprites:portraits": "tsx scripts/pmd-portraits.ts",
     "sounds:cries": "tsx scripts/download-cries.ts",
     "db:seed-moves": "tsx scripts/seed-moves.ts",
     "typecheck": "tsc --noEmit",
