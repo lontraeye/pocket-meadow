@@ -31,17 +31,18 @@
     delay: rand(-3.5, 0),
     duration: rand(2.2, 3.5),
   }))
-  // Nublado: sombras de nuvem em pixel art. Cada uma é um punhado de elipses
-  // numa grade (o miolo), com uma borda pontilhada mais clara em volta (dither),
-  // e vira dois paths de SVG: nada de desfoque, só bordas em degrau.
+  // Nublado: sombras de nuvem em pixel art. Cada uma é uma base larga e
+  // achatada com três calombos em cima (o do meio maior), numa grade de pixels,
+  // com uma borda pontilhada mais clara em volta (dither). Vira dois paths de
+  // SVG: nada de desfoque, só bordas em degrau.
   const CLOUD_PX = 4
   function cloudShape(cols: number, rows: number): { core: string; rim: string } {
-    const blobs = Array.from({ length: 4 }, (_, i) => ({
-      x: cols * (0.22 + 0.56 * (i / 3)) + rand(-2, 2),
-      y: rows * rand(0.42, 0.58),
-      rx: cols * rand(0.16, 0.24),
-      ry: rows * rand(0.3, 0.42),
-    }))
+    const blobs = [
+      { x: 0.5, y: 0.68, rx: 0.47, ry: 0.24 },
+      { x: 0.5 + rand(-0.05, 0.05), y: 0.42, rx: rand(0.2, 0.25), ry: rand(0.32, 0.38) },
+      { x: rand(0.26, 0.32), y: 0.55, rx: rand(0.14, 0.18), ry: rand(0.22, 0.28) },
+      { x: rand(0.68, 0.74), y: 0.53, rx: rand(0.15, 0.19), ry: rand(0.24, 0.3) },
+    ].map((b) => ({ x: b.x * cols, y: b.y * rows, rx: b.rx * cols, ry: b.ry * rows }))
     const inside = (x: number, y: number) =>
       blobs.some((b) => ((x + 0.5 - b.x) / b.rx) ** 2 + ((y + 0.5 - b.y) / b.ry) ** 2 <= 1)
     let core = ''
@@ -62,7 +63,7 @@
   }
   const clouds = Array.from({ length: 4 }, (_, i) => {
     const cols = Math.round(rand(50, 70))
-    const rows = Math.round(cols * rand(0.42, 0.52))
+    const rows = Math.round(cols * 0.5)
     return {
       top: rand(-10, 60),
       delay: -i * 8 - rand(0, 5),
