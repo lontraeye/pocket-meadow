@@ -2245,12 +2245,13 @@
   .tree-full {
     position: absolute;
     left: 50%;
-    top: -2px;
+    top: -4px;
     transform: translate(-50%, -100%);
-    padding: 1px 4px;
+    padding: 2px 7px;
     background: #fff8e6;
-    border: 1px solid #3a2a14;
-    font-size: 11px;
+    border: 2px solid #3a2a14;
+    box-shadow: 0 2px 0 rgb(0 0 0 / 0.25);
+    font-size: 14px;
     font-weight: 700;
     line-height: 1.2;
     color: #3a2a14;
@@ -2260,7 +2261,7 @@
 
   /* Marcador com tempo: a barrinha corre no pé da etiqueta. */
   .tree-full.timer {
-    padding-bottom: 4px;
+    padding-bottom: 7px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -2268,8 +2269,9 @@
     position: absolute;
     left: 0;
     bottom: 0;
-    height: 3px;
+    height: 5px;
     background: #6fc46a;
+    box-shadow: inset 0 -2px 0 #3f9a45;
   }
 
   @keyframes tree-shake {
