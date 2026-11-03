@@ -74,7 +74,7 @@ Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar.
 #### O que muda (nesta ordem)
 1. **Cuidado como pet** (5.21). É a peça mais barata, usa o jardim que já existe e dá o motivo de volta mais direto. O daycare continua, com papel novo (5.21).
 2. **Avisos de "pronto" e quadro de missões** (6.1 e 5.20), morando no jardim.
-3. **Primeira cadeia de produção, em lugares fixos:** uma ou duas máquinas com operador e poucas receitas (5.16), usando berries, sementes e os itens de árvore e pedra. Sem modo de edição ainda: as máquinas ocupam blocos fixos da grade, como os canteiros hoje.
+3. **Primeira cadeia de produção, em lugares fixos:** uma ou duas máquinas com operador e poucas receitas (5.16), usando berries, sementes e os itens de árvore e pedra. Sem modo de edição ainda: as máquinas ocupam blocos fixos da grade, como os canteiros hoje. **Escolhida em 2026-11-03:** árvore de Apricorn e bancada de bolas (5.23).
 4. **Habitats construídos em blocos** (5.22): o jogador monta o habitat peça por peça e o jogo reconhece o bioma pela mistura; cada habitat abriga 2 ou 3 Pokémon e dá o limite do jardim. Junto, o modo de construção e os enfeites. Pede arte (lista de peças na 5.16), por isso vem depois, mas a arte pode começar já.
 5. **Visitantes** atraídos pelos biomas.
 6. **Amaciar os muros** em paralelo: o painel do marco diz quanto falta, e o balanço dos líderes entra com o playtest (seção 11).
@@ -1349,6 +1349,56 @@ O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A
 - O tamanho do jardim (hoje 12×12 casas) e se ele cresce com o nível ou comprando terreno.
 - Se o reconhecimento olha só a composição ou também a forma (ex.: Lago precisa de água cercada de margem).
 - Os pesos de cada peça e as frações das receitas, depois de montar os primeiros habitats na prática.
+
+### 5.23 Árvore de Apricorn e bancada de bolas (especificado em 2026-11-03, ainda sem fase)
+A primeira cadeia de produção (seção 1.1, item 3; 5.16, "Crafting"). Uma árvore no jardim dá **Apricorns** sozinha com o tempo, e uma **bancada** operada por um Pokémon transforma cada Apricorn numa **Poké Ball**, de 5 em 5. Fecha o ciclo da seção 1.1: o jardim produz o que a captura (que continua ativa) gasta. A ideia de fazer bola de Apricorn é a dos jogos de Johto; as regras são nossas.
+
+**Apricorn** (`mat:apricorn`): o primeiro material. Uma cor só, e **1 Apricorn = 1 Poké Ball**. Great e Ultra pela bancada, as cores e as bolas especiais de Johto (Level, Lure, Moon, Friend, Love, Heavy, Fast) ficam para depois.
+
+**Árvore de Apricorn:**
+- Ocupa um bloco reservado **perto da horta**, fixo (chão de estrutura, `STRUCTURE_TERRAINS`). Sem modo de construção ainda.
+- **Produz sozinha, sem operador:** 1 Apricorn a cada `intervalMs` (inicial: 3 h), acumulando até `cap` = **5**. Cheia em ~15 h (uma noite e um pouco), e cheia para de produzir: o motivo de voltar.
+- **Chuva acelera:** nos dias de clima `rain` (5.11), o intervalo é multiplicado por `rainMult` (inicial: 0,6). Como o clima de cada dia é determinístico (semente do jogador e dia de Brasília), a produção soma os trechos de cada dia entre `since` e agora, com a taxa de cada um. Nada roda em loop (seção 2).
+- **Colher com um toque** pega tudo o que está pendurado. O tempo do próximo que já estava correndo não se perde (o relógio volta só o que foi colhido); cheia, o relógio recomeça na colheita.
+- A arte mostra os frutos pendurados (0 a 5).
+
+**Bancada de bolas:**
+- Outro bloco reservado, ao lado da árvore.
+- **Operador:** um Pokémon do jardim de um dos tipos `operatorTypes` (inicial: Normal, Lutador, Aço; "quem tem mãos"). Fica parado na bancada, aparecendo trabalhando. Enquanto opera, **não pode estar no time** e não luta, mas continua sendo pet (fome, carinho, felicidade, XP do jardim). Trocar o operador só com a bancada parada.
+- **Lote de 5:** a bancada recebe até `batchSize` Apricorns (inicial: **5**, o mesmo da árvore cheia) e faz uma Poké Ball de cada. As bolas ficam prontas uma a uma (`started_at + k × unitMs`, `unitMs` inicial: 30 min, o lote cheio em 2 h 30). Os Apricorns saem do inventário ao começar.
+- **Coletar** a qualquer momento entrega as prontas, e o resto segue (guarda `collected`). **Cancelar** entrega as prontas e devolve os Apricorns das que faltam.
+- **Operador feliz trabalha mais rápido:** `unitMs × (1 − speedBonus × felicidade/100)`, `speedBonus` inicial 0,25, fixado quando o lote começa.
+- **Upgrades** (depois da primeira versão, sem custo definido): a bancada sobe de nível e faz mais por hora, com lote maior (5 → 10 → 15) e unidade mais rápida. O nível fica em `garden_structures.level` desde já (começa em 1), e o config tem uma tabela por nível (`batchSize`, `unitMs`). O custo do upgrade (Apricorns, bolas, material do mundo) se decide quando entrar.
+- Um lote por vez. Fila e mais bancadas, depois.
+
+**Abertura:** árvore e bancada abrem juntas num nível de treinador (config, inicial: 2), com cadeado e o nível escrito, como a horta. Ao abrir, a árvore já vem com 1 Apricorn pendurado, para o primeiro toque.
+
+**Outras fontes de Apricorn** (para a árvore não ser o único caminho, 5.16): a árvore do campo (Headbutt) passa a soltar Apricorn às vezes (`spotDropsConfig`); os presentes dos pets (5.21) entram com peso pequeno; o baú das missões (5.20) dá alguns.
+
+**Volta e missões:**
+- O aviso de "pronto" (6.1) ganha "árvore cheia" e "N bolas prontas" (bancada), e o toque leva até elas.
+- Missões novas (5.20): "colha N Apricorns" e "produza N bolas", contadas pelo próprio registro (colheitas, `craft_jobs.collected`) ou junto com a `trainer_events`.
+
+**Dados e rotas:**
+- `garden_structures` (`user_id`, `key` = `apricorn_tree` | `ball_bench`, `level`, `since`, `operator_pokemon_id`), única por (`user_id`, `key`). A árvore usa `since`; a bancada usa `level` e o operador.
+- `craft_jobs` (`id`, `user_id`, `structure_key`, `recipe_key`, `quantity`, `unit_ms`, `started_at`, `collected`, `cancelled_at`), um ativo por estrutura. `recipe_key` já existe para as receitas que virão (Great, Ultra, especiais).
+- Migração. Os itens continuam no `inventory`.
+- `GET /state` traz `structures: { tree: { unlocked, ready, cap, nextAt, fullAt, raining }, bench: { unlocked, level, batchSize, operator, job: { quantity, done, collected, nextAt, endsAt } | null } }`.
+- `POST /garden/tree/harvest`, `POST /garden/bench/operator` (`{ pokemonId | null }`), `POST /garden/bench/start` (`{ quantity }`), `POST /garden/bench/collect`, `POST /garden/bench/cancel`. Cada um numa transação; o servidor confere tudo (Apricorns, operador, nível).
+
+**Tela:**
+- A árvore com os frutos e a bancada com o operador no jardim. Tocar na árvore colhe (com os frutos caindo); tocar na bancada abre um painel: o operador (trocar), quantos Apricorns colocar (até 5, com "pronto às 23:40"), a barra do lote, "Coletar" e "Cancelar".
+- Mobile primeiro (seção 4.4): painel em baixo, alvos de 44px.
+
+**Arte** (provisória primeiro, trocada depois pela do usuário): árvore com 0 a 5 frutos, bancada parada e trabalhando, ícone do Apricorn.
+
+**Ordem (cada parte um commit, numa branch):**
+1. **Árvore:** config, migração, estado (com a chuva), colher, árvore no jardim, aviso.
+2. **Bancada:** operador, lote, coletar e cancelar, painel, aviso.
+3. **Outras fontes e missões:** Apricorn no Headbutt, nos presentes e no baú; missões de colher e produzir.
+4. **Depois:** upgrades da bancada; Great e Ultra; cores de Apricorn e bolas especiais.
+
+**Pontos a decidir:** o custo dos upgrades; o ritmo exato depois de jogar uns dias.
 
 ---
 
