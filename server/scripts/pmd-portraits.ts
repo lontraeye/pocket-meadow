@@ -1,12 +1,13 @@
-// Retratos do PMD Sprite Collab (PLANNING.md, 5.21): o rosto "Normal" das
-// espécies que cuidam do daycare, do mesmo commit dos sprites do jardim.
+// Retratos do PMD Sprite Collab: o rosto "Normal" de todas as espécies do jogo
+// (cuidador do daycare, resumo dos Pokémon do jardim), do mesmo commit dos
+// sprites do jardim.
 // Baixa em web/public/sprites/pmd-portrait/<dex>.png e escreve os autores no
 // CREDITS-PMD.md (CC BY-NC 4.0 pede crédito). Rodar: npm run sprites:portraits
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CARETAKER_TIERS } from '../src/config/daycare.js'
 import { pmd } from '../src/config/pmd.js'
+import { speciesSeed } from '../src/config/seed.js'
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outputDir = path.resolve(serverRoot, '../web/public/sprites/pmd-portrait')
@@ -29,7 +30,8 @@ for (const line of ((await text(raw('credit_names.txt'))) ?? '').split('\n').sli
 fs.mkdirSync(outputDir, { recursive: true })
 const authors = new Map<string, { name: string; contact: string; dex: Set<number> }>()
 const missing: number[] = []
-for (const dex of CARETAKER_TIERS.flatMap((tier) => [...tier.species]).sort((a, b) => a - b)) {
+const allDex = Array.from({ length: speciesSeed.lastId - speciesSeed.firstId + 1 }, (_, i) => speciesSeed.firstId + i)
+for (const dex of allDex) {
   const id = String(dex).padStart(4, '0')
   const png = await fetch(raw(`portrait/${id}/Normal.png`))
   if (!png.ok) {
@@ -53,7 +55,7 @@ for (const dex of CARETAKER_TIERS.flatMap((tier) => [...tier.species]).sort((a, 
 const table = [
   START,
   '',
-  '## Retratos (cuidadores do daycare)',
+  '## Retratos',
   '',
   `Retrato "Normal" de \`portrait/<dex>/\`, mesmo commit. Arquivos em \`web/public/sprites/pmd-portrait/\`.`,
   '',

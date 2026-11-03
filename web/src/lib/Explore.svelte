@@ -45,7 +45,7 @@
   import { loadBattleFx } from './fx'
   import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
   import { simConfig, type BattleInput } from './sim'
-  import FeedPanel from './FeedPanel.svelte'
+  import GardenCare from './GardenCare.svelte'
   import Modal from './Modal.svelte'
 
   let {
@@ -1528,10 +1528,10 @@
 
 {#if feedOpen}
   <Modal label="Alimentar o time" wide onBackdrop={() => (feedOpen = false)}>
-    <FeedPanel
+    <GardenCare
       {game}
       ids={roster.map((mon) => mon.id)}
-      title="Alimentar o time"
+      title="Como está o time"
       {onState}
       onClose={() => (feedOpen = false)}
     />

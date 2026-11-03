@@ -57,23 +57,58 @@ Entram autores com crédito atual (`CUR`) em Walk, Idle, Sleep, Attack, Hurt, Ch
 
 <!-- retratos: gerado por npm run sprites:portraits -->
 
-## Retratos (cuidadores do daycare)
+## Retratos
 
 Retrato "Normal" de `portrait/<dex>/`, mesmo commit. Arquivos em `web/public/sprites/pmd-portrait/`.
 
 | Autor | Contato | Dex |
 |---|---|---|
-| Spike Chunsoft (retratos originais de Pokémon Mystery Dungeon) | https://www.spike-chunsoft.com/ | 35, 36, 39, 40, 113, 115, 124, 161, 162, 163, 164, 165, 166, 173, 174, 175, 176, 183, 184, 209, 210, 216, 217, 238, 241, 242 |
+| Spike Chunsoft (retratos originais de Pokémon Mystery Dungeon) | https://www.spike-chunsoft.com/ | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251 |
+|  |  | 3 |
+| 0palite | https://zeropalart.tumblr.com/ | 5, 64, 154, 157, 196 |
+| Emmuffin | https://twitter.com/Ernmuffin | 8, 12, 105, 128, 137, 148, 176, 184, 197, 199, 203, 213, 222, 230, 245, 246 |
+| Frostdrop1 |  | 10, 19, 138, 140 |
+| Emboarger |  | 11, 34, 39, 212, 232, 241 |
+| Novie | <https://twitter.com/themagolord> | 13 |
+| Caitemis | https://caitemis-art.tumblr.com/ | 14, 80, 96, 109 |
+| Fable | https://twitter.com/fabledpainter | 15 |
+| JFain |  | 16, 29, 32, 34, 42, 55, 61, 63, 67, 92, 100, 114, 161, 163, 165, 166, 167, 170, 173, 175, 177, 187, 188, 190, 193, 204, 214, 219, 220, 223, 240, 242 |
+| Tainted#3886 |  | 17, 75, 106, 202 |
+| Vex |  | 27, 241 |
+| XModxGodX |  | 28 |
+| Fearless-Quit |  | 29, 81, 235 |
 | estelstarlight | https://estelstarlight.tumblr.com/post/186838449949 | 35 |
 | jackolanternjackalope | https://www.instagram.com/jackolanternjackalope/ | 36 |
-| Mojo |  | 39, 113 |
-| Emboarger |  | 39, 241 |
+| Mojo |  | 39, 113, 137, 151 |
+| fledermaus | https://www.furaffinity.net/user/fleder-maus/ | 41 |
+| Felis-Licht | https://www.deviantart.com/felis-licht/ | 43, 179, 194 |
+| baronessfaron |  | 53, 59, 64, 86, 134, 136, 190, 198, 217 |
+| Deltex12 | /u/Deltex12 | 58 |
+| LT | https://twitter.com/eLTehH | 58 |
+|  |  | 69, 180 |
+| deltaflare | <@555360707617488904> | 78 |
+| SirViolet |  | 82 |
+| Noo | https://artfight.net/~NooNoo_Skidoo | 83, 123, 160, 227 |
+| Ray2064 | <@540823632054714388> | 84 |
+| Blanca |  | 87, 233 |
+| PhillipsYoung | https://twitter.com/PhilliYoung196 | 93, 101 |
+| drawsstuff | https://bugfu.newgrounds.com/ | 96 |
+|  |  | 98 |
 | Top_Kec | @topkec.bsky.social | 115 |
-| JFain |  | 161, 163, 165, 166, 173, 175, 242 |
+| frostibirb | https://twitter.com/frostibirb | 116 |
+| JemDragons | https://twitter.com/JemDragons?s=09 | 129 |
+| C_Pariah | <@322382592202637322> | 131, 153, 156, 159, 172, 225 |
+|  |  | 132 |
+| Vynnyal | <https://vynnyal.tumblr.com/> | 136 |
 | Deleca7755 | <https://www.deviantart.com/deleca-7755> | 161, 173 |
 | RelicCipher | <@739304144552198285> | 162 |
-| Emmuffin | https://twitter.com/Ernmuffin | 176, 184 |
-| baronessfaron |  | 217 |
-| Vex |  | 241 |
+| gromchurch | https://twitter.com/poongis2 | 182 |
+|  |  | 185 |
+| MeepTheMareep02 | https://instagram.com/meepy.starsheepy?igshid=NGVhN2U2NjQ0Yg== | 191 |
+| RoyalRust |  | 200 |
+| Bluetails_the_Buizel | https://www.deviantart.com/tanyuliang | 203 |
+| NeroIntruder | https://twitter.com/NeroIntruder | 207 |
+| Angels-Snack | https://angels-snack.tumblr.com/ | 239 |
+| CamusZekeSirius |  | 250 |
 
 <!-- /retratos -->

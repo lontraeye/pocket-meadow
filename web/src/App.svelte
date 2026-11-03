@@ -11,7 +11,7 @@
   import Garden from './lib/Garden.svelte'
   import Modal from './lib/Modal.svelte'
   import MissionBoard from './lib/MissionBoard.svelte'
-  import FeedPanel from './lib/FeedPanel.svelte'
+  import GardenCare from './lib/GardenCare.svelte'
   import Pokedex from './lib/Pokedex.svelte'
   import WeatherIcon from './lib/WeatherIcon.svelte'
   import { WEATHER_WITH } from './lib/weather'
@@ -587,9 +587,9 @@
             <span class="badge" aria-label={`${ready.daycareFullCount} prontos`}>{ready.daycareFullCount}</span>
           {/if}
         </button>
-        <!-- Alimentar todos (faminto não luta): sempre à mão, com quantos estão com fome. -->
+        <!-- Como estão os Pokémon (fome, carinho, felicidade): com quantos estão com fome. -->
         <button type="button" class="btn badge-host" onclick={() => (feedOpen = true)}>
-          Alimentar
+          Cuidar
           {#if ready && ready.hungryCount > 0}
             <span class="badge" aria-label={`${ready.hungryCount} com fome`}>{ready.hungryCount}</span>
           {/if}
@@ -619,8 +619,8 @@
     {/if}
 
     {#if feedOpen && game}
-      <Modal label="Alimentar" wide onBackdrop={() => (feedOpen = false)}>
-        <FeedPanel {game} title="Alimentar o jardim" onState={loadState} onClose={() => (feedOpen = false)} />
+      <Modal label="Como estão os Pokémon" wide onBackdrop={() => (feedOpen = false)}>
+        <GardenCare {game} onState={loadState} onClose={() => (feedOpen = false)} />
       </Modal>
     {/if}
 
