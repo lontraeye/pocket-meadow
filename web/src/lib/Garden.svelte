@@ -87,8 +87,12 @@
   function bushSrc(berryKey: string, ripe: boolean): string | null {
     return bushArt.get(`arbusto-${berryKey}${ripe ? '-frutos' : ''}`) ?? null
   }
-  /** Centro das raízes, em pixels da arte, acima da última linha (igual à árvore). */
-  const BUSH_FOOT = 2
+  /**
+   * Quanto o pé do arbusto (a borda de baixo da imagem) desce do centro do
+   * canteiro, em pixels da arte: com 1, o tronco entra no meio do losango e as
+   * raízes não encostam na ponta de baixo.
+   */
+  const BUSH_FOOT = 1
 
   function plotStage(plot: PlotState | undefined): 'empty' | 'planted' | 'growing' | 'ready' {
     if (!plot) return 'empty'

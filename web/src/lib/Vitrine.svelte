@@ -33,23 +33,26 @@
     src: string | null
     frame?: 'idle' | 'work' | 'ready'
     floor: 'grama' | 'canteiro'
-    /** 'raiz': centro das raízes 2 px acima da última linha; 'losango': última linha na ponta de baixo do bloco. */
-    foot: 'raiz' | 'losango'
+    /**
+     * Quanto a borda de baixo da imagem desce do centro do bloco, em pixels da
+     * arte (o mesmo do jardim): árvore 2, arbusto 1, máquina 6 (a ponta de baixo).
+     */
+    foot: number
   }
   const rows: Item[][] = [
-    BERRIES.map(([key, name]) => ({ label: name, src: find(art, `arbusto-${key}.png`), floor: 'canteiro', foot: 'raiz' })),
+    BERRIES.map(([key, name]) => ({ label: name, src: find(art, `arbusto-${key}.png`), floor: 'canteiro', foot: 1 })),
     BERRIES.map(([key, name]) => ({
       label: `${name} pronta`,
       src: find(art, `arbusto-${key}-frutos.png`),
       floor: 'canteiro',
-      foot: 'raiz',
+      foot: 1,
     })),
     [
-      { label: 'Árvore', src: find(art, 'arvore-apricorn.png'), floor: 'grama', foot: 'raiz' },
-      { label: 'Árvore cheia', src: find(art, 'arvore-apricorn-frutos.png'), floor: 'grama', foot: 'raiz' },
-      { label: 'Máquina parada', src: BENCH_SHEET, frame: 'idle', floor: 'grama', foot: 'losango' },
-      { label: 'Trabalhando', src: BENCH_SHEET, frame: 'work', floor: 'grama', foot: 'losango' },
-      { label: 'Pronta', src: BENCH_SHEET, frame: 'ready', floor: 'grama', foot: 'losango' },
+      { label: 'Árvore', src: find(art, 'arvore-apricorn.png'), floor: 'grama', foot: 2 },
+      { label: 'Árvore cheia', src: find(art, 'arvore-apricorn-frutos.png'), floor: 'grama', foot: 2 },
+      { label: 'Máquina parada', src: BENCH_SHEET, frame: 'idle', floor: 'grama', foot: 6 },
+      { label: 'Trabalhando', src: BENCH_SHEET, frame: 'work', floor: 'grama', foot: 6 },
+      { label: 'Pronta', src: BENCH_SHEET, frame: 'ready', floor: 'grama', foot: 6 },
     ],
   ]
 
@@ -120,13 +123,13 @@
         const image = item.src ? images!.get(item.src) : undefined
         if (!image) return
         const cx = centerX(i)
-        // Última linha da imagem: 2 px abaixo do centro (raízes) ou na ponta de baixo do bloco.
-        const last = item.foot === 'raiz' ? cy + 2 : cy + 6 - 1
+        // Borda de baixo da imagem `foot` pixels abaixo do centro do bloco, como no jardim.
+        const bottom = cy + item.foot
         if (item.frame) {
           const index = item.frame === 'idle' ? BENCH_IDLE : item.frame === 'ready' ? BENCH_READY : benchWorkFrame(now)
-          ctx.drawImage(image, index * 24, 0, 24, 32, cx - 12, last - 31, 24, 32)
+          ctx.drawImage(image, index * 24, 0, 24, 32, cx - 12, bottom - 32, 24, 32)
         } else {
-          ctx.drawImage(image, cx - image.width / 2, last - image.height + 1)
+          ctx.drawImage(image, cx - image.width / 2, bottom - image.height)
         }
       })
     })
