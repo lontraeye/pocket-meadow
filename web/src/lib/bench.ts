@@ -1,49 +1,36 @@
-// Bancada de bolas no jardim (PLANNING.md, seção 5.23). Arte provisória em
-// pixel art, como a árvore (apricornTree.ts): uma mesa de madeira com um
-// Apricorn e uma Poké Ball em cima.
+// Bancada de bolas no jardim (PLANNING.md, seção 5.23). Arte do usuário em
+// art/jardim/maquina-apricorn.png: uma folha de 24×32 por quadro (fonte no GIF
+// ao lado). O quadro 0 é a máquina parada (montado tirando o Apricorn do
+// primeiro quadro do GIF); do 1 ao 24, a alavanca e o Apricorn virando Poké
+// Ball, em loop enquanto trabalha; o 25, a bola pronta.
 
 import type { BenchView } from './api'
-import type { Pixel } from './bubbles'
+import sheetUrl from '../../../art/jardim/maquina-apricorn.png?url'
 
-const BENCH = [
-  '...K..........KK..',
-  '..rRR........KRRK.',
-  '..RRR........KWWK.',
-  '..............KK..',
-  '.OOOOOOOOOOOOOOOO.',
-  '.OwwwwwwwwwwwwwwO.',
-  '.OWWWWWWWWWWWWWWO.',
-  '.OOOOOOOOOOOOOOOO.',
-  '..OT..........TO..',
-  '..OT..........TO..',
-  '..OT..........TO..',
-  '..OO..........OO..',
-]
+export const BENCH_SHEET = sheetUrl
+export const BENCH_W = 24
+export const BENCH_H = 32
+export const BENCH_FRAMES = 26
+export const BENCH_IDLE = 0
+export const BENCH_WORK_FIRST = 1
+export const BENCH_READY = 25
 
-const COLORS: Record<string, string> = {
-  O: '#3a2a14',
-  w: '#c08a52',
-  W: '#9a6a3a',
-  T: '#7a5232',
-  R: '#d83a3a',
-  r: '#ff8a7a',
-  K: '#2a2a2a',
-}
-// A bola: em cima vermelha, embaixo branca (W na fileira da bola).
-const BALL_WHITE = '#f4f4f4'
+/**
+ * Tempo de cada quadro do trabalho (ms). O GIF tem 330 ms em todos (8 s por
+ * volta); aqui o meio passa rápido e o começo e o fim seguram um pouco.
+ */
+const WORK_MS = [400, ...Array.from({ length: 22 }, () => 110), 300]
+const WORK_TOTAL = WORK_MS.reduce((sum, ms) => sum + ms, 0)
 
-export const BENCH_W = BENCH[0]!.length
-export const BENCH_H = BENCH.length
-
-export function benchPixels(): Pixel[] {
-  const pixels: Pixel[] = []
-  BENCH.forEach((row, y) =>
-    row.split('').forEach((cell, x) => {
-      const color = y < 4 && cell === 'W' ? BALL_WHITE : COLORS[cell]
-      if (color) pixels.push({ x, y, color })
-    }),
-  )
-  return pixels
+/** Quadro do trabalho em `time` (ms, do relógio da animação). */
+export function benchWorkFrame(time: number): number {
+  let t = ((time % WORK_TOTAL) + WORK_TOTAL) % WORK_TOTAL
+  let index = 0
+  while (index < WORK_MS.length - 1 && t >= WORK_MS[index]!) {
+    t -= WORK_MS[index]!
+    index += 1
+  }
+  return BENCH_WORK_FIRST + index
 }
 
 /** Quantas do lote já ficaram prontas em `now` (igual ao servidor). */

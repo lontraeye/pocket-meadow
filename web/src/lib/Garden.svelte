@@ -20,7 +20,16 @@
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
   import { loadTreeArt, treePixels, type TreeArt } from './apricornTree'
-  import { BENCH_H, BENCH_W, benchDone, benchPixels } from './bench'
+  import {
+    BENCH_FRAMES,
+    BENCH_H,
+    BENCH_IDLE,
+    BENCH_READY,
+    BENCH_SHEET,
+    BENCH_W,
+    benchDone,
+    benchWorkFrame,
+  } from './bench'
   import BenchPanel from './BenchPanel.svelte'
   import Modal from './Modal.svelte'
   import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
@@ -289,7 +298,11 @@
   }
 
   // Árvore de Apricorn (5.23): um bloco ao lado da horta, com uma casa livre
-  // entre os dois para o passeio.
+  // entre os dois para o passeio. As raízes formam um losango pequeno com o
+  // centro 2 pixels (da arte) acima da última linha: é esse centro que pisa no
+  // meio do bloco. A máquina é diferente: a última linha dela é a ponta de baixo
+  // do losango do chão, então ela se apoia na ponta de baixo do bloco.
+  const TREE_FOOT = 2
   const treeCol = hortaCol0 + hortaCols + 1
   const treeRow = hortaRow0 + 1
 
@@ -297,13 +310,16 @@
     return col === treeCol && row === treeRow
   }
 
-  // Bancada de bolas (5.23): ao lado da árvore, com uma casa livre no meio.
-  // O operador sai do passeio e fica parado atrás dela.
+  // Bancada de bolas (5.23): ao lado da árvore, com uma casa no meio. O
+  // operador sai do passeio e fica nessa casa, virado para a máquina.
   const benchCol = treeCol + 2
   const benchRow = treeRow
+  const operatorCol = benchCol - 1
+  const operatorRow = benchRow
+  const hasOperator = $derived(game.garden.bench.operatorId !== null)
 
   function isBenchCell(col: number, row: number): boolean {
-    return col === benchCol && row === benchRow
+    return (col === benchCol && row === benchRow) || (hasOperator && col === operatorCol && row === operatorRow)
   }
 
   function isWalkable(col: number, row: number): boolean {
@@ -487,6 +503,16 @@
   }
 
   const benchOperator = $derived(game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null)
+  /** Quadro parado da máquina: pronta (lote acabado com bolas esperando) ou parada. */
+  const benchState = $derived.by((): 'idle' | 'working' | 'ready' => {
+    const job = game.garden.bench.job
+    if (!job) return 'idle'
+    return benchDone(job, clock.now()) >= job.quantity ? 'ready' : 'working'
+  })
+  /** Quadro do trabalho, pelo relógio da animação. */
+  const benchWork = $derived(
+    game.garden.bench.unlocked && benchState === 'working' ? benchWorkFrame(time) : null,
+  )
   /** Poké Balls prontas no lote, esperando coletar. */
   const benchReady = $derived.by(() => {
     const job = game.garden.bench.job
@@ -761,6 +787,8 @@
   }
 
   let showLabels = $state(loadLabels())
+  // Grade de teste (só com DEV_TOOLS): contorno de cada bloco e os ocupados pintados.
+  let showGrid = $state(false)
 
   function toggleLabels() {
     showLabels = !showLabels
@@ -1377,7 +1405,7 @@
           class:locked={!tree.unlocked}
           class:shake={treeShake}
           style:left="{snapToDevice(spot.x)}px"
-          style:top="{snapToDevice(spot.y + halfH)}px"
+          style:top="{snapToDevice(spot.y + halfH + TREE_FOOT * pmdScale)}px"
           style:z-index={treeCol + treeRow + depthSpan + 1}
           aria-label={!tree.unlocked
             ? `Árvore de Apricorn, abre no nível ${tree.unlockLevel}`
@@ -1406,14 +1434,15 @@
         {@const bench = game.garden.bench}
         {#if benchOperator}
           {@const look = gardenSprite(benchOperator.speciesId, benchOperator.isShiny)}
-          <!-- O operador fica atrás da mesa, um pouco acima do centro do bloco. -->
+          {@const at = place(operatorCol, operatorRow)}
+          <!-- O operador fica na casa ao lado, virado para a máquina. -->
           <button
             type="button"
             class="mon operator"
-            style:left="{snapToDevice(spot.x)}px"
-            style:top="{snapToDevice(spot.y + halfH * 0.4)}px"
+            style:left="{snapToDevice(at.x)}px"
+            style:top="{snapToDevice(at.y + halfH)}px"
             style:--size="{showdownSize * scale}px"
-            style:z-index={benchCol + benchRow + depthSpan}
+            style:z-index={operatorCol + operatorRow + depthSpan + 1}
             aria-label={`${benchOperator.nickname ?? benchOperator.displayName} operando a bancada`}
             onclick={onBench}
           >
@@ -1422,7 +1451,7 @@
                 speciesId={benchOperator.speciesId}
                 shiny={look.shinySheet}
                 anim="Idle"
-                dir={0}
+                dir={1}
                 scale={pmdScale}
                 shadow={look.shadow}
                 {time}
@@ -1437,9 +1466,9 @@
           type="button"
           class="bench"
           class:locked={!bench.unlocked}
-          class:working={bench.job !== null && benchReady < bench.job.quantity - bench.job.collected}
+          class:working={bench.unlocked && benchState === 'working'}
           style:left="{snapToDevice(spot.x)}px"
-          style:top="{snapToDevice(spot.y + halfH)}px"
+          style:top="{snapToDevice(spot.y + tileH)}px"
           style:z-index={benchCol + benchRow + depthSpan + 1}
           aria-label={!bench.unlocked
             ? `Bancada de bolas, abre no nível ${bench.unlockLevel}`
@@ -1448,17 +1477,16 @@
               : 'Bancada de bolas'}
           onclick={onBench}
         >
-          <svg
-            width={BENCH_W * pmdScale}
-            height={BENCH_H * pmdScale}
-            viewBox="0 0 {BENCH_W} {BENCH_H}"
-            shape-rendering="crispEdges"
+          <!-- Folha de quadros: parada, 24 de trabalho (em loop) e pronta. -->
+          <span
+            class="bench-sprite"
+            style:width="{BENCH_W * pmdScale}px"
+            style:height="{BENCH_H * pmdScale}px"
+            style:background-image="url({BENCH_SHEET})"
+            style:background-size="{BENCH_W * BENCH_FRAMES * pmdScale}px {BENCH_H * pmdScale}px"
+            style:background-position-x="{-(benchWork ?? (benchState === 'ready' && bench.unlocked ? BENCH_READY : BENCH_IDLE)) * BENCH_W * pmdScale}px"
             aria-hidden="true"
-          >
-            {#each benchPixels() as px, index (index)}
-              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
-            {/each}
-          </svg>
+          ></span>
           {#if !bench.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
           {#if benchReady > 0}<span class="tree-full" aria-hidden="true">{benchReady} pronta{benchReady === 1 ? '' : 's'}</span>{/if}
         </button>
@@ -1479,6 +1507,24 @@
           <img src={giftIconSrc(gift.itemKey)} alt="" />
         </button>
       {/each}
+      {#if showGrid}
+        <svg class="grid" width={stageW} height={stageH} style:z-index={depthSpan * 4} aria-hidden="true">
+          {#each Array.from({ length: playCols * playRows }, (_, i) => ({ col: playCol0 + (i % playCols), row: playRow0 + Math.floor(i / playCols) })) as cell (`${cell.col}-${cell.row}`)}
+            {@const at = place(cell.col, cell.row)}
+            {@const kind = isPlotCell(cell.col, cell.row)
+              ? 'horta'
+              : isTreeCell(cell.col, cell.row)
+                ? 'arvore'
+                : isBenchCell(cell.col, cell.row)
+                  ? 'maquina'
+                  : null}
+            <polygon
+              class={kind ?? ''}
+              points="{at.x},{at.y} {at.x + halfW},{at.y + halfH} {at.x},{at.y + tileH} {at.x - halfW},{at.y + halfH}"
+            />
+          {/each}
+        </svg>
+      {/if}
       {#each walkers as walker (walker.id)}
         {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
         {@const spot = place(walker.col, walker.row)}
@@ -1590,6 +1636,21 @@
 
     <!-- Zoom: + e − com a barrinha do nível no meio (tocar nela também escolhe). -->
     <div class="zoom" role="group" aria-label="Zoom">
+      {#if devTools}
+        <button
+          type="button"
+          class="zoom-btn"
+          aria-pressed={showGrid}
+          aria-label={showGrid ? 'Ocultar grade (teste)' : 'Mostrar grade (teste)'}
+          title="Grade (teste)"
+          onclick={() => (showGrid = !showGrid)}
+        >
+          <svg viewBox="0 0 12 12" width={snapIconSize(14)} height={snapIconSize(14)} aria-hidden="true" shape-rendering="crispEdges">
+            <rect x="1" y="1" width="10" height="1" /><rect x="1" y="5" width="10" height="1" /><rect x="1" y="10" width="10" height="1" />
+            <rect x="1" y="1" width="1" height="10" /><rect x="5" y="1" width="1" height="10" /><rect x="10" y="1" width="1" height="10" />
+          </svg>
+        </button>
+      {/if}
       <button
         type="button"
         class="zoom-btn"
@@ -2101,12 +2162,39 @@
     touch-action: manipulation;
   }
 
-  .bench svg {
+  .grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+  }
+
+  .grid polygon {
+    fill: none;
+    stroke: rgb(255 255 255 / 0.55);
+    stroke-width: 1;
+  }
+
+  .grid polygon.horta {
+    fill: rgb(255 200 60 / 0.25);
+  }
+
+  .grid polygon.arvore {
+    fill: rgb(80 200 80 / 0.35);
+  }
+
+  .grid polygon.maquina {
+    fill: rgb(80 160 255 / 0.35);
+  }
+
+  .bench-sprite {
     display: block;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
     filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
   }
 
-  .bench.locked svg {
+  .bench.locked .bench-sprite {
     filter: grayscale(0.7) brightness(0.6);
   }
 
@@ -2114,15 +2202,6 @@
     top: 55%;
   }
 
-  .bench.working svg {
-    animation: bench-work 0.9s steps(2, jump-none) infinite;
-  }
-
-  @keyframes bench-work {
-    50% {
-      transform: translateY(-1px);
-    }
-  }
 
   .tree-full {
     position: absolute;
