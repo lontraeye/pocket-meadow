@@ -53,6 +53,7 @@
     stage('-frutos', 'pronta'),
     [
       { label: 'Arbusto seco', src: find(art, 'arbusto-seco.png'), floor: 'canteiro', foot: 1 },
+      { label: 'Arbusto em bloco', src: find(art, 'arbusto-bloco.png'), floor: 'grama', foot: 6 },
       { label: 'Árvore', src: find(art, 'arvore-apricorn.png'), floor: 'grama', foot: 2 },
       { label: 'Árvore cheia', src: find(art, 'arvore-apricorn-frutos.png'), floor: 'grama', foot: 2 },
       { label: 'Máquina parada', src: BENCH_SHEET, frame: 'idle', floor: 'grama', foot: 6 },
