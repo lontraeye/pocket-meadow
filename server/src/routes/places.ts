@@ -149,7 +149,6 @@ function claimMilestone(
   if (progress.cleared.has(key)) return fail('milestone_cleared', 409)
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
-  if (clock.level < milestone.minLevel) return fail('milestone_level', 400)
   // Marco com líder: só vencendo o desafio (POST /leaders/:key/challenge).
   if (leaderByMilestone(key)) return fail('leader_required', 400)
 
@@ -282,9 +281,8 @@ function goalView(progress: Progress, here: string, statusOf: (id: number) => Sp
           typeLabel: open.typeLabel,
           town: open.town,
           townName: placeBySlug(open.town)?.name ?? open.town,
-          needLevel: open.minLevel,
-          level: progress.level,
-          ready: progress.level >= open.minLevel,
+          // O marco é só o líder (2026-11-03): sem nível de treinador.
+          ready: true,
           here: here === open.town,
           grants: (open.grants ?? []).map((tool) => TOOL_NAMES[tool]),
           leader: leaderView(open.key),

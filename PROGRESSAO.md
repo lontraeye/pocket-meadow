@@ -77,11 +77,20 @@ jardim (horta, árvores, bancada, daycare) ──recursos──▶ exploração 
                                                        (áreas, ferramentas, desbloqueios do jardim)
 ```
 
-### 4.2 O que cada lado precisa do outro
+### 4.2 Os recursos da exploração (decididos em 2026-11-03)
+
+- **Energia por campo revelado, não por luta.** Revelar um campo (abrir o campo de uma área ou "Explorar de novo") gasta 1 de energia; todos os Pokémon daquele campo podem ser enfrentados com ela. A energia volta devagar sozinha e rápido com berries (a Oran já restaura energia).
+- **HP que não volta sozinho.** O time termina a luta machucado e o HP fica. Cura: berries, descanso no jardim (por tempo) e uma **máquina de cura** no jardim, como a do Pokécenter, que acelera. Incentiva ter dois times para revezar.
+- **Pokémon com fome não luta.** A colheita passa a render mais berries e entra um jeito de alimentar vários de uma vez; o jogador divide as berries entre o que usa na exploração (energia, cura) e o que dá aos pets.
+- **Bolas:** captura mais difícil; as bolas vêm principalmente da bancada.
+
+### 4.2.1 O que cada lado precisa do outro
 
 | A exploração gasta | Vem do jardim |
 |---|---|
-| (a decidir) energia por encontro | berries da horta (a Oran restaura energia) |
+| energia por campo revelado | berries da horta (Oran), recarga lenta por tempo |
+| HP do time | berries, descanso no jardim, máquina de cura |
+| pets alimentados para lutar | berries da horta |
 | bolas, mais na captura difícil | bancada (Apricorns das árvores) |
 | tempo de treino do time | daycare e cuidador |
 
@@ -113,15 +122,19 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 ## 5. O que falta construir (em ordem)
 
-1. **Marco = só o líder:** tirar o nível de treinador do requisito; o painel do marco mostra o líder e o que ele usa.
-2. **Recurso da exploração** (a decidir, seção 6) e o jardim produzindo esse recurso.
-3. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, de missões e de nível.
-4. **Desbloqueios do jardim por marco** (4.3), no lugar dos níveis de treinador.
-5. **Ritmo do jardim e simulação da campanha** (horta, árvores, bancada, daycare) para fechar ~3 semanas, com a simulação virando um script.
-6. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
-7. **Liga, rival e pós-jogo.**
+1. **Marco = só o líder:** tirar o nível de treinador do requisito; o painel do marco mostra o líder.
+2. **Energia por campo revelado:** religar a energia, gastando ao revelar o campo (não na luta); recarga por tempo e pelas berries.
+3. **Fome trava a luta:** pet com fome não entra em luta; colheita com mais berries; alimentar vários de uma vez.
+4. **HP persistente e máquina de cura:** HP fica depois da luta; cura por berry, por descanso no jardim e pela máquina de cura (estrutura do jardim).
+5. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, missões e nível.
+6. **Desbloqueios do jardim por marco** (4.3).
+7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script.
+8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
+9. **Liga, rival e pós-jogo.**
+
+**Para depois (anotado):** breed, com sorteio de sexo (macho/fêmea; alguns sprites mudam com o sexo, então o sprite tem de respeitar isso) e ovos personalizados (muda só a cor do ovo), com ninho e incubadora no jardim.
 
 ## 6. Pontos a decidir
 
-- **O que a exploração gasta:** energia por encontro que volta pelas berries (o sistema existe, desligado); HP que não volta sozinho e se cura com berries ou descanso; ou só bolas. Sugestão: energia pelas berries + bolas pela bancada agora, HP depois.
-- Quanto mais lento o jardim fica, depois de definido o recurso.
+- Quanto mais lento o jardim fica e quantas berries a colheita passa a dar (sai do balanço do item 7).
+- A máquina de cura: cura na hora com tempo de recarga, ou cura por tempo (mais rápido que o descanso).

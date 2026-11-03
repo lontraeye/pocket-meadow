@@ -43,7 +43,6 @@ function startChallenge(userId: number, key: string, now: number) {
   if (progress.cleared.has(key)) return fail('milestone_cleared', 409)
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
-  if (clock.level < milestone.minLevel) return fail('milestone_level', 400)
   const pending = getDb()
     .select({ id: encounters.id })
     .from(encounters)

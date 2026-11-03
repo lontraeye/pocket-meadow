@@ -86,10 +86,8 @@
   const caughtHere = $derived(data?.here.species.filter((entry) => entry.status === 'caught').length ?? 0)
   const goal = $derived(data?.goal ?? null)
   const mark = $derived(goal?.milestone ?? null)
-  // Por enquanto o marco pede só o nível (as missões entram depois).
-  const goalPct = $derived(
-    mark ? Math.min(100, Math.round((mark.level / mark.needLevel) * 100)) : goal && goal.total > 0 ? Math.round((goal.caught / goal.total) * 100) : 100,
-  )
+  // O marco é só o líder; a barra mostra as espécies do capítulo (informação, não requisito).
+  const goalPct = $derived(goal && goal.total > 0 ? Math.round((goal.caught / goal.total) * 100) : 100)
   let claiming = $state(false)
   let celebrate = $state('')
   /** Altura do painel que flutua sobre o mapa (lida do próprio painel). */
@@ -421,7 +419,7 @@
           </ul>
         {/if}
         <div class="goal-meta">
-          <span class="goal-level" class:done={mark.ready} title="Nível de treinador">Nível {Math.min(mark.level, mark.needLevel)}/{mark.needLevel}</span>
+          <span class="goal-level" title="Espécies do capítulo capturadas">Espécies {goal?.caught ?? 0}/{goal?.total ?? 0}</span>
           {#if mark.ready && mark.here}
             <button
               type="button"
@@ -846,11 +844,6 @@
     font-size: 0.85rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .goal-meta .done {
-    color: var(--primary);
-    font-weight: 700;
   }
 
   .celebrate {

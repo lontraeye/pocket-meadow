@@ -19,30 +19,27 @@ export type MilestoneConfig = {
   name: string
   /** Tipo do ginásio, só para o texto. */
   typeLabel: string
-  minLevel: number
   /** Ferramentas que o marco libera. */
   grants?: readonly Tool[]
 }
 
 export const milestoneConfigs: readonly MilestoneConfig[] = [
-  { key: 'violet', chapter: 1, town: 'violet', name: 'Marco de Violet', typeLabel: 'Voador', minLevel: 3 },
+  { key: 'violet', chapter: 1, town: 'violet', name: 'Marco de Violet', typeLabel: 'Voador' },
   {
     key: 'azalea',
     chapter: 2,
     town: 'azalea',
     name: 'Marco de Azalea',
     typeLabel: 'Inseto',
-    minLevel: 6,
     grants: ['oldRod', 'headbutt'],
   },
-  { key: 'goldenrod', chapter: 3, town: 'goldenrod', name: 'Marco de Goldenrod', typeLabel: 'Normal', minLevel: 9 },
+  { key: 'goldenrod', chapter: 3, town: 'goldenrod', name: 'Marco de Goldenrod', typeLabel: 'Normal' },
   {
     key: 'ecruteak',
     chapter: 4,
     town: 'ecruteak',
     name: 'Marco de Ecruteak',
     typeLabel: 'Fantasma',
-    minLevel: 12,
     grants: ['surf', 'rockSmash'],
   },
   {
@@ -51,21 +48,19 @@ export const milestoneConfigs: readonly MilestoneConfig[] = [
     town: 'cianwood',
     name: 'Marco de Cianwood',
     typeLabel: 'Lutador',
-    minLevel: 15,
     grants: ['goodRod', 'fly'],
   },
-  { key: 'olivine', chapter: 6, town: 'olivine', name: 'Marco de Olivine', typeLabel: 'Aço', minLevel: 18 },
-  { key: 'mahogany', chapter: 7, town: 'mahogany', name: 'Marco de Mahogany', typeLabel: 'Gelo', minLevel: 21 },
+  { key: 'olivine', chapter: 6, town: 'olivine', name: 'Marco de Olivine', typeLabel: 'Aço' },
+  { key: 'mahogany', chapter: 7, town: 'mahogany', name: 'Marco de Mahogany', typeLabel: 'Gelo' },
   {
     key: 'blackthorn',
     chapter: 8,
     town: 'blackthorn',
     name: 'Marco de Blackthorn',
     typeLabel: 'Dragão',
-    minLevel: 24,
     grants: ['superRod'],
   },
-  { key: 'league', chapter: 9, town: 'indigo-plateau', name: 'Liga de Johto', typeLabel: 'Liga', minLevel: 30 },
+  { key: 'league', chapter: 9, town: 'indigo-plateau', name: 'Liga de Johto', typeLabel: 'Liga' },
 ]
 
 /** Capítulos que existem: 1 a 9 fecham com marco; o 10 (fim de jogo) abre com a Liga. */

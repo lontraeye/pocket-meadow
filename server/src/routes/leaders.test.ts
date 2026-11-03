@@ -150,10 +150,10 @@ test('desafio: vencer cada Pokémon do líder abre o próximo; o último dá o m
   assert.equal(await errorOf(await post('/dev/leader/reset', cookie)), 'no_leader_cleared')
 })
 
-test('desafio fora da cidade ou sem nível é recusado', async () => {
+test('desafio fora da cidade é recusado; no nível 1 de treinador já pode', async () => {
   const { cookie, userId } = player('rookie')
   assert.equal(await errorOf(await post('/leaders/violet/challenge', cookie)), 'milestone_not_here')
   getSqlite().prepare(`update trainers set level = 1, current_place = 'violet' where user_id = ?`).run(userId)
-  assert.equal(await errorOf(await post('/leaders/violet/challenge', cookie)), 'milestone_level')
+  assert.equal((await post('/leaders/violet/challenge', cookie)).status, 201)
   assert.equal(await errorOf(await post('/leaders/nowhere/challenge', cookie)), 'milestone_not_found')
 })

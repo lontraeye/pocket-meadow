@@ -148,8 +148,6 @@ export type PlacesResponse = {
       typeLabel: string
       town: string
       townName: string
-      needLevel: number
-      level: number
       ready: boolean
       here: boolean
       grants: string[]

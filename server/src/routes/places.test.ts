@@ -34,7 +34,6 @@ type View = {
     milestone: {
       key: string
       town: string
-      needLevel: number
       ready: boolean
       here: boolean
       leader: { name: string; foes: { speciesId: number; level: number; ace: boolean }[] } | null
@@ -120,7 +119,6 @@ test('começa em New Bark; anda só para vizinhos abertos; avisa a primeira visi
   assert.equal(places.places.find((place) => place.slug === 'route-29')?.visited, true)
   assert.equal(places.goal.chapter, 1)
   assert.equal(places.goal.milestone?.key, 'violet')
-  assert.equal(places.goal.milestone?.needLevel, 3)
   assert.equal(places.goal.milestone?.here, true)
 })
 
@@ -153,14 +151,13 @@ test('encontro só onde está; não viaja com encontro pendente; espécies do lu
   assert.equal(await errorOf(await post('/encounters', cookie, { regionSlug: 'route-30' })), 'not_here')
 })
 
-test('marco: só na cidade e com o nível; com líder, não sai pelo resgate; abre o capítulo seguinte', async () => {
+test('marco: só na cidade (sem nível de treinador); com líder, não sai pelo resgate; abre o capítulo seguinte', async () => {
   const { cookie, userId } = player('lyra')
   const claim = () => app.request('/places/milestones/violet/claim', { method: 'POST', headers: { cookie } }, env)
   assert.equal(await errorOf(await claim()), 'milestone_not_here')
 
-  getSqlite().prepare(`update trainers set current_place = 'violet' where user_id = ?`).run(userId)
-  assert.equal(await errorOf(await claim()), 'milestone_level')
-  getSqlite().prepare(`update trainers set level = 3 where user_id = ?`).run(userId)
+  // Nível 1 basta: o marco é só o líder.
+  getSqlite().prepare(`update trainers set current_place = 'violet', level = 1 where user_id = ?`).run(userId)
   let places = await view(cookie)
   assert.equal(places.goal.milestone?.ready, true)
   // O marco de Violet tem líder: sai vencendo o desafio (leaders.test.ts), não pelo resgate.
