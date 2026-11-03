@@ -55,81 +55,73 @@ Total: uns **1.760 encontros, ~44 h de luta ativa**. As missões do dia (3 + ba�
 5. **Desbloqueios soltos:** canteiros, vagas do daycare e melhorias da bancada abrem por nível de treinador em números sem relação com os capítulos (8, 15, 20, 30), e o jogador não sabe o que vem a seguir.
 6. **Sem meta de capítulo visível:** o painel do marco não diz quanto falta nem o caminho.
 
-## 4. Proposta
+## 4. Modelo decidido (2026-11-03)
 
-### 4.1 A meta da campanha
+Decidido com o usuário depois do diagnóstico:
 
-Johto inteira (8 marcos + Liga) em **3 a 4 semanas** de um jogador que abre o jogo 3 a 5 vezes por dia, em sessões de 5 a 10 minutos (~30 a 45 min por dia), mais o que o jardim produz sozinho entre as visitas. Na média, **2 a 3 dias por capítulo**, crescendo um pouco no fim. Quem joga mais (lutas seguidas) chega antes, mas o teto diário vem das coisas que rendem por tempo.
+- **Johto em ~3 semanas** para quem joga algumas vezes por dia.
+- **O marco é só o líder.** Sem nível de treinador nem captura como requisito: quem monta um time bom avança, mesmo no nível 1. O portão da jornada é o time e a habilidade na luta.
+- **Quem joga mais avança mais rápido.** Sem retorno decrescente nas lutas.
+- **A exploração gasta recursos, e os recursos vêm principalmente do jardim.** O jardim ancora a jornada: sem cuidar dele, não dá para explorar muito.
+- **Captura mais difícil,** para gastar mais bolas (que vêm da bancada).
+- **Jardim um pouco mais lento,** para os recursos terem valor.
 
-### 4.2 Uma moeda de progresso: XP de treinador vindo dos dois lados
+### 4.1 O ciclo
 
-O marco continua pedindo nível de treinador (é simples e já existe). O que muda é **de onde vem o XP**:
+```
+jardim (horta, árvores, bancada, daycare) ──recursos──▶ exploração (encontros, captura)
+      ▲                                                        │
+      └──── Pokémon, materiais, espécies, ferramentas ◀────────┘
+                               │
+                     time melhor ──▶ líder (marco) ──▶ capítulo novo
+                                                       (áreas, ferramentas, desbloqueios do jardim)
+```
 
-| Fonte | Hoje | Proposta |
+### 4.2 O que cada lado precisa do outro
+
+| A exploração gasta | Vem do jardim |
+|---|---|
+| (a decidir) energia por encontro | berries da horta (a Oran restaura energia) |
+| bolas, mais na captura difícil | bancada (Apricorns das árvores) |
+| tempo de treino do time | daycare e cuidador |
+
+| O jardim precisa | Vem da exploração |
+|---|---|
+| sementes novas | lutas, Headbutt, presentes |
+| operador e cuidador de espécies certas | captura |
+| desbloqueios (vagas, níveis da bancada, árvores) | marcos (líderes vencidos) |
+| Apricorns extras | Headbutt |
+
+### 4.3 Desbloqueios do jardim por marco
+
+Com o nível de treinador fora do portão, os desbloqueios do jardim passam a vir dos líderes:
+
+| Marco | Mundo | Jardim |
 |---|---|---|
-| Luta e captura | única fonte relevante | continua, com retorno decrescente no dia (a partir de N lutas, metade do XP), para a luta não ser o único caminho |
-| Missões do dia + baú | ~7 lutas por dia | a fonte principal do dia: ~40% do que um capítulo pede em 2 a 3 dias |
-| Jardim | nada | colher (horta e Apricorn), coletar lote da bancada, cuidar dos pets, terminar estadia no daycare: XP pequeno e com teto diário |
-| Pokédex e álbum | itens | também XP de treinador por bloco |
-
-Com isso, a curva do treinador é recalibrada para a renda de um dia típico (seção 4.4), em vez de ser só `30 × nível^1,7`.
-
-### 4.3 Meta de capítulo: o marco vira uma lista curta
-
-Cada marco mostra **o que falta**, com 3 a 4 itens, um de cada pilar:
-
-- nível de treinador N (como hoje);
-- **mundo:** capturar X espécies das áreas do capítulo;
-- **jardim:** uma meta que puxa um sistema do capítulo (ex.: colher 10 berries, fazer um lote de Great Balls, deixar um Pokémon no daycare até o fim);
-- vencer o líder.
-
-O painel do marco lista isso com progresso, como as missões. Assim o jogador sempre sabe o próximo passo (pilar 4 do PLANNING), e o jardim faz parte da jornada.
-
-### 4.4 Desbloqueios amarrados aos capítulos
-
-Cada marco abre algo do jardim, para o mundo também empurrar o jardim:
-
-| Marco | Mundo (hoje) | Jardim (proposta) |
-|---|---|---|
-| Início | — | horta (2 canteiros), daycare (1 vaga), árvore vermelha e bancada (nível 2 de treinador) |
+| Início | — | horta (2 canteiros), daycare (1 vaga), árvore vermelha e bancada |
 | 1 Violet | — | 3º canteiro |
-| 2 Azalea | Old Rod, Headbutt | 2ª vaga do daycare; cuidador |
-| 3 Goldenrod | — | melhoria da bancada nível 2 (Great Ball) e árvore azul |
+| 2 Azalea | Old Rod, Headbutt | 2ª vaga do daycare |
+| 3 Goldenrod | — | bancada nível 2 (Great Ball) e árvore azul |
 | 4 Ecruteak | Surf, Rock Smash | 4º canteiro |
 | 5 Cianwood | Good Rod, Voo | 3ª vaga do daycare |
-| 6 Olivine | — | melhoria da bancada nível 3 (Ultra Ball) e árvore amarela |
+| 6 Olivine | — | bancada nível 3 (Ultra Ball) e árvore amarela |
 | 7 Mahogany | — | (habitats: primeiro bioma) |
 | 8 Blackthorn | Super Rod | 4ª vaga do daycare; (habitats: mais biomas) |
 | Liga | — | (visitantes) |
 
-Os itens entre parênteses dependem de sistemas que ainda não existem.
-
-### 4.5 Estimativa com a proposta
-
-Um dia típico no meio do jogo (capítulo 5), por fonte:
-
-| Fonte | Por dia |
-|---|---|
-| ~20 lutas e algumas capturas | ~900 XP |
-| 3 missões + baú | ~900 XP (com o novo peso) |
-| Jardim (colheitas, lotes, pets, daycare) | ~500 XP (com teto) |
-| **Total** | **~2.300 XP** |
-
-Para 2 a 3 dias por capítulo, cada capítulo deveria pedir ~5.000 a 7.000 XP no meio do jogo, contra os 8.000 a 11.000 de hoje no capítulo 5 e os 50.000 do capítulo 9. Isso dá **~25 dias para Johto**, e a luta deixa de ser o único caminho. Os números finais saem do primeiro playtest de uma semana.
+O nível de treinador continua existindo (XP, recompensas de nível), mas não trava a jornada.
 
 ## 5. O que falta construir (em ordem)
 
-1. **Painel do marco com "o que falta"** (lista do 4.3, só com o que já dá para medir: nível, espécies do capítulo, líder). Pequeno; dá a meta visível.
-2. **XP de treinador do jardim e do álbum** (4.2), com teto diário. Pequeno; usa o registro de ações que já existe.
-3. **Recalibrar a curva do treinador e o peso das missões** (4.5), com a simulação deste arquivo virando um teste/script para repetir.
-4. **Desbloqueios do jardim por marco** (4.4), no lugar dos níveis soltos.
-5. **Metas de jardim no marco** (4.3), usando os mesmos tipos das missões.
-6. **Habitats (5.22)** e **visitantes**, que entram nos capítulos 7 em diante.
-7. **Liga, rival e pós-jogo** (capítulo 10: Tin Tower, Mt. Silver), quando a campanha principal estiver redonda.
+1. **Marco = só o líder:** tirar o nível de treinador do requisito; o painel do marco mostra o líder e o que ele usa.
+2. **Recurso da exploração** (a decidir, seção 6) e o jardim produzindo esse recurso.
+3. **Captura mais difícil e bolas vindo da bancada:** menos bolas de drops, de missões e de nível.
+4. **Desbloqueios do jardim por marco** (4.3), no lugar dos níveis de treinador.
+5. **Ritmo do jardim e simulação da campanha** (horta, árvores, bancada, daycare) para fechar ~3 semanas, com a simulação virando um script.
+6. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
+7. **Liga, rival e pós-jogo.**
 
 ## 6. Pontos a decidir
 
-- O alvo de 3 a 4 semanas para Johto (mais curto deixa o jogo raso; mais longo vira grind).
-- Retorno decrescente nas lutas do dia: sim ou não, e a partir de quantas.
-- Se o marco continua pedindo só nível de treinador, ou passa a pedir a lista do 4.3.
-- A energia segue desligada; o freio passa a ser o teto diário das fontes de XP.
+- **O que a exploração gasta:** energia por encontro que volta pelas berries (o sistema existe, desligado); HP que não volta sozinho e se cura com berries ou descanso; ou só bolas. Sugestão: energia pelas berries + bolas pela bancada agora, HP depois.
+- Quanto mais lento o jardim fica, depois de definido o recurso.
