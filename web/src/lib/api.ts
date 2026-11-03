@@ -344,6 +344,7 @@ export type TreeView = {
   ready: number
   cap: number
   readyAts: number[]
+  unitMs: number
   raining: boolean
 }
 

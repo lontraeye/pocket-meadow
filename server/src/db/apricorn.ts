@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
 import type { WeatherKey } from '../config/weather.js'
-import { harvestTree, settleTree, treeReadyTimes, type WeatherOf } from '../game/apricornTree.js'
+import { harvestTree, settleTree, treeReadyTimes, treeUnitMs, type WeatherOf } from '../game/apricornTree.js'
 import { currentWeather, weatherDay, weatherForDay } from '../game/weather.js'
 import { getDb } from './client.js'
 import { recordEvent } from './events.js'
@@ -18,6 +18,8 @@ export type TreeView = {
   cap: number
   /** Quando cada próximo fica pronto (até encher), pelo clima de hoje. */
   readyAts: number[]
+  /** Quanto leva cada Apricorn hoje (com a chuva): a barrinha do próximo. */
+  unitMs: number
   raining: boolean
 }
 
@@ -48,7 +50,15 @@ export function treeView(userId: number, level: number, now: number): TreeView {
   const config = apricornConfig.tree
   const tree = ensureTree(userId, level, now)
   if (!tree) {
-    return { unlocked: false, unlockLevel: config.unlockLevel, ready: 0, cap: config.cap, readyAts: [], raining: false }
+    return {
+      unlocked: false,
+      unlockLevel: config.unlockLevel,
+      ready: 0,
+      cap: config.cap,
+      readyAts: [],
+      unitMs: config.intervalMs,
+      raining: false,
+    }
   }
   const weather = weatherFor(userId, now)
   const progress = settleTree(tree.progress, tree.since, now, weather.of)
@@ -58,6 +68,7 @@ export function treeView(userId: number, level: number, now: number): TreeView {
     ready: Math.floor(progress),
     cap: config.cap,
     readyAts: treeReadyTimes(progress, now, weather.today),
+    unitMs: treeUnitMs(weather.today),
     raining: weather.today === 'rain',
   }
 }

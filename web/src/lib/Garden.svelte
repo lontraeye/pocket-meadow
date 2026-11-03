@@ -465,6 +465,19 @@
     const now = clock.now()
     return Math.min(tree.cap, tree.ready + tree.readyAts.filter((at) => at <= now).length)
   })
+  // Marcador de tempo da árvore: quantos estão pendurados, quanto falta para o
+  // próximo nascer e a barrinha dele. Cheia, só "cheia".
+  const treeTimer = $derived.by(() => {
+    const tree = game.garden.tree
+    if (!tree.unlocked || treeReady >= tree.cap) return null
+    const now = clock.now()
+    const next = tree.readyAts.find((at) => at > now)
+    if (next === undefined) return null
+    return {
+      text: `${treeReady}/${tree.cap} · ${formatCountdown(next - now)}`,
+      progress: Math.max(0, Math.min(1, 1 - (next - now) / tree.unitMs)),
+    }
+  })
   let treeShake = $state(false)
   let treeArt = $state<TreeArt | null>(null)
   $effect(() => {
@@ -519,6 +532,18 @@
     return job ? (benchDone(job, clock.now()) - job.collected) * game.garden.bench.ballsPerApricorn : 0
   })
   let benchOpen = $state(false)
+  // Marcador de tempo da máquina: bolas já prontas, quanto falta para o lote
+  // acabar e a barrinha do lote. Acabado, fica só "N prontas".
+  const benchTimer = $derived.by(() => {
+    const job = game.garden.bench.job
+    if (!job || benchState !== 'working') return null
+    const now = clock.now()
+    const endsAt = job.startedAt + job.quantity * job.unitMs
+    return {
+      text: `${benchReady > 0 ? `${benchReady} · ` : ''}${formatCountdown(endsAt - now)}`,
+      progress: Math.max(0, Math.min(1, (now - job.startedAt) / (job.quantity * job.unitMs))),
+    }
+  })
 
   function onBench() {
     const bench = game.garden.bench
@@ -1426,7 +1451,14 @@
             </svg>
           {/if}
           {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
-          {#if tree.unlocked && treeReady >= tree.cap}<span class="tree-full" aria-hidden="true">cheia</span>{/if}
+          {#if tree.unlocked && treeReady >= tree.cap}
+            <span class="tree-full" aria-hidden="true">cheia</span>
+          {:else if treeTimer}
+            <span class="tree-full timer" aria-hidden="true">
+              {treeTimer.text}
+              <i style:width="{treeTimer.progress * 100}%"></i>
+            </span>
+          {/if}
         </button>
       {/if}
       {#if game.garden.bench}
@@ -1488,7 +1520,14 @@
             aria-hidden="true"
           ></span>
           {#if !bench.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
-          {#if benchReady > 0}<span class="tree-full" aria-hidden="true">{benchReady} pronta{benchReady === 1 ? '' : 's'}</span>{/if}
+          {#if benchTimer}
+            <span class="tree-full timer" aria-hidden="true">
+              {benchTimer.text}
+              <i style:width="{benchTimer.progress * 100}%"></i>
+            </span>
+          {:else if benchReady > 0}
+            <span class="tree-full" aria-hidden="true">{benchReady} pronta{benchReady === 1 ? '' : 's'}</span>
+          {/if}
         </button>
       {/if}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
@@ -2217,6 +2256,20 @@
     color: #3a2a14;
     white-space: nowrap;
     pointer-events: none;
+  }
+
+  /* Marcador com tempo: a barrinha corre no pé da etiqueta. */
+  .tree-full.timer {
+    padding-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tree-full.timer i {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    background: #6fc46a;
   }
 
   @keyframes tree-shake {
