@@ -37,6 +37,7 @@ import { toEncounterView } from './encounterView.js'
 import { currentPlaceOf } from './places.js'
 import { view as petView } from './garden.js'
 import { missionsView } from '../db/missions.js'
+import { treeView } from '../db/apricorn.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -340,6 +341,7 @@ function readState(userId: number, now: number) {
         .all(),
       needThreshold: petConfig.needThreshold,
       fullAt: petConfig.fullAt,
+      tree: treeView(userId, trainer.level, now),
     },
     daycare,
     plots: db

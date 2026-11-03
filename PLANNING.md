@@ -1400,6 +1400,8 @@ A primeira cadeia de produção (seção 1.1, item 3; 5.16, "Crafting"). Uma ár
 
 **Pontos a decidir:** o custo dos upgrades; o ritmo exato depois de jogar uns dias.
 
+**Feito em 2026-11-03 (parte 1, `feat/apricorn`):** `config/apricorn.ts`, `game/apricornTree.ts` (progresso real por dia, chuva em `rainMult`; o futuro vai ao front pelo clima de hoje, para não revelar o de amanhã), `db/apricorn.ts` (a árvore nasce com 1 Apricorn no primeiro `GET /state` depois do nível de abrir), `POST /garden/tree/harvest`; migração `0025_garden_structures` (sem `craft_jobs` ainda, que entra com a bancada). Na tela: árvore provisória em pixel art (`web/src/lib/apricornTree.ts`) a uma casa da horta, frutos de 0 a 5 contados ao vivo por `readyAts`, toque colhe (ou diz quanto falta), "cheia" sobre a copa, cadeado abaixo do nível; o Apricorn (ícone `red-apricorn.png` do PokeAPI) aparece na mochila em "Materiais"; o aviso ganha "árvore cheia". O login de teste com cenário sobe o treinador ao nível 2 e enche a árvore.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")

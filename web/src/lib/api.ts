@@ -337,6 +337,16 @@ export type PetView = {
   petReadyAt: number | null
 }
 
+/** Árvore de Apricorn (5.23); `readyAts` = quando cada próximo fica pronto, até encher. */
+export type TreeView = {
+  unlocked: boolean
+  unlockLevel: number
+  ready: number
+  cap: number
+  readyAts: number[]
+  raining: boolean
+}
+
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
 export type GardenGift = {
   id: number
@@ -451,7 +461,7 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
-  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number }
+  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; tree: TreeView }
   missions: MissionsView
   daycare: DaycareState
   plots: PlotState[]
@@ -517,6 +527,7 @@ export function giftIconSrc(itemKey: string): string {
   if (itemKey.startsWith('seed:')) return berryIconSrc(itemKey.slice(5))
   if (itemKey.startsWith('ball:')) return ballIconSrc(itemKey.slice(5))
   if (itemKey.startsWith('berry:')) return berryIconSrc(itemKey.slice(6))
+  if (itemKey === 'mat:apricorn') return '/sprites/items/red-apricorn.png'
   return '/sprites/items/poke-ball.png'
 }
 
@@ -538,6 +549,7 @@ export function itemLabel(itemKey: string, berries: BerryInfo[], balls?: BallInf
     const ball = balls?.find((row) => row.key === itemKey.slice(5))
     return ball?.displayName ?? itemKey
   }
+  if (itemKey === 'mat:apricorn') return 'Apricorn'
   return itemKey
 }
 
@@ -681,6 +693,10 @@ export function errorText(error: ApiError): string {
       return 'O apelido precisa ter de 1 a 12 caracteres, sem quebra de linha.'
     case 'plot_locked':
       return 'Esse canteiro ainda está bloqueado.'
+    case 'tree_locked':
+      return 'A árvore de Apricorn ainda está fechada.'
+    case 'nothing_ready':
+      return 'Ainda não há Apricorn para colher.'
     case 'plot_empty':
       return 'Não há nada plantado aqui.'
     case 'already_ready':

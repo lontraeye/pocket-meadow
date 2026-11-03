@@ -1,7 +1,9 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
+import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
 import { berries } from '../config/berries.js'
+import { harvestApricorns, treeView } from '../db/apricorn.js'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -42,6 +44,21 @@ gardenRoutes.post('/gifts/:id/collect', requireUser, (c) => {
   const result = immediate(() => collect(c.get('userId'), id, Date.now()))
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json(result.gift)
+})
+
+// Árvore de Apricorn (5.23): colhe tudo o que está pendurado.
+gardenRoutes.post('/tree/harvest', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => {
+    const clock = persistCatchUp(userId, now)
+    if (clock.level < apricornConfig.tree.unlockLevel) return fail('tree_locked', 400)
+    const harvested = harvestApricorns(userId, clock.level, now)
+    if (harvested === null) return fail('nothing_ready', 400)
+    return { ok: true as const, harvested, tree: treeView(userId, clock.level, now) }
+  })
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json({ itemKey: APRICORN_ITEM, quantity: result.harvested, tree: result.tree })
 })
 
 function errorBody(result: Failure): { error: string; readyAt?: number } {

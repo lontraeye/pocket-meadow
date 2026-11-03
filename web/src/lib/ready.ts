@@ -1,4 +1,4 @@
-import type { DaycareState, GardenGift, MissionsView, PetView, PlotState } from './api'
+import type { DaycareState, GardenGift, MissionsView, PetView, PlotState, TreeView } from './api'
 
 export type ReadyInput = {
   plots: Pick<PlotState, 'plotIndex' | 'readyAt'>[]
@@ -8,6 +8,7 @@ export type ReadyInput = {
   /** Só os Pokémon do jardim (quem está no PC ou no daycare não tem necessidades). */
   pets: { id: number; pet: Pick<PetView, 'hunger' | 'affection' | 'petReadyAt'> }[]
   needThreshold: number
+  tree: Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'>
 }
 
 /** Para onde o toque no aviso leva: o primeiro item que tem lugar próprio. */
@@ -23,9 +24,10 @@ export type ReadyStatus = {
   giftCount: number
   hungryCount: number
   wantPetCount: number
+  treeFull: boolean
   /**
    * Uma chave por coisa pronta (`p0@readyAt`, `d1@fullAt`, `m12`, `c2026-11-03`,
-   * `g5`, `h7`, `a7`). O horário entra para uma berry replantada no mesmo
+   * `g5`, `h7`, `a7`, `t@cheia`). O horário entra para uma berry replantada no mesmo
    * canteiro, ou um daycare renovado, contar como novidade.
    */
   ids: string[]
@@ -50,6 +52,11 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
       mon.pet.affection < input.needThreshold && (mon.pet.petReadyAt === null || mon.pet.petReadyAt <= now),
   )
 
+  // Árvore cheia (5.23): o que o servidor contou mais o que amadureceu depois.
+  const tree = input.tree
+  const treeReady = tree.ready + tree.readyAts.filter((at) => at <= now).length
+  const treeFull = tree.unlocked && treeReady >= tree.cap
+
   const readyPlots = plots.map((plot) => plot.plotIndex)
   const berryCount = readyPlots.length
   const daycareFullCount = fullSlots.length
@@ -63,6 +70,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     ...input.gifts.map((gift) => `g${gift.id}`),
     ...hungry.map((mon) => `h${mon.id}`),
     ...wantPet.map((mon) => `a${mon.id}`),
+    ...(treeFull ? [`t@${tree.readyAts.at(-1) ?? 'cheia'}`] : []),
   ]
 
   // Primeiro o que tem lugar para onde ir (o toque leva ao primeiro), depois o
@@ -72,6 +80,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
   if (missionCount > 0) parts.push(count(missionCount, '1 missão pronta', '# missões prontas'))
   if (chestReady) parts.push('baú pronto')
   if (daycareFullCount > 0) parts.push(count(daycareFullCount, 'daycare cheio', '# no daycare cheios'))
+  if (treeFull) parts.push('árvore cheia')
   if (giftCount > 0) parts.push(count(giftCount, '1 presente', '# presentes'))
   if (hungry.length > 0) parts.push(`${hungry.length} com fome`)
   if (wantPet.length > 0) parts.push(count(wantPet.length, '1 quer carinho', '# querem carinho'))
@@ -88,6 +97,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     giftCount,
     hungryCount: hungry.length,
     wantPetCount: wantPet.length,
+    treeFull,
     ids,
     target,
     summary: parts.length > 0 ? parts.join(' · ') : null,

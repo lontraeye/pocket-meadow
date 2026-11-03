@@ -7,6 +7,7 @@
     berryIconSrc,
     effectLabel,
     errorText,
+    giftIconSrc,
     itemLabel,
     type ActiveEffect,
     type ApiError,
@@ -28,6 +29,12 @@
   const berries = $derived(
     game.inventory
       .filter((row) => row.itemKey.startsWith('berry:') && row.quantity > 0)
+      .sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
+  )
+  /** Materiais do jardim (5.23): Apricorn, e depois os outros `mat:`. */
+  const materials = $derived(
+    game.inventory
+      .filter((row) => row.itemKey.startsWith('mat:') && row.quantity > 0)
       .sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
   )
   const balls = $derived(
@@ -126,6 +133,21 @@
         </ul>
       {/if}
     </section>
+
+    {#if materials.length > 0}
+      <section class="panel sheet">
+        <h2>Materiais</h2>
+        <ul class="list">
+          {#each materials as row (row.itemKey)}
+            <li>
+              <img src={giftIconSrc(row.itemKey)} alt="" width="30" height="30" />
+              <span>{itemLabel(row.itemKey, game.berries, game.balls.list)}</span>
+              <strong>×{row.quantity}</strong>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
 
     <section class="panel sheet">
       <h2>Pokébolas</h2>

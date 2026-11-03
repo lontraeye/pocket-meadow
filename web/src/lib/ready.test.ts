@@ -12,6 +12,7 @@ function input(over: Partial<ReadyInput> = {}): ReadyInput {
     gifts: [],
     pets: [],
     needThreshold: 40,
+    tree: { unlocked: true, ready: 0, cap: 5, readyAts: [now + 1000] },
     ...over,
   }
 }
@@ -75,4 +76,15 @@ test('dispensado volta a aparecer quando surge algo novo', () => {
   assert.equal(shouldShowReadyBanner(first, first.ids), false)
   const later = readyStatus(input({ gifts: [{ id: 1 }, { id: 2 }] }), now)
   assert.equal(shouldShowReadyBanner(later, first.ids), true)
+})
+
+test('árvore cheia entra no aviso, também quando enche com o app aberto', () => {
+  const full = readyStatus(input({ tree: { unlocked: true, ready: 5, cap: 5, readyAts: [] } }), now)
+  assert.equal(full.summary, 'árvore cheia')
+  assert.equal(full.target, null)
+  const filling = { unlocked: true, ready: 4, cap: 5, readyAts: [now + 1000] }
+  assert.equal(readyStatus(input({ tree: filling }), now).summary, null)
+  assert.equal(readyStatus(input({ tree: filling }), now + 1000).summary, 'árvore cheia')
+  const locked = { unlocked: false, ready: 0, cap: 5, readyAts: [] }
+  assert.equal(readyStatus(input({ tree: { ...locked, ready: 5 } }), now).summary, null)
 })

@@ -176,6 +176,13 @@
       "when": 1793370000000,
       "tag": "0024_missions",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793760000000,
+      "tag": "0025_garden_structures",
+      "breakpoints": true
     }
   ]
 }

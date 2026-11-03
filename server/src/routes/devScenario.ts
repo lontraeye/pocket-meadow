@@ -1,9 +1,20 @@
 import { and, eq, inArray } from 'drizzle-orm'
+import { apricornConfig } from '../config/apricorn.js'
 import { daycareConfig } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb } from '../db/client.js'
+import { treeView } from '../db/apricorn.js'
 import { ensureMissionDay } from '../db/missions.js'
-import { berryPlots, daycareSlots, dailyMissions, encounters, gardenGifts, pokemon, trainers } from '../db/schema.js'
+import {
+  berryPlots,
+  daycareSlots,
+  dailyMissions,
+  encounters,
+  gardenGifts,
+  gardenStructures,
+  pokemon,
+  trainers,
+} from '../db/schema.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
 import { traitColumns } from '../game/traitValues.js'
 import { rollTraits, traitsRngSeed } from '../game/traits.js'
@@ -85,8 +96,17 @@ export function applyReadyScenario(userId: number, now: number): void {
     .values([0, 1].map((plotIndex) => ({ userId, plotIndex, berryKey: 'oran', plantedAt: now - 3_600_000, readyAt: now - 60_000 })))
     .run()
 
+  // Árvore de Apricorn cheia (5.23); sobe o treinador até o nível que abre a árvore.
+  const level = Math.max(trainer.level, apricornConfig.tree.unlockLevel)
+  if (level !== trainer.level) db.update(trainers).set({ level, xp: 0 }).where(eq(trainers.userId, userId)).run()
+  treeView(userId, level, now)
+  db.update(gardenStructures)
+    .set({ progress: apricornConfig.tree.cap, since: now })
+    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
+    .run()
+
   // Missão do slot 0 vira "vencer 1 luta", já cumprida por uma luta vencida agora.
-  const day = ensureMissionDay(userId, trainer.level, now)
+  const day = ensureMissionDay(userId, level, now)
   db.update(dailyMissions)
     .set({ kind: 'win_any', params: '{}', target: 1, assignedAt: now - 60_000, claimedAt: null })
     .where(and(eq(dailyMissions.userId, userId), eq(dailyMissions.day, day), eq(dailyMissions.slot, 0)))

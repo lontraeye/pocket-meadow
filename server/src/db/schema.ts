@@ -338,6 +338,25 @@ export const missionDays = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.day] })],
 )
 
+/**
+ * Estruturas fixas do jardim (5.23): `apricorn_tree` usa `progress` (Apricorns,
+ * real) no instante `since`; `ball_bench` usa `level` e o operador.
+ */
+export const gardenStructures = sqliteTable(
+  'garden_structures',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    key: text('key', { enum: ['apricorn_tree', 'ball_bench'] }).notNull(),
+    level: integer('level').notNull().default(1),
+    since: integer('since').notNull(),
+    progress: real('progress').notNull().default(0),
+    operatorPokemonId: integer('operator_pokemon_id').references(() => pokemon.id, { onDelete: 'set null' }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.key] })],
+)
+
 export const daycareSlots = sqliteTable(
   'daycare_slots',
   {

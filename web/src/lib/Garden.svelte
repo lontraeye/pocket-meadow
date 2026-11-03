@@ -19,6 +19,7 @@
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
+  import { TREE_H, TREE_W, treePixels } from './apricornTree'
   import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
   import PokemonSheet from './PokemonSheet.svelte'
   import WeatherIcon from './WeatherIcon.svelte'
@@ -284,8 +285,17 @@
     return (row - hortaRow0) * hortaCols + (col - hortaCol0)
   }
 
+  // Árvore de Apricorn (5.23): um bloco ao lado da horta, com uma casa livre
+  // entre os dois para o passeio.
+  const treeCol = hortaCol0 + hortaCols + 1
+  const treeRow = hortaRow0 + 1
+
+  function isTreeCell(col: number, row: number): boolean {
+    return col === treeCol && row === treeRow
+  }
+
   function isWalkable(col: number, row: number): boolean {
-    return inPlay(col, row) && !isPlotCell(col, row)
+    return inPlay(col, row) && !isPlotCell(col, row) && !isTreeCell(col, row)
   }
 
   type Walker = {
@@ -419,6 +429,45 @@
       showGiftToast(errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError))
     }
     await onState()
+  }
+
+  // Pendurados agora: o que o servidor contou mais os que ficaram prontos depois.
+  const treeReady = $derived.by(() => {
+    const tree = game.garden.tree
+    const now = clock.now()
+    return Math.min(tree.cap, tree.ready + tree.readyAts.filter((at) => at <= now).length)
+  })
+  let treeShake = $state(false)
+  let harvestingTree = $state(false)
+
+  async function onTree() {
+    const tree = game.garden.tree
+    if (!tree.unlocked) {
+      showGiftToast(`A árvore de Apricorn abre no nível ${tree.unlockLevel} de treinador.`)
+      return
+    }
+    if (treeReady === 0) {
+      const next = tree.readyAts.find((at) => at > clock.now())
+      showGiftToast(next ? `Próximo Apricorn em ${formatCountdown(next - clock.now())}.` : 'Nada para colher agora.')
+      return
+    }
+    if (harvestingTree) return
+    harvestingTree = true
+    treeShake = true
+    setTimeout(() => (treeShake = false), 450)
+    try {
+      const response = await api('/api/garden/tree/harvest', {})
+      if (response.ok) {
+        const body = (await response.json()) as { quantity: number }
+        showGiftToast(`Colheu ${body.quantity} ${body.quantity === 1 ? 'Apricorn' : 'Apricorns'}!`)
+        play('harvest')
+      } else {
+        showGiftToast(errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError))
+      }
+      await onState()
+    } finally {
+      harvestingTree = false
+    }
   }
 
   function showLockedPlot() {
@@ -1285,6 +1334,37 @@
           </button>
         {/if}
       {/each}
+      {#if game.garden.tree}
+        {@const spot = place(treeCol, treeRow)}
+        {@const tree = game.garden.tree}
+        <button
+          type="button"
+          class="tree"
+          class:locked={!tree.unlocked}
+          class:shake={treeShake}
+          style:left="{snapToDevice(spot.x)}px"
+          style:top="{snapToDevice(spot.y + halfH)}px"
+          style:z-index={treeCol + treeRow + depthSpan + 1}
+          aria-label={!tree.unlocked
+            ? `Árvore de Apricorn, abre no nível ${tree.unlockLevel}`
+            : `Árvore de Apricorn: ${treeReady} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
+          onclick={() => void onTree()}
+        >
+          <svg
+            width={TREE_W * pmdScale}
+            height={TREE_H * pmdScale}
+            viewBox="0 0 {TREE_W} {TREE_H}"
+            shape-rendering="crispEdges"
+            aria-hidden="true"
+          >
+            {#each treePixels(tree.unlocked ? treeReady : 0) as px, index (index)}
+              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+            {/each}
+          </svg>
+          {#if !tree.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
+          {#if tree.unlocked && treeReady >= tree.cap}<span class="tree-full" aria-hidden="true">cheia</span>{/if}
+        </button>
+      {/if}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
         {@const spot = place(cell.col, cell.row)}
         <button
@@ -1879,6 +1959,65 @@
   /* Zzz de quem dorme: três letras que nascem no alto da cabeça (zzzSpot),
      sobem em diagonal para o lado dela crescendo e somem, uma atrás da outra. */
   /* Presente no chão (5.21): o ponto do botão é o centro do bloco. */
+  .tree {
+    position: absolute;
+    padding: 0;
+    border: 0;
+    background: none;
+    transform: translate(-50%, -100%);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tree svg {
+    display: block;
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
+  }
+
+  .tree.locked svg {
+    filter: grayscale(0.7) brightness(0.6);
+  }
+
+  .tree .lock {
+    top: 40%;
+  }
+
+  .tree.shake svg {
+    transform-origin: 50% 100%;
+    animation: tree-shake 0.45s steps(6, jump-none);
+  }
+
+  .tree-full {
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    transform: translate(-50%, -100%);
+    padding: 1px 4px;
+    background: #fff8e6;
+    border: 1px solid #3a2a14;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #3a2a14;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  @keyframes tree-shake {
+    20% {
+      transform: rotate(-3deg);
+    }
+    40% {
+      transform: rotate(3deg);
+    }
+    60% {
+      transform: rotate(-2deg);
+    }
+    80% {
+      transform: rotate(2deg);
+    }
+  }
+
   .gift {
     position: absolute;
     width: var(--size);
