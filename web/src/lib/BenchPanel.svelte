@@ -41,6 +41,15 @@
   )
   const typesText = $derived(bench.operatorTypes.map(typeLabelPt).join(', ').replace(/, ([^,]*)$/, ' ou $1'))
 
+  /** Abas, para o painel caber na tela do celular sem rolar. */
+  type Tab = 'lote' | 'operador' | 'melhorar'
+  let tab = $state<Tab>('lote')
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'lote', label: 'Lote' },
+    { key: 'operador', label: 'Operador' },
+    { key: 'melhorar', label: 'Melhorar' },
+  ]
+
   let quantity = $state(1)
   let choosing = $state(false)
   let pending = $state(false)
@@ -119,7 +128,25 @@
     Nível {bench.level} de {bench.maxLevel} · até {bench.batchSize} Apricorns por lote
   </p>
 
-  <section class="panel block">
+  <div class="tabs" role="tablist" aria-label="Bancada">
+    {#each TABS as item (item.key)}
+      <button
+        type="button"
+        class="btn tab"
+        role="tab"
+        aria-selected={tab === item.key}
+        class:active={tab === item.key}
+        onclick={() => (tab = item.key)}
+      >
+        {item.label}
+        {#if item.key === 'operador' && !operator}<span class="dot" aria-label="sem operador"></span>{/if}
+        {#if item.key === 'melhorar' && bench.upgrade}<span class="dot busy" aria-label="melhorando"></span>{/if}
+      </button>
+    {/each}
+  </div>
+
+  {#if tab === 'operador'}
+  <section class="panel block" role="tabpanel">
     <h3>Operador</h3>
     {#if operator && !choosing}
       <div class="operator">
@@ -157,8 +184,10 @@
       {/if}
     {/if}
   </section>
+  {/if}
 
-  <section class="panel block">
+  {#if tab === 'lote'}
+  <section class="panel block" role="tabpanel">
     <h3>Lote</h3>
     {#if bench.upgrade}
       <p class="hint">Parada enquanto é melhorada.</p>
@@ -210,7 +239,8 @@
         {/each}
       </div>
       {#if !operator}
-        <p class="hint">Escolha um operador para começar.</p>
+        <p class="hint">A bancada precisa de um operador para começar.</p>
+        <button type="button" class="btn" onclick={() => (tab = 'operador')}>Escolher operador</button>
       {:else if apricorns === 0}
         <p class="hint">Sem {itemLabel(recipe.input, game.berries)}. Colha na árvore.</p>
       {:else}
@@ -224,8 +254,10 @@
       {/if}
     {/if}
   </section>
+  {/if}
 
-  <section class="panel block">
+  {#if tab === 'melhorar'}
+  <section class="panel block" role="tabpanel">
     <h3>Melhorar</h3>
     {#if bench.upgrade}
       {@const now = clock.now()}
@@ -273,6 +305,7 @@
       <p class="hint">A bancada está no nível máximo.</p>
     {/if}
   </section>
+  {/if}
 
   {#if game.devTools}
     <button
@@ -292,6 +325,35 @@
   .level {
     margin: 0;
     font-weight: 700;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.35rem;
+  }
+
+  .tab {
+    position: relative;
+    min-height: 44px;
+  }
+
+  .tab.active {
+    outline: 3px solid var(--accent, #3a7bd5);
+    outline-offset: -3px;
+  }
+
+  .dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background: #e05a4a;
+  }
+
+  .dot.busy {
+    background: #e8c547;
   }
 
   .recipes {
