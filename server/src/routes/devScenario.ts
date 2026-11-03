@@ -1,12 +1,15 @@
 import { and, eq, inArray } from 'drizzle-orm'
-import { apricornConfig } from '../config/apricorn.js'
+import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
 import { daycareConfig } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb } from '../db/client.js'
 import { treeView } from '../db/apricorn.js'
+import { setOperator, startJob } from '../db/bench.js'
+import { creditItems } from '../db/inventory.js'
 import { ensureMissionDay } from '../db/missions.js'
 import {
   berryPlots,
+  craftJobs,
   daycareSlots,
   dailyMissions,
   encounters,
@@ -104,6 +107,19 @@ export function applyReadyScenario(userId: number, now: number): void {
     .set({ progress: apricornConfig.tree.cap, since: now })
     .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
     .run()
+
+  // Bancada (5.23): o Sentret opera um lote de 5 com 2 bolas já prontas.
+  const operatorId = ids[0]!
+  if (setOperator(userId, level, operatorId, now).ok) {
+    creditItems(userId, [{ itemKey: APRICORN_ITEM, quantity: 5 }])
+    const started = startJob(userId, level, 5, now)
+    if (started.ok) {
+      db.update(craftJobs)
+        .set({ startedAt: now - Math.round(started.job.unitMs * 2.5) })
+        .where(eq(craftJobs.id, started.job.id))
+        .run()
+    }
+  }
 
   // Missão do slot 0 vira "vencer 1 luta", já cumprida por uma luta vencida agora.
   const day = ensureMissionDay(userId, level, now)

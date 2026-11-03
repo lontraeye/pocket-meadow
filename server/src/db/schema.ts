@@ -357,6 +357,28 @@ export const gardenStructures = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.key] })],
 )
 
+/**
+ * Lotes das estruturas (5.23): as unidades ficam prontas uma a uma
+ * (`started_at + k × unit_ms`). Ativo = sem `cancelled_at` e `collected` < `quantity`.
+ */
+export const craftJobs = sqliteTable(
+  'craft_jobs',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    structureKey: text('structure_key').notNull(),
+    recipeKey: text('recipe_key').notNull(),
+    quantity: integer('quantity').notNull(),
+    unitMs: integer('unit_ms').notNull(),
+    startedAt: integer('started_at').notNull(),
+    collected: integer('collected').notNull().default(0),
+    cancelledAt: integer('cancelled_at'),
+  },
+  (table) => [index('idx_craft_jobs_user').on(table.userId, table.structureKey)],
+)
+
 export const daycareSlots = sqliteTable(
   'daycare_slots',
   {

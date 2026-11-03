@@ -1,5 +1,6 @@
 import { and, asc, eq, isNotNull } from 'drizzle-orm'
 import { trainerConfig } from '../config/trainer.js'
+import { operatorAmong } from './bench.js'
 import { getDb } from './client.js'
 import { pokemon } from './schema.js'
 
@@ -8,7 +9,7 @@ import { pokemon } from './schema.js'
 // o Pokémon some do jardim e fica parado. Tudo aqui roda dentro da transação
 // de quem chama (immediate).
 
-export type TeamError = 'invalid_team' | 'last_in_team'
+export type TeamError = 'invalid_team' | 'last_in_team' | 'operating'
 
 /** Ids do time, na ordem das posições. */
 export function teamIds(userId: number): number[] {
@@ -53,6 +54,8 @@ export function setTeam(userId: number, ids: readonly number[]): { ok: true; tea
     const mon = byId.get(id)
     if (!mon || mon.location !== 'garden' || mon.inPc) return { ok: false, error: 'invalid_team' }
   }
+  // Quem opera a bancada (5.23) não luta.
+  if (operatorAmong(userId, ids) !== null) return { ok: false, error: 'operating' }
   writeTeam(userId, ids)
   return { ok: true, team: [...ids] }
 }
@@ -81,7 +84,7 @@ export function isWholeTeam(userId: number, ids: readonly number[]): boolean {
 
 export type Place = 'team' | 'garden' | 'pc'
 
-export type MoveError = 'pokemon_not_found' | 'in_daycare' | 'last_in_team' | 'team_full' | 'invalid_slot'
+export type MoveError = 'pokemon_not_found' | 'in_daycare' | 'last_in_team' | 'team_full' | 'invalid_slot' | 'operating'
 
 function setInPc(userId: number, id: number, inPc: boolean): void {
   getDb()
@@ -109,6 +112,7 @@ export function movePokemon(
     .get()
   if (!mon) return { ok: false, error: 'pokemon_not_found' }
   if (mon.location === 'daycare') return { ok: false, error: 'in_daycare' }
+  if (to !== 'garden' && operatorAmong(userId, [id]) !== null) return { ok: false, error: 'operating' }
   const from: Place = mon.teamSlot !== null ? 'team' : mon.inPc ? 'pc' : 'garden'
 
   if (to !== 'team') {
@@ -168,6 +172,8 @@ export function moveMany(
     if (!row) return { ok: false, error: 'pokemon_not_found', pokemonId: id }
     if (row.location === 'daycare') return { ok: false, error: 'in_daycare', pokemonId: id }
   }
+  const operator = to === 'pc' ? operatorAmong(userId, ids) : null
+  if (operator !== null) return { ok: false, error: 'operating', pokemonId: operator }
   const left = leaveTeam(userId, ids)
   if (!left.ok) return left
   for (const id of ids) setInPc(userId, id, to === 'pc')

@@ -5,6 +5,7 @@ import { daycareConfig, daycareSlotsUnlocked } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { daycareSlots, pokemon } from '../db/schema.js'
+import { operatorAmong } from '../db/bench.js'
 import { leaveTeam } from '../db/team.js'
 import { levelsGainedFromStay } from '../game/daycare.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
@@ -79,6 +80,7 @@ function place(
   if (!mon) return fail('pokemon_not_found', 404)
   if (mon.location === 'daycare') return fail('in_daycare', 400)
   if (mon.inPc) return fail('in_pc', 400)
+  if (operatorAmong(userId, [pokemonId]) !== null) return fail('operating', 400)
 
   const gardenCount = db
     .select({ id: pokemon.id })

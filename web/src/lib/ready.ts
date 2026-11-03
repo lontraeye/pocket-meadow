@@ -1,4 +1,5 @@
-import type { DaycareState, GardenGift, MissionsView, PetView, PlotState, TreeView } from './api'
+import type { BenchView, DaycareState, GardenGift, MissionsView, PetView, PlotState, TreeView } from './api'
+import { benchDone } from './bench'
 
 export type ReadyInput = {
   plots: Pick<PlotState, 'plotIndex' | 'readyAt'>[]
@@ -9,6 +10,7 @@ export type ReadyInput = {
   pets: { id: number; pet: Pick<PetView, 'hunger' | 'affection' | 'petReadyAt'> }[]
   needThreshold: number
   tree: Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'>
+  benchJob: BenchView['job']
 }
 
 /** Para onde o toque no aviso leva: o primeiro item que tem lugar próprio. */
@@ -25,9 +27,10 @@ export type ReadyStatus = {
   hungryCount: number
   wantPetCount: number
   treeFull: boolean
+  benchReady: number
   /**
    * Uma chave por coisa pronta (`p0@readyAt`, `d1@fullAt`, `m12`, `c2026-11-03`,
-   * `g5`, `h7`, `a7`, `t@cheia`). O horário entra para uma berry replantada no mesmo
+   * `g5`, `h7`, `a7`, `t@cheia`, `b3@2`). O horário entra para uma berry replantada no mesmo
    * canteiro, ou um daycare renovado, contar como novidade.
    */
   ids: string[]
@@ -57,6 +60,10 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
   const treeReady = tree.ready + tree.readyAts.filter((at) => at <= now).length
   const treeFull = tree.unlocked && treeReady >= tree.cap
 
+  // Poké Balls prontas na bancada, esperando coletar.
+  const job = input.benchJob
+  const benchReady = job ? benchDone(job, now) - job.collected : 0
+
   const readyPlots = plots.map((plot) => plot.plotIndex)
   const berryCount = readyPlots.length
   const daycareFullCount = fullSlots.length
@@ -71,6 +78,8 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     ...hungry.map((mon) => `h${mon.id}`),
     ...wantPet.map((mon) => `a${mon.id}`),
     ...(treeFull ? [`t@${tree.readyAts.at(-1) ?? 'cheia'}`] : []),
+    // Uma chave por lote, e outra quando ele acaba: o lote inteiro pronto volta a avisar.
+    ...(job && benchReady > 0 ? [`b${job.id}@${benchDone(job, now) === job.quantity ? 'fim' : 'parcial'}`] : []),
   ]
 
   // Primeiro o que tem lugar para onde ir (o toque leva ao primeiro), depois o
@@ -81,6 +90,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
   if (chestReady) parts.push('baú pronto')
   if (daycareFullCount > 0) parts.push(count(daycareFullCount, 'daycare cheio', '# no daycare cheios'))
   if (treeFull) parts.push('árvore cheia')
+  if (benchReady > 0) parts.push(count(benchReady, '1 bola pronta', '# bolas prontas'))
   if (giftCount > 0) parts.push(count(giftCount, '1 presente', '# presentes'))
   if (hungry.length > 0) parts.push(`${hungry.length} com fome`)
   if (wantPet.length > 0) parts.push(count(wantPet.length, '1 quer carinho', '# querem carinho'))
@@ -98,6 +108,7 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     hungryCount: hungry.length,
     wantPetCount: wantPet.length,
     treeFull,
+    benchReady,
     ids,
     target,
     summary: parts.length > 0 ? parts.join(' · ') : null,

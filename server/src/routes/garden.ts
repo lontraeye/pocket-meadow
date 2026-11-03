@@ -1,9 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { APRICORN_ITEM, apricornConfig } from '../config/apricorn.js'
 import { berries } from '../config/berries.js'
 import { harvestApricorns, treeView } from '../db/apricorn.js'
+import { benchView, cancelJob, collectJob, setOperator, startJob } from '../db/bench.js'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -60,6 +61,49 @@ gardenRoutes.post('/tree/harvest', requireUser, (c) => {
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json({ itemKey: APRICORN_ITEM, quantity: result.harvested, tree: result.tree })
 })
+
+// Bancada de bolas (5.23): operador, lote, coletar e cancelar. Cada ação
+// devolve a bancada atualizada.
+gardenRoutes.post('/bench/operator', requireUser, async (c) => {
+  const body = await readObject(c)
+  const pokemonId = body?.pokemonId
+  if (pokemonId !== null && (typeof pokemonId !== 'number' || !Number.isInteger(pokemonId))) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  return benchAction(c.get('userId'), (userId, level, now) => setOperator(userId, level, pokemonId, now), c)
+})
+
+gardenRoutes.post('/bench/start', requireUser, async (c) => {
+  const body = await readObject(c)
+  const quantity = body?.quantity
+  if (typeof quantity !== 'number') return c.json({ error: 'invalid_body' }, 400)
+  return benchAction(c.get('userId'), (userId, level, now) => startJob(userId, level, quantity, now), c)
+})
+
+gardenRoutes.post('/bench/collect', requireUser, (c) =>
+  benchAction(c.get('userId'), (userId, _level, now) => collectJob(userId, now), c),
+)
+
+gardenRoutes.post('/bench/cancel', requireUser, (c) =>
+  benchAction(c.get('userId'), (userId, _level, now) => cancelJob(userId, now), c),
+)
+
+function benchAction(
+  userId: number,
+  action: (userId: number, level: number, now: number) => { ok: true } | { ok: false; error: string },
+  c: Context<AuthEnv>,
+) {
+  const now = Date.now()
+  const result = immediate(() => {
+    const clock = persistCatchUp(userId, now)
+    const out = action(userId, clock.level, now)
+    if (!out.ok) return out
+    return { ...out, bench: benchView(userId, clock.level, now) }
+  })
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  const { ok: _ok, ...body } = result
+  return c.json(body)
+}
 
 function errorBody(result: Failure): { error: string; readyAt?: number } {
   return { error: result.error, ...(result.readyAt !== undefined ? { readyAt: result.readyAt } : {}) }

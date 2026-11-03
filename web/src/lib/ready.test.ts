@@ -13,6 +13,7 @@ function input(over: Partial<ReadyInput> = {}): ReadyInput {
     pets: [],
     needThreshold: 40,
     tree: { unlocked: true, ready: 0, cap: 5, readyAts: [now + 1000] },
+    benchJob: null,
     ...over,
   }
 }
@@ -87,4 +88,13 @@ test('árvore cheia entra no aviso, também quando enche com o app aberto', () =
   assert.equal(readyStatus(input({ tree: filling }), now + 1000).summary, 'árvore cheia')
   const locked = { unlocked: false, ready: 0, cap: 5, readyAts: [] }
   assert.equal(readyStatus(input({ tree: { ...locked, ready: 5 } }), now).summary, null)
+})
+
+test('bolas prontas na bancada, sem contar as já coletadas', () => {
+  const job = { id: 3, quantity: 5, unitMs: 1000, startedAt: now - 3500, collected: 1 }
+  const ready = readyStatus(input({ benchJob: job }), now)
+  assert.equal(ready.summary, '2 bolas prontas')
+  assert.deepEqual(ready.ids, ['b3@parcial'])
+  assert.equal(readyStatus(input({ benchJob: { ...job, collected: 3 } }), now).summary, null)
+  assert.deepEqual(readyStatus(input({ benchJob: job }), now + 2000).ids, ['b3@fim'])
 })

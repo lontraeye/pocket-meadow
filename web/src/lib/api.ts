@@ -347,6 +347,19 @@ export type TreeView = {
   raining: boolean
 }
 
+/** Bancada de bolas (5.23): as bolas do lote ficam prontas uma a uma (`startedAt + k × unitMs`). */
+export type BenchView = {
+  unlocked: boolean
+  unlockLevel: number
+  level: number
+  batchSize: number
+  unitMs: number
+  speedBonus: number
+  operatorTypes: string[]
+  operatorId: number | null
+  job: { id: number; quantity: number; unitMs: number; startedAt: number; collected: number } | null
+}
+
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
 export type GardenGift = {
   id: number
@@ -461,7 +474,7 @@ export type GameState = {
   }
   pokemon: OwnedPokemon[]
   candies: { evolutionChainId: number; amount: number }[]
-  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; tree: TreeView }
+  garden: { gifts: GardenGift[]; needThreshold: number; fullAt: number; tree: TreeView; bench: BenchView }
   missions: MissionsView
   daycare: DaycareState
   plots: PlotState[]
@@ -693,10 +706,28 @@ export function errorText(error: ApiError): string {
       return 'O apelido precisa ter de 1 a 12 caracteres, sem quebra de linha.'
     case 'plot_locked':
       return 'Esse canteiro ainda está bloqueado.'
+    case 'operating':
+      return 'Esse Pokémon está operando a bancada. Tire-o de lá primeiro.'
+    case 'bench_locked':
+      return 'A bancada ainda está fechada.'
+    case 'in_team':
+      return 'Quem está no time não pode operar a bancada.'
+    case 'wrong_type':
+      return 'Esse Pokémon não é de um tipo que opera a bancada.'
+    case 'bench_busy':
+      return 'A bancada está trabalhando. Espere o lote acabar ou cancele.'
+    case 'no_operator':
+      return 'A bancada precisa de um operador.'
+    case 'invalid_quantity':
+      return 'Essa quantidade não cabe no lote.'
+    case 'no_apricorn':
+      return 'Faltam Apricorns.'
+    case 'no_job':
+      return 'A bancada não está trabalhando.'
     case 'tree_locked':
       return 'A árvore de Apricorn ainda está fechada.'
     case 'nothing_ready':
-      return 'Ainda não há Apricorn para colher.'
+      return 'Ainda não há nada pronto.'
     case 'plot_empty':
       return 'Não há nada plantado aqui.'
     case 'already_ready':

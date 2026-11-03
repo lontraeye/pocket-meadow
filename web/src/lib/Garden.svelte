@@ -20,6 +20,9 @@
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
   import { TREE_H, TREE_W, treePixels } from './apricornTree'
+  import { BENCH_H, BENCH_W, benchDone, benchPixels } from './bench'
+  import BenchPanel from './BenchPanel.svelte'
+  import Modal from './Modal.svelte'
   import { TILE_H, TILE_W, type TerrainGrid } from './terrain'
   import PokemonSheet from './PokemonSheet.svelte'
   import WeatherIcon from './WeatherIcon.svelte'
@@ -294,8 +297,17 @@
     return col === treeCol && row === treeRow
   }
 
+  // Bancada de bolas (5.23): ao lado da árvore, com uma casa livre no meio.
+  // O operador sai do passeio e fica parado atrás dela.
+  const benchCol = treeCol + 2
+  const benchRow = treeRow
+
+  function isBenchCell(col: number, row: number): boolean {
+    return col === benchCol && row === benchRow
+  }
+
   function isWalkable(col: number, row: number): boolean {
-    return inPlay(col, row) && !isPlotCell(col, row) && !isTreeCell(col, row)
+    return inPlay(col, row) && !isPlotCell(col, row) && !isTreeCell(col, row) && !isBenchCell(col, row)
   }
 
   type Walker = {
@@ -339,7 +351,7 @@
   const halfH = $derived(tileH / 2)
 
   const gardenPokemon = $derived(
-    [...game.pokemon.filter((mon) => mon.location === 'garden')]
+    [...game.pokemon.filter((mon) => mon.location === 'garden' && mon.id !== game.garden.bench.operatorId)]
       .sort((a, b) => {
         if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1
         return a.id - b.id
@@ -468,6 +480,24 @@
     } finally {
       harvestingTree = false
     }
+  }
+
+  const benchOperator = $derived(game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null)
+  /** Poké Balls prontas no lote, esperando coletar. */
+  const benchReady = $derived.by(() => {
+    const job = game.garden.bench.job
+    return job ? benchDone(job, clock.now()) - job.collected : 0
+  })
+  let benchOpen = $state(false)
+
+  function onBench() {
+    const bench = game.garden.bench
+    if (!bench.unlocked) {
+      showGiftToast(`A bancada de bolas abre no nível ${bench.unlockLevel} de treinador.`)
+      return
+    }
+    play('tap')
+    benchOpen = true
   }
 
   function showLockedPlot() {
@@ -1365,6 +1395,68 @@
           {#if tree.unlocked && treeReady >= tree.cap}<span class="tree-full" aria-hidden="true">cheia</span>{/if}
         </button>
       {/if}
+      {#if game.garden.bench}
+        {@const spot = place(benchCol, benchRow)}
+        {@const bench = game.garden.bench}
+        {#if benchOperator}
+          {@const look = gardenSprite(benchOperator.speciesId, benchOperator.isShiny)}
+          <!-- O operador fica atrás da mesa, um pouco acima do centro do bloco. -->
+          <button
+            type="button"
+            class="mon operator"
+            style:left="{snapToDevice(spot.x)}px"
+            style:top="{snapToDevice(spot.y + halfH * 0.4)}px"
+            style:--size="{showdownSize * scale}px"
+            style:z-index={benchCol + benchRow + depthSpan}
+            aria-label={`${benchOperator.nickname ?? benchOperator.displayName} operando a bancada`}
+            onclick={onBench}
+          >
+            {#if look.kind === 'pmd'}
+              <PmdSprite
+                speciesId={benchOperator.speciesId}
+                shiny={look.shinySheet}
+                anim="Idle"
+                dir={0}
+                scale={pmdScale}
+                shadow={look.shadow}
+                {time}
+              />
+            {:else}
+              <span class="shadow" aria-hidden="true"></span>
+              <img src={showdownSrc(benchOperator.speciesId, benchOperator.isShiny)} alt="" />
+            {/if}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="bench"
+          class:locked={!bench.unlocked}
+          class:working={bench.job !== null && benchReady < bench.job.quantity - bench.job.collected}
+          style:left="{snapToDevice(spot.x)}px"
+          style:top="{snapToDevice(spot.y + halfH)}px"
+          style:z-index={benchCol + benchRow + depthSpan + 1}
+          aria-label={!bench.unlocked
+            ? `Bancada de bolas, abre no nível ${bench.unlockLevel}`
+            : benchReady > 0
+              ? `Bancada de bolas: ${benchReady} prontas`
+              : 'Bancada de bolas'}
+          onclick={onBench}
+        >
+          <svg
+            width={BENCH_W * pmdScale}
+            height={BENCH_H * pmdScale}
+            viewBox="0 0 {BENCH_W} {BENCH_H}"
+            shape-rendering="crispEdges"
+            aria-hidden="true"
+          >
+            {#each benchPixels() as px, index (index)}
+              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+            {/each}
+          </svg>
+          {#if !bench.unlocked}<span class="lock" aria-hidden="true"></span>{/if}
+          {#if benchReady > 0}<span class="tree-full" aria-hidden="true">{benchReady} pronta{benchReady === 1 ? '' : 's'}</span>{/if}
+        </button>
+      {/if}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
         {@const spot = place(cell.col, cell.row)}
         <button
@@ -1549,6 +1641,12 @@
       </button>
     </div>
   </div>
+
+  {#if benchOpen}
+    <Modal label="Bancada de bolas" onBackdrop={() => (benchOpen = false)}>
+      <BenchPanel {game} {onState} onClose={() => (benchOpen = false)} />
+    </Modal>
+  {/if}
 
   {#if plotIndex !== null}
     {@const plot = plotsByIndex.get(plotIndex)}
@@ -1985,6 +2083,39 @@
   .tree.shake svg {
     transform-origin: 50% 100%;
     animation: tree-shake 0.45s steps(6, jump-none);
+  }
+
+  .bench {
+    position: absolute;
+    padding: 0;
+    border: 0;
+    background: none;
+    transform: translate(-50%, -100%);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .bench svg {
+    display: block;
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
+  }
+
+  .bench.locked svg {
+    filter: grayscale(0.7) brightness(0.6);
+  }
+
+  .bench .lock {
+    top: 55%;
+  }
+
+  .bench.working svg {
+    animation: bench-work 0.9s steps(2, jump-none) infinite;
+  }
+
+  @keyframes bench-work {
+    50% {
+      transform: translateY(-1px);
+    }
   }
 
   .tree-full {

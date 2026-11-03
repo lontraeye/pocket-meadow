@@ -14,6 +14,7 @@ import { applyLevelMovesToPokemon, rerollMove, rerollMovesOnEvolve, slotOfMove, 
 import { evolutionBlock, parseNickname, planFeed, planRelease } from '../game/progression.js'
 import { canLearnMove, moveFitsSlot } from '../game/traits.js'
 import { grantXp } from '../game/xp.js'
+import { operatorAmong } from '../db/bench.js'
 import { leaveTeam } from '../db/team.js'
 import { learnsetFor, movesByName } from '../seed/traitsData.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
@@ -270,6 +271,7 @@ function moveToPc(userId: number, id: number, toPc: boolean): { ok: true } | Fai
   if (!mon) return fail('pokemon_not_found', 404)
   if (mon.location === 'daycare') return fail('in_daycare', 400)
   if (mon.inPc === toPc) return { ok: true }
+  if (toPc && operatorAmong(userId, [id]) !== null) return fail('operating', 400)
   if (toPc) {
     // O time sai junto e nunca fica vazio, então o jardim também não.
     const left = leaveTeam(userId, [id])
@@ -340,6 +342,8 @@ function releaseMany(userId: number, ids: number[], now: number): Ok<{ release: 
     const status = plan.error === 'pokemon_not_found' ? 404 : 400
     return fail(plan.error, status, plan.pokemonId !== undefined ? { pokemonId: plan.pokemonId } : undefined)
   }
+  const operator = operatorAmong(userId, ids)
+  if (operator !== null) return fail('operating', 400, { pokemonId: operator })
   const left = leaveTeam(userId, ids)
   if (!left.ok) return fail(left.error, 400)
 
