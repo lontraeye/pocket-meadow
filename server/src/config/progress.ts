@@ -1,6 +1,6 @@
 export const progressConfig = {
-  // 1 de energia por hora (até a energia máxima); o grosso vem das berries.
-  energyRegenMs: 60 * 60 * 1000,
+  // 1 de energia a cada 15 min (até a energia máxima; era 1 por hora até 2026-11-04).
+  energyRegenMs: 15 * 60 * 1000,
   levelCap: 100,
   gardenMaxVisible: 15,
   xpBase: 10,

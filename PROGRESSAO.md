@@ -135,7 +135,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 ## 5. O que falta construir (em ordem)
 
 1. ~~**Marco = só o líder**~~ (feito em 2026-11-03).
-2. ~~**Energia por campo revelado**~~ (feito em 2026-11-03): chegar numa área não revela nada; "Revelar campo" gasta 1 e as lutas daquele campo saem de graça; procurar no mato e usar mancha (pesca, árvore, pedra) gastam 1; líder não gasta. Máximo 10, volta 1 por hora; a Oran dá +2.
+2. ~~**Energia por campo revelado**~~ (feito em 2026-11-03): chegar numa área não revela nada; "Revelar campo" gasta 1 e as lutas daquele campo saem de graça; procurar no mato e usar mancha (pesca, árvore, pedra) gastam 1; líder não gasta. Máximo 10, volta 1 a cada 15 min (era 1 por hora até 2026-11-04); a Oran dá +2.
 2.1. ~~**Desmaio pausa a luta**~~ (feito em 2026-11-03): no manual, quando o Pokémon do jogador desmaia, a luta pausa e pergunta quem entra; no automático também pausa, com 4 s para escolher; sem toque, entra o próximo vivo e a luta segue.
 3. ~~**Fome trava a luta**~~ (feito em 2026-11-03): com fome abaixo de 20 (`fightMinHunger`) o Pokémon fica fora do time da luta (todos famintos: não há luta); cada luta tira 8 de fome de quem entrou (`battleHungerCost`); colheita com +2 berries; "Alimentar todos" (`POST /garden/pets/feed-all`) dá 1 berry a cada um, do mais faminto ao menos; abre pelo aviso "N com fome" e antes da luta ("Alimentar o time").
 4. ~~**HP persistente e máquina de cura**~~ (feito): HP fica depois da luta; cura por descanso no jardim e pela máquina de cura (estrutura do jardim; 1 carga cura a equipe toda; liberada desde o início). Berry de HP fica para depois.
@@ -183,28 +183,28 @@ Valores de partida, para ajustar jogando. A conta sai de `npm run economia` (ser
 | Descanso (HP 0 → cheio) | 2 h | 4 h | o HP vale alguma coisa entre sessões |
 | Recarga da máquina de cura | 3 h por carga | 6 h por carga | 4 curas da equipe por dia por máquina (eram 8) |
 
-**Conta por dia** (entra / sai), com as ~32 lutas que cabem no tempo:
+**Conta por dia** (entra / sai), com as ~32 lutas que cabem no tempo (energia a 1 a cada 15 min desde 2026-11-04):
 
 | Cap. | Energia | Lutas | Manchas | Madeira | Pedra | Berries | Bolas | Curas |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 22 | 32 | 0 | 0 | 0 | 30 / 15 | 37 / 14 | 4 |
-| 2 | 22 | 32 | 0 | 0 | 0 | 30 / 18 | 37 / 15 | 4 |
-| 3 | 22 | 32 | 7 | 6 | 0 | 45 / 22 | 40 / 16 | 4 |
-| 4 | 22 | 32 | 7 | 6 | 0 | 45 / 26 | 58 / 17 | 4 |
-| 5 | 22 | 32 | 7 | 3 | 4 | 59 / 30 | 76 / 18 | 4 |
-| 6 | 22 | 32 | 7 | 3 | 4 | 59 / 30 | 76 / 19 | 8 |
-| 7 | 22 | 32 | 7 | 3 | 4 | 74 / 30 | 76 / 20 | 8 |
-| 8 | 22 | 32 | 7 | 3 | 4 | 74 / 30 | 76 / 22 | 8 |
-| 9 | 22 | 32 | 7 | 3 | 4 | 89 / 30 | 76 / 24 | 8 |
+| 1 | 40 | 32 | 0 | 0 | 0 | 30 / 15 | 37 / 14 | 4 |
+| 2 | 40 | 32 | 0 | 0 | 0 | 30 / 18 | 37 / 15 | 4 |
+| 3 | 40 | 32 | 12 | 11 | 0 | 45 / 22 | 40 / 16 | 4 |
+| 4 | 40 | 32 | 12 | 11 | 0 | 45 / 26 | 59 / 17 | 4 |
+| 5 | 40 | 32 | 12 | 5,5 | 7 | 59 / 30 | 77 / 18 | 4 |
+| 6 | 40 | 32 | 12 | 5,5 | 7 | 59 / 30 | 77 / 19 | 8 |
+| 7 | 40 | 32 | 12 | 5,5 | 7 | 74 / 30 | 77 / 20 | 8 |
+| 8 | 40 | 32 | 12 | 5,5 | 7 | 74 / 30 | 77 / 22 | 8 |
+| 9 | 40 | 32 | 12 | 5,5 | 7 | 89 / 30 | 77 / 24 | 8 |
 
 Berries: Oran dos canteiros contra a fome do time (o dia e as lutas). Bolas: Poké Balls das árvores vermelhas (todas as que o teto deixa), do Headbutt e das missões, limitadas pela bancada, contra as tentativas de captura. Curas: cargas da máquina por dia.
 
-Quem gasta a energia toda (88 lutas, ~2 h por dia) fica perto do empate nos capítulos 1 e 2 (berries 30 / 27, bolas 37 / 39) e com sobra do 3 em diante.
+Com a energia a 15 min, ela quase não limita: dariam ~160 lutas por dia, então o freio de verdade é o tempo de jogo. Quem joga ~2 h por dia (88 lutas) fica perto do empate nos capítulos 1 e 2 (berries 30 / 27, bolas 37 / 39) e com sobra do 3 em diante; quem joga mais que isso passa a esbarrar em berries e bolas, não na energia.
 
 **Leitura:**
 - Para o jogador de referência, berries e bolas sobram em todos os capítulos (o dobro do uso): o aperto só aparece para quem gasta a energia toda. Se a captura tiver de pesar mais para quem joga pouco, o caminho é cortar a produção (árvore vermelha de volta a 3 h, missões com menos Apricorn), não a energia.
 - A conta não desconta os Apricorns das receitas e das melhorias da bancada (15 e 30), nem as Great e Ultra, que dividem o tempo da bancada.
-- Madeira e pedra: uma receita a cada 1 a 3 dias, o que fecha com o teto de peças subindo por marco.
+- Madeira e pedra: com mais energia sobrando para as manchas, uma receita a cada 1 a 2 dias, o que fecha com o teto de peças subindo por marco.
 - Não entra na conta: presentes do chão, nível de treinador, sementes e as berries de captura.
 
 ### 7.1 Tempo da campanha

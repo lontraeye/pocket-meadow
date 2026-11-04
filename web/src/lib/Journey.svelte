@@ -644,7 +644,7 @@
             <!-- Revelar gasta 1 de energia; as lutas deste campo saem com ela. -->
             <p class="hint">
               {energy !== null && energy < 1
-                ? 'Sem energia: volta 1 por hora, ou use uma Oran Berry.'
+                ? 'Sem energia: volta 1 a cada 15 min, ou use uma Oran Berry.'
                 : 'Revelar o campo gasta 1 de energia; as lutas dele não gastam.'}
             </p>
             <button
