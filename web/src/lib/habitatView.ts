@@ -1,7 +1,16 @@
 // Textos dos habitats (5.22) para a bandeja do Construir e as etiquetas do
 // jardim: o nome do tipo, os pontos que faltam e as vagas.
 
-import { MATERIAL_NAMES, habitatConfig, habitatKind, type HabitatCheck, type HabitatKind } from '@habitat'
+import {
+  FLOORS,
+  MATERIAL_NAMES,
+  PAINT_FLOORS,
+  habitatConfig,
+  habitatKind,
+  type HabitatCheck,
+  type HabitatKind,
+  type PaintFloor,
+} from '@habitat'
 
 /** "planta", "pedra/areia/terra", "água". */
 export function materialText(kind: HabitatKind): string {
@@ -25,4 +34,12 @@ export function habitatLabel(kind: HabitatKind, check: HabitatCheck): string {
 export function needText(kind: HabitatKind, check: HabitatCheck): string {
   if (check.need === 0) return 'Não pede pontos: aceita qualquer tipo, sem bônus.'
   return `Pede ${check.need} pontos de ${materialText(kind)} (metade da área); cada chão vale 1 e cada móvel, mais 1.`
+}
+
+/** Chãos que valem ponto para o tipo (os outros são enfeite), na ordem da paleta. */
+export function kindFloors(kind: HabitatKind): PaintFloor[] {
+  const materials = habitatKind(kind).materials as readonly string[]
+  return PAINT_FLOORS.filter((floor) =>
+    Object.keys((FLOORS as Record<string, Record<string, number>>)[floor] ?? {}).some((material) => materials.includes(material)),
+  )
 }

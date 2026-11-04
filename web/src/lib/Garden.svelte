@@ -22,7 +22,7 @@
   import { benchOperatorIds } from './structures'
   import { cellKey, inBounds, isFlippable, occupied, type PieceKey } from '@garden/layout'
   import { checkHabitat, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
-  import { habitatLabel } from './habitatView'
+  import { habitatLabel, kindFloors } from './habitatView'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -545,6 +545,19 @@
   let paint = $state<PaintTool | null>(null)
   let paintDraft = $state<Record<string, PaintFloor | null>>({})
   let painting: number | null = null
+  /** Como estava no começo da pincelada (para desfazer quando entra o segundo dedo). */
+  let strokeStart: { draft: Record<string, PaintFloor | null>; cells: Record<string, true> | null } | null = null
+  /** Pincel ligado: um dedo pinta em vez de fazer pan. */
+  const brushing = $derived(building && (paint !== null || areaEdit !== null) && buildPick === null)
+
+  function cancelStroke() {
+    const start = strokeStart
+    painting = null
+    strokeStart = null
+    if (!start) return
+    paintDraft = start.draft
+    if (areaEdit && start.cells) areaEdit = { ...areaEdit, cells: start.cells }
+  }
   /** Chão de cada casa jogável agora: o layout com o rascunho por cima. */
   const floorMap = $derived.by(() => {
     const out = new Map<string, string>(layout.floor.map((tile) => [cellKey(tile.col, tile.row), tile.floor]))
@@ -566,7 +579,8 @@
 
   // Habitats (5.22): área e tipo escolhidos. Criar ou editar abre um rascunho
   // da área (casas marcadas com o pincel de área), salvo de uma vez.
-  type AreaEdit = { id: number | null; kind: HabitatKind; cells: Record<string, true> }
+  /** `dirty`: área ou tipo mudaram e ainda não foram salvos (o chão só pinta depois de salvar). */
+  type AreaEdit = { id: number | null; kind: HabitatKind; cells: Record<string, true>; dirty: boolean }
   let areaEdit = $state<AreaEdit | null>(null)
   /** Ao arrastar, o primeiro toque decide se marca ou desmarca. */
   let areaAdding = true
@@ -605,8 +619,9 @@
     const found = id === null ? null : layout.habitats.find((row) => row.id === id)
     const cells: Record<string, true> = {}
     for (const tile of found?.tiles ?? []) cells[cellKey(tile.col, tile.row)] = true
-    areaEdit = { id, kind: found?.kind ?? kind, cells }
-    paint = null
+    areaEdit = { id, kind: found?.kind ?? kind, cells, dirty: false }
+    // Habitat que já existe abre com o primeiro chão que vale ponto; o novo, com o pincel de área.
+    paint = found ? firstKindFloor(found.kind) : null
     buildPick = null
     buildMessage = ''
   }
@@ -623,7 +638,7 @@
     const cells = { ...edit.cells }
     if (areaAdding) cells[key] = true
     else delete cells[key]
-    areaEdit = { ...edit, cells }
+    areaEdit = { ...edit, cells, dirty: true }
   }
 
   async function saveArea() {
@@ -632,7 +647,17 @@
     const cells = areaTiles
     const body = { kind: edit.kind, cells }
     const path = edit.id === null ? '/api/build/habitat' : `/api/build/habitat/${edit.id}`
-    if (await habitatCall(path, body)) areaEdit = null
+    if (!(await habitatCall(path, body))) return
+    // O menu do habitat continua aberto, agora para pintar o chão dele.
+    const id = edit.id ?? Math.max(...layout.habitats.map((row) => row.id))
+    areaEdit = { ...edit, id, dirty: false }
+    paint = firstKindFloor(edit.kind)
+  }
+
+  /** O primeiro chão aberto que vale ponto para o tipo (null no básico). */
+  function firstKindFloor(kind: HabitatKind): PaintFloor | null {
+    const open = new Set(layout.floors.filter((row) => row.unlockAt === null).map((row) => row.floor))
+    return kindFloors(kind).find((floor) => open.has(floor)) ?? null
   }
 
   async function deleteArea() {
@@ -674,6 +699,8 @@
 
   function paintAt(cell: { col: number; row: number }) {
     if (!paint || !inBounds(cell) || isPlotCell(playCol0 + cell.col, playRow0 + cell.row)) return
+    // No menu de um habitat, o pincel só pinta dentro da área dele.
+    if (areaEdit && !areaEdit.cells[cellKey(cell.col, cell.row)]) return
     const floor = paint === 'erase' ? null : paint
     const key = cellKey(cell.col, cell.row)
     // Água não vai embaixo de peça (o servidor também recusa).
@@ -855,18 +882,24 @@
     // Um arrasto anterior que soltou fora não deixa o próximo clique preso.
     buildSkipClick = false
     if (buildPending || (buildMouse && event.button !== 0)) return
-    // Pincel do chão ou da área do habitat: tocar marca a casa e arrastar
-    // marca o caminho (sem pan).
+    // Pincel do chão ou da área do habitat: um dedo (ou o botão esquerdo)
+    // marca a casa e arrastar marca o caminho. O gramado não faz pan com um
+    // dedo nesse modo; dois dedos (ou o botão do meio/direito) movem a câmera.
     if ((paint || areaEdit) && !buildPick) {
-      event.stopPropagation()
+      if (painting !== null) {
+        // Segundo dedo: vira pan de dois dedos e a pincelada do primeiro é desfeita.
+        cancelStroke()
+        return
+      }
       painting = event.pointerId
+      strokeStart = { draft: paintDraft, cells: areaEdit?.cells ?? null }
       try {
         ;(event.currentTarget as Element).setPointerCapture(event.pointerId)
       } catch {
         // Sem capture, pinta enquanto o dedo estiver na camada.
       }
       const cell = gridCellAt(event.clientX, event.clientY)
-      if (areaEdit) areaAt(cell, true)
+      if (areaEdit && !paint) areaAt(cell, true)
       else paintAt(cell)
       return
     }
@@ -898,7 +931,7 @@
     if (painting !== null) {
       if (event.pointerId === painting) {
         const cell = gridCellAt(event.clientX, event.clientY)
-        if (areaEdit) areaAt(cell, false)
+        if (areaEdit && !paint) areaAt(cell, false)
         else paintAt(cell)
       }
       return
@@ -941,8 +974,9 @@
   function onBuildUp(event: PointerEvent) {
     if (painting !== null && event.pointerId === painting) {
       painting = null
+      strokeStart = null
       buildSkipClick = true
-      if (!areaEdit) void flushPaint()
+      if (paint) void flushPaint()
       return
     }
     const drag = buildDrag
@@ -1674,8 +1708,29 @@
       return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0
     }
 
+    // Pan de dois dedos: o meio dos dedos e o pan quando o segundo encostou.
+    let twoMidX = 0
+    let twoMidY = 0
+    let twoPanX = 0
+    let twoPanY = 0
+    const midOfTouches = () => {
+      const [a, b] = [...touches.values()]
+      return { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 }
+    }
+    const startTwo = () => {
+      const mid = midOfTouches()
+      twoMidX = mid.x
+      twoMidY = mid.y
+      twoPanX = panX
+      twoPanY = panY
+    }
+
     const onDown = (event: PointerEvent) => {
-      if (event.button !== 0 && event.pointerType === 'mouse') return
+      const mouse = event.pointerType === 'mouse'
+      // Botão do meio ou direito: sempre pan (no Construir, o esquerdo pinta).
+      const panButton = mouse && (event.button === 1 || event.button === 2)
+      if (mouse && event.button !== 0 && !panButton) return
+      if (panButton) event.preventDefault()
       // Setas do Construir: tocar nelas não começa pan.
       if ((event.target as Element | null)?.closest?.('.build-arrow')) return
       // Prepara as máscaras dos sprites sob o dedo para o click (onGardenTap).
@@ -1684,6 +1739,7 @@
         touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
         if (touches.size === 2) {
           pinchBase = pinchDistance()
+          startTwo()
           pointerId = null
           dragging = false
           suppressClick = true
@@ -1691,6 +1747,8 @@
         }
       }
       if (touches.size > 1) return
+      // Com o pincel ligado, um dedo (ou o botão esquerdo) pinta: não faz pan.
+      if (untrack(() => brushing) && !panButton) return
       pointerId = event.pointerId
       startX = event.clientX
       startY = event.clientY
@@ -1710,7 +1768,15 @@
             const mid = lawnPoint((a!.x + b!.x) / 2, (a!.y + b!.y) / 2)
             applyZoom(untrack(() => scale) + (ratio > 1 ? scaleStep : -scaleStep), mid)
             pinchBase = distance
+            // O zoom mexe no pan: o arrasto de dois dedos recomeça daqui.
+            startTwo()
+            return
           }
+          // Dois dedos juntos arrastam a câmera.
+          const mid = midOfTouches()
+          const next = clampPan(twoPanX + mid.x - twoMidX, twoPanY + mid.y - twoMidY, lawnW, lawnH, stageBoxW, stageBoxH)
+          panX = next.x
+          panY = next.y
           return
         }
       }
@@ -1758,6 +1824,9 @@
     // fantasma"), que engole os pointermove e trava o pan até soltar.
     const onDragStart = (event: DragEvent) => event.preventDefault()
     node.addEventListener('dragstart', onDragStart)
+    // Arrastar com o botão direito move a câmera: sem o menu do navegador.
+    const onContextMenu = (event: MouseEvent) => event.preventDefault()
+    node.addEventListener('contextmenu', onContextMenu)
     node.addEventListener('pointerdown', onDown)
     node.addEventListener('pointermove', onMove)
     node.addEventListener('pointerup', onUp)
@@ -2669,21 +2738,22 @@
         {paint}
         {floorSrc}
         habitats={layout.habitats.map((row) => ({ id: row.id, kind: row.kind, check: checkHabitat(row.kind, row.tiles, lookAt) }))}
-        area={areaEdit && areaCheck ? { id: areaEdit.id, kind: areaEdit.kind, check: areaCheck } : null}
+        area={areaEdit && areaCheck ? { id: areaEdit.id, kind: areaEdit.kind, check: areaCheck, dirty: areaEdit.dirty } : null}
         onNewHabitat={(kind) => startArea(null, kind)}
         onEditHabitat={(id) => startArea(id, 'basico')}
         onAreaKind={(kind) => {
-          if (areaEdit) areaEdit = { ...areaEdit, kind }
+          if (areaEdit) areaEdit = { ...areaEdit, kind, dirty: true }
+          paint = null
         }}
         onAreaSave={() => void saveArea()}
         onAreaDelete={() => void deleteArea()}
         onAreaCancel={() => {
           areaEdit = null
+          paint = null
           buildMessage = ''
         }}
         onPaint={(tool) => {
           paint = tool
-          areaEdit = null
           buildPick = null
           buildMessage = ''
           if (tool) play('tap')

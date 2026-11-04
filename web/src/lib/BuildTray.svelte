@@ -6,7 +6,7 @@
   import { formatCountdown } from './time'
   import { FLOOR_NAMES, type PaintFloor } from '@habitat/config'
   import { habitatKind, type HabitatCheck, type HabitatKind } from '@habitat'
-  import { habitatStatus, needText } from './habitatView'
+  import { habitatStatus, kindFloors, needText } from './habitatView'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
   // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
@@ -62,7 +62,7 @@
     /** Habitats com a conta ao vivo. */
     habitats: { id: number; kind: HabitatKind; check: HabitatCheck }[]
     /** Habitat em edição (área marcada com o pincel), ou null. */
-    area: { id: number | null; kind: HabitatKind; check: HabitatCheck } | null
+    area: { id: number | null; kind: HabitatKind; check: HabitatCheck; dirty: boolean } | null
     onNewHabitat: (kind: HabitatKind) => void
     onEditHabitat: (id: number) => void
     onAreaKind: (kind: HabitatKind) => void
@@ -82,6 +82,16 @@
     onCancel: () => void
     onClose: () => void
   } = $props()
+
+  /** Menu do habitat: chãos que valem ponto para o tipo e os outros (enfeite). */
+  const areaFloors = $derived.by(() => {
+    if (!area) return { scoring: [], others: [] }
+    const scoring = new Set(kindFloors(area.kind))
+    return {
+      scoring: layout.floors.filter((row) => scoring.has(row.floor)),
+      others: layout.floors.filter((row) => !scoring.has(row.floor)),
+    }
+  })
 
   const plotsFree = $derived(Math.max(0, layout.plotLimit - layout.plotsPlaced))
   const name = (piece: PieceKey) => PIECES[piece].name
@@ -241,6 +251,26 @@
   </svg>
 {/snippet}
 
+{#snippet floorCard(floor: PaintFloor, unlockAt: { name: string } | null, scoring: boolean)}
+  {@const src = floorSrc(floor)}
+  <button
+    type="button"
+    class="card"
+    class:focused={paint === floor}
+    class:locked={unlockAt !== null}
+    aria-pressed={paint === floor}
+    disabled={pending || unlockAt !== null || (area !== null && (area.dirty || area.id === null))}
+    aria-label={unlockAt ? `${FLOOR_NAMES[floor]}: abre no ${unlockAt.name}` : FLOOR_NAMES[floor]}
+    onclick={() => onPaint(paint === floor ? null : floor)}
+  >
+    <span class="thumb">
+      {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
+    </span>
+    <span class="card-name">{FLOOR_NAMES[floor]}</span>
+    {#if unlockAt}<small>{town(unlockAt.name)}</small>{:else if scoring}<small class="more">vale ponto</small>{/if}
+  </button>
+{/snippet}
+
 {#snippet catalogTabs()}
   <div class="tabs" role="tablist" aria-label="Categorias">
     <button
@@ -301,12 +331,13 @@
     {:else}
       {@render catalogTabs()}
     {/if}
-    <button type="button" class="btn" onclick={onClose}>Pronto</button>
+    <button type="button" class="btn" onclick={onClose}>{area ? 'Sair' : 'Pronto'}</button>
   </div>
 
   {#if area}
-    <!-- Habitat em edição: tipo, área (pincel) e o requisito ao vivo. -->
-    <div class="catalog">
+    <!-- Menu de construção do habitat: tipo, área e os chãos do tipo separados
+         dos outros. O pincel de chão só pinta dentro da área. -->
+    <div class="catalog habitat-menu">
       <div class="kinds" role="group" aria-label="Tipo do habitat">
         {#each layout.habitatKinds as row (row.kind)}
           <button
@@ -325,13 +356,67 @@
       <p class="hint habitat">
         {area.check.size === 0 ? 'Marque a área: toque ou arraste nas casas.' : `${area.check.size} casas · ${habitatStatus(area.kind, area.check)}`}
       </p>
-      <p class="hint">{needText(area.kind, area.check)} Começar numa casa marcada desmarca.</p>
+      <p class="hint">{needText(area.kind, area.check)}</p>
+
+      <div class="cards floors" role="group" aria-label="Ferramentas do habitat">
+        <button
+          type="button"
+          class="card"
+          class:focused={paint === null}
+          aria-pressed={paint === null}
+          disabled={pending}
+          onclick={() => onPaint(null)}
+        >
+          <span class="thumb">{@render tabIcon('habitat')}</span>
+          <span class="card-name">Área</span>
+          <small>marcar</small>
+        </button>
+        {#each areaFloors.scoring as row (row.floor)}
+          {@render floorCard(row.floor, row.unlockAt, true)}
+        {/each}
+      </div>
+      {#if areaFloors.others.length > 0}
+        <p class="hint section">Outros chãos (enfeite, sem ponto)</p>
+        <div class="cards floors" role="group" aria-label="Outros chãos">
+          {#each areaFloors.others as row (row.floor)}
+            {@render floorCard(row.floor, row.unlockAt, false)}
+          {/each}
+          <button
+            type="button"
+            class="card"
+            class:focused={paint === 'erase'}
+            aria-pressed={paint === 'erase'}
+            disabled={pending || area.dirty || area.id === null}
+            onclick={() => onPaint(paint === 'erase' ? null : 'erase')}
+          >
+            <span class="thumb">
+              {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
+            </span>
+            <span class="card-name">Apagar</span>
+            <small>gramado</small>
+          </button>
+        </div>
+      {/if}
+      <p class="hint">
+        {#if paint === null}
+          {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} para marcar a área; começar numa casa marcada desmarca.
+        {:else if area.dirty || area.id === null}
+          Salve a área para pintar o chão.
+        {:else}
+          {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} dentro da área para {paint === 'erase' ? 'apagar' : 'pintar'}.
+        {/if}
+        {mouse ? 'Botão do meio ou direito move a câmera.' : 'Dois dedos movem a câmera.'}
+      </p>
       <div class="row">
-        <button type="button" class="btn btn-primary" disabled={pending || area.check.size === 0} onclick={onAreaSave}>Salvar</button>
+        {#if area.dirty || area.id === null}
+          <button type="button" class="btn btn-primary" disabled={pending || area.check.size === 0} onclick={onAreaSave}>Salvar área</button>
+        {/if}
         {#if area.id !== null}
           <button type="button" class="btn" disabled={pending} onclick={onAreaDelete}>Excluir</button>
         {/if}
-        <button type="button" class="btn" disabled={pending} onclick={onAreaCancel}>Cancelar</button>
+        <button type="button" class="btn" disabled={pending} onclick={onAreaCancel}>
+          {area.dirty || area.id === null ? 'Cancelar' : 'Pronto'}
+        </button>
       </div>
     </div>
   {:else if pick?.kind === 'selected'}
@@ -808,6 +893,11 @@
   }
 
   .habitat {
+    font-weight: 600;
+  }
+
+  .section {
+    margin-top: 0.2rem;
     font-weight: 600;
   }
 
