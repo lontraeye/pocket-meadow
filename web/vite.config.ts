@@ -63,6 +63,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@sim': path.resolve(root, '../server/src/game/sim'),
+      '@garden': path.resolve(root, '../server/src/game/garden'),
     },
   },
   server: {

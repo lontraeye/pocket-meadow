@@ -100,6 +100,7 @@ gardenRoutes.post('/tree/harvest', requireUser, async (c) => {
     const clock = persistCatchUp(userId, now)
     const view = treesView(userId, clock.level, now).find((row) => row.key === tree.key)
     if (!view?.unlocked) return fail('tree_locked', 400)
+    if (!view.placed) return fail('not_placed', 400)
     const harvested = harvestApricorns(userId, clock.level, now, tree.key)
     if (harvested === null) return fail('nothing_ready', 400)
     return { ok: true as const, harvested, trees: treesView(userId, clock.level, now) }

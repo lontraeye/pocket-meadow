@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { RECIPES, apricornConfig, benchLevel, benchUnitMs, recipeDef, recipeUnitMs } from '../config/apricorn.js'
 import { getDb } from './client.js'
+import { autoPlace, isPlaced } from './gardenLayout.js'
 import { recordEvent } from './events.js'
 import { creditItems, debitItem, itemQty } from './inventory.js'
 import { craftJobs, gardenStructures, pokemon, species } from './schema.js'
@@ -36,6 +37,8 @@ export type RecipeView = {
 
 export type BenchView = {
   unlocked: boolean
+  /** No jardim (false = guardada no inventário de construção). */
+  placed: boolean
   unlockLevel: number
   level: number
   maxLevel: number
@@ -79,6 +82,7 @@ export type BenchError =
   | 'trainer_level'
   | 'missing_items'
   | 'operating'
+  | 'not_placed'
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: BenchError }
 
@@ -110,6 +114,7 @@ function ensureBench(userId: number, trainerLevel: number, now: number): BenchRo
     .get()
   if (!found) {
     db.insert(gardenStructures).values({ userId, key: 'ball_bench', since: now }).run()
+    autoPlace(userId, 'ball_bench', now)
     return { level: 1, operatorId: null, upgradeTo: null, upgradeEndsAt: null, since: now }
   }
   if (found.upgradeTo !== null && found.upgradeEndsAt !== null && found.upgradeEndsAt <= now) {
@@ -159,6 +164,7 @@ export function benchView(userId: number, trainerLevel: number, now: number): Be
   const nextDef = config.levels[level]
   return {
     unlocked: bench !== null,
+    placed: bench !== null && isPlaced(userId, 'ball_bench'),
     unlockLevel: apricornConfig.unlockLevel,
     level,
     maxLevel: config.levels.length,
@@ -217,6 +223,7 @@ export function setOperator(userId: number, level: number, pokemonId: number | n
   const bench = ensureBench(userId, level, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
+  if (pokemonId !== null && !isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
   if (pokemonId !== null) {
     const mon = getDb()
       .select({
@@ -260,6 +267,7 @@ export function startJob(
 ): Result<{ job: BenchJobView }> {
   const bench = ensureBench(userId, trainerLevel, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
+  if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
   if (bench.operatorId === null) return { ok: false, error: 'no_operator' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
@@ -337,6 +345,7 @@ export function cancelJob(userId: number, now: number): Result<{ balls: number; 
 export function startUpgrade(userId: number, trainerLevel: number, now: number): Result<{ endsAt: number; toLevel: number }> {
   const bench = ensureBench(userId, trainerLevel, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
+  if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
   const next = apricornConfig.bench.levels[bench.level]
@@ -355,4 +364,17 @@ export function startUpgrade(userId: number, trainerLevel: number, now: number):
     .where(benchWhere(userId))
     .run()
   return { ok: true, endsAt, toLevel: bench.level + 1 }
+}
+
+/**
+ * Antes de guardar a bancada: só parada (sem lote nem melhoria). Ao guardar, o
+ * operador volta para o passeio.
+ */
+export function storeBench(userId: number, trainerLevel: number, now: number): { ok: true } | { ok: false; error: BenchError } {
+  const bench = ensureBench(userId, trainerLevel, now)
+  if (!bench) return { ok: false, error: 'bench_locked' }
+  if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
+  if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
+  getDb().update(gardenStructures).set({ operatorPokemonId: null }).where(benchWhere(userId)).run()
+  return { ok: true }
 }

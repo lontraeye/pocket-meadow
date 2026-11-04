@@ -168,6 +168,8 @@
     else openPokedex()
   }
 
+  /** O jardim está no modo Construir (esconde as barras de baixo). */
+  let gardenBuilding = $state(false)
   const clock = serverClock(() => game?.now ?? 0)
 
   const ready = $derived(
@@ -180,7 +182,8 @@
             gifts: game.garden.gifts,
             pets: game.pokemon.filter((mon) => mon.location === 'garden'),
             needThreshold: game.garden.needThreshold,
-            trees: game.garden.trees,
+            // Guardada no inventário de construção não cresce nem avisa.
+            trees: game.garden.trees.filter((tree) => tree.placed),
             benchJob: game.garden.bench.job,
           },
           clock.now(),
@@ -410,6 +413,7 @@
     class="meadow fit"
     class:immersive={screen === 'meadow'}
     class:pokedex-open={pokedexOpen}
+    class:building={screen === 'meadow' && gardenBuilding}
   >
     <!-- No jardim o gramado é o fundo da tela; HUD e docks flutuam por cima. -->
     {#if screen === 'meadow'}
@@ -419,6 +423,7 @@
           onState={loadState}
           openPlotIndex={focusPlot}
           onPlotOpened={() => (focusPlot = null)}
+          onBuildMode={(on) => (gardenBuilding = on)}
         />
       </div>
     {/if}
@@ -938,6 +943,11 @@
 
   .meadow.immersive .docks > * {
     pointer-events: auto;
+  }
+
+  /* Modo Construir do jardim: a barra de construção fica no lugar das docks. */
+  .meadow.building .docks {
+    display: none;
   }
 
   .meadow.immersive .ready-banner {

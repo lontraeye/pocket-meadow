@@ -1,10 +1,11 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { FIRST_GROWTH_MULT, bushDeathChance, getBerry, plotSlotsUnlocked, seedKey } from '../config/berries.js'
+import { FIRST_GROWTH_MULT, bushDeathChance, getBerry, seedKey } from '../config/berries.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { recordEvent } from '../db/events.js'
+import { plotPlaced } from '../db/gardenLayout.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { loadWeather } from '../db/weather.js'
 import { berryPlots } from '../db/schema.js'
@@ -57,9 +58,9 @@ function plant(
 ): Ok<{
   planted: { plotIndex: number; berryKey: string; plantedAt: number; readyAt: number; weatherBoost: boolean }
 }> | Failure {
-  const clock = persistCatchUp(userId, now)
-  const unlocked = plotSlotsUnlocked(clock.level)
-  if (plotIndex < 0 || plotIndex >= unlocked) return fail('plot_locked', 400)
+  persistCatchUp(userId, now)
+  // Canteiro é peça do jardim (PROGRESSAO.md 4.3): só planta no que está colocado.
+  if (!plotPlaced(userId, plotIndex)) return fail('plot_locked', 400)
 
   const berry = getBerry(berryKey)
   if (!berry) return fail('unknown_berry', 400)

@@ -10,7 +10,8 @@
     "baseUrl": ".",
     "paths": {
       "@sim": ["../server/src/game/sim/index.ts"],
-      "@sim/*": ["../server/src/game/sim/*"]
+      "@sim/*": ["../server/src/game/sim/*"],
+      "@garden/*": ["../server/src/game/garden/*"]
     },
     /**
      * Typecheck JS in `.svelte` and `.js` files by default.

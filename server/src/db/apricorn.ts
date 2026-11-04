@@ -5,6 +5,7 @@ import { harvestTree, settleTree, treeReadyTimes, treeUnitMs, type WeatherOf } f
 import { currentWeather, weatherDay, weatherForDay } from '../game/weather.js'
 import { getDb } from './client.js'
 import { recordEvent } from './events.js'
+import { autoPlace, isPlaced } from './gardenLayout.js'
 import { creditItems } from './inventory.js'
 import { gardenStructures, trainers } from './schema.js'
 
@@ -16,6 +17,8 @@ export type TreeView = {
   color: TreeDef['color']
   itemKey: string
   unlocked: boolean
+  /** No jardim (false = guardada no inventário de construção, parada). */
+  placed: boolean
   /** O que abre a árvore, para o texto do cadeado. */
   unlock: TreeDef['unlock']
   /** Pendurados agora. */
@@ -62,18 +65,24 @@ function ensureTree(userId: number, tree: TreeDef, trainerLevel: number, now: nu
   if (found) return found
   const row = { progress: tree.startWith, since: now }
   db.insert(gardenStructures).values({ userId, key: tree.key, ...row }).run()
+  autoPlace(userId, tree.key, now)
   return row
 }
 
 function viewOf(userId: number, tree: TreeDef, trainerLevel: number, now: number): TreeView {
   const base = { key: tree.key, color: tree.color, itemKey: tree.itemKey, unlock: tree.unlock, cap: tree.cap }
   const row = ensureTree(userId, tree, trainerLevel, now)
-  if (!row) return { ...base, unlocked: false, ready: 0, readyAts: [], unitMs: tree.intervalMs, raining: false }
+  if (!row) return { ...base, unlocked: false, placed: false, ready: 0, readyAts: [], unitMs: tree.intervalMs, raining: false }
+  // Guardada: não cresce (o `progress` foi liquidado ao guardar).
+  if (!isPlaced(userId, tree.key)) {
+    return { ...base, unlocked: true, placed: false, ready: Math.floor(row.progress), readyAts: [], unitMs: tree.intervalMs, raining: false }
+  }
   const weather = weatherFor(userId, now)
   const progress = settleTree(row.progress, row.since, now, weather.of, tree)
   return {
     ...base,
     unlocked: true,
+    placed: true,
     ready: Math.floor(progress),
     readyAts: treeReadyTimes(progress, now, weather.today, tree),
     unitMs: treeUnitMs(weather.today, tree),
@@ -96,7 +105,7 @@ export function harvestApricorns(userId: number, trainerLevel: number, now: numb
   const tree = treeDef(key)
   if (!tree) return null
   const row = ensureTree(userId, tree, trainerLevel, now)
-  if (!row) return null
+  if (!row || !isPlaced(userId, tree.key)) return null
   const settled = settleTree(row.progress, row.since, now, weatherFor(userId, now).of, tree)
   const { harvested, progress } = harvestTree(settled)
   if (harvested === 0) return null
@@ -108,4 +117,15 @@ export function harvestApricorns(userId: number, trainerLevel: number, now: numb
   creditItems(userId, [{ itemKey: tree.itemKey, quantity: harvested }])
   recordEvent(userId, 'apricorn_harvest', harvested, now)
   return harvested
+}
+
+/** Ao guardar: liquida o que cresceu até agora e para o relógio. */
+export function freezeTree(userId: number, key: string, now: number): void {
+  const tree = treeDef(key)
+  if (!tree) return
+  const where = and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, tree.key))
+  const row = getDb().select({ progress: gardenStructures.progress, since: gardenStructures.since }).from(gardenStructures).where(where).get()
+  if (!row) return
+  const progress = settleTree(row.progress, row.since, now, weatherFor(userId, now).of, tree)
+  getDb().update(gardenStructures).set({ progress, since: now }).where(where).run()
 }

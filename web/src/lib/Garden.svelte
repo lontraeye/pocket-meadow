@@ -17,6 +17,7 @@
     type PlotState,
     type TreeView,
   } from './api'
+  import { cellKey, occupied, type StructurePiece } from '@garden/layout'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -32,6 +33,8 @@
     benchWorkFrame,
   } from './bench'
   import BenchPanel from './BenchPanel.svelte'
+  import BuildTray from './BuildTray.svelte'
+  import { pickedCells, pieceAtCell, validAnchors, type BuildPick } from './build'
   import HealMachinePanel from './HealMachinePanel.svelte'
   import {
     HEAL_ANIM_TOTAL_MS,
@@ -64,11 +67,14 @@
     onState,
     openPlotIndex = null,
     onPlotOpened,
+    onBuildMode,
   }: {
     game: GameState
     onState: () => Promise<void>
     openPlotIndex?: number | null
     onPlotOpened?: () => void
+    /** O modo Construir abriu ou fechou (o App esconde as barras de baixo). */
+    onBuildMode?: (on: boolean) => void
   } = $props()
 
   let plotIndex = $state<number | null>(null)
@@ -346,71 +352,122 @@
     return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
   }
 
-  // Horta: um espaço reservado de 2×2 blocos perto do canto de baixo, com os 4
-  // canteiros (PLOT_SLOT_LEVELS no servidor); os ainda fechados aparecem com
-  // cadeado. É a primeira "estrutura" do jardim: as máquinas (5.16) seguem o
-  // mesmo molde de blocos reservados.
-  const hortaCol0 = playCol0 + 1
-  const hortaRow0 = playRowEnd - 3
-  const hortaCols = 2
-  const hortaRows = 2
+  // Construção (PROGRESSAO.md 4.3): cada peça (canteiro, árvore, bancada,
+  // máquina) vem do servidor com a casa dela na grade jogável; aqui vira casa
+  // do mundo (+ margem). As peças ocupam casas e o passeio desvia delas.
+  const layout = $derived(game.garden.layout)
+  const worldKey = (col: number, row: number) => cellKey(col - playCol0, row - playRow0)
+  /** Canteiro em cada casa: casa → slot (o `plotIndex` das rotas da horta). */
+  const plotSlotAt = $derived(
+    new Map(layout.pieces.filter((piece) => piece.piece === 'berry_plot').map((piece) => [cellKey(piece.col, piece.row), piece.slot])),
+  )
+  /** Casas ocupadas por alguma peça (pegada inteira, como a casa do operador da bancada). */
+  const blockedCells = $derived(occupied(layout.pieces))
 
   function isPlotCell(col: number, row: number): boolean {
-    return col >= hortaCol0 && col < hortaCol0 + hortaCols && row >= hortaRow0 && row < hortaRow0 + hortaRows
+    return plotSlotAt.has(worldKey(col, row))
   }
 
   function plotIndexAt(col: number, row: number): number {
-    return (row - hortaRow0) * hortaCols + (col - hortaCol0)
+    return plotSlotAt.get(worldKey(col, row)) ?? -1
   }
 
-  // Árvore de Apricorn (5.23): um bloco ao lado da horta, com uma casa livre
-  // entre os dois para o passeio. As raízes formam um losango pequeno com o
+  /** Casa (do mundo) de uma estrutura colocada; null = guardada ou ainda fechada. */
+  function structureCell(piece: StructurePiece): { col: number; row: number } | null {
+    const found = layout.pieces.find((row) => row.piece === piece)
+    return found ? { col: found.col + playCol0, row: found.row + playRow0 } : null
+  }
+
+  // Árvore de Apricorn (5.23): as raízes formam um losango pequeno com o
   // centro 2 pixels (da arte) acima da última linha: é esse centro que pisa no
   // meio do bloco. A máquina é diferente: a última linha dela é a ponta de baixo
   // do losango do chão, então ela se apoia na ponta de baixo do bloco.
   const TREE_FOOT = 2
-  const treeCol = hortaCol0 + hortaCols + 1
-  const treeRow = hortaRow0 + 1
-  /** Onde fica cada árvore: a vermelha ao lado da horta, as outras depois da bancada. */
-  const TREE_CELLS: Record<string, { col: number; row: number }> = {
-    apricorn_tree: { col: treeCol, row: treeRow },
-    apricorn_tree_blue: { col: treeCol + 4, row: treeRow },
-    apricorn_tree_yellow: { col: treeCol + 6, row: treeRow },
-  }
 
-  function isTreeCell(col: number, row: number): boolean {
-    return Object.values(TREE_CELLS).some((cell) => cell.col === col && cell.row === row)
-  }
+  // Bancada de bolas (5.23): o operador sai do passeio e fica na casa à
+  // esquerda da máquina (faz parte da pegada da bancada), virado para ela.
+  const benchCell = $derived(structureCell('ball_bench'))
+  const operatorCell = $derived(benchCell ? { col: benchCell.col - 1, row: benchCell.row } : null)
 
-  // Bancada de bolas (5.23): ao lado da árvore, com uma casa no meio. O
-  // operador sai do passeio e fica nessa casa, virado para a máquina.
-  const benchCol = treeCol + 2
-  const benchRow = treeRow
-  const operatorCol = benchCol - 1
-  const operatorRow = benchRow
-  const hasOperator = $derived(game.garden.bench.operatorId !== null)
-
-  function isBenchCell(col: number, row: number): boolean {
-    return (col === benchCol && row === benchRow) || (hasOperator && col === operatorCol && row === operatorRow)
-  }
-
-  // Máquina de cura (PROGRESSAO.md, item 4): na mesma fileira da bancada,
-  // na casa livre entre a bancada e a árvore azul (como as outras estruturas).
-  const healCol = benchCol + 1
-  const healRow = benchRow
-
-  function isHealCell(col: number, row: number): boolean {
-    return col === healCol && row === healRow
-  }
+  // Máquina de cura (PROGRESSAO.md, item 4).
+  const healCell = $derived(structureCell('heal_machine'))
 
   function isWalkable(col: number, row: number): boolean {
-    return (
-      inPlay(col, row) &&
-      !isPlotCell(col, row) &&
-      !isTreeCell(col, row) &&
-      !isBenchCell(col, row) &&
-      !isHealCell(col, row)
-    )
+    return inPlay(col, row) && !blockedCells.has(worldKey(col, row))
+  }
+
+  // Modo Construir (PROGRESSAO.md 4.3): a grade fica por cima de tudo e cada
+  // toque cai numa casa. Sem nada escolhido, tocar numa peça a seleciona
+  // (mover ou guardar); com uma peça escolhida, tocar numa casa livre a põe lá.
+  let building = $state(false)
+  let buildPick = $state<BuildPick | null>(null)
+  let buildPending = $state(false)
+  let buildMessage = $state('')
+  const buildValid = $derived(building ? validAnchors(layout, buildPick) : new Set<string>())
+  const buildPicked = $derived(building ? pickedCells(layout, buildPick) : new Set<string>())
+  /** O que espera para ser colocado: estruturas guardadas e canteiros livres. */
+  const buildWaiting = $derived(layout.stored.length + Math.max(0, layout.plotLimit - layout.plotsPlaced))
+  const playCells = Array.from({ length: playCols * playRows }, (_, index) => ({
+    col: playCol0 + (index % playCols),
+    row: playRow0 + Math.floor(index / playCols),
+  }))
+
+  function setBuilding(on: boolean) {
+    building = on
+    buildPick = null
+    buildMessage = ''
+    onBuildMode?.(on)
+  }
+
+  async function buildCall(path: string, body: object): Promise<boolean> {
+    buildPending = true
+    buildMessage = ''
+    try {
+      const response = await api(path, body)
+      if (!response.ok) {
+        buildMessage = errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError)
+        return false
+      }
+      await onState()
+      return true
+    } catch {
+      buildMessage = 'Sem conexão com o servidor.'
+      return false
+    } finally {
+      buildPending = false
+    }
+  }
+
+  async function onBuildCell(worldCol: number, worldRow: number) {
+    if (buildPending) return
+    const col = worldCol - playCol0
+    const row = worldRow - playRow0
+    const pick = buildPick
+    if (pick && pick.kind !== 'selected') {
+      if (!buildValid.has(cellKey(col, row))) {
+        buildMessage = 'Não cabe aí. Escolha uma casa verde.'
+        return
+      }
+      const ok =
+        pick.kind === 'new'
+          ? await buildCall('/api/build/place', { piece: pick.piece, col, row })
+          : await buildCall(`/api/build/${pick.id}/move`, { col, row })
+      if (ok) {
+        buildPick = null
+        play('tap')
+      }
+      return
+    }
+    buildMessage = ''
+    const found = pieceAtCell(layout, col, row)
+    buildPick = found ? { kind: 'selected', id: found.id, piece: found.piece } : null
+    if (found) play('tap')
+  }
+
+  async function storePicked() {
+    const pick = buildPick
+    if (pick?.kind !== 'selected') return
+    if (await buildCall(`/api/build/${pick.id}/store`, {})) buildPick = null
   }
 
   type Walker = {
@@ -527,7 +584,7 @@
 
   // Presentes no chão: cada um numa casa fixa (pelo id), fora dos canteiros.
   const giftSpots = $derived.by(() => {
-    void game.plotSlotsUnlocked
+    void blockedCells
     const spots = walkableSpots()
     return game.garden.gifts.map((gift) => ({
       gift,
@@ -619,19 +676,22 @@
     }
   }
 
-  const benchOperator = $derived(game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null)
+  const benchOperator = $derived(
+    benchCell ? (game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null) : null,
+  )
   /** O operador como um "walker" parado na casa dele, para ganhar os mesmos balões. */
   const operatorWalker = $derived.by((): Walker | null => {
     const mon = benchOperator
-    if (!mon) return null
+    const cell = operatorCell
+    if (!mon || !cell) return null
     return {
       id: mon.id,
       speciesId: mon.speciesId,
       displayName: mon.nickname ?? mon.displayName,
       level: mon.level,
       isShiny: mon.isShiny,
-      col: operatorCol,
-      row: operatorRow,
+      col: cell.col,
+      row: cell.row,
       dir: 1,
       anim: 'Idle',
     }
@@ -716,10 +776,6 @@
     window.setTimeout(() => {
       if (healAnimAt === started) healAnimAt = null
     }, HEAL_ANIM_TOTAL_MS + 50)
-  }
-
-  function showLockedPlot() {
-    showGiftToast(game.nextPlotSlotLevel ? `Esse canteiro abre no nível ${game.nextPlotSlotLevel} de treinador.` : 'Canteiro fechado.')
   }
 
   function showGiftToast(text: string) {
@@ -1477,62 +1533,44 @@
     return spots[Math.floor(Math.random() * spots.length)] ?? null
   }
 
-  /** Caminho em L que não pisa em canteiro; se precisar, sobe da fileira dos plots antes. */
+  /**
+   * Caminho mais curto (4 direções) desviando das peças do jardim. A casa de
+   * partida pode estar ocupada (uma peça colocada em cima de quem estava ali).
+   * Sem caminho, fica parado.
+   */
   function route(fromCol: number, fromRow: number, toCol: number, toRow: number): Step[] {
-    const direct = orthRoute(fromCol, fromRow, toCol, toRow, true)
-    if (direct && pathClear(direct)) return direct
-    const alt = orthRoute(fromCol, fromRow, toCol, toRow, false)
-    if (alt && pathClear(alt)) return alt
-
-    // Em cima de um canteiro (ou rota cruzando): sai para o norte e tenta de novo.
-    if (isPlotCell(fromCol, fromRow) && isWalkable(fromCol, fromRow - 1)) {
-      const escape: Step[] = [{ col: fromCol, row: fromRow - 1, dir: 3 }]
-      return [...escape, ...route(fromCol, fromRow - 1, toCol, toRow)]
+    const moves = [
+      { dc: 1, dr: 0, dir: 1 },
+      { dc: -1, dr: 0, dir: 5 },
+      { dc: 0, dr: 1, dir: 7 },
+      { dc: 0, dr: -1, dir: 3 },
+    ] as const
+    const key = (col: number, row: number) => `${col},${row}`
+    const cameFrom = new Map<string, Step | null>([[key(fromCol, fromRow), null]])
+    const queue: { col: number; row: number }[] = [{ col: fromCol, row: fromRow }]
+    for (let head = 0; head < queue.length; head += 1) {
+      const here = queue[head]!
+      if (here.col === toCol && here.row === toRow) {
+        const steps: Step[] = []
+        let step = cameFrom.get(key(toCol, toRow)) ?? null
+        while (step) {
+          steps.push(step)
+          const back = moves.find((move) => move.dir === step!.dir)!
+          step = cameFrom.get(key(step.col - back.dc, step.row - back.dr)) ?? null
+        }
+        return steps.reverse()
+      }
+      for (const move of moves) {
+        const col = here.col + move.dc
+        const row = here.row + move.dr
+        if (cameFrom.has(key(col, row)) || !isWalkable(col, row)) continue
+        cameFrom.set(key(col, row), { col, row, dir: move.dir })
+        queue.push({ col, row })
+      }
     }
-    const viaRow = Math.min(fromRow, toRow, hortaRow0 - 1)
-    const via = orthRoute(fromCol, fromRow, fromCol, viaRow, false)
-    const rest = orthRoute(fromCol, viaRow, toCol, toRow, true)
-    if (via && rest && pathClear(via) && pathClear(rest)) return [...via, ...rest]
     return []
   }
 
-  function orthRoute(
-    fromCol: number,
-    fromRow: number,
-    toCol: number,
-    toRow: number,
-    colFirst: boolean,
-  ): Step[] {
-    const steps: Step[] = []
-    let col = fromCol
-    let row = fromRow
-    const runCol = () => {
-      const delta = Math.sign(toCol - col)
-      while (col !== toCol) {
-        col += delta
-        steps.push({ col, row, dir: delta > 0 ? 1 : 5 })
-      }
-    }
-    const runRow = () => {
-      const delta = Math.sign(toRow - row)
-      while (row !== toRow) {
-        row += delta
-        steps.push({ col, row, dir: delta > 0 ? 7 : 3 })
-      }
-    }
-    if (colFirst) {
-      runCol()
-      runRow()
-    } else {
-      runRow()
-      runCol()
-    }
-    return steps
-  }
-
-  function pathClear(steps: Step[]): boolean {
-    return steps.every((step) => isWalkable(step.col, step.row))
-  }
 </script>
 
 <div class="layout">
@@ -1565,7 +1603,6 @@
         {@const spot = place(tile.col, tile.row)}
         {@const isPlot = isPlotCell(tile.col, tile.row)}
         {@const plotIdx = isPlot ? plotIndexAt(tile.col, tile.row) : -1}
-        {@const locked = plotIdx >= game.plotSlotsUnlocked}
         {@const plot = isPlot ? plotsByIndex.get(plotIdx) : undefined}
         {@const stage = isPlot ? plotStage(plot) : null}
         {#if isPlot}
@@ -1581,10 +1618,9 @@
             style:height="{tileH}px"
             style:margin-left="{-halfW}px"
             style:z-index={tile.col + tile.row + depthSpan}
-            class:locked
-            data-plot={locked ? undefined : plotIdx}
-            aria-label={locked ? `Canteiro ${plotIdx + 1}, fechado` : `Canteiro ${plotIdx + 1}`}
-            onclick={() => (locked ? showLockedPlot() : openPlot(plotIdx))}
+            data-plot={plotIdx}
+            aria-label={`Canteiro ${plotIdx + 1}`}
+            onclick={() => openPlot(plotIdx)}
           >
             <!-- Sem arte para a berry: o desenho antigo do canteiro. -->
             {#if plot && !bushSrc(plot.berryKey, bushLook(plot))}
@@ -1626,7 +1662,7 @@
         {/if}
       {/each}
       {#each game.garden.trees as tree (tree.key)}
-        {@const cell = TREE_CELLS[tree.key]}
+        {@const cell = tree.placed ? structureCell(tree.key) : null}
         {@const art = treeArts[tree.color]}
         {#if cell}
           {@const spot = place(cell.col, cell.row)}
@@ -1669,12 +1705,12 @@
           </button>
         {/if}
       {/each}
-      {#if game.garden.bench}
-        {@const spot = place(benchCol, benchRow)}
+      {#if benchCell && operatorCell}
+        {@const spot = place(benchCell.col, benchCell.row)}
         {@const bench = game.garden.bench}
         {#if benchOperator}
           {@const look = gardenSprite(benchOperator.speciesId, benchOperator.isShiny)}
-          {@const at = place(operatorCol, operatorRow)}
+          {@const at = place(operatorCell.col, operatorCell.row)}
           <!-- O operador fica na casa ao lado, virado para a máquina. -->
           <button
             type="button"
@@ -1682,7 +1718,7 @@
             style:left="{snapToDevice(at.x)}px"
             style:top="{snapToDevice(at.y + halfH)}px"
             style:--size="{showdownSize * scale}px"
-            style:z-index={operatorCol + operatorRow + depthSpan + 1}
+            style:z-index={operatorCell.col + operatorCell.row + depthSpan + 1}
             aria-label={`${benchOperator.nickname ?? benchOperator.displayName} operando a bancada`}
             onclick={() => (bubbleById.get(benchOperator.id) === 'pet' ? void onBubble(benchOperator.id, 'pet') : onBench())}
           >
@@ -1709,7 +1745,7 @@
           class:working={bench.unlocked && benchState === 'working'}
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
-          style:z-index={benchCol + benchRow + depthSpan + 1}
+          style:z-index={benchCell.col + benchCell.row + depthSpan + 1}
           aria-label={!bench.unlocked
             ? `Bancada de bolas, abre no nível ${bench.unlockLevel}`
             : benchReady > 0
@@ -1737,15 +1773,15 @@
           {/if}
         </button>
       {/if}
-      {#if game.garden.healMachine}
-        {@const spot = place(healCol, healRow)}
+      {#if healCell}
+        {@const spot = place(healCell.col, healCell.row)}
         {@const charges = healCharges}
         <button
           type="button"
           class="heal-machine"
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
-          style:z-index={healCol + healRow + depthSpan + 1}
+          style:z-index={healCell.col + healCell.row + depthSpan + 1}
           aria-label={`Máquina de cura: ${charges} carga${charges === 1 ? '' : 's'}`}
           onclick={onHealMachine}
         >
@@ -1784,17 +1820,31 @@
           <img src={giftIconSrc(gift.itemKey)} alt="" />
         </button>
       {/each}
+      {#if building}
+        <svg class="build-grid" width={stageW} height={stageH} style:z-index={depthSpan * 5} aria-hidden="true">
+          {#each playCells as cell (`${cell.col}-${cell.row}`)}
+            {@const at = place(cell.col, cell.row)}
+            {@const key = worldKey(cell.col, cell.row)}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <polygon
+              class:busy={blockedCells.has(key)}
+              class:ok={buildValid.has(key)}
+              class:picked={buildPicked.has(key)}
+              points="{at.x},{at.y} {at.x + halfW},{at.y + halfH} {at.x},{at.y + tileH} {at.x - halfW},{at.y + halfH}"
+              onclick={() => void onBuildCell(cell.col, cell.row)}
+            />
+          {/each}
+        </svg>
+      {/if}
       {#if showGrid}
         <svg class="grid" width={stageW} height={stageH} style:z-index={depthSpan * 4} aria-hidden="true">
           {#each Array.from({ length: playCols * playRows }, (_, i) => ({ col: playCol0 + (i % playCols), row: playRow0 + Math.floor(i / playCols) })) as cell (`${cell.col}-${cell.row}`)}
             {@const at = place(cell.col, cell.row)}
             {@const kind = isPlotCell(cell.col, cell.row)
               ? 'horta'
-              : isTreeCell(cell.col, cell.row)
-                ? 'arvore'
-                : isBenchCell(cell.col, cell.row) || isHealCell(cell.col, cell.row)
-                  ? 'maquina'
-                  : null}
+              : blockedCells.has(worldKey(cell.col, cell.row))
+                ? 'maquina'
+                : null}
             <polygon
               class={kind ?? ''}
               points="{at.x},{at.y} {at.x + halfW},{at.y + halfH} {at.x},{at.y + tileH} {at.x - halfW},{at.y + halfH}"
@@ -1930,6 +1980,23 @@
       {/if}
       <button
         type="button"
+        class="zoom-btn build-btn"
+        aria-pressed={building}
+        aria-label={building ? 'Sair do Construir' : `Construir${buildWaiting > 0 ? `: ${buildWaiting} para colocar` : ''}`}
+        title="Construir"
+        onclick={() => setBuilding(!building)}
+      >
+        <!-- Martelo em pixels (grade 12×12). -->
+        <svg viewBox="0 0 12 12" width={snapIconSize(14)} height={snapIconSize(14)} aria-hidden="true" shape-rendering="crispEdges">
+          <rect x="2" y="1" width="7" height="3" /><rect x="8" y="2" width="2" height="1" />
+          <rect x="5" y="4" width="2" height="7" />
+        </svg>
+        {#if buildWaiting > 0 && !building}
+          <span class="build-badge" aria-hidden="true">{buildWaiting}</span>
+        {/if}
+      </button>
+      <button
+        type="button"
         class="zoom-btn"
         aria-pressed={showLabels}
         aria-label={showLabels ? 'Ocultar nomes e níveis' : 'Mostrar nomes e níveis'}
@@ -1984,6 +2051,28 @@
         <svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 5h10v2H1z" /></svg>
       </button>
     </div>
+
+    {#if building}
+      <BuildTray
+        {layout}
+        pick={buildPick}
+        pending={buildPending}
+        message={buildMessage}
+        onPick={(piece) => {
+          buildMessage = ''
+          buildPick = { kind: 'new', piece }
+        }}
+        onMove={() => {
+          if (buildPick?.kind === 'selected') buildPick = { ...buildPick, kind: 'move' }
+        }}
+        onStore={() => void storePicked()}
+        onCancel={() => {
+          buildMessage = ''
+          buildPick = null
+        }}
+        onClose={() => setBuilding(false)}
+      />
+    {/if}
   </div>
 
   {#if benchOpen}
@@ -2896,4 +2985,59 @@
     font-weight: 700;
   }
 
+
+  /* Modo Construir: a grade por cima de tudo, e cada casa pega o toque. */
+  .build-grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+  }
+
+  .build-grid polygon {
+    fill: #ffffff10;
+    stroke: #ffffff70;
+    stroke-width: 1;
+    cursor: pointer;
+    pointer-events: all;
+  }
+
+  .build-grid polygon.busy {
+    fill: #00000030;
+  }
+
+  .build-grid polygon.ok {
+    fill: #70e05060;
+    stroke: #b0ff90;
+  }
+
+  .build-grid polygon.picked {
+    fill: #f8d03070;
+    stroke: #f8d030;
+  }
+
+  .build-btn {
+    position: relative;
+  }
+
+  .build-btn[aria-pressed='true'] svg {
+    fill: var(--accent);
+  }
+
+  .build-badge {
+    position: absolute;
+    top: 4px;
+    right: 2px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    box-sizing: border-box;
+    border-radius: 7px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+  }
 </style>

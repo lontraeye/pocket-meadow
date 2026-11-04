@@ -218,6 +218,13 @@
       "when": 1793810000000,
       "tag": "0030_hp_heal",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1793820000000,
+      "tag": "0031_garden_placements",
+      "breakpoints": true
     }
   ]
 }

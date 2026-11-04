@@ -37,6 +37,7 @@ import type { AbilitySlot } from '../game/traits.js'
 import { devToolsEnabled } from './dev.js'
 import { toEncounterView } from './encounterView.js'
 import { currentPlaceOf } from './places.js'
+import { layoutView } from './build.js'
 import { view as petView } from './garden.js'
 import { missionsView } from '../db/missions.js'
 import { treesView } from '../db/apricorn.js'
@@ -239,6 +240,9 @@ function readState(userId: number, now: number) {
   }
   for (const list of evolutionsBySpecies.values()) list.sort((a, b) => a.toSpeciesId - b.toSpeciesId)
 
+  // As views criam as estruturas abertas; o layout vem depois delas.
+  const trees = treesView(userId, trainer.level, now)
+  const bench = benchView(userId, trainer.level, now)
   return {
     now,
     devTools: devToolsEnabled(),
@@ -397,9 +401,11 @@ function readState(userId: number, now: number) {
       fullAt: petConfig.fullAt,
       fightMinHunger: petConfig.fightMinHunger,
       berryFill: petConfig.berryFill,
-      trees: treesView(userId, trainer.level, now),
-      bench: benchView(userId, trainer.level, now),
+      trees,
+      bench,
       healMachine: healMachineView(userId, now),
+      // Construção (PROGRESSAO.md 4.3): onde está cada peça e o que está guardado.
+      layout: layoutView(userId, trainer.level),
     },
     daycare,
     plots: db

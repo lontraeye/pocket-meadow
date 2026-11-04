@@ -1,3 +1,4 @@
+import type { PieceKey, StructurePiece } from '@garden/layout'
 import type { BattleSetup } from '@sim'
 import { busyFromLastPress } from './busy'
 import { markOffline, markOnline } from './connection.svelte'
@@ -341,6 +342,8 @@ export type TreeView = {
   color: 'red' | 'blue' | 'yellow'
   itemKey: string
   unlocked: boolean
+  /** No jardim (false = guardada no inventário de construção, parada). */
+  placed: boolean
   /** O que abre a árvore: nível de treinador ou nível da bancada. */
   unlock: { trainerLevel: number } | { benchLevel: number }
   ready: number
@@ -375,6 +378,8 @@ export type BenchRecipe = {
 /** Bancada de bolas (5.23): as bolas do lote ficam prontas uma a uma (`startedAt + k × unitMs`). */
 export type BenchView = {
   unlocked: boolean
+  /** No jardim (false = guardada no inventário de construção). */
+  placed: boolean
   unlockLevel: number
   level: number
   maxLevel: number
@@ -403,6 +408,18 @@ export type HealMachineView = {
   max: number
   nextChargeAt: number | null
   unitMs: number
+  /** No jardim (false = guardada, parada). */
+  placed: boolean
+}
+
+/** Construção do jardim (PROGRESSAO.md 4.3): peças colocadas (casas da grade jogável) e guardadas. */
+export type GardenLayout = {
+  cols: number
+  rows: number
+  pieces: { id: number; piece: PieceKey; slot: number; col: number; row: number }[]
+  stored: StructurePiece[]
+  plotLimit: number
+  plotsPlaced: number
 }
 
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
@@ -556,6 +573,7 @@ export type GameState = {
     bench: BenchView
     /** Máquina de cura do jardim (PROGRESSAO.md, item 4). */
     healMachine: HealMachineView
+    layout: GardenLayout
   }
   missions: MissionsView
   daycare: DaycareState
@@ -799,7 +817,23 @@ export function errorText(error: ApiError): string {
     case 'invalid_nickname':
       return 'O apelido precisa ter de 1 a 12 caracteres, sem quebra de linha.'
     case 'plot_locked':
-      return 'Esse canteiro ainda está bloqueado.'
+      return 'Esse canteiro não está no jardim.'
+    case 'not_placed':
+      return 'Essa peça está guardada. Coloque no jardim pelo Construir.'
+    case 'out_of_bounds':
+      return 'Não cabe aí: passa da borda do jardim.'
+    case 'occupied':
+      return 'Essa casa já está ocupada.'
+    case 'plot_limit':
+      return 'Já tem o máximo de canteiros no jardim.'
+    case 'plot_not_empty':
+      return 'Colha ou limpe o canteiro antes de guardar.'
+    case 'piece_locked':
+      return 'Essa peça ainda não abriu.'
+    case 'already_placed':
+      return 'Essa peça já está no jardim.'
+    case 'piece_not_found':
+      return 'Essa peça não está mais no jardim.'
     case 'operating':
       return 'Esse Pokémon está trabalhando (bancada ou daycare). Tire-o de lá primeiro.'
     case 'not_caretaker':

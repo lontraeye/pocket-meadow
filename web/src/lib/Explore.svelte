@@ -1208,7 +1208,7 @@
               </button>
             {/each}
           </div>
-          {#if roster.some((mon) => mon.hpRatio < 1)}
+          {#if roster.some((mon) => mon.hpRatio < 1) && game.garden.healMachine.placed}
             <button
               type="button"
               class="btn feed-team"

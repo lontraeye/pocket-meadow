@@ -136,6 +136,8 @@ export const trainers = sqliteTable('trainers', {
   weatherSeed: integer('weather_seed').notNull().default(0),
   /** Onde o treinador está na jornada (JORNADA.md, seção 11): slug do lugar. */
   currentPlace: text('current_place').notNull().default('new-bark'),
+  /** Quando o jardim ganhou as peças colocadas (construção, PROGRESSAO 4.3); null = ainda não. */
+  gardenLayoutAt: integer('garden_layout_at'),
   updatedAt: integer('updated_at').notNull(),
 })
 
@@ -376,6 +378,31 @@ export const gardenStructures = sqliteTable(
     upgradeEndsAt: integer('upgrade_ends_at'),
   },
   (table) => [primaryKey({ columns: [table.userId, table.key] })],
+)
+
+/**
+ * Peças colocadas no jardim (construção, PROGRESSAO.md 4.3): estruturas (uma de
+ * cada por enquanto, a linha de `garden_structures` guarda o estado) e
+ * canteiros (`slot` = `berry_plots.plot_index`; 0 nas estruturas). Sem linha aqui = guardada no
+ * inventário de construção. `col`/`row` na grade jogável (0..11), a âncora.
+ */
+export const gardenPlacements = sqliteTable(
+  'garden_placements',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    piece: text('piece').notNull(),
+    slot: integer('slot').notNull().default(0),
+    col: integer('col').notNull(),
+    row: integer('row').notNull(),
+    placedAt: integer('placed_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('ux_garden_placements_cell').on(table.userId, table.col, table.row),
+    uniqueIndex('ux_garden_placements_piece').on(table.userId, table.piece, table.slot),
+  ],
 )
 
 /**

@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm'
 import { healConfig } from '../config/heal.js'
 import { clampRatio, nextHealChargeAt, settleHealCharges } from '../game/heal.js'
 import { getDb } from './client.js'
+import { autoPlace, isPlaced } from './gardenLayout.js'
 import { gardenStructures, pokemon } from './schema.js'
 
 export const HEAL_MACHINE_KEY = 'heal_machine' as const
@@ -13,6 +14,8 @@ export type HealMachineView = {
   nextChargeAt: number | null
   /** Quanto leva cada carga (para a barrinha no jardim). */
   unitMs: number
+  /** No jardim (false = guardada, parada). */
+  placed: boolean
 }
 
 type MachineRow = { progress: number; since: number }
@@ -31,17 +34,21 @@ export function ensureHealMachine(userId: number, now: number): MachineRow {
   db.insert(gardenStructures)
     .values({ userId, key: HEAL_MACHINE_KEY, level: 1, ...row })
     .run()
+  autoPlace(userId, HEAL_MACHINE_KEY, now)
   return row
 }
 
 export function healMachineView(userId: number, now: number): HealMachineView {
   const row = ensureHealMachine(userId, now)
-  const progress = settleHealCharges(row.progress, row.since, now)
+  const placed = isPlaced(userId, HEAL_MACHINE_KEY)
+  // Guardada: as cargas não voltam (o `progress` foi liquidado ao guardar).
+  const progress = placed ? settleHealCharges(row.progress, row.since, now) : row.progress
   return {
     charges: Math.floor(progress),
     max: healConfig.machine.maxCharges,
-    nextChargeAt: nextHealChargeAt(progress, now),
+    nextChargeAt: placed ? nextHealChargeAt(progress, now) : null,
     unitMs: healConfig.machine.rechargeMs,
+    placed,
   }
 }
 
@@ -51,9 +58,10 @@ export function healMachineView(userId: number, now: number): HealMachineView {
 export function useHealMachine(
   userId: number,
   now: number,
-): { ok: true; healed: number; view: HealMachineView } | { ok: false; error: 'no_charge' | 'team_healthy' } {
+): { ok: true; healed: number; view: HealMachineView } | { ok: false; error: 'no_charge' | 'team_healthy' | 'not_placed' } {
   const db = getDb()
   const row = ensureHealMachine(userId, now)
+  if (!isPlaced(userId, HEAL_MACHINE_KEY)) return { ok: false, error: 'not_placed' }
   const settled = settleHealCharges(row.progress, row.since, now)
   if (Math.floor(settled) < 1) return { ok: false, error: 'no_charge' }
 
@@ -79,4 +87,14 @@ export function useHealMachine(
   }
 
   return { ok: true, healed: members.length, view: healMachineView(userId, now) }
+}
+
+/** Ao guardar: liquida as cargas que voltaram até agora e para o relógio. */
+export function freezeHealMachine(userId: number, now: number): void {
+  const row = ensureHealMachine(userId, now)
+  getDb()
+    .update(gardenStructures)
+    .set({ progress: settleHealCharges(row.progress, row.since, now), since: now })
+    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, HEAL_MACHINE_KEY)))
+    .run()
 }
