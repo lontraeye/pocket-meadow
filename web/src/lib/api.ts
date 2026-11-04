@@ -466,6 +466,17 @@ export type GardenLayout = {
   habitatKinds: { kind: HabitatKind; unlockAt: UnlockAt | null }[]
 }
 
+/** Pokémon selvagem visitando um habitat (5.22). */
+export type GardenVisitor = {
+  id: number
+  habitatId: number
+  speciesId: number
+  displayName: string
+  level: number
+  isShiny: boolean
+  leavesAt: number
+}
+
 /** O marco (líder vencido) que abre algo no jardim. */
 export type UnlockAt = { milestone: string; name: string }
 
@@ -615,6 +626,8 @@ export type GameState = {
     fightMinHunger: number
     /** Quanto uma berry enche a fome. */
     berryFill: number
+    /** Visitantes dos habitats (5.22): um por habitat pronto; tocar abre o encontro. */
+    visitors: GardenVisitor[]
     /** Descanso: do HP 0 ao cheio no jardim, em ms. */
     restFullMs: number
     /** Cada estrutura é uma peça (PROGRESSAO.md 4.3, passo 2): listas, com o id de cada uma. */
