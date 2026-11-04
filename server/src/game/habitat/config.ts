@@ -64,8 +64,37 @@ export const OBJECTS = {
   gerador: { metal: 1 },
   /** A cerca separa habitats: a casa com cerca não entra em zona nenhuma. */
   cerca: {},
+  /** Boia decorativa: o primeiro móvel de água. */
+  boia: { agua: 1 },
 } as const satisfies Record<string, Makeup>
 export type ObjectKey = keyof typeof OBJECTS
+
+/**
+ * Em que chão cada coisa pode ficar (pedido em 2026-11-04): a maioria só em
+ * terra; alguns móveis só na água (a boia). Vale para os móveis e para as
+ * peças do Construir (canteiro, árvores, bancada, máquina: terra).
+ */
+export type Ground = 'land' | 'water' | 'any'
+export const WATER_FLOORS: readonly string[] = ['agua', 'agua-funda']
+
+export const OBJECT_GROUND: Record<ObjectKey, Ground> = {
+  rocha: 'land',
+  arvore: 'land',
+  'arvore-escura': 'land',
+  tronco: 'land',
+  cogumelo: 'land',
+  cristal: 'land',
+  gerador: 'land',
+  cerca: 'land',
+  boia: 'water',
+}
+
+/** O chão (null = gramado) aceita algo que pede `ground`. */
+export function groundAllows(ground: Ground, floor: string | null): boolean {
+  if (ground === 'any') return true
+  const water = floor !== null && WATER_FLOORS.includes(floor)
+  return ground === 'water' ? water : !water
+}
 
 /** Uma condição da receita: a soma das frações desses materiais ≥ `min`. */
 export type RecipeRule = { materials: readonly Material[]; min: number }
@@ -80,6 +109,13 @@ export type BiomeRecipe = {
 export const habitatConfig = {
   /** Peso de um objeto em relação a um chão. */
   objectWeight: 3,
+  /**
+   * Habitat com área escolhida (area.ts): o tipo pede pontos do material dele
+   * nesta fração da área (metade: 8 casas pedem 4 pontos); o chão do material
+   * vale 1 e cada móvel do material vale mais `objectPoints`.
+   */
+  needShare: 0.5,
+  objectPoints: 1,
   /** Pisos e objetos que não entram em zona (separadores). */
   neutralFloors: ['caminho'] as readonly string[],
   separatorObjects: ['cerca'] as readonly string[],

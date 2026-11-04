@@ -1,16 +1,17 @@
-// Habitats no banco (PLANNING 5.22, decidido em 2026-11-04): o chão pintado
-// (garden_tiles), as zonas que o motor reconhece e a casa de cada Pokémon
-// (pokemon.home_col/home_row). Habitat é bônus: sem casa, o Pokémon segue no
-// jardim como sempre. Chamar dentro de immediate().
+// Habitats no banco (PLANNING 5.22, redesenhado em 2026-11-04): o chão pintado
+// (garden_tiles), os habitats com área e tipo escolhidos (habitats e
+// habitat_tiles, uma casa por habitat) e onde cada Pokémon mora
+// (pokemon.habitat_id). Habitat é bônus: sem casa, o Pokémon segue no jardim.
+// Chamar dentro de immediate().
 
-import { and, eq, isNotNull } from 'drizzle-orm'
-import { type GardenCell, type Zone, biomeBonus, canLiveIn, recognizeHabitats, zoneAt } from '../game/habitat/index.js'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { type CellLook, type HabitatCheck, type HabitatKind, canLiveInKind, checkHabitat, kindBonus } from '../game/habitat/index.js'
 import { getDb } from './client.js'
 import { loadPieces } from './gardenLayout.js'
-import { gardenTiles, pokemon, species } from './schema.js'
+import { gardenTiles, habitatTiles, habitats, pokemon, species } from './schema.js'
 
 /** O chão pintado; as casas com canteiro ficam de fora (o canteiro tem chão próprio). */
-export function loadFloor(userId: number): GardenCell[] {
+export function loadFloor(userId: number): { col: number; row: number; floor: string }[] {
   const plots = new Set(
     loadPieces(userId)
       .filter((row) => row.piece === 'berry_plot')
@@ -22,73 +23,92 @@ export function loadFloor(userId: number): GardenCell[] {
     .where(eq(gardenTiles.userId, userId))
     .all()
     .filter((tile) => !plots.has(`${tile.col},${tile.row}`))
-    .map((tile) => ({ ...tile, object: null }))
 }
 
-export function loadZones(userId: number): Zone[] {
-  return recognizeHabitats(loadFloor(userId))
+/** O que tem em cada casa, para o motor (móveis entram com os decorativos). */
+export function floorLook(userId: number): CellLook {
+  const byCell = new Map(loadFloor(userId).map((tile) => [`${tile.col},${tile.row}`, tile.floor]))
+  return (col, row) => {
+    const floor = byCell.get(`${col},${row}`) ?? null
+    return floor === null ? null : { floor, object: null }
+  }
 }
 
-type Resident = { id: number; homeCol: number; homeRow: number; types: string[] }
+export type HabitatRow = { id: number; kind: HabitatKind; tiles: { col: number; row: number }[] }
+
+export function loadHabitats(userId: number): HabitatRow[] {
+  const db = getDb()
+  const rows = db
+    .select({ id: habitats.id, kind: habitats.kind })
+    .from(habitats)
+    .where(eq(habitats.userId, userId))
+    .orderBy(habitats.id)
+    .all()
+  const tiles = db
+    .select({ habitatId: habitatTiles.habitatId, col: habitatTiles.col, row: habitatTiles.row })
+    .from(habitatTiles)
+    .where(eq(habitatTiles.userId, userId))
+    .orderBy(habitatTiles.row, habitatTiles.col)
+    .all()
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind as HabitatKind,
+    tiles: tiles.filter((tile) => tile.habitatId === row.id).map(({ col, row: r }) => ({ col, row: r })),
+  }))
+}
+
+type Resident = { id: number; habitatId: number; types: string[] }
 
 function residents(userId: number): Resident[] {
   return getDb()
-    .select({
-      id: pokemon.id,
-      homeCol: pokemon.homeCol,
-      homeRow: pokemon.homeRow,
-      type1: species.type1,
-      type2: species.type2,
-    })
+    .select({ id: pokemon.id, habitatId: pokemon.habitatId, type1: species.type1, type2: species.type2 })
     .from(pokemon)
     .innerJoin(species, eq(species.id, pokemon.speciesId))
-    .where(and(eq(pokemon.userId, userId), isNotNull(pokemon.homeCol), isNotNull(pokemon.homeRow)))
+    .where(and(eq(pokemon.userId, userId), isNotNull(pokemon.habitatId)))
     .orderBy(pokemon.id)
     .all()
-    .map((row) => ({
-      id: row.id,
-      homeCol: row.homeCol!,
-      homeRow: row.homeRow!,
-      types: row.type2 ? [row.type1, row.type2] : [row.type1],
-    }))
+    .map((row) => ({ id: row.id, habitatId: row.habitatId!, types: row.type2 ? [row.type1, row.type2] : [row.type1] }))
+}
+
+/** Cada habitat com a conta do motor (pontos, pronto, vagas). */
+export function checkedHabitats(userId: number): (HabitatRow & { check: HabitatCheck })[] {
+  const look = floorLook(userId)
+  return loadHabitats(userId).map((row) => ({ ...row, check: checkHabitat(row.kind, row.tiles, look) }))
 }
 
 /**
- * Tira a casa de quem não cabe mais (a zona sumiu, virou outro bioma ou ficou
- * com menos vagas). Fica quem chegou primeiro (menor id). Devolve os ids.
+ * Tira a casa de quem não cabe mais: o tipo não aceita, o habitat não está
+ * pronto ou ficou com menos vagas. Fica quem chegou primeiro (menor id).
  */
-export function evictHomeless(userId: number, zones: readonly Zone[] = loadZones(userId)): number[] {
-  const used = new Map<Zone, number>()
+export function evictHomeless(userId: number): number[] {
+  const byId = new Map(checkedHabitats(userId).map((row) => [row.id, row]))
+  const used = new Map<number, number>()
   const out: number[] = []
   for (const mon of residents(userId)) {
-    const zone = zoneAt(zones, mon.homeCol, mon.homeRow)
-    const taken = zone ? (used.get(zone) ?? 0) : 0
-    if (!zone || !zone.biome || !canLiveIn(mon.types, zone.biome) || taken >= zone.capacity) {
+    const home = byId.get(mon.habitatId)
+    const taken = used.get(mon.habitatId) ?? 0
+    if (!home || !canLiveInKind(mon.types, home.kind) || taken >= home.check.capacity) {
       out.push(mon.id)
       continue
     }
-    used.set(zone, taken + 1)
+    used.set(mon.habitatId, taken + 1)
   }
-  if (out.length > 0) {
-    for (const id of out) {
-      getDb().update(pokemon).set({ homeCol: null, homeRow: null }).where(eq(pokemon.id, id)).run()
-    }
-  }
+  if (out.length > 0) getDb().update(pokemon).set({ habitatId: null }).where(inArray(pokemon.id, out)).run()
   return out
 }
 
-/** Quem mora no bioma do próprio tipo (ganha o bônus no jardim). */
-export function habitatBonusIds(userId: number, zones: readonly Zone[] = loadZones(userId)): Set<number> {
+/** Quem mora num habitat pronto do próprio tipo (ganha o bônus no jardim). */
+export function habitatBonusIds(userId: number): Set<number> {
+  const byId = new Map(checkedHabitats(userId).map((row) => [row.id, row]))
   const ids = new Set<number>()
   for (const mon of residents(userId)) {
-    if (biomeBonus(mon.types, zoneAt(zones, mon.homeCol, mon.homeRow)?.biome ?? null)) ids.add(mon.id)
+    const home = byId.get(mon.habitatId)
+    if (home && kindBonus(mon.types, home.kind, home.check.ready)) ids.add(mon.id)
   }
   return ids
 }
 
-/** Quantos moram na zona agora (sem contar `exceptId`). */
-export function residentsOf(userId: number, zone: Zone, exceptId?: number): number {
-  return residents(userId).filter(
-    (mon) => mon.id !== exceptId && zone.tiles.some((tile) => tile.col === mon.homeCol && tile.row === mon.homeRow),
-  ).length
+/** Quantos moram no habitat (sem contar `exceptId`). */
+export function residentsOf(userId: number, habitatId: number, exceptId?: number): number {
+  return residents(userId).filter((mon) => mon.habitatId === habitatId && mon.id !== exceptId).length
 }

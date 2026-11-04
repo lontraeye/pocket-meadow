@@ -1,4 +1,6 @@
-// Motor de reconhecimento dos habitats (PLANNING.md, seção 5.22). Puro: recebe
+// Reconhecimento automático por zonas (o primeiro desenho da 5.22). O jogo
+// passou a usar habitats com área e tipo escolhidos (area.ts); este fica para
+// o laboratório de tiles. Motor de reconhecimento dos habitats. Puro: recebe
 // as casas construídas do jardim e devolve as zonas, o bioma de cada uma e
 // quantos Pokémon cabem. O servidor roda ao salvar uma construção; a tela, ao
 // vivo enquanto o jogador constrói.

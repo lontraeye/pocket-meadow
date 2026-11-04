@@ -12,8 +12,9 @@ import { getDb, getSqlite, immediate } from '../db/client.js'
 import { migrateDatabase } from '../db/migrate.js'
 import { sessions } from '../db/schema.js'
 
-// Habitats no jardim (PLANNING 5.22, decidido em 2026-11-04): pintar o chão
-// sem custo, chãos abrindo por marco, casa no habitat do tipo e o bônus.
+// Habitats no jardim (PLANNING 5.22, redesenhado em 2026-11-04): chão pintado
+// sem custo, habitat com área e tipo escolhidos (pontos = metade da área), casa
+// no habitat pronto do tipo, bônus, e a água que não aceita peça.
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pocket-meadow-habitat-'))
 process.env.DATABASE_PATH = path.join(dir, 'meadow.sqlite')
@@ -31,15 +32,15 @@ after(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-type State = {
-  pokemon: { id: number; home: { col: number; row: number } | null }[]
-  garden: {
-    layout: {
-      floor: { col: number; row: number; floor: string }[]
-      floors: { floor: string; unlockAt: { milestone: string } | null }[]
-    }
-  }
+type Habitat = { id: number; kind: string; tiles: { col: number; row: number }[] }
+type Layout = {
+  floor: { col: number; row: number; floor: string }[]
+  floors: { floor: string; unlockAt: { milestone: string } | null }[]
+  habitats: Habitat[]
+  habitatKinds: { kind: string; unlockAt: { milestone: string } | null }[]
+  pieces: { id: number; piece: string; col: number; row: number }[]
 }
+type State = { pokemon: { id: number; habitatId: number | null }[]; garden: { layout: Layout } }
 
 function player(username: string): { cookie: string; userId: number; starterId: number } {
   const now = Date.now()
@@ -56,11 +57,11 @@ function player(username: string): { cookie: string; userId: number; starterId: 
   return { cookie: `${authConfig.cookieName}=${token}`, userId: created.userId, starterId: starter.id }
 }
 
-/** Outro Pokémon igual ao inicial (fora do time), para encher as vagas. */
+/** Outro Pokémon igual ao inicial (fora do time e sem casa), para encher as vagas. */
 function copyOf(id: number): number {
   const columns = (getSqlite().prepare('pragma table_info(pokemon)').all() as { name: string }[])
     .map((column) => column.name)
-    .filter((name) => !['id', 'team_slot', 'home_col', 'home_row'].includes(name))
+    .filter((name) => !['id', 'team_slot', 'habitat_id'].includes(name))
     .join(', ')
   const out = getSqlite().prepare(`insert into pokemon (${columns}) select ${columns} from pokemon where id = ?`).run(id)
   return Number(out.lastInsertRowid)
@@ -70,76 +71,107 @@ const post = (cookie: string, url: string, body: unknown = {}) =>
   app.request(url, { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) }, env)
 const state = async (cookie: string) => (await (await app.request('/state', { headers: { cookie } }, env)).json()) as State
 const errorOf = async (response: Response) => ((await response.json()) as { error: string }).error
+const layoutOf = async (response: Response) => ((await response.json()) as { layout: Layout }).layout
 const clear = (userId: number, ...keys: string[]) => {
   for (const key of keys) {
     getSqlite().prepare('insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, ?)').run(userId, key, Date.now())
   }
 }
-/** Uma fileira de casas com o mesmo chão. */
-const strip = (row: number, from: number, to: number, floor: string | null) =>
-  Array.from({ length: to - from + 1 }, (_, index) => ({ col: from + index, row, floor }))
+const cells = (row: number, from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, index) => ({ col: from + index, row }))
+const paint = (row: number, from: number, to: number, floor: string | null) => cells(row, from, to).map((cell) => ({ ...cell, floor }))
 
 test('chão: pinta sem custo, abre por marco, volta ao gramado e ignora o canteiro', async () => {
   const p = player('habitat-chao')
-  const floors = (await state(p.cookie)).garden.layout.floors
+  const layout = (await state(p.cookie)).garden.layout
   assert.deepEqual(
-    floors.filter((row) => row.unlockAt === null).map((row) => row.floor),
+    layout.floors.filter((row) => row.unlockAt === null).map((row) => row.floor),
     ['grama-alta', 'flores'],
   )
-  assert.equal(floors.find((row) => row.floor === 'areia')?.unlockAt?.milestone, 'azalea')
-
-  assert.equal((await post(p.cookie, '/build/floor', { cells: strip(0, 0, 5, 'flores') })).status, 200)
-  assert.equal(await errorOf(await post(p.cookie, '/build/floor', { cells: strip(1, 0, 0, 'areia') })), 'floor_locked')
+  assert.deepEqual(
+    layout.habitatKinds.map((row) => [row.kind, row.unlockAt?.milestone ?? null]),
+    [['pradaria', null], ['rochedo', 'azalea'], ['lago', 'ecruteak'], ['basico', null]],
+  )
+  assert.equal((await post(p.cookie, '/build/floor', { cells: paint(0, 0, 5, 'flores') })).status, 200)
+  assert.equal(await errorOf(await post(p.cookie, '/build/floor', { cells: paint(1, 0, 0, 'areia') })), 'floor_locked')
   clear(p.userId, 'violet', 'azalea')
-  assert.equal((await post(p.cookie, '/build/floor', { cells: strip(1, 0, 0, 'areia') })).status, 200)
+  assert.equal((await post(p.cookie, '/build/floor', { cells: paint(1, 0, 0, 'areia') })).status, 200)
 
-  // Canteiro tem chão próprio: a casa pintada embaixo dele não aparece.
   await post(p.cookie, '/build/floor', { cells: [{ col: 1, row: 9, floor: 'flores' }] })
   await post(p.cookie, '/build/floor', { cells: [{ col: 0, row: 0, floor: null }] })
   const floor = (await state(p.cookie)).garden.layout.floor
   assert.equal(floor.length, 6)
-  assert.ok(!floor.some((tile) => tile.col === 1 && tile.row === 9))
-  assert.ok(!floor.some((tile) => tile.col === 0 && tile.row === 0))
-
-  assert.equal(await errorOf(await post(p.cookie, '/build/floor', { cells: strip(0, 11, 12, 'flores') })), 'out_of_bounds')
-  assert.equal(await errorOf(await post(p.cookie, '/build/floor', { cells: [{ col: 0, row: 0, floor: 'lava' }] })), 'invalid_body')
+  assert.ok(!floor.some((tile) => tile.col === 1 && tile.row === 9), 'canteiro tem chão próprio')
+  assert.equal(await errorOf(await post(p.cookie, '/build/floor', { cells: paint(0, 11, 12, 'flores') })), 'out_of_bounds')
 })
 
-test('casa: só no habitat do tipo, até as vagas; quem perde o habitat sai da casa', async () => {
+test('habitat: área sem buraco, sem invadir outro e tipo aberto pelo marco', async () => {
+  const p = player('habitat-area')
+  const created = await post(p.cookie, '/build/habitat', { kind: 'pradaria', cells: cells(0, 0, 5) })
+  assert.equal(created.status, 200)
+  const first = (await layoutOf(created)).habitats[0]!
+  assert.deepEqual([first.kind, first.tiles.length], ['pradaria', 6])
+
+  // Encostado no primeiro é outro habitat (a fronteira é a área de cada um).
+  assert.equal((await post(p.cookie, '/build/habitat', { kind: 'basico', cells: cells(1, 0, 5) })).status, 200)
+  assert.equal(await errorOf(await post(p.cookie, '/build/habitat', { kind: 'basico', cells: cells(0, 5, 7) })), 'habitat_overlap')
+  assert.equal(
+    await errorOf(await post(p.cookie, '/build/habitat', { kind: 'basico', cells: [{ col: 9, row: 0 }, { col: 11, row: 0 }] })),
+    'habitat_not_connected',
+  )
+  assert.equal(await errorOf(await post(p.cookie, '/build/habitat', { kind: 'lago', cells: cells(3, 0, 5) })), 'habitat_locked')
+
+  // Editar a área e o tipo; excluir.
+  const edited = await post(p.cookie, `/build/habitat/${first.id}`, { cells: cells(0, 0, 7) })
+  assert.equal((await layoutOf(edited)).habitats.find((row) => row.id === first.id)?.tiles.length, 8)
+  const deleted = await post(p.cookie, `/build/habitat/${first.id}/delete`)
+  assert.equal((await layoutOf(deleted)).habitats.length, 1)
+})
+
+test('casa: só no habitat pronto do tipo, até as vagas; quem não cabe mais sai', async () => {
   const p = player('habitat-casa')
-  const home = (id: number, cell: { col: number; row: number } | null) => post(p.cookie, `/garden/pets/${id}/home`, { home: cell })
+  const home = (id: number, habitatId: number | null) => post(p.cookie, `/garden/pets/${id}/home`, { habitatId })
+  const pradaria = (await layoutOf(await post(p.cookie, '/build/habitat', { kind: 'pradaria', cells: cells(0, 0, 5) }))).habitats[0]!
 
-  // Zona pequena não é habitat.
-  await post(p.cookie, '/build/floor', { cells: strip(0, 0, 4, 'flores') })
-  assert.equal(await errorOf(await home(p.starterId, { col: 2, row: 0 })), 'not_a_habitat')
-
-  // 6 casas de flores: Pradaria com 2 vagas; a casa guardada é a âncora da zona.
-  await post(p.cookie, '/build/floor', { cells: strip(0, 5, 5, 'flores') })
-  assert.equal((await home(p.starterId, { col: 3, row: 0 })).status, 200)
-  assert.deepEqual((await state(p.cookie)).pokemon.find((mon) => mon.id === p.starterId)?.home, { col: 0, row: 0 })
-  assert.ok(habitatBonusIds(p.userId).has(p.starterId), 'Chikorita na Pradaria ganha o bônus')
+  // 6 casas pedem 3 pontos de planta: sem chão, não está pronto.
+  assert.equal(await errorOf(await home(p.starterId, pradaria.id)), 'habitat_not_ready')
+  await post(p.cookie, '/build/floor', { cells: paint(0, 0, 2, 'flores') })
+  assert.equal((await home(p.starterId, pradaria.id)).status, 200)
+  assert.equal((await state(p.cookie)).pokemon.find((mon) => mon.id === p.starterId)?.habitatId, pradaria.id)
+  assert.ok(habitatBonusIds(p.userId).has(p.starterId), 'Chikorita na Pradaria pronta ganha o bônus')
 
   const second = copyOf(p.starterId)
   const third = copyOf(p.starterId)
-  assert.equal((await home(second, { col: 5, row: 0 })).status, 200)
-  assert.equal(await errorOf(await home(third, { col: 1, row: 0 })), 'habitat_full')
+  assert.equal((await home(second, pradaria.id)).status, 200)
+  assert.equal(await errorOf(await home(third, pradaria.id)), 'habitat_full')
 
   // Lago não aceita Planta.
   clear(p.userId, 'violet', 'azalea', 'goldenrod', 'ecruteak')
-  await post(p.cookie, '/build/floor', { cells: strip(3, 0, 5, 'agua') })
-  assert.equal(await errorOf(await home(third, { col: 0, row: 3 })), 'wrong_habitat')
+  await post(p.cookie, '/build/floor', { cells: paint(3, 0, 5, 'agua') })
+  const lago = (await layoutOf(await post(p.cookie, '/build/habitat', { kind: 'lago', cells: cells(3, 0, 5) }))).habitats[1]!
+  assert.equal(await errorOf(await home(third, lago.id)), 'wrong_habitat')
 
-  // Apagar metade da Pradaria: vira decoração e os dois saem da casa.
-  const erased = await post(p.cookie, '/build/floor', { cells: strip(0, 3, 5, null) })
-  const body = (await erased.json()) as { evicted: number[] }
-  assert.deepEqual(body.evicted.sort(), [p.starterId, second].sort())
-  const after = await state(p.cookie)
-  assert.equal(after.pokemon.find((mon) => mon.id === p.starterId)?.home, null)
+  // Apagar uma flor: fica com 2 de 3 pontos, deixa de estar pronto e os dois saem.
+  const erased = await post(p.cookie, '/build/floor', { cells: paint(0, 2, 2, null) })
+  assert.deepEqual(((await erased.json()) as { evicted: number[] }).evicted.sort(), [p.starterId, second].sort())
   assert.equal(habitatBonusIds(p.userId).size, 0)
 
-  // Sair da casa por conta própria.
-  await post(p.cookie, '/build/floor', { cells: strip(0, 3, 5, 'flores') })
-  await home(p.starterId, { col: 0, row: 0 })
-  assert.equal((await home(p.starterId, null)).status, 200)
-  assert.equal((await state(p.cookie)).pokemon.find((mon) => mon.id === p.starterId)?.home, null)
+  // Trocar o tipo para Lago também tira quem não é de Água.
+  await post(p.cookie, '/build/floor', { cells: paint(0, 2, 2, 'flores') })
+  await home(p.starterId, pradaria.id)
+  const changed = await post(p.cookie, `/build/habitat/${pradaria.id}`, { kind: 'lago' })
+  assert.deepEqual(((await changed.json()) as { evicted: number[] }).evicted, [p.starterId])
+})
+
+test('água: peça não fica na água e água não vai embaixo de peça', async () => {
+  const p = player('habitat-agua')
+  clear(p.userId, 'violet', 'azalea', 'goldenrod', 'ecruteak')
+  const plot = (await state(p.cookie)).garden.layout.pieces.find((row) => row.piece === 'berry_plot')!
+  assert.equal(
+    await errorOf(await post(p.cookie, '/build/floor', { cells: [{ col: plot.col, row: plot.row, floor: 'agua' }] })),
+    'piece_on_water',
+  )
+  await post(p.cookie, '/build/floor', { cells: [{ col: 5, row: 2, floor: 'agua' }] })
+  assert.equal(await errorOf(await post(p.cookie, `/build/${plot.id}/move`, { col: 5, row: 2 })), 'on_water')
+  assert.equal((await post(p.cookie, `/build/${plot.id}/move`, { col: 6, row: 2 })).status, 200)
 })

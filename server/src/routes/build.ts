@@ -9,17 +9,28 @@ import { insertPlacement, loadPieces, ownedStructures, type PlacedRow } from '..
 import { clearedMilestones, gardenUnlocksOf } from '../db/milestones.js'
 import { BUILD_RECIPES } from '../config/buildRecipes.js'
 import { floorUnlockAt, nextCapAt, nextPlotsAt, pieceUnlockAt, recipeUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
-import { evictHomeless, loadFloor } from '../db/habitat.js'
-import { PAINT_FLOORS, type PaintFloor, isPaintFloor } from '../game/habitat/index.js'
+import { evictHomeless, loadFloor, loadHabitats } from '../db/habitat.js'
+import {
+  HABITAT_KINDS,
+  PAINT_FLOORS,
+  type HabitatKind,
+  type PaintFloor,
+  WATER_FLOORS,
+  habitatKind,
+  isConnected,
+  isHabitatKind,
+  isPaintFloor,
+} from '../game/habitat/index.js'
 import { itemQty } from '../db/inventory.js'
 import { buildingOf, countOf, craftStructure } from '../db/structures.js'
 import { freezeHealMachine } from '../db/healMachine.js'
-import { berryPlots, gardenPlacements, gardenStructures, gardenTiles } from '../db/schema.js'
+import { berryPlots, gardenPlacements, gardenStructures, gardenTiles, habitatTiles, habitats, pokemon } from '../db/schema.js'
 import {
   GARDEN_COLS,
   GARDEN_ROWS,
   STRUCTURE_PIECES,
   canPlace,
+  cellsOf,
   inBounds,
   isFlippable,
   isPieceKey,
@@ -54,6 +65,10 @@ export type LayoutView = {
   floor: { col: number; row: number; floor: string }[]
   /** Chãos da paleta, na ordem, com o marco que abre os fechados (null = aberto). */
   floors: { floor: PaintFloor; unlockAt: UnlockAt | null }[]
+  /** Habitats (área e tipo escolhidos); a conta de pontos sai do motor, na tela também. */
+  habitats: { id: number; kind: HabitatKind; tiles: { col: number; row: number }[] }[]
+  /** Tipos de habitat, na ordem, com o marco que abre os fechados (pelo chão do tipo). */
+  habitatKinds: { kind: HabitatKind; unlockAt: UnlockAt | null }[]
 }
 
 export type RecipeView = {
@@ -100,8 +115,13 @@ export function layoutView(userId: number): LayoutView {
       nextCap: nextCapAt(cleared, recipe.piece),
     })),
     building: buildingOf(userId),
-    floor: loadFloor(userId).map(({ col, row, floor }) => ({ col, row, floor: floor ?? '' })),
+    floor: loadFloor(userId),
     floors: PAINT_FLOORS.map((floor) => ({ floor, unlockAt: floorUnlockAt(cleared, floor) })),
+    habitats: loadHabitats(userId),
+    habitatKinds: HABITAT_KINDS.map((kind) => ({
+      kind: kind.key,
+      unlockAt: kind.floor === null ? null : floorUnlockAt(cleared, kind.floor),
+    })),
   }
 }
 
@@ -129,6 +149,20 @@ function resume(userId: number, structureId: number, piece: StructurePiece, now:
     .set({ since: now })
     .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.id, structureId)))
     .run()
+}
+
+/** Alguma das casas tem chão de água (peça do Construir só fica em terra). */
+function onWater(userId: number, cells: readonly { col: number; row: number }[]): boolean {
+  const water = new Set(
+    getDb()
+      .select({ col: gardenTiles.col, row: gardenTiles.row, floor: gardenTiles.floor })
+      .from(gardenTiles)
+      .where(eq(gardenTiles.userId, userId))
+      .all()
+      .filter((tile) => WATER_FLOORS.includes(tile.floor))
+      .map((tile) => `${tile.col},${tile.row}`),
+  )
+  return cells.some((cell) => water.has(`${cell.col},${cell.row}`))
 }
 
 /**
@@ -170,6 +204,7 @@ export function placePiece(
   }
   const blocked = canPlace(pieces, piece, col, row, undefined, turn)
   if (blocked) return fail(blocked, 400)
+  if (onWater(userId, cellsOf(piece, col, row, turn))) return fail('on_water', 400)
   insertPlacement(userId, piece, slot, col, row, now, turn, structure)
   if (structure !== null && piece !== 'berry_plot') resume(userId, structure, piece, now)
   // O canteiro tem chão próprio: pôr ou tirar um muda as zonas dos habitats.
@@ -192,6 +227,7 @@ export function movePiece(
   const turn = isFlippable(found.piece) ? (flipped ?? found.flipped) : false
   const blocked = canPlace(pieces, found.piece, col, row, id, turn)
   if (blocked) return fail(blocked, 400)
+  if (onWater(userId, cellsOf(found.piece, col, row, turn))) return fail('on_water', 400)
   // O operador da bancada vai junto: a casa dele sai da pegada (cellsOf).
   getDb()
     .update(gardenPlacements)
@@ -257,6 +293,15 @@ export function paintFloor(userId: number, cells: readonly FloorPaint[], now: nu
     if (!inBounds(cell)) return fail('out_of_bounds', 400)
     if (cell.floor !== null && !open.has(cell.floor)) return fail('floor_locked', 400)
   }
+  // Água não vai embaixo de peça (canteiro, árvore, bancada, máquina: terra).
+  const taken = new Set(
+    loadPieces(userId)
+      .flatMap((row) => cellsOf(row.piece, row.col, row.row, row.flipped))
+      .map((cell) => `${cell.col},${cell.row}`),
+  )
+  if (cells.some((cell) => cell.floor !== null && WATER_FLOORS.includes(cell.floor) && taken.has(`${cell.col},${cell.row}`))) {
+    return fail('piece_on_water', 400)
+  }
   const db = getDb()
   for (const cell of cells) {
     const where = and(eq(gardenTiles.userId, userId), eq(gardenTiles.col, cell.col), eq(gardenTiles.row, cell.row))
@@ -285,7 +330,127 @@ function parsePaint(body: Record<string, unknown> | null): FloorPaint[] | null {
   return out
 }
 
+type Cell = { col: number; row: number }
+
+/**
+ * Área de habitat válida: casas dentro do jardim, sem repetir, que se tocam e
+ * não são de outro habitat (`selfId` = o que está sendo editado).
+ */
+function habitatAreaError(userId: number, cells: readonly Cell[], selfId: number | null): string | null {
+  const keys = new Set(cells.map((cell) => `${cell.col},${cell.row}`))
+  if (keys.size !== cells.length) return 'invalid_body'
+  if (!cells.every(inBounds)) return 'out_of_bounds'
+  if (!isConnected(cells)) return 'habitat_not_connected'
+  const others = loadHabitats(userId).filter((row) => row.id !== selfId)
+  if (others.some((row) => row.tiles.some((tile) => keys.has(`${tile.col},${tile.row}`)))) return 'habitat_overlap'
+  return null
+}
+
+function kindOpen(userId: number, kind: HabitatKind): boolean {
+  const floor = habitatKind(kind).floor
+  return floor === null || gardenUnlocksOf(userId).floors.has(floor)
+}
+
+function writeHabitatTiles(userId: number, habitatId: number, cells: readonly Cell[]): void {
+  const db = getDb()
+  db.delete(habitatTiles).where(eq(habitatTiles.habitatId, habitatId)).run()
+  for (const cell of cells) db.insert(habitatTiles).values({ habitatId, userId, col: cell.col, row: cell.row }).run()
+}
+
+/** Cria um habitat: o tipo (aberto pelo marco) e a área pintada pelo jogador. */
+export function createHabitat(userId: number, kind: HabitatKind, cells: readonly Cell[], now: number): Ok | Failure {
+  persistCatchUp(userId, now)
+  if (!kindOpen(userId, kind)) return fail('habitat_locked', 400)
+  const error = habitatAreaError(userId, cells, null)
+  if (error) return fail(error, 400)
+  const row = getDb().insert(habitats).values({ userId, kind, createdAt: now }).returning({ id: habitats.id }).get()
+  writeHabitatTiles(userId, row.id, cells)
+  return { ok: true, layout: layoutView(userId), evicted: [] }
+}
+
+/** Muda a área e/ou o tipo; quem não cabe mais sai da casa. */
+export function editHabitat(
+  userId: number,
+  id: number,
+  change: { kind?: HabitatKind; cells?: readonly Cell[] },
+  now: number,
+): Ok | Failure {
+  persistCatchUp(userId, now)
+  const found = loadHabitats(userId).find((row) => row.id === id)
+  if (!found) return fail('habitat_not_found', 404)
+  if (change.kind && !kindOpen(userId, change.kind)) return fail('habitat_locked', 400)
+  if (change.cells) {
+    const error = habitatAreaError(userId, change.cells, id)
+    if (error) return fail(error, 400)
+    writeHabitatTiles(userId, id, change.cells)
+  }
+  if (change.kind) getDb().update(habitats).set({ kind: change.kind }).where(eq(habitats.id, id)).run()
+  const evicted = evictHomeless(userId)
+  return { ok: true, layout: layoutView(userId), evicted }
+}
+
+/** Exclui o habitat: os moradores ficam sem casa (o chão pintado fica). */
+export function deleteHabitat(userId: number, id: number, now: number): Ok | Failure {
+  persistCatchUp(userId, now)
+  const found = loadHabitats(userId).find((row) => row.id === id)
+  if (!found) return fail('habitat_not_found', 404)
+  const db = getDb()
+  const evicted = db
+    .select({ id: pokemon.id })
+    .from(pokemon)
+    .where(eq(pokemon.habitatId, id))
+    .all()
+    .map((row) => row.id)
+  db.update(pokemon).set({ habitatId: null }).where(eq(pokemon.habitatId, id)).run()
+  db.delete(habitats).where(and(eq(habitats.id, id), eq(habitats.userId, userId))).run()
+  return { ok: true, layout: layoutView(userId), evicted }
+}
+
+function parseCells(raw: unknown): Cell[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > GARDEN_COLS * GARDEN_ROWS) return null
+  const out: Cell[] = []
+  for (const item of raw) {
+    const cell = parseCell(item !== null && typeof item === 'object' ? (item as Record<string, unknown>) : null)
+    if (!cell) return null
+    out.push(cell)
+  }
+  return out
+}
+
 export const buildRoutes = new Hono<AuthEnv>()
+
+buildRoutes.post('/habitat', requireUser, async (c) => {
+  const body = await readObject(c)
+  const kind = body?.kind
+  const cells = parseCells(body?.cells)
+  if (!isHabitatKind(kind) || !cells) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => createHabitat(c.get('userId'), kind, cells, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
+})
+
+buildRoutes.post('/habitat/:id', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  const body = await readObject(c)
+  const kind = body?.kind
+  const cells = body?.cells === undefined ? undefined : parseCells(body.cells)
+  const badKind = kind !== undefined && !isHabitatKind(kind)
+  if (id === null || cells === null || badKind || (kind === undefined && cells === undefined)) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const change = { kind: kind as HabitatKind | undefined, cells }
+  const result = immediate(() => editHabitat(c.get('userId'), id, change, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
+})
+
+buildRoutes.post('/habitat/:id/delete', requireUser, (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => deleteHabitat(c.get('userId'), id, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
+})
 
 buildRoutes.post('/floor', requireUser, async (c) => {
   const cells = parsePaint(await readObject(c))

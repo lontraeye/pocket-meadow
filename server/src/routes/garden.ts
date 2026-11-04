@@ -12,8 +12,8 @@ import { getDb, immediate } from '../db/client.js'
 import { recordEvent } from '../db/events.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { gardenGifts, pokemon, species, trainers } from '../db/schema.js'
-import { loadZones, residentsOf } from '../db/habitat.js'
-import { canLiveIn, zoneAt } from '../game/habitat/index.js'
+import { checkedHabitats, residentsOf } from '../db/habitat.js'
+import { canLiveInKind } from '../game/habitat/index.js'
 import { petReadyAt } from '../game/pets.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 
@@ -43,55 +43,38 @@ gardenRoutes.post('/pets/:id/snack', requireUser, async (c) => {
   return c.json(result.pet)
 })
 
-// Casa no habitat (PLANNING 5.22): `home` é uma casa da zona, ou null para
-// sair. O habitat precisa ser de um dos tipos dele (ou básico) e ter vaga.
+// Casa no habitat (PLANNING 5.22): `habitatId` do habitat, ou null para sair.
+// O habitat precisa estar pronto, ser de um dos tipos dele (ou básico) e ter vaga.
 gardenRoutes.post('/pets/:id/home', requireUser, async (c) => {
   const id = parseId(c.req.param('id'))
-  const home = (await readObject(c))?.home
-  const cell =
-    home === null
-      ? null
-      : home !== null &&
-          typeof home === 'object' &&
-          Number.isInteger((home as { col?: unknown }).col) &&
-          Number.isInteger((home as { row?: unknown }).row)
-        ? { col: (home as { col: number }).col, row: (home as { row: number }).row }
-        : undefined
-  if (id === null || cell === undefined) return c.json({ error: 'invalid_body' }, 400)
-  const result = immediate(() => setHome(c.get('userId'), id, cell, Date.now()))
+  const habitatId = (await readObject(c))?.habitatId
+  const valid = habitatId === null || (typeof habitatId === 'number' && Number.isInteger(habitatId))
+  if (id === null || !valid) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => setHome(c.get('userId'), id, habitatId as number | null, Date.now()))
   if (!result.ok) return c.json(errorBody(result), result.status)
-  return c.json({ home: result.home })
+  return c.json({ habitatId })
 })
 
-function setHome(
-  userId: number,
-  pokemonId: number,
-  cell: { col: number; row: number } | null,
-  now: number,
-): { ok: true; home: { col: number; row: number } | null } | Failure {
+function setHome(userId: number, pokemonId: number, habitatId: number | null, now: number): { ok: true } | Failure {
   persistCatchUp(userId, now)
   const found = gardenPet(userId, pokemonId)
   if (!found.ok) return found
   const db = getDb()
-  if (cell !== null) {
-    const zone = zoneAt(loadZones(userId), cell.col, cell.row)
-    if (!zone || !zone.biome) return fail('not_a_habitat', 400)
+  if (habitatId !== null) {
+    const home = checkedHabitats(userId).find((row) => row.id === habitatId)
+    if (!home) return fail('habitat_not_found', 404)
+    if (!home.check.ready) return fail('habitat_not_ready', 400)
     const kinds = db
       .select({ type1: species.type1, type2: species.type2 })
       .from(pokemon)
       .innerJoin(species, eq(species.id, pokemon.speciesId))
       .where(eq(pokemon.id, pokemonId))
       .get()!
-    if (!canLiveIn(kinds.type2 ? [kinds.type1, kinds.type2] : [kinds.type1], zone.biome)) return fail('wrong_habitat', 400)
-    if (residentsOf(userId, zone, pokemonId) >= zone.capacity) return fail('habitat_full', 400)
-    // A âncora da zona: a casa guardada não muda se o jogador tocou em outra casa da mesma zona.
-    cell = zone.tiles[0]!
+    if (!canLiveInKind(kinds.type2 ? [kinds.type1, kinds.type2] : [kinds.type1], home.kind)) return fail('wrong_habitat', 400)
+    if (residentsOf(userId, habitatId, pokemonId) >= home.check.capacity) return fail('habitat_full', 400)
   }
-  db.update(pokemon)
-    .set({ homeCol: cell?.col ?? null, homeRow: cell?.row ?? null })
-    .where(eq(pokemon.id, pokemonId))
-    .run()
-  return { ok: true, home: cell }
+  db.update(pokemon).set({ habitatId }).where(eq(pokemon.id, pokemonId)).run()
+  return { ok: true }
 }
 
 // Alimentar todos (PROGRESSAO.md, 4.2): 1 berry por Pokémon com fome, do mais
