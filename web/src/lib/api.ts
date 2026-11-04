@@ -436,6 +436,20 @@ export type GardenLayout = {
   nextPlots: (UnlockAt & { plots: number }) | null
   /** Peças que ainda não abriram e o marco que abre cada uma. */
   locked: { piece: StructurePiece; unlockAt: UnlockAt }[]
+  /** Receitas de construção: custo, tempo, quantas tem (com a obra) e o teto. */
+  recipes: {
+    piece: StructurePiece
+    cost: { itemKey: string; quantity: number; have: number }[]
+    ms: number
+    count: number
+    cap: number
+    /** O marco que libera a receita (null = liberada). */
+    unlockAt: UnlockAt | null
+    /** O próximo marco que sobe o teto. */
+    nextCap: (UnlockAt & { cap: number }) | null
+  }[]
+  /** A obra em andamento (uma por vez), ou null. */
+  building: { id: number; piece: StructurePiece; startedAt: number; readyAt: number } | null
 }
 
 /** O marco (líder vencido) que abre algo no jardim. */
@@ -662,6 +676,8 @@ export function giftIconSrc(itemKey: string): string {
   if (itemKey === 'mat:apricorn') return '/sprites/items/red-apricorn.png'
   if (itemKey === 'mat:apricorn-blue') return '/sprites/items/blue-apricorn.png'
   if (itemKey === 'mat:apricorn-yellow') return '/sprites/items/yellow-apricorn.png'
+  if (itemKey === 'mat:wood') return '/sprites/items/wood.png'
+  if (itemKey === 'mat:stone') return '/sprites/items/hard-stone.png'
   return '/sprites/items/poke-ball.png'
 }
 
@@ -686,6 +702,8 @@ export function itemLabel(itemKey: string, berries: BerryInfo[], balls?: BallInf
   if (itemKey === 'mat:apricorn') return 'Apricorn'
   if (itemKey === 'mat:apricorn-blue') return 'Apricorn azul'
   if (itemKey === 'mat:apricorn-yellow') return 'Apricorn amarelo'
+  if (itemKey === 'mat:wood') return 'Madeira'
+  if (itemKey === 'mat:stone') return 'Pedra'
   return itemKey
 }
 
@@ -874,7 +892,13 @@ export function errorText(error: ApiError): string {
     case 'milestone_needed':
       return 'Essa melhoria abre com um marco da jornada.'
     case 'missing_items':
-      return 'Faltam itens para a melhoria.'
+      return 'Faltam itens.'
+    case 'build_recipe_locked':
+      return 'Essa receita abre com um marco da jornada.'
+    case 'piece_cap':
+      return 'Já tem o máximo dessa peça. O teto sobe com os marcos.'
+    case 'build_busy':
+      return 'Já tem uma obra em andamento. Espere ficar pronta.'
     case 'bench_busy':
       return 'A bancada está trabalhando. Espere o lote acabar ou cancele.'
     case 'no_operator':

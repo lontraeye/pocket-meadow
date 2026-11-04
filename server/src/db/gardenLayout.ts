@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   DEFAULT_LAYOUT,
   STRUCTURE_PIECES,
@@ -60,12 +60,12 @@ export function plotPlaced(userId: number, slot: number): boolean {
   )
 }
 
-/** As estruturas do jogador (colocadas ou guardadas): id e tipo, na ordem em que vieram. */
+/** As estruturas prontas do jogador (colocadas ou guardadas): id e tipo, na ordem em que vieram. */
 export function ownedStructures(userId: number): { id: number; piece: StructurePiece }[] {
   return getDb()
     .select({ id: gardenStructures.id, key: gardenStructures.key })
     .from(gardenStructures)
-    .where(eq(gardenStructures.userId, userId))
+    .where(and(eq(gardenStructures.userId, userId), isNull(gardenStructures.readyAt)))
     .orderBy(asc(gardenStructures.id))
     .all()
     .flatMap((row) =>

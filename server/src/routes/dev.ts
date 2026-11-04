@@ -25,7 +25,7 @@ import {
   trainers,
   users,
 } from '../db/schema.js'
-import { applyReadyScenario } from './devScenario.js'
+import { applyBuildScenario, applyReadyScenario } from './devScenario.js'
 import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
 
@@ -49,13 +49,15 @@ devRoutes.post('/login', async (c) => {
   if (!username) return c.json({ error: 'invalid_username' }, 400)
   const starter = body.starter === undefined ? 'chikorita' : body.starter
   if (!isStarter(starter)) return c.json({ error: 'invalid_starter' }, 400)
-  // `scenario: 'ready'` deixa a conta com um pouco de tudo esperando (aviso de "pronto").
-  const scenario = body.scenario === 'ready'
+  // `scenario: 'ready'` deixa a conta com um pouco de tudo esperando (aviso de "pronto");
+  // `'build'`, pronta para testar a construção (devScenario.ts).
+  const scenario = body.scenario === 'ready' || body.scenario === 'build' ? body.scenario : null
   const now = Date.now()
   const token = immediate(() => {
     const existing = getDb().select({ id: users.id }).from(users).where(eq(users.username, username)).get()
     const userId = existing?.id ?? createPlayer({ username, googleSub: null, starter, now }).userId
-    if (scenario) applyReadyScenario(userId, now)
+    if (scenario === 'ready') applyReadyScenario(userId, now)
+    if (scenario === 'build') applyBuildScenario(userId, now)
     return openSession(c, userId, existing ? 'login' : 'register', now)
   })
   setSessionCookie(c, token)
@@ -237,8 +239,9 @@ devRoutes.post('/plots/advance', requireUser, async (c) => {
 })
 
 /** Dá algumas de cada pokébola (Master: 3) e das berries novas de captura. */
-// Bancada (5.23): sobe o treinador ao nível 12, dá Apricorns e as berries das
-// melhorias e termina na hora uma melhoria em andamento.
+// Bancada (5.23): sobe o treinador ao nível 12, dá Apricorns, as berries das
+// melhorias e os materiais de construção (madeira, pedra) e termina na hora uma
+// melhoria e uma obra em andamento.
 devRoutes.post('/bench/boost', requireUser, (c) => {
   const userId = c.get('userId')
   const now = Date.now()
@@ -253,10 +256,16 @@ devRoutes.post('/bench/boost', requireUser, (c) => {
       { itemKey: 'berry:oran', quantity: 10 },
       { itemKey: 'berry:pinap', quantity: 10 },
       { itemKey: 'berry:razz', quantity: 10 },
+      { itemKey: 'mat:wood', quantity: 30 },
+      { itemKey: 'mat:stone', quantity: 30 },
     ])
     db.update(gardenStructures)
       .set({ upgradeEndsAt: now - 1 })
       .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench'), sql`${gardenStructures.upgradeTo} is not null`))
+      .run()
+    db.update(gardenStructures)
+      .set({ readyAt: now - 1 })
+      .where(and(eq(gardenStructures.userId, userId), sql`${gardenStructures.readyAt} is not null`))
       .run()
   })
   return c.json({ ok: true })

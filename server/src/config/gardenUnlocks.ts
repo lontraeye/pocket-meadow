@@ -1,7 +1,8 @@
 // O que abre no jardim (PROGRESSAO.md 4.3, passo 2): os marcos (líderes
 // vencidos), não o nível de treinador. Cada marco pode dar peças (a primeira
-// unidade), subir o limite de canteiros, abrir vagas do daycare e o nível
-// máximo da bancada. Módulo puro: recebe os marcos conquistados.
+// unidade), receitas para construir mais, subir quantas de cada tipo dá para
+// ter (o teto), o limite de canteiros, as vagas do daycare e o nível máximo da
+// bancada. Módulo puro: recebe os marcos conquistados.
 
 import type { StructurePiece } from '../game/garden/layout.js'
 import { milestoneConfigs } from './milestones.js'
@@ -15,6 +16,10 @@ export type GardenGrant = {
   daycareSlots?: number
   /** Até onde a bancada pode subir. */
   benchMaxLevel?: number
+  /** Receitas que o marco libera (config/buildRecipes). */
+  recipes?: readonly StructurePiece[]
+  /** Quantas de cada tipo dá para ter (o teto passa a ser este). */
+  caps?: Partial<Record<StructurePiece, number>>
 }
 
 /** O que já vem no começo. */
@@ -23,16 +28,19 @@ export const GARDEN_START = {
   plots: 4,
   daycareSlots: 1,
   benchMaxLevel: 1,
+  recipes: [],
+  /** Uma de cada; quem não tem entrada nos marcos fica em 1. */
+  caps: {},
 } as const satisfies Required<GardenGrant>
 
 /** Por marco (chave de `milestoneConfigs`); marco sem entrada não muda o jardim. */
 export const GARDEN_GRANTS: Readonly<Record<string, GardenGrant>> = {
-  azalea: { plots: 6, daycareSlots: 2 },
+  azalea: { plots: 6, daycareSlots: 2, recipes: ['apricorn_tree'], caps: { apricorn_tree: 2 } },
   goldenrod: { pieces: ['apricorn_tree_blue'], benchMaxLevel: 2 },
-  ecruteak: { plots: 8 },
-  cianwood: { daycareSlots: 3 },
+  ecruteak: { plots: 8, caps: { apricorn_tree: 3 } },
+  cianwood: { daycareSlots: 3, recipes: ['heal_machine'], caps: { heal_machine: 2 } },
   olivine: { pieces: ['apricorn_tree_yellow'], plots: 10, benchMaxLevel: 3 },
-  blackthorn: { plots: 12, daycareSlots: 4 },
+  blackthorn: { plots: 12, daycareSlots: 4, recipes: ['ball_bench'], caps: { ball_bench: 2 } },
 }
 
 export type GardenUnlocks = {
@@ -40,6 +48,9 @@ export type GardenUnlocks = {
   plotLimit: number
   daycareSlots: number
   benchMaxLevel: number
+  recipes: ReadonlySet<StructurePiece>
+  /** Teto de cada tipo (1 sem marco que suba). */
+  capOf: (piece: StructurePiece) => number
 }
 
 /** Somando o começo e os marcos conquistados (o maior valor de cada um vale). */
@@ -48,14 +59,20 @@ export function gardenUnlocks(cleared: ReadonlySet<string>): GardenUnlocks {
   let plotLimit: number = GARDEN_START.plots
   let daycareSlots: number = GARDEN_START.daycareSlots
   let benchMaxLevel: number = GARDEN_START.benchMaxLevel
+  const recipes = new Set<StructurePiece>()
+  const caps = new Map<StructurePiece, number>()
   for (const [key, grant] of Object.entries(GARDEN_GRANTS)) {
     if (!cleared.has(key)) continue
     for (const piece of grant.pieces ?? []) pieces.add(piece)
+    for (const piece of grant.recipes ?? []) recipes.add(piece)
+    for (const [piece, cap] of Object.entries(grant.caps ?? {}) as [StructurePiece, number][]) {
+      caps.set(piece, Math.max(caps.get(piece) ?? 1, cap))
+    }
     plotLimit = Math.max(plotLimit, grant.plots ?? 0)
     daycareSlots = Math.max(daycareSlots, grant.daycareSlots ?? 0)
     benchMaxLevel = Math.max(benchMaxLevel, grant.benchMaxLevel ?? 0)
   }
-  return { pieces, plotLimit, daycareSlots, benchMaxLevel }
+  return { pieces, plotLimit, daycareSlots, benchMaxLevel, recipes, capOf: (piece) => caps.get(piece) ?? 1 }
 }
 
 /** O marco que abre algo, para o texto do cadeado ("abre no Marco de Azalea"). */
@@ -97,4 +114,17 @@ export function nextDaycareSlotAt(cleared: ReadonlySet<string>): UnlockAt | null
 export function benchLevelAt(cleared: ReadonlySet<string>, level: number): UnlockAt | null {
   if (gardenUnlocks(cleared).benchMaxLevel >= level) return null
   return nextGrant(cleared, (grant) => (grant.benchMaxLevel ?? 0) >= level)
+}
+
+/** O marco que libera a receita da peça (null = já liberada ou nenhum dá). */
+export function recipeUnlockAt(cleared: ReadonlySet<string>, piece: StructurePiece): UnlockAt | null {
+  if (gardenUnlocks(cleared).recipes.has(piece)) return null
+  return nextGrant(cleared, (grant) => grant.recipes?.includes(piece) ?? false)
+}
+
+/** O próximo marco que sobe o teto da peça, e para quanto. */
+export function nextCapAt(cleared: ReadonlySet<string>, piece: StructurePiece): (UnlockAt & { cap: number }) | null {
+  const now = gardenUnlocks(cleared).capOf(piece)
+  const at = nextGrant(cleared, (grant) => (grant.caps?.[piece] ?? 0) > now)
+  return at ? { ...at, cap: GARDEN_GRANTS[at.milestone]!.caps![piece]! } : null
 }

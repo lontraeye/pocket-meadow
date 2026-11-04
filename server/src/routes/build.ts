@@ -7,7 +7,10 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { insertPlacement, loadPieces, ownedStructures, type PlacedRow } from '../db/gardenLayout.js'
 import { clearedMilestones, gardenUnlocksOf } from '../db/milestones.js'
-import { nextPlotsAt, pieceUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
+import { BUILD_RECIPES } from '../config/buildRecipes.js'
+import { nextCapAt, nextPlotsAt, pieceUnlockAt, recipeUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
+import { itemQty } from '../db/inventory.js'
+import { buildingOf, countOf, craftStructure } from '../db/structures.js'
 import { freezeHealMachine } from '../db/healMachine.js'
 import { berryPlots, gardenPlacements, gardenStructures } from '../db/schema.js'
 import {
@@ -40,6 +43,23 @@ export type LayoutView = {
   nextPlots: (UnlockAt & { plots: number }) | null
   /** Peças que ainda não abriram e o marco que abre cada uma (o catálogo mostra com cadeado). */
   locked: { piece: StructurePiece; unlockAt: UnlockAt }[]
+  /** Receitas de construção (passo 2c): custo, tempo, quantas tem e o teto. */
+  recipes: RecipeView[]
+  /** A construção em andamento (uma por vez), ou null. */
+  building: { id: number; piece: StructurePiece; startedAt: number; readyAt: number } | null
+}
+
+export type RecipeView = {
+  piece: StructurePiece
+  cost: { itemKey: string; quantity: number; have: number }[]
+  ms: number
+  /** Quantas tem (com a que está em construção) e quantas dá para ter. */
+  count: number
+  cap: number
+  /** O marco que libera a receita (null = liberada). */
+  unlockAt: UnlockAt | null
+  /** O próximo marco que sobe o teto (null = já no máximo). */
+  nextCap: (UnlockAt & { cap: number }) | null
 }
 
 /** Chamar dentro de immediate(), depois do catch-up (que cria as estruturas abertas). */
@@ -49,6 +69,7 @@ export function layoutView(userId: number): LayoutView {
   const owned = ownedStructures(userId)
   const ownedKinds = new Set(owned.map((row) => row.piece))
   const cleared = clearedMilestones(userId)
+  const unlocks = gardenUnlocksOf(userId)
   return {
     cols: GARDEN_COLS,
     rows: GARDEN_ROWS,
@@ -62,6 +83,16 @@ export function layoutView(userId: number): LayoutView {
       const unlockAt = pieceUnlockAt(cleared, piece)
       return unlockAt ? [{ piece, unlockAt }] : []
     }),
+    recipes: BUILD_RECIPES.map((recipe) => ({
+      piece: recipe.piece,
+      cost: recipe.cost.map((item) => ({ ...item, have: itemQty(userId, item.itemKey) })),
+      ms: recipe.ms,
+      count: countOf(userId, recipe.piece),
+      cap: unlocks.capOf(recipe.piece),
+      unlockAt: recipeUnlockAt(cleared, recipe.piece),
+      nextCap: nextCapAt(cleared, recipe.piece),
+    })),
+    building: buildingOf(userId),
   }
 }
 
@@ -190,7 +221,25 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
   return { ok: true, layout: layoutView(userId) }
 }
 
+/** Constrói uma peça pela receita (passo 2c): fica pronta depois do tempo dela, guardada. */
+export function craftPiece(userId: number, piece: StructurePiece, now: number): Ok | Failure {
+  persistCatchUp(userId, now)
+  const out = craftStructure(userId, piece, now)
+  if (!out.ok) return fail(out.error, 400)
+  return { ok: true, layout: layoutView(userId) }
+}
+
 export const buildRoutes = new Hono<AuthEnv>()
+
+buildRoutes.post('/craft', requireUser, async (c) => {
+  const piece = (await readObject(c))?.piece
+  if (typeof piece !== 'string' || !(STRUCTURE_PIECES as readonly string[]).includes(piece)) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  const result = immediate(() => craftPiece(c.get('userId'), piece as StructurePiece, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout })
+})
 
 buildRoutes.post('/place', requireUser, async (c) => {
   const body = await readObject(c)

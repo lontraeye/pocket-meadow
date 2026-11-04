@@ -319,6 +319,8 @@
   const blockedWaitMs = 350
   const blockedTries = 4
   const panDragPx = 6
+  /** Quanto o dedo anda numa peça do Construir antes de virar arrasto. */
+  const buildTouchSlackPx = 14
 
   // A pose de sono do PMD olha para ↙ em quase todas as espécies. Quem dorme
   // olhando para a direita (↘ → ↗) usa a pose espelhada, para não virar de lado.
@@ -396,6 +398,13 @@
   )
   /** Casas ocupadas por alguma peça (pegada inteira, como a casa do operador da bancada). */
   const blockedCells = $derived(occupied(layout.pieces))
+
+  /** A estrutura está selecionada no Construir (contorno no sprite: a grade fica embaixo dela). */
+  function isChosen(structureId: number): boolean {
+    const pick = buildPick
+    if (!building || pick?.kind !== 'selected') return false
+    return layout.pieces.find((row) => row.id === pick.id)?.structureId === structureId
+  }
 
   /** O canteiro desenhado (pelo slot) é a prévia. */
   function isGhostPlot(slot: number): boolean {
@@ -509,6 +518,19 @@
    * e máquina sobem acima da casa delas, então a copa cai nas casas de trás).
    */
   function pieceUnder(pieces: readonly PlacedView[], clientX: number, clientY: number): PlacedView | null {
+    // Primeiro o desenho sob o dedo (a copa da árvore sobe duas ou três casas
+    // acima do pé): o navegador lista todas as camadas, inclusive as de baixo
+    // da camada de toque; vale a da frente que for de uma peça.
+    for (const element of document.elementsFromPoint(clientX, clientY)) {
+      const marked = element.closest<HTMLElement>('[data-structure], [data-plot]')
+      if (!marked) continue
+      const structure = marked.dataset.structure
+      const found =
+        structure !== undefined
+          ? pieces.find((row) => row.structureId === Number(structure))
+          : pieces.find((row) => row.piece === 'berry_plot' && row.slot === Number(marked.dataset.plot))
+      if (found) return found
+    }
     const { col, row } = gridCellAt(clientX, clientY)
     for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
       const found = pieceAtCell(pieces, col + dc, row + dr)
@@ -516,6 +538,16 @@
     }
     return null
   }
+
+  // A obra só vira peça pronta no servidor, no próximo pedido: quando o tempo
+  // dela acaba, pede o estado (senão o cartão fica em "0:00" até outra ação).
+  $effect(() => {
+    const readyAt = layout.building?.readyAt
+    if (readyAt === undefined) return
+    const wait = Math.max(0, readyAt - untrack(() => clock.now())) + 500
+    const timer = window.setTimeout(() => void onState(), wait)
+    return () => window.clearTimeout(timer)
+  })
 
   /** Peça nova do catálogo: canteiro, ou a primeira estrutura guardada daquele tipo. */
   function pickNew(piece: PieceKey) {
@@ -655,7 +687,9 @@
     if (!drag.moved) {
       const dx = event.clientX - drag.startX
       const dy = event.clientY - drag.startY
-      if (dx * dx + dy * dy < panDragPx * panDragPx) return
+      // No toque, o dedo treme: com folga maior, tocar numa peça seleciona em vez de virar "mover".
+      const slack = event.pointerType === 'mouse' ? panDragPx : buildTouchSlackPx
+      if (dx * dx + dy * dy < slack * slack) return
       drag.moved = true
       try {
         ;(event.currentTarget as Element).setPointerCapture(event.pointerId)
@@ -1938,6 +1972,8 @@
           <button
             type="button"
             class="tree"
+            data-structure={tree.id}
+            class:chosen={isChosen(tree.id)}
             class:shake={treeShake === tree.id}
             class:ghost={isGhostStructure(tree.id)}
             class:bad={isGhostStructure(tree.id) && !ghostOk}
@@ -1983,6 +2019,7 @@
           <button
             type="button"
             class="mon operator"
+            data-structure={bench.id}
             class:ghost={ghosted}
             class:bad={ghosted && !ghostOk}
             style:left="{snapToDevice(at.x)}px"
@@ -2011,6 +2048,8 @@
         <button
           type="button"
           class="bench"
+          data-structure={bench.id}
+          class:chosen={isChosen(bench.id)}
           class:working={benchStateOf(bench) === 'working'}
           class:ghost={ghosted}
           class:bad={ghosted && !ghostOk}
@@ -2048,6 +2087,8 @@
         <button
           type="button"
           class="heal-machine"
+          data-structure={machine.id}
+          class:chosen={isChosen(machine.id)}
           class:ghost={isGhostStructure(machine.id)}
           class:bad={isGhostStructure(machine.id) && !ghostOk}
           style:left="{snapToDevice(spot.x)}px"
@@ -2364,7 +2405,17 @@
         message={buildMessage}
         fits={ghostOk}
         mouse={buildMouse}
+        now={clock.now()}
+        itemName={(itemKey) => itemLabel(itemKey, game.berries)}
         onPick={pickNew}
+        onCraft={(piece) => {
+          void buildCall('/api/build/craft', { piece }).then((ok) => {
+            if (ok) {
+              buildMessage = 'Obra começada: a peça vai para o inventário quando ficar pronta.'
+              play('tap')
+            }
+          })
+        }}
         onSelectPlaced={(id) => {
           const placed = layout.pieces.find((row) => row.id === id)
           if (!placed) return
@@ -3335,6 +3386,14 @@
 
   .build-hit.placing {
     cursor: pointer;
+  }
+
+  /* Selecionada no Construir: contorno amarelo em volta do desenho. */
+  .chosen > svg,
+  .chosen > .bench-sprite,
+  .chosen > .heal-sprite {
+    filter: drop-shadow(2px 0 0 var(--accent)) drop-shadow(-2px 0 0 var(--accent)) drop-shadow(0 2px 0 var(--accent))
+      drop-shadow(0 -2px 0 var(--accent));
   }
 
   /* A prévia: meio transparente; vermelha quando não cabe. */

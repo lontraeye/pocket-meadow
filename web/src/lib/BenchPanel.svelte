@@ -327,7 +327,7 @@
       type="button"
       class="btn"
       disabled={pending}
-      onclick={() => void call('/api/dev/bench/boost', {}, () => 'Teste: nível 12, Apricorns e berries; melhoria terminada.')}
+      onclick={() => void call('/api/dev/bench/boost', {}, () => 'Teste: Apricorns, berries, madeira e pedra; melhoria e obra terminadas.')}
     >
       Itens e nível (teste)
     </button>

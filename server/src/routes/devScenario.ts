@@ -1,11 +1,16 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { APRICORN_ITEM, TREES, apricornConfig } from '../config/apricorn.js'
 import { daycareConfig } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb } from '../db/client.js'
-import { treeView } from '../db/apricorn.js'
+import { freezeTree, treeView } from '../db/apricorn.js'
+import { loadPieces } from '../db/gardenLayout.js'
+import { freezeHealMachine } from '../db/healMachine.js'
 import { setOperator, startJob } from '../db/bench.js'
 import { creditItems } from '../db/inventory.js'
+import { countOf, createStructure } from '../db/structures.js'
+import { STONE_ITEM, WOOD_ITEM } from '../config/buildRecipes.js'
+import { milestoneConfigs } from '../config/milestones.js'
 import { ensureMissionDay } from '../db/missions.js'
 import {
   berryPlots,
@@ -13,9 +18,11 @@ import {
   daycareSlots,
   dailyMissions,
   encounters,
-  gardenGifts,
+  gardenGifts,
+  gardenPlacements,
   gardenStructures,
   pokemon,
+  trainerMilestones,
   trainers,
 } from '../db/schema.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
@@ -129,4 +136,70 @@ export function applyReadyScenario(userId: number, now: number): void {
   db.insert(encounters)
     .values({ userId, regionSlug: 'route-29', speciesId: 161, level: 3, rngSeed: randomSeed(), status: 'fled', wonAt: now, resolvedAt: now, createdAt: now, expiresAt: now })
     .run()
+}
+
+/** Um Pokémon nível 5 do jardim, com traits (o /state recusa Pokémon sem eles). */
+function addScenarioMon(userId: number, speciesId: number, now: number): number {
+  const traits = rollTraits(mulberry32(traitsRngSeed(randomSeed())), {
+    level: 5,
+    learnset: learnsetFor(speciesId),
+    abilities: abilitiesFor(speciesId),
+    moves: movesByName(),
+  })
+  const row = getDb()
+    .insert(pokemon)
+    .values({ userId, speciesId, level: 5, caughtAt: now, originalSpeciesId: speciesId, ...traitColumns(traits), petAt: now, lastGiftAt: now })
+    .returning({ id: pokemon.id })
+    .get()
+  if (!row) throw new Error('failed to add scenario pokemon')
+  return row.id
+}
+
+// Cenário de teste da construção (PROGRESSAO.md 4.3, passo 2): todos os marcos
+// de Johto (receitas, tetos, árvores azul e amarela, 12 canteiros, 4 vagas),
+// materiais de sobra, todas as estruturas guardadas no inventário de construção
+// (para colocar do zero), uma 2ª máquina (duas peças iguais) e dois operadores
+// no jardim. Sem obra em andamento: as receitas (árvore, bancada) ficam livres
+// para construir. Só pelas rotas /dev. Chamar dentro de immediate().
+export function applyBuildScenario(userId: number, now: number): void {
+  const db = getDb()
+  for (const milestone of milestoneConfigs.filter((row) => row.key !== 'league')) {
+    db.insert(trainerMilestones).values({ userId, milestoneKey: milestone.key, clearedAt: now }).onConflictDoNothing().run()
+  }
+  // O catch-up dá a primeira unidade do que os marcos abriram (azul e amarela vão para o jardim).
+  persistCatchUp(userId, now)
+
+  creditItems(userId, [
+    { itemKey: WOOD_ITEM, quantity: 60 },
+    { itemKey: STONE_ITEM, quantity: 60 },
+    { itemKey: APRICORN_ITEM, quantity: 40 },
+    { itemKey: 'mat:apricorn-blue', quantity: 15 },
+    { itemKey: 'mat:apricorn-yellow', quantity: 15 },
+    { itemKey: 'berry:oran', quantity: 30 },
+    { itemKey: 'berry:pinap', quantity: 10 },
+    { itemKey: 'berry:razz', quantity: 10 },
+    { itemKey: 'seed:oran', quantity: 8 },
+  ])
+
+  // A 2ª máquina (o teto é 2 com Cianwood); a 2ª bancada e as árvores vêm da receita.
+  if (countOf(userId, 'heal_machine') < 2) createStructure(userId, 'heal_machine', now)
+
+  // Tudo guardado, para colocar do zero (a bancada com lote fica onde está).
+  for (const placed of loadPieces(userId)) {
+    if (placed.structureId === null) continue
+    const busy = db
+      .select({ id: craftJobs.id })
+      .from(craftJobs)
+      .where(and(eq(craftJobs.structureId, placed.structureId), isNull(craftJobs.cancelledAt)))
+      .get()
+    if (busy) continue
+    if (placed.piece === 'heal_machine') freezeHealMachine(userId, placed.structureId, now)
+    else if (placed.piece !== 'ball_bench') freezeTree(userId, placed.structureId, now)
+    db.update(gardenStructures).set({ operatorPokemonId: null }).where(eq(gardenStructures.id, placed.structureId)).run()
+    db.delete(gardenPlacements).where(eq(gardenPlacements.id, placed.id)).run()
+  }
+
+  // Machop (Lutador) e Sentret (Normal) para operar as duas bancadas.
+  addScenarioMon(userId, 66, now)
+  addScenarioMon(userId, 161, now)
 }

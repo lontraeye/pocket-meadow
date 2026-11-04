@@ -316,3 +316,57 @@ test('duas bancadas e duas máquinas: cada peça com o seu estado', async () => 
   const auto = (await (await post(p.cookie, '/garden/heal-machine/use')).json()) as { machineId: number }
   assert.equal(auto.machineId, heal1)
 })
+
+test('receitas: marco libera, gasta materiais, leva tempo, uma por vez e para no teto', async () => {
+  const p = player('construcao-receita', 1)
+  const sqlite = getSqlite()
+  const give = (itemKey: string, quantity: number) =>
+    sqlite
+      .prepare('insert into inventory (user_id, item_key, quantity) values (?, ?, ?) on conflict do update set quantity = excluded.quantity')
+      .run(p.userId, itemKey, quantity)
+  type Recipe = { piece: string; count: number; cap: number; unlockAt: { milestone: string } | null }
+  type CraftLayout = Layout & { recipes: Recipe[]; building: { piece: string; readyAt: number } | null }
+  const layoutOf = async () => (await state(p.cookie)).garden.layout as CraftLayout
+  const tree = (layout: CraftLayout) => layout.recipes.find((row) => row.piece === 'apricorn_tree')!
+
+  // Sem o Marco de Azalea a receita da árvore está fechada.
+  assert.equal(tree(await layoutOf()).unlockAt?.milestone, 'azalea')
+  assert.equal(await errorOf(await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })), 'build_recipe_locked')
+
+  clear(p.userId, 'azalea')
+  assert.deepEqual([tree(await layoutOf()).count, tree(await layoutOf()).cap], [1, 2])
+  assert.equal(await errorOf(await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })), 'missing_items')
+
+  give('mat:wood', 10)
+  give('mat:apricorn', 5)
+  give('berry:oran', 3)
+  const crafted = await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })
+  assert.equal(crafted.status, 200)
+  const during = ((await crafted.json()) as { layout: CraftLayout }).layout
+  assert.equal(during.building?.piece, 'apricorn_tree')
+  assert.equal(tree(during).count, 2)
+  assert.equal(during.stored.length, 0, 'em construção não aparece guardada')
+  const wood = sqlite.prepare("select quantity from inventory where user_id = ? and item_key = 'mat:wood'").get(p.userId) as
+    | { quantity: number }
+    | undefined
+  assert.equal(wood?.quantity ?? 0, 0)
+
+  // Pronta: vai para o inventário de construção; o teto (2) chegou.
+  sqlite.prepare('update garden_structures set ready_at = ? where user_id = ? and ready_at is not null').run(Date.now() - 1, p.userId)
+  const done = await layoutOf()
+  assert.equal(done.building, null)
+  assert.deepEqual(done.stored.map((row) => row.piece), ['apricorn_tree'])
+  assert.equal((await state(p.cookie)).garden.trees.filter((row) => row.placed).length, 1)
+  give('mat:wood', 10)
+  give('mat:apricorn', 5)
+  give('berry:oran', 3)
+  assert.equal(await errorOf(await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })), 'piece_cap')
+
+  // Ecruteak sobe o teto para 3; uma construção por vez (a máquina espera a árvore).
+  clear(p.userId, 'ecruteak', 'cianwood')
+  assert.equal((await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })).status, 200)
+  give('mat:stone', 10)
+  give('mat:wood', 5)
+  give('berry:oran', 5)
+  assert.equal(await errorOf(await post(p.cookie, '/build/craft', { piece: 'heal_machine' })), 'build_busy')
+})

@@ -142,7 +142,10 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 5. ~~**Captura mais difícil e bolas vindo da bancada**~~ (feito em 2026-11-03): `catchMult` de 1,2 para 0,8 (capture rate 255 sai em 80%, 190 em 60%, 45 em 14%); começa com 15 Poké Balls (eram 30); vencer selvagem não dá mais bola; nível de treinador, missões e baú trocam bola por Apricorn (nível: 2 vermelhos, 2 azuis a cada 5, 2 amarelos a cada 10; missão comum: 2 vermelhos; captura nova: 1 Great e 1 azul; baú: 1 Great, 3 vermelhos e 2 azuis); presentes com menos bolas (pesos 40/10 para 15/4). Pedra (Rock Smash) e Pokédex ficam como estavam.
 6. **Construção do jardim** (4.3), em passos:
    1. ~~Inventário de construção e peças com posição~~ (feito em 2026-11-03): tabela `garden_placements` (uma estrutura de cada por enquanto; canteiros com `slot`), migração preguiçosa no catch-up (o que existe fica nas casas de antes), estrutura que abre vai sozinha para a casa de sempre se estiver livre, modo Construir no jardim (colocar, mover, guardar), peça guardada para de produzir, passeio desvia de qualquer peça. Duas da mesma estrutura (estado por instância) entram no passo 2, junto com as receitas.
-   2. Marcos dão peças, receitas e o limite de canteiros (a tabela do 4.3); materiais novos (pedra, madeira) e as receitas; vagas do daycare por marco.
+   2. ~~Marcos dão peças, receitas e o limite de canteiros~~ (feito em 2026-11-04), em três partes:
+      - 2a: o jardim abre pelos marcos (`config/gardenUnlocks`), não pelo nível de treinador; a tabela do 4.3 vale para peças, canteiros, vagas do daycare e nível máximo da bancada. A bancada vem desde o começo (sem ela, faltaria bola e o jogo travaria).
+      - 2b: cada estrutura é uma peça com estado próprio (`garden_structures.id`): duas bancadas têm operador, lote e nível separados (o mesmo Pokémon não opera duas); duas máquinas têm cargas separadas (a cura antes da luta usa a de mais cargas).
+      - 2c: materiais novos (madeira do Headbutt e pedra do Rock Smash, 2 a 4 por vez) e receitas (`config/buildRecipes`): árvore vermelha (Azalea; 10 madeiras, 5 Apricorns, 3 Oran; 1 h), máquina de cura (Cianwood; 10 pedras, 5 madeiras, 5 Oran; 2 h), bancada (Blackthorn; 15 madeiras, 10 pedras, 10 Apricorns; 4 h). Construir leva tempo, uma obra por vez, e para no teto do tipo: árvore vermelha 1 → 2 (Azalea) → 3 (Ecruteak), máquina 1 → 2 (Cianwood), bancada 1 → 2 (Blackthorn). Números de partida; o balanço é do item 7.
    3. Peças de habitat por cima disso, com o motor que já está na branch `feat/habitats`.
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script.
 8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
@@ -152,6 +155,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 ## 6. Pontos a decidir
 
-- Teto por estrutura de produção (bancada, árvore): sem teto, quem junta material faz muitas e as bolas perdem valor. Proposta: o marco também sobe quantas de cada dá para ter.
+- ~~Teto por estrutura de produção~~: decidido em 2026-11-04: o marco sobe quantas de cada dá para ter (passo 2c).
+- Quanto material cai no campo e quanto as receitas custam (sai do balanço do item 7, junto com o ritmo do jardim).
 - Quanto mais lento o jardim fica e quantas berries a colheita passa a dar (sai do balanço do item 7).
 - ~~A máquina de cura~~: decidido em 2026-11-03: cura na hora, com usos limitados que recarregam com o tempo.

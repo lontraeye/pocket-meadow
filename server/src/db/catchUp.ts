@@ -7,7 +7,7 @@ import { daycareContext } from './caretaker.js'
 import { ensureGardenLayout } from './gardenLayout.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
-import { grantStructures } from './structures.js'
+import { finishBuilds, grantStructures } from './structures.js'
 
 export type PlayerClock = {
   level: number
@@ -137,6 +137,7 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   // Construção (PROGRESSAO.md 4.3): o que já existe vira peça colocada, uma vez;
   // depois, a primeira unidade do que os marcos abriram nasce e vai para o jardim.
   ensureGardenLayout(userId, now)
+  finishBuilds(userId, now)
   grantStructures(userId, now)
 
   return {

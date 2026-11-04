@@ -15,6 +15,8 @@ const layout: GardenLayout = {
   plotsPlaced: 1,
   nextPlots: null,
   locked: [],
+  recipes: [],
+  building: null,
 }
 
 test('a casa do operador também é da bancada', () => {

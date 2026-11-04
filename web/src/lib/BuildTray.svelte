@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey } from '@garden/layout'
-  import type { GardenLayout } from './api'
+  import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
+  import { giftIconSrc, type GardenLayout } from './api'
   import type { BuildPick } from './build'
   import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
+  import { formatCountdown } from './time'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
   // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
-  // por categoria e um cartão com ícone por peça) e as ações da peça escolhida.
+  // por categoria e um cartão com ícone por peça), o detalhe da peça com
+  // receita (colocar, achar, construir: passo 2c) e as ações da peça escolhida.
 
   let {
     layout,
@@ -15,8 +17,11 @@
     message,
     fits,
     mouse,
+    now,
+    itemName,
     onPick,
     onSelectPlaced,
+    onCraft,
     onMove,
     onTurn,
     onConfirm,
@@ -32,9 +37,15 @@
     fits: boolean
     /** Mouse (a prévia segue o ponteiro e o clique coloca) ou toque (setas e Confirmar). */
     mouse: boolean
+    /** Relógio do servidor (a obra em andamento). */
+    now: number
+    /** Nome do material, para o custo da receita. */
+    itemName: (itemKey: string) => string
     onPick: (piece: PieceKey) => void
     /** Cartão de uma peça que já está no jardim: seleciona ela lá. */
     onSelectPlaced: (id: number) => void
+    /** Constrói uma peça pela receita. */
+    onCraft: (piece: StructurePiece) => void
     onMove: () => void
     onTurn: () => void
     onConfirm: () => void
@@ -96,8 +107,36 @@
         out.push({ ...base, piece, badge: null, note: town(closed.unlockAt.name), placedId: null, ready: false, locked: true })
       }
     }
-    return out
+    // A obra em andamento aparece no cartão do tipo dela.
+    const building = layout.building
+    return building
+      ? out.map((card) => (card.piece === building.piece ? { ...card, more: `obra · ${formatCountdown(building.readyAt - now)}` } : card))
+      : out
   })
+
+  /** A peça com receita que está aberta no detalhe (null = nenhuma). */
+  let focus = $state<StructurePiece | null>(null)
+  const focusRecipe = $derived(focus ? (layout.recipes.find((row) => row.piece === focus) ?? null) : null)
+  const focusStored = $derived(focus ? layout.stored.filter((row) => row.piece === focus).length : 0)
+  const focusPlaced = $derived(focus ? (layout.pieces.find((row) => row.piece === focus) ?? null) : null)
+  /** Por que não dá para construir agora (null = dá). */
+  const craftBlock = $derived.by((): string | null => {
+    const recipe = focusRecipe
+    if (!recipe) return null
+    if (recipe.unlockAt) return `A receita abre no ${recipe.unlockAt.name}.`
+    if (recipe.count >= recipe.cap) {
+      return recipe.nextCap ? `No máximo (${recipe.cap}). Mais no ${recipe.nextCap.name}.` : `No máximo (${recipe.cap}).`
+    }
+    if (layout.building) return `Já tem uma obra: ${name(layout.building.piece).toLowerCase()}.`
+    if (recipe.cost.some((item) => item.have < item.quantity)) return 'Faltam materiais.'
+    return null
+  })
+
+  /** Tempo da receita, sem segundos ("1 h", "4 h", "30 min"). */
+  function recipeTime(ms: number): string {
+    const minutes = Math.round(ms / 60_000)
+    return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`
+  }
 
   let tab = $state<BuildCategory | 'all'>('all')
   const tabs = $derived(
@@ -112,6 +151,11 @@
   const waitingAll = $derived(cards.filter((card) => card.ready).length)
 
   function onCard(card: Card) {
+    // Peça com receita: abre o detalhe (colocar, achar, construir).
+    if (card.piece !== 'berry_plot' && layout.recipes.some((row) => row.piece === card.piece)) {
+      focus = focus === card.piece ? null : card.piece
+      return
+    }
     if (card.ready) onPick(card.piece)
     else if (card.placedId !== null) onSelectPlaced(card.placedId)
   }
@@ -236,7 +280,10 @@
             class="card"
             class:placed={!card.ready}
             class:locked={card.locked}
-            disabled={pending || (!card.ready && card.placedId === null)}
+            class:focused={focus === card.piece}
+            aria-pressed={card.piece !== 'berry_plot' && layout.recipes.some((row) => row.piece === card.piece) ? focus === card.piece : undefined}
+            disabled={pending ||
+              (!card.ready && card.placedId === null && !layout.recipes.some((row) => row.piece === card.piece && row.unlockAt === null))}
             aria-label={card.locked
               ? `${name(card.piece)}: abre no Marco de ${card.note}`
               : `${name(card.piece)}: ${card.note}${card.more ? `, ${card.more}` : ''}`}
@@ -259,6 +306,51 @@
           </button>
         {/each}
       </div>
+
+      {#if focus && focusRecipe}
+        {@const recipe = focusRecipe}
+        {@const building = layout.building?.piece === focus ? layout.building : null}
+        <!-- Detalhe da peça: o que tem, a receita e as ações. -->
+        <div class="detail" role="group" aria-label={name(focus)}>
+          <p class="hint">
+            <strong>{name(focus)}</strong>
+            <span class="count">{recipe.count}/{recipe.cap}</span>
+          </p>
+          {#if building}
+            {@const total = Math.max(1, building.readyAt - building.startedAt)}
+            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(((now - building.startedAt) / total) * 100)}>
+              <span style:width="{Math.min(100, Math.max(0, ((now - building.startedAt) / total) * 100))}%"></span>
+              <b>Pronta em {formatCountdown(building.readyAt - now)}</b>
+            </div>
+          {/if}
+          <ul class="cost" aria-label="Receita">
+            {#each recipe.cost as item (item.itemKey)}
+              <li class:short={item.have < item.quantity}>
+                <img src={giftIconSrc(item.itemKey)} alt="" width="20" height="20" />
+                <span>{itemName(item.itemKey)}</span>
+                <strong>{Math.min(item.have, item.quantity)}/{item.quantity}</strong>
+              </li>
+            {/each}
+          </ul>
+          {#if craftBlock}<p class="hint block">{craftBlock}</p>{/if}
+          <div class="row">
+            {#if focusStored > 0}
+              <button type="button" class="btn btn-primary" disabled={pending} onclick={() => focus && onPick(focus)}>Colocar</button>
+            {:else if focusPlaced}
+              <button type="button" class="btn" disabled={pending} onclick={() => focusPlaced && onSelectPlaced(focusPlaced.id)}>Achar</button>
+            {/if}
+            <button
+              type="button"
+              class="btn"
+              class:btn-primary={focusStored === 0 && craftBlock === null}
+              disabled={pending || craftBlock !== null}
+              onclick={() => focus && onCraft(focus)}
+            >
+              Construir · {recipeTime(recipe.ms)}
+            </button>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -424,6 +516,86 @@
     top: 50%;
     transform: translate(-50%, -50%);
     fill: var(--ink);
+  }
+
+  .card.focused {
+    background: #fff8d8;
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
+    outline: 2px solid var(--accent-shade);
+    outline-offset: -4px;
+  }
+
+  /* Detalhe da peça com receita, embaixo dos cartões. */
+  .detail {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 2px solid var(--panel-shade);
+  }
+
+  .detail .hint {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .detail .hint.block {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+  }
+
+  .count {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+
+  .cost {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+
+  .cost li {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .cost img {
+    image-rendering: pixelated;
+  }
+
+  .cost li.short strong {
+    color: #c03020;
+  }
+
+  .bar {
+    position: relative;
+    height: 1.2rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--paper);
+    overflow: hidden;
+  }
+
+  .bar span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: #8ccf6a;
+  }
+
+  .bar b {
+    position: relative;
+    display: block;
+    text-align: center;
+    font-size: 0.72rem;
+    line-height: 1rem;
   }
 
   .card small.more {

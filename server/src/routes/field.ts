@@ -287,7 +287,10 @@ function useSpot(userId: number, method: FieldMethod, now: number) {
     const rng = mulberry32(randomSeed())
     if (rng() < spotDropsConfig.chance) {
       const table = spotDropsConfig.tables[method].map((row, index) => ({ ...row, speciesId: index + 1 }))
-      return dropItem(userId, clock.energy, rollWeighted(table, rng).itemKey, now)
+      const rolled: { itemKey: string; min?: number; max?: number } = rollWeighted(table, rng)
+      const min = rolled.min ?? 1
+      const quantity = min + Math.floor(rng() * ((rolled.max ?? min) - min + 1))
+      return dropItem(userId, clock.energy, rolled.itemKey, quantity, now)
     }
   }
 
@@ -304,7 +307,7 @@ function useSpot(userId: number, method: FieldMethod, now: number) {
  * Caiu um item em vez de um Pokémon: gasta a energia como um encontro (com as
  * mesmas travas: sem encontro pendente, com energia) e credita o item.
  */
-function dropItem(userId: number, energy: number, itemKey: string, now: number) {
+function dropItem(userId: number, energy: number, itemKey: string, quantity: number, now: number) {
   const db = getDb()
   const pending = db
     .select({ id: encounters.id })
@@ -316,6 +319,6 @@ function dropItem(userId: number, energy: number, itemKey: string, now: number) 
   if (trainerConfig.energyEnabled) {
     db.update(trainers).set({ energy: energy - 1, updatedAt: now }).where(eq(trainers.userId, userId)).run()
   }
-  creditItems(userId, [{ itemKey, quantity: 1 }])
-  return { ok: true as const, drop: { itemKey, quantity: 1 } }
+  creditItems(userId, [{ itemKey, quantity }])
+  return { ok: true as const, drop: { itemKey, quantity } }
 }

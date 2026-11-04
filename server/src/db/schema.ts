@@ -379,6 +379,8 @@ export const gardenStructures = sqliteTable(
     /** Upgrade da bancada em andamento: para qual nível e quando termina. */
     upgradeTo: integer('upgrade_to'),
     upgradeEndsAt: integer('upgrade_ends_at'),
+    /** Em construção até este instante (receita, passo 2c); null = pronta. */
+    readyAt: integer('ready_at'),
   },
   (table) => [
     index('idx_garden_structures_user').on(table.userId, table.key),
