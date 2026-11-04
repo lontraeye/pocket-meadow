@@ -995,7 +995,11 @@
         : [],
     ),
   )
-  const bubbleWalkers = $derived([...walkers, ...operatorWalkers])
+  // Quem acabou de virar operador ainda está em `walkers` até o passeio
+  // recomeçar: sem tirar, aparece duas vezes, e a chave repetida no {#each}
+  // dos balões trava a atualização da tela.
+  const operatorIds = $derived(new Set(operatorWalkers.map((walker) => walker.id)))
+  const bubbleWalkers = $derived([...walkers.filter((walker) => !operatorIds.has(walker.id)), ...operatorWalkers])
   /** Quadro parado da máquina: pronta (lote acabado com bolas esperando) ou parada. */
   function benchStateOf(bench: BenchView): 'idle' | 'working' | 'ready' {
     const job = bench.job
@@ -2197,7 +2201,7 @@
           {/each}
         </svg>
       {/if}
-      {#each walkers as walker (walker.id)}
+      {#each walkers.filter((walker) => !operatorIds.has(walker.id)) as walker (walker.id)}
         {@const look = gardenSprite(walker.speciesId, walker.isShiny)}
         {@const spot = place(walker.col, walker.row)}
         <!-- O botão é o ponto do chão (centro do bloco); o sprite cresce a partir dele. -->

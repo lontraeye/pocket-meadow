@@ -354,7 +354,11 @@
       .filter((mon) => mon.teamSlot !== null && mon.location === 'garden')
       .sort((a, b) => (a.teamSlot ?? 0) - (b.teamSlot ?? 0)),
   )
-  const leadId = $derived(roster.some((mon) => mon.id === lead) ? lead : (roster[0]?.id ?? null))
+  /** Desmaiado ou com fome fica fora da luta (o servidor também tira): não abre. */
+  const canFight = (mon: OwnedPokemon) => mon.hpRatio > 0 && mon.pet.hunger >= game.garden.fightMinHunger
+  const leadId = $derived(
+    roster.some((mon) => mon.id === lead && canFight(mon)) ? lead : ((roster.find(canFight) ?? roster[0])?.id ?? null),
+  )
   /** Quem abre primeiro; o resto segue a ordem do time. */
   const chosen = $derived([
     ...roster.filter((mon) => mon.id === leadId),
@@ -705,6 +709,8 @@
   }
 
   function pickLead(id: number) {
+    const mon = roster.find((row) => row.id === id)
+    if (!mon || !canFight(mon)) return
     play('tap')
     lead = id
   }
@@ -1200,7 +1206,7 @@
                 class="member"
                 class:on
                 aria-pressed={on}
-                disabled={pending}
+                disabled={pending || !canFight(mon)}
                 onclick={() => pickLead(mon.id)}
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
