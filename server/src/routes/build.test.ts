@@ -35,7 +35,7 @@ after(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-type Piece = { id: number; piece: string; slot: number; col: number; row: number }
+type Piece = { id: number; piece: string; slot: number; col: number; row: number; flipped: boolean }
 type Layout = { pieces: Piece[]; stored: string[]; plotLimit: number; plotsPlaced: number }
 type State = {
   garden: {
@@ -117,6 +117,32 @@ test('mover: casa livre dentro do jardim; a bancada ocupa a casa do operador', a
   // A casa antiga da bancada ficou livre.
   const healMove = await post(p.cookie, `/build/${heal.id}/move`, { col: bench.col, row: bench.row })
   assert.equal(healMove.status, 200)
+})
+
+test('girar: a bancada leva a casa do operador para o outro lado; árvore não gira', async () => {
+  const p = player('construcao-girar', 2)
+  const { layout } = (await state(p.cookie)).garden
+  const bench = pieceOf(layout, 'ball_bench')!
+  const tree = pieceOf(layout, 'apricorn_tree')!
+  assert.equal(bench.flipped, false)
+
+  // Girada, a casa do operador sai de (col − 1, row) para (col, row − 1).
+  const turned = await post(p.cookie, `/build/${bench.id}/move`, { col: 5, row: 0, flipped: true })
+  assert.equal(await errorOf(turned), 'out_of_bounds')
+  const ok = await post(p.cookie, `/build/${bench.id}/move`, { col: 0, row: 3, flipped: true })
+  assert.equal(ok.status, 200)
+  const after = ((await ok.json()) as { layout: Layout }).layout
+  assert.equal(pieceOf(after, 'ball_bench')!.flipped, true)
+  // Mover sem `flipped` mantém o giro.
+  const kept = await post(p.cookie, `/build/${bench.id}/move`, { col: 0, row: 5 })
+  assert.equal(((await kept.json()) as { layout: Layout }).layout.pieces.find((row) => row.id === bench.id)!.flipped, true)
+  // A casa do operador (0, 4) está ocupada pela pegada.
+  assert.equal(await errorOf(await post(p.cookie, `/build/${tree.id}/move`, { col: 0, row: 4 })), 'occupied')
+
+  const treeTurn = await post(p.cookie, `/build/${tree.id}/move`, { col: 3, row: 3, flipped: true })
+  assert.equal(treeTurn.status, 200)
+  assert.equal(((await treeTurn.json()) as { layout: Layout }).layout.pieces.find((row) => row.id === tree.id)!.flipped, false)
+  assert.equal(await errorOf(await post(p.cookie, `/build/${bench.id}/move`, { col: 3, row: 5, flipped: 'sim' })), 'invalid_body')
 })
 
 test('árvore guardada para de crescer, não colhe e volta a contar ao colocar', async () => {

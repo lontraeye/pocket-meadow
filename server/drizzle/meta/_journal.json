@@ -225,6 +225,13 @@
       "when": 1793820000000,
       "tag": "0031_garden_placements",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793830000000,
+      "tag": "0032_garden_placements_flipped",
+      "breakpoints": true
     }
   ]
 }

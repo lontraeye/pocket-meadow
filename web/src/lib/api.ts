@@ -416,7 +416,8 @@ export type HealMachineView = {
 export type GardenLayout = {
   cols: number
   rows: number
-  pieces: { id: number; piece: PieceKey; slot: number; col: number; row: number }[]
+  /** `flipped`: girada (só bancada e máquina de cura). */
+  pieces: { id: number; piece: PieceKey; slot: number; col: number; row: number; flipped: boolean }[]
   stored: StructurePiece[]
   plotLimit: number
   plotsPlaced: number

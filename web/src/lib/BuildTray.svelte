@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
+  import { isFlippable, PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
   import type { GardenLayout } from './api'
   import type { BuildPick } from './build'
 
@@ -12,8 +12,12 @@
     pick,
     pending,
     message,
+    fits,
+    mouse,
     onPick,
     onMove,
+    onTurn,
+    onConfirm,
     onStore,
     onCancel,
     onClose,
@@ -22,8 +26,14 @@
     pick: BuildPick | null
     pending: boolean
     message: string
+    /** A prévia cabe onde está. */
+    fits: boolean
+    /** Mouse (a prévia segue o ponteiro e o clique coloca) ou toque (setas e Confirmar). */
+    mouse: boolean
     onPick: (piece: PieceKey) => void
     onMove: () => void
+    onTurn: () => void
+    onConfirm: () => void
     onStore: () => void
     onCancel: () => void
     onClose: () => void
@@ -43,12 +53,29 @@
     <p class="hint">{name(pick.piece)}</p>
     <div class="row">
       <button type="button" class="btn btn-primary" disabled={pending} onclick={onMove}>Mover</button>
+      {#if isFlippable(pick.piece)}
+        <button type="button" class="btn" disabled={pending} onclick={onTurn}>Girar</button>
+      {/if}
       <button type="button" class="btn" disabled={pending} onclick={onStore}>Guardar</button>
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Voltar</button>
     </div>
   {:else if pick}
-    <p class="hint">Toque numa casa livre para {pick.kind === 'move' ? 'levar' : 'colocar'} {name(pick.piece).toLowerCase()}.</p>
+    <p class="hint">
+      {#if mouse}
+        Clique numa casa para {pick.kind === 'move' ? 'levar' : 'colocar'} {name(pick.piece).toLowerCase()}.{isFlippable(pick.piece)
+          ? ' R gira.'
+          : ''} Esc cancela.
+      {:else}
+        Arraste {name(pick.piece).toLowerCase()} ou use as setas, e confirme.
+      {/if}
+    </p>
     <div class="row">
+      {#if !mouse}
+        <button type="button" class="btn btn-primary" disabled={pending || !fits} onclick={onConfirm}>Confirmar</button>
+      {/if}
+      {#if isFlippable(pick.piece)}
+        <button type="button" class="btn" disabled={pending} onclick={onTurn}>Girar{mouse ? ' (R)' : ''}</button>
+      {/if}
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Cancelar</button>
     </div>
   {:else}

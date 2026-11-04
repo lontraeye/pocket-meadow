@@ -17,7 +17,7 @@
     type PlotState,
     type TreeView,
   } from './api'
-  import { cellKey, occupied, type StructurePiece } from '@garden/layout'
+  import { cellKey, isFlippable, occupied, type PieceKey, type StructurePiece } from '@garden/layout'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -34,7 +34,19 @@
   } from './bench'
   import BenchPanel from './BenchPanel.svelte'
   import BuildTray from './BuildTray.svelte'
-  import { pickedCells, pieceAtCell, validAnchors, type BuildPick } from './build'
+  import {
+    GHOST_ID,
+    ghostAt,
+    ghostFits,
+    pickedCells,
+    pieceAtCell,
+    startGhost,
+    turnGhost,
+    validAnchors,
+    viewPieces,
+    type BuildPick,
+    type PlacedView,
+  } from './build'
   import HealMachinePanel from './HealMachinePanel.svelte'
   import {
     HEAL_ANIM_TOTAL_MS,
@@ -357,12 +369,38 @@
   // do mundo (+ margem). As peças ocupam casas e o passeio desvia delas.
   const layout = $derived(game.garden.layout)
   const worldKey = (col: number, row: number) => cellKey(col - playCol0, row - playRow0)
+
+  // Modo Construir (PROGRESSAO.md 4.3): a grade fica embaixo das peças e dos
+  // Pokémon; uma camada transparente por cima pega os toques e acha a casa pela
+  // posição. A peça nova ou sendo movida é uma prévia: desenhada na casa da
+  // prévia (a bancada leva o operador junto) até colocar. Com mouse, a prévia
+  // segue o ponteiro, o clique coloca e R gira; no toque, setas, arrastar e
+  // Confirmar.
+  let building = $state(false)
+  let buildPick = $state<BuildPick | null>(null)
+  let buildPending = $state(false)
+  let buildMessage = $state('')
+  /** O último ponteiro foi mouse (muda as instruções e o jeito de colocar). */
+  let buildMouse = $state(typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches)
+  /** Peças como desenhadas: a que está sendo movida (ou a nova) na casa da prévia. */
+  const drawnPieces = $derived(building ? viewPieces(layout, buildPick) : layout.pieces)
+  const ghost = $derived(building && buildPick && buildPick.kind !== 'selected' ? buildPick : null)
+  const ghostOk = $derived(building ? ghostFits(layout, buildPick) : false)
+
   /** Canteiro em cada casa: casa → slot (o `plotIndex` das rotas da horta). */
   const plotSlotAt = $derived(
-    new Map(layout.pieces.filter((piece) => piece.piece === 'berry_plot').map((piece) => [cellKey(piece.col, piece.row), piece.slot])),
+    new Map(drawnPieces.filter((piece) => piece.piece === 'berry_plot').map((piece) => [cellKey(piece.col, piece.row), piece.slot])),
   )
   /** Casas ocupadas por alguma peça (pegada inteira, como a casa do operador da bancada). */
   const blockedCells = $derived(occupied(layout.pieces))
+
+  /** A peça desenhada é a prévia (canteiro pelo slot, estrutura pela chave). */
+  function isGhost(piece: PieceKey, slot = 0): boolean {
+    if (!ghost || ghost.piece !== piece) return false
+    if (piece !== 'berry_plot') return true
+    if (ghost.kind === 'new') return slot === GHOST_ID
+    return layout.pieces.find((row) => row.id === ghost.id)?.slot === slot
+  }
 
   function isPlotCell(col: number, row: number): boolean {
     return plotSlotAt.has(worldKey(col, row))
@@ -374,8 +412,13 @@
 
   /** Casa (do mundo) de uma estrutura colocada; null = guardada ou ainda fechada. */
   function structureCell(piece: StructurePiece): { col: number; row: number } | null {
-    const found = layout.pieces.find((row) => row.piece === piece)
+    const found = drawnPieces.find((row) => row.piece === piece)
     return found ? { col: found.col + playCol0, row: found.row + playRow0 } : null
+  }
+
+  /** A estrutura está girada (sprite espelhado). */
+  function structureFlipped(piece: StructurePiece): boolean {
+    return drawnPieces.find((row) => row.piece === piece)?.flipped ?? false
   }
 
   // Árvore de Apricorn (5.23): as raízes formam um losango pequeno com o
@@ -386,8 +429,14 @@
 
   // Bancada de bolas (5.23): o operador sai do passeio e fica na casa à
   // esquerda da máquina (faz parte da pegada da bancada), virado para ela.
+  // Girada, ele fica à direita (cellsOf troca dc por dr) e vira para baixo à esquerda.
   const benchCell = $derived(structureCell('ball_bench'))
-  const operatorCell = $derived(benchCell ? { col: benchCell.col - 1, row: benchCell.row } : null)
+  const benchFlipped = $derived(structureFlipped('ball_bench'))
+  const operatorCell = $derived(
+    benchCell ? (benchFlipped ? { col: benchCell.col, row: benchCell.row - 1 } : { col: benchCell.col - 1, row: benchCell.row }) : null,
+  )
+  /** Direção PMD do operador: 1 = baixo à direita, 7 = baixo à esquerda. */
+  const operatorDir = $derived(benchFlipped ? 7 : 1)
 
   // Máquina de cura (PROGRESSAO.md, item 4).
   const healCell = $derived(structureCell('heal_machine'))
@@ -396,15 +445,11 @@
     return inPlay(col, row) && !blockedCells.has(worldKey(col, row))
   }
 
-  // Modo Construir (PROGRESSAO.md 4.3): a grade fica por cima de tudo e cada
-  // toque cai numa casa. Sem nada escolhido, tocar numa peça a seleciona
-  // (mover ou guardar); com uma peça escolhida, tocar numa casa livre a põe lá.
-  let building = $state(false)
-  let buildPick = $state<BuildPick | null>(null)
-  let buildPending = $state(false)
-  let buildMessage = $state('')
+  // Sem nada escolhido, tocar numa peça a seleciona (mover, girar, guardar).
   const buildValid = $derived(building ? validAnchors(layout, buildPick) : new Set<string>())
   const buildPicked = $derived(building ? pickedCells(layout, buildPick) : new Set<string>())
+  /** Casas ocupadas fora a peça sendo movida (a casa de onde ela saiu fica livre). */
+  const buildBusy = $derived(building ? occupied(layout.pieces, ghost?.kind === 'move' ? ghost.id : undefined) : new Set<string>())
   /** O que espera para ser colocado: estruturas guardadas e canteiros livres. */
   const buildWaiting = $derived(layout.stored.length + Math.max(0, layout.plotLimit - layout.plotsPlaced))
   const playCells = Array.from({ length: playCols * playRows }, (_, index) => ({
@@ -438,31 +483,227 @@
     }
   }
 
-  async function onBuildCell(worldCol: number, worldRow: number) {
+  /** Casa da grade jogável sob o ponto da tela (pode cair fora da grade). */
+  function gridCellAt(clientX: number, clientY: number): { col: number; row: number } {
+    const point = lawnPoint(clientX, clientY)
+    // Inverso do place(): u = col − row e v = col + row, no centro do losango.
+    const u = (point.x - panX - originX) / halfW
+    const v = (point.y - panY - originY) / halfH - 1
+    return { col: Math.round((u + v) / 2) - playCol0, row: Math.round((v - u) / 2) - playRow0 }
+  }
+
+  /**
+   * A peça sob o ponto: a da casa e, se não houver, a da frente (árvore, bancada
+   * e máquina sobem acima da casa delas, então a copa cai nas casas de trás).
+   */
+  function pieceUnder(pieces: readonly PlacedView[], clientX: number, clientY: number): PlacedView | null {
+    const { col, row } = gridCellAt(clientX, clientY)
+    for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      const found = pieceAtCell(pieces, col + dc, row + dr)
+      if (found && (dc === 0 && dr === 0 ? true : found.piece !== 'berry_plot')) return found
+    }
+    return null
+  }
+
+  function pickNew(piece: PieceKey) {
+    buildMessage = ''
+    buildPick = { kind: 'new', piece, ...startGhost(layout, piece) }
+  }
+
+  function startMove() {
+    const pick = buildPick
+    if (pick?.kind !== 'selected') return
+    const placed = layout.pieces.find((row) => row.id === pick.id)
+    if (!placed) return
+    buildMessage = ''
+    buildPick = { kind: 'move', id: placed.id, piece: placed.piece, col: placed.col, row: placed.row, flipped: placed.flipped }
+  }
+
+  /** Girar: a prévia na hora; a peça só selecionada gira no lugar (vai ao servidor). */
+  async function turnPick() {
+    const pick = buildPick
+    if (!pick || buildPending || !isFlippable(pick.piece)) return
+    if (pick.kind !== 'selected') {
+      buildPick = turnGhost(pick)
+      return
+    }
+    const placed = layout.pieces.find((row) => row.id === pick.id)
+    if (!placed) return
+    if (await buildCall(`/api/build/${placed.id}/move`, { col: placed.col, row: placed.row, flipped: !placed.flipped })) {
+      play('tap')
+    }
+  }
+
+  async function commitGhost() {
+    const pick = buildPick
+    if (!pick || pick.kind === 'selected' || buildPending) return
+    if (!ghostFits(layout, pick)) {
+      buildMessage = 'Não cabe aí.'
+      return
+    }
+    const { col, row, flipped } = pick
+    const ok =
+      pick.kind === 'new'
+        ? await buildCall('/api/build/place', { piece: pick.piece, col, row, flipped })
+        : await buildCall(`/api/build/${pick.id}/move`, { col, row, flipped })
+    if (ok) {
+      buildPick = null
+      play('tap')
+    }
+  }
+
+  function nudgeGhost(dc: number, dr: number) {
+    const pick = buildPick
+    if (!pick || pick.kind === 'selected' || buildPending) return
+    buildMessage = ''
+    buildPick = ghostAt(pick, pick.col + dc, pick.row + dr)
+  }
+
+  // Arrastar na camada do Construir: a prévia (ou uma peça, que já vira
+  // "mover") segue o dedo pela casa, mantendo onde ela foi pega. Arrastar fora
+  // de peça é o pan de sempre (o evento sobe para o gramado).
+  type BuildDrag = {
+    pointerId: number
+    startX: number
+    startY: number
+    offCol: number
+    offRow: number
+    moved: boolean
+    /** Peça ainda não escolhida para mover (vira "mover" ao passar do limiar). */
+    piece: PlacedView | null
+  }
+  let buildDrag: BuildDrag | null = null
+  let buildSkipClick = false
+
+  function ghostId(pick: BuildPick): number {
+    return pick.kind === 'move' ? pick.id : GHOST_ID
+  }
+
+  function onBuildDown(event: PointerEvent) {
+    buildMouse = event.pointerType === 'mouse'
+    // Um arrasto anterior que soltou fora não deixa o próximo clique preso.
+    buildSkipClick = false
+    if (buildPending || (buildMouse && event.button !== 0)) return
+    const cell = gridCellAt(event.clientX, event.clientY)
+    const pick = buildPick
+    let piece: PlacedView | null = null
+    let anchor: { col: number; row: number }
+    if (pick && pick.kind !== 'selected') {
+      if (pieceUnder(drawnPieces, event.clientX, event.clientY)?.id !== ghostId(pick)) return
+      anchor = pick
+    } else {
+      piece = pieceUnder(layout.pieces, event.clientX, event.clientY)
+      if (!piece) return
+      anchor = piece
+    }
+    event.stopPropagation()
+    buildDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offCol: cell.col - anchor.col,
+      offRow: cell.row - anchor.row,
+      moved: false,
+      piece,
+    }
+  }
+
+  function onBuildMove(event: PointerEvent) {
+    const drag = buildDrag
+    if (!drag) {
+      // Mouse sem botão: a prévia segue o ponteiro.
+      if (event.pointerType !== 'mouse' || event.buttons !== 0 || !ghost || buildPending) return
+      const cell = gridCellAt(event.clientX, event.clientY)
+      if (cell.col !== ghost.col || cell.row !== ghost.row) buildPick = ghostAt(ghost, cell.col, cell.row)
+      return
+    }
+    if (drag.pointerId !== event.pointerId) return
+    if (!drag.moved) {
+      const dx = event.clientX - drag.startX
+      const dy = event.clientY - drag.startY
+      if (dx * dx + dy * dy < panDragPx * panDragPx) return
+      drag.moved = true
+      try {
+        ;(event.currentTarget as Element).setPointerCapture(event.pointerId)
+      } catch {
+        // Sem capture o arrasto segue enquanto o dedo estiver na camada.
+      }
+      if (drag.piece) {
+        const placed = drag.piece
+        buildMessage = ''
+        buildPick = { kind: 'move', id: placed.id, piece: placed.piece, col: placed.col, row: placed.row, flipped: placed.flipped }
+      }
+    }
+    const pick = buildPick
+    if (!pick || pick.kind === 'selected') return
+    const cell = gridCellAt(event.clientX, event.clientY)
+    const col = cell.col - drag.offCol
+    const row = cell.row - drag.offRow
+    if (col !== pick.col || row !== pick.row) buildPick = ghostAt(pick, col, row)
+  }
+
+  function onBuildUp(event: PointerEvent) {
+    const drag = buildDrag
+    if (!drag || drag.pointerId !== event.pointerId) return
+    buildDrag = null
+    if (!drag.moved) return
+    buildSkipClick = true
+    // Mouse: soltar coloca. Toque: fica a prévia, para ajustar e confirmar.
+    if (event.pointerType === 'mouse') void commitGhost()
+  }
+
+  function onBuildClick(event: MouseEvent) {
+    if (buildSkipClick) {
+      buildSkipClick = false
+      return
+    }
     if (buildPending) return
-    const col = worldCol - playCol0
-    const row = worldRow - playRow0
     const pick = buildPick
     if (pick && pick.kind !== 'selected') {
-      if (!buildValid.has(cellKey(col, row))) {
-        buildMessage = 'Não cabe aí. Escolha uma casa verde.'
-        return
-      }
-      const ok =
-        pick.kind === 'new'
-          ? await buildCall('/api/build/place', { piece: pick.piece, col, row })
-          : await buildCall(`/api/build/${pick.id}/move`, { col, row })
-      if (ok) {
-        buildPick = null
-        play('tap')
+      const cell = gridCellAt(event.clientX, event.clientY)
+      if (buildMouse) {
+        buildPick = ghostAt(pick, cell.col, cell.row)
+        void commitGhost()
+      } else if (pieceUnder(drawnPieces, event.clientX, event.clientY)?.id !== ghostId(pick)) {
+        // Toque numa casa: a prévia vai para lá.
+        nudgeGhost(cell.col - pick.col, cell.row - pick.row)
       }
       return
     }
     buildMessage = ''
-    const found = pieceAtCell(layout, col, row)
+    const found = pieceUnder(layout.pieces, event.clientX, event.clientY)
     buildPick = found ? { kind: 'selected', id: found.id, piece: found.piece } : null
     if (found) play('tap')
   }
+
+  // Teclado no Construir: R gira a prévia, Esc desiste dela.
+  $effect(() => {
+    if (!building) return
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select')) return
+      if (event.key === 'r' || event.key === 'R') {
+        if (ghost) {
+          event.preventDefault()
+          void turnPick()
+        }
+      } else if (event.key === 'Escape' && buildPick) {
+        event.preventDefault()
+        buildMessage = ''
+        buildPick = null
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  /** Setas do toque em volta da prévia: [dc, dr, ângulo da seta em graus]. */
+  const NUDGES = [
+    [1, 0, 26.57],
+    [0, 1, 153.43],
+    [-1, 0, -153.43],
+    [0, -1, -26.57],
+  ] as const
 
   async function storePicked() {
     const pick = buildPick
@@ -692,7 +933,7 @@
       isShiny: mon.isShiny,
       col: cell.col,
       row: cell.row,
-      dir: 1,
+      dir: operatorDir,
       anim: 'Idle',
     }
   })
@@ -1612,6 +1853,8 @@
             class:planted={stage === 'planted'}
             class:growing={stage === 'growing'}
             class:ready={stage === 'ready'}
+            class:ghost={isGhost('berry_plot', plotIdx)}
+            class:bad={isGhost('berry_plot', plotIdx) && !ghostOk}
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
@@ -1642,6 +1885,8 @@
                 type="button"
                 class="bush-art"
                 class:ripe={stage === 'ready'}
+                class:ghost={isGhost('berry_plot', plotIdx)}
+                class:bad={isGhost('berry_plot', plotIdx) && !ghostOk}
                 data-plot={plotIdx}
                 tabindex="-1"
                 aria-hidden="true"
@@ -1662,7 +1907,7 @@
         {/if}
       {/each}
       {#each game.garden.trees as tree (tree.key)}
-        {@const cell = tree.placed ? structureCell(tree.key) : null}
+        {@const cell = structureCell(tree.key)}
         {@const art = treeArts[tree.color]}
         {#if cell}
           {@const spot = place(cell.col, cell.row)}
@@ -1673,6 +1918,8 @@
             class="tree"
             class:locked={!tree.unlocked}
             class:shake={treeShake === tree.key}
+            class:ghost={isGhost(tree.key)}
+            class:bad={isGhost(tree.key) && !ghostOk}
             style:left="{snapToDevice(spot.x)}px"
             style:top="{snapToDevice(spot.y + halfH + TREE_FOOT * pmdScale)}px"
             style:z-index={cell.col + cell.row + depthSpan + 1}
@@ -1715,6 +1962,8 @@
           <button
             type="button"
             class="mon operator"
+            class:ghost={isGhost('ball_bench')}
+            class:bad={isGhost('ball_bench') && !ghostOk}
             style:left="{snapToDevice(at.x)}px"
             style:top="{snapToDevice(at.y + halfH)}px"
             style:--size="{showdownSize * scale}px"
@@ -1727,7 +1976,7 @@
                 speciesId={benchOperator.speciesId}
                 shiny={look.shinySheet}
                 anim="Idle"
-                dir={1}
+                dir={operatorDir}
                 scale={pmdScale}
                 shadow={look.shadow}
                 {time}
@@ -1743,6 +1992,8 @@
           class="bench"
           class:locked={!bench.unlocked}
           class:working={bench.unlocked && benchState === 'working'}
+          class:ghost={isGhost('ball_bench')}
+          class:bad={isGhost('ball_bench') && !ghostOk}
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
           style:z-index={benchCell.col + benchCell.row + depthSpan + 1}
@@ -1756,6 +2007,7 @@
           <!-- Folha de quadros: parada, 24 de trabalho (em loop) e pronta. -->
           <span
             class="bench-sprite"
+            class:flip={benchFlipped}
             style:width="{BENCH_W * pmdScale}px"
             style:height="{BENCH_H * pmdScale}px"
             style:background-image="url({benchSheet(bench.job?.recipeKey)})"
@@ -1779,6 +2031,8 @@
         <button
           type="button"
           class="heal-machine"
+          class:ghost={isGhost('heal_machine')}
+          class:bad={isGhost('heal_machine') && !ghostOk}
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
           style:z-index={healCell.col + healCell.row + depthSpan + 1}
@@ -1787,6 +2041,7 @@
         >
           <span
             class="heal-sprite"
+            class:flip={structureFlipped('heal_machine')}
             style:width="{HEAL_W * pmdScale}px"
             style:height="{HEAL_H * pmdScale}px"
             style:background-image="url({HEAL_SHEET})"
@@ -1821,20 +2076,56 @@
         </button>
       {/each}
       {#if building}
-        <svg class="build-grid" width={stageW} height={stageH} style:z-index={depthSpan * 5} aria-hidden="true">
+        <!-- A grade fica no alto do chão: peças e Pokémon por cima dela. -->
+        <svg class="build-grid" width={stageW} height={stageH} style:z-index={depthSpan - 1} aria-hidden="true">
           {#each playCells as cell (`${cell.col}-${cell.row}`)}
             {@const at = place(cell.col, cell.row)}
             {@const key = worldKey(cell.col, cell.row)}
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <polygon
-              class:busy={blockedCells.has(key)}
+              class:busy={buildBusy.has(key)}
               class:ok={buildValid.has(key)}
               class:picked={buildPicked.has(key)}
+              class:bad={ghost !== null && !ghostOk && buildPicked.has(key)}
               points="{at.x},{at.y} {at.x + halfW},{at.y + halfH} {at.x},{at.y + tileH} {at.x - halfW},{at.y + halfH}"
-              onclick={() => void onBuildCell(cell.col, cell.row)}
             />
           {/each}
         </svg>
+        <!-- Camada transparente por cima de tudo: os toques do Construir caem
+             na casa pela posição (gridCellAt), não no sprite. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="build-hit"
+          class:placing={ghost !== null}
+          style:width="{stageW}px"
+          style:height="{stageH}px"
+          style:z-index={depthSpan * 5}
+          onpointerdown={onBuildDown}
+          onpointermove={onBuildMove}
+          onpointerup={onBuildUp}
+          onpointercancel={onBuildUp}
+          onclick={onBuildClick}
+        ></div>
+        {#if ghost && !buildMouse}
+          {@const at = place(ghost.col + playCol0, ghost.row + playRow0)}
+          {@const reach = Math.max(1.5, 46 / halfW)}
+          {#each NUDGES as [dc, dr, angle] (`${dc},${dr}`)}
+            <button
+              type="button"
+              class="build-arrow"
+              style:left="{at.x + (dc - dr) * halfW * reach}px"
+              style:top="{at.y + halfH + (dc + dr) * halfH * reach}px"
+              style:z-index={depthSpan * 5 + 1}
+              aria-label="Mover a peça uma casa"
+              disabled={buildPending}
+              onpointerdown={(event) => event.stopPropagation()}
+              onclick={() => nudgeGhost(dc, dr)}
+            >
+              <svg viewBox="0 0 12 12" width="18" height="18" style:transform="rotate({angle}deg)" aria-hidden="true">
+                <path d="M2 4.5h5V2l4 4-4 4V7.5H2z" />
+              </svg>
+            </button>
+          {/each}
+        {/if}
       {/if}
       {#if showGrid}
         <svg class="grid" width={stageW} height={stageH} style:z-index={depthSpan * 4} aria-hidden="true">
@@ -2058,13 +2349,12 @@
         pick={buildPick}
         pending={buildPending}
         message={buildMessage}
-        onPick={(piece) => {
-          buildMessage = ''
-          buildPick = { kind: 'new', piece }
-        }}
-        onMove={() => {
-          if (buildPick?.kind === 'selected') buildPick = { ...buildPick, kind: 'move' }
-        }}
+        fits={ghostOk}
+        mouse={buildMouse}
+        onPick={pickNew}
+        onMove={startMove}
+        onTurn={() => void turnPick()}
+        onConfirm={() => void commitGhost()}
         onStore={() => void storePicked()}
         onCancel={() => {
           buildMessage = ''
@@ -2986,20 +3276,20 @@
   }
 
 
-  /* Modo Construir: a grade por cima de tudo, e cada casa pega o toque. */
+  /* Modo Construir: a grade no alto do chão (peças e Pokémon por cima) e a
+     camada transparente que pega os toques. */
   .build-grid {
     position: absolute;
     left: 0;
     top: 0;
     overflow: visible;
+    pointer-events: none;
   }
 
   .build-grid polygon {
     fill: #ffffff10;
     stroke: #ffffff70;
     stroke-width: 1;
-    cursor: pointer;
-    pointer-events: all;
   }
 
   .build-grid polygon.busy {
@@ -3007,13 +3297,64 @@
   }
 
   .build-grid polygon.ok {
-    fill: #70e05060;
+    fill: #70e05038;
     stroke: #b0ff90;
   }
 
   .build-grid polygon.picked {
     fill: #f8d03070;
     stroke: #f8d030;
+  }
+
+  .build-grid polygon.picked.bad {
+    fill: #e0403070;
+    stroke: #ff8070;
+  }
+
+  .build-hit {
+    position: absolute;
+    left: 0;
+    top: 0;
+    touch-action: none;
+  }
+
+  .build-hit.placing {
+    cursor: pointer;
+  }
+
+  /* A prévia: meio transparente; vermelha quando não cabe. */
+  .ghost {
+    opacity: 0.85;
+  }
+
+  .ghost.bad {
+    filter: sepia(1) saturate(5) hue-rotate(-40deg) brightness(0.85);
+  }
+
+  .bench-sprite.flip,
+  .heal-sprite.flip {
+    transform: scaleX(-1);
+  }
+
+  .build-arrow {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    margin: -22px 0 0 -22px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    background: var(--panel-face);
+    color: var(--ink);
+    fill: currentColor;
+    box-shadow: 0 2px 0 rgb(0 0 0 / 0.3);
+    touch-action: manipulation;
+  }
+
+  .build-arrow:disabled {
+    opacity: 0.5;
   }
 
   .build-btn {

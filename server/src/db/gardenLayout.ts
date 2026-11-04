@@ -26,6 +26,7 @@ export function loadPieces(userId: number): PlacedRow[] {
       slot: gardenPlacements.slot,
       col: gardenPlacements.col,
       row: gardenPlacements.row,
+      flipped: gardenPlacements.flipped,
     })
     .from(gardenPlacements)
     .where(eq(gardenPlacements.userId, userId))
@@ -75,10 +76,11 @@ export function insertPlacement(
   col: number,
   row: number,
   now: number,
+  flipped = false,
 ): number {
   const inserted = getDb()
     .insert(gardenPlacements)
-    .values({ userId, piece, slot, col, row, placedAt: now })
+    .values({ userId, piece, slot, col, row, flipped, placedAt: now })
     .returning({ id: gardenPlacements.id })
     .get()
   return inserted.id

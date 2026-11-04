@@ -397,6 +397,8 @@ export const gardenPlacements = sqliteTable(
     slot: integer('slot').notNull().default(0),
     col: integer('col').notNull(),
     row: integer('row').notNull(),
+    /** Espelhada (a bancada com o operador do outro lado). Só peças com `flippable`. */
+    flipped: integer('flipped', { mode: 'boolean' }).notNull().default(false),
     placedAt: integer('placed_at').notNull(),
   },
   (table) => [

@@ -1,20 +1,36 @@
 // Caminho relativo (não o alias @garden) para os testes rodarem com o tsx puro.
-import { canPlace, cellsOf, GARDEN_COLS, GARDEN_ROWS, type PieceKey } from '../../../server/src/game/garden/layout'
+import {
+  canPlace,
+  cellsOf,
+  GARDEN_COLS,
+  GARDEN_ROWS,
+  isFlippable,
+  type PieceKey,
+} from '../../../server/src/game/garden/layout'
 import type { GardenLayout } from './api'
 
 // Modo Construir do jardim (PROGRESSAO.md 4.3): o que está escolhido e onde dá
 // para pôr. As casas são as da grade jogável (0..11), como no servidor.
+// Peça nova ou sendo movida tem uma prévia (col, row, flipped): ela é desenhada
+// lá no lugar da de verdade até o jogador confirmar.
+
+export type BuildGhost = { col: number; row: number; flipped: boolean }
 
 export type BuildPick =
-  | { kind: 'new'; piece: PieceKey }
+  | ({ kind: 'new'; piece: PieceKey } & BuildGhost)
   | { kind: 'selected'; id: number; piece: PieceKey }
-  | { kind: 'move'; id: number; piece: PieceKey }
+  | ({ kind: 'move'; id: number; piece: PieceKey } & BuildGhost)
+
+export type PlacedView = GardenLayout['pieces'][number]
+
+/** A prévia ganha este id (peça nova) e este slot (canteiro novo). */
+export const GHOST_ID = -1
 
 /** A peça colocada que ocupa a casa (pela pegada inteira). */
-export function pieceAtCell(layout: GardenLayout, col: number, row: number): GardenLayout['pieces'][number] | null {
+export function pieceAtCell(pieces: readonly PlacedView[], col: number, row: number): PlacedView | null {
   return (
-    layout.pieces.find((placed) =>
-      cellsOf(placed.piece, placed.col, placed.row).some((cell) => cell.col === col && cell.row === row),
+    pieces.find((placed) =>
+      cellsOf(placed.piece, placed.col, placed.row, placed.flipped).some((cell) => cell.col === col && cell.row === row),
     ) ?? null
   )
 }
@@ -26,16 +42,73 @@ export function validAnchors(layout: GardenLayout, pick: BuildPick | null): Set<
   const ignoreId = pick.kind === 'move' ? pick.id : undefined
   for (let row = 0; row < GARDEN_ROWS; row += 1) {
     for (let col = 0; col < GARDEN_COLS; col += 1) {
-      if (canPlace(layout.pieces, pick.piece, col, row, ignoreId) === null) out.add(`${col},${row}`)
+      if (canPlace(layout.pieces, pick.piece, col, row, ignoreId, pick.flipped) === null) out.add(`${col},${row}`)
     }
   }
   return out
 }
 
-/** Casas da peça selecionada (ou sendo movida), para destacar. */
+/** A prévia cabe onde está. */
+export function ghostFits(layout: GardenLayout, pick: BuildPick | null): boolean {
+  if (!pick || pick.kind === 'selected') return false
+  return canPlace(layout.pieces, pick.piece, pick.col, pick.row, pick.kind === 'move' ? pick.id : undefined, pick.flipped) === null
+}
+
+/** Casas da peça selecionada, ou da prévia, para destacar. */
 export function pickedCells(layout: GardenLayout, pick: BuildPick | null): Set<string> {
-  if (!pick || pick.kind === 'new') return new Set()
+  if (!pick) return new Set()
+  if (pick.kind !== 'selected') {
+    return new Set(cellsOf(pick.piece, pick.col, pick.row, pick.flipped).map((cell) => `${cell.col},${cell.row}`))
+  }
   const placed = layout.pieces.find((row) => row.id === pick.id)
   if (!placed) return new Set()
-  return new Set(cellsOf(placed.piece, placed.col, placed.row).map((cell) => `${cell.col},${cell.row}`))
+  return new Set(cellsOf(placed.piece, placed.col, placed.row, placed.flipped).map((cell) => `${cell.col},${cell.row}`))
+}
+
+/**
+ * As peças como a tela desenha: a que está sendo movida no lugar da prévia, e a
+ * nova (id e slot GHOST_ID) junto das outras.
+ */
+export function viewPieces(layout: GardenLayout, pick: BuildPick | null): PlacedView[] {
+  if (!pick || pick.kind === 'selected') return layout.pieces
+  const { col, row, flipped } = pick
+  if (pick.kind === 'move') {
+    return layout.pieces.map((placed) => (placed.id === pick.id ? { ...placed, col, row, flipped } : placed))
+  }
+  return [...layout.pieces, { id: GHOST_ID, piece: pick.piece, slot: GHOST_ID, col, row, flipped }]
+}
+
+/** Prévia nova: a casa livre mais perto do meio do jardim (ou o meio, se nada couber). */
+export function startGhost(layout: GardenLayout, piece: PieceKey): BuildGhost {
+  const midCol = (GARDEN_COLS - 1) / 2
+  const midRow = (GARDEN_ROWS - 1) / 2
+  let best: BuildGhost | null = null
+  let bestDistance = Infinity
+  for (let row = 0; row < GARDEN_ROWS; row += 1) {
+    for (let col = 0; col < GARDEN_COLS; col += 1) {
+      if (canPlace(layout.pieces, piece, col, row) !== null) continue
+      const distance = Math.abs(col - midCol) + Math.abs(row - midRow)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = { col, row, flipped: false }
+      }
+    }
+  }
+  return best ?? { col: Math.floor(midCol), row: Math.floor(midRow), flipped: false }
+}
+
+/** Leva a prévia para (col, row), sem sair da grade. */
+export function ghostAt<T extends BuildPick>(pick: T, col: number, row: number): T {
+  if (pick.kind === 'selected') return pick
+  return {
+    ...pick,
+    col: Math.min(GARDEN_COLS - 1, Math.max(0, col)),
+    row: Math.min(GARDEN_ROWS - 1, Math.max(0, row)),
+  }
+}
+
+/** Gira a prévia (só bancada e máquina de cura). */
+export function turnGhost<T extends BuildPick>(pick: T): T {
+  if (pick.kind === 'selected' || !isFlippable(pick.piece)) return pick
+  return { ...pick, flipped: !pick.flipped }
 }

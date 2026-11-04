@@ -14,6 +14,7 @@ import {
   GARDEN_ROWS,
   STRUCTURE_PIECES,
   canPlace,
+  isFlippable,
   isPieceKey,
   type PieceKey,
   type StructurePiece,
@@ -59,6 +60,13 @@ function parseCell(body: Record<string, unknown> | null): { col: number; row: nu
   return { col, row }
 }
 
+/** `flipped` é opcional: ausente = não girada (colocar) ou como está (mover). */
+function parseFlipped(body: Record<string, unknown> | null): boolean | undefined | null {
+  const flipped = body?.flipped
+  if (flipped === undefined) return undefined
+  return typeof flipped === 'boolean' ? flipped : null
+}
+
 /** O relógio da estrutura volta a contar agora (árvore e máquina de cura). */
 function resume(userId: number, piece: StructurePiece, now: number): void {
   if (piece === 'ball_bench') return
@@ -69,7 +77,16 @@ function resume(userId: number, piece: StructurePiece, now: number): void {
     .run()
 }
 
-export function placePiece(userId: number, piece: PieceKey, col: number, row: number, now: number): Ok | Failure {
+export function placePiece(
+  userId: number,
+  piece: PieceKey,
+  col: number,
+  row: number,
+  now: number,
+  flipped = false,
+): Ok | Failure {
+  // Girar só vale para quem pode (bancada, máquina); nas outras é ignorado.
+  const turn = flipped && isFlippable(piece)
   const clock = persistCatchUp(userId, now)
   // As views criam as estruturas que o nível já abriu.
   treesView(userId, clock.level, now)
@@ -85,23 +102,32 @@ export function placePiece(userId: number, piece: PieceKey, col: number, row: nu
     if (!ownedStructures(userId).has(piece)) return fail('piece_locked', 400)
     if (pieces.some((row) => row.piece === piece)) return fail('already_placed', 409)
   }
-  const blocked = canPlace(pieces, piece, col, row)
+  const blocked = canPlace(pieces, piece, col, row, undefined, turn)
   if (blocked) return fail(blocked, 400)
-  insertPlacement(userId, piece, slot, col, row, now)
+  insertPlacement(userId, piece, slot, col, row, now, turn)
   if (piece !== 'berry_plot') resume(userId, piece, now)
   return { ok: true, layout: layoutView(userId, clock.level) }
 }
 
-export function movePiece(userId: number, id: number, col: number, row: number, now: number): Ok | Failure {
+export function movePiece(
+  userId: number,
+  id: number,
+  col: number,
+  row: number,
+  now: number,
+  flipped?: boolean,
+): Ok | Failure {
   const clock = persistCatchUp(userId, now)
   const pieces = loadPieces(userId)
   const found = pieces.find((row) => row.id === id)
   if (!found) return fail('piece_not_found', 404)
-  const blocked = canPlace(pieces, found.piece, col, row, id)
+  const turn = isFlippable(found.piece) ? (flipped ?? found.flipped) : false
+  const blocked = canPlace(pieces, found.piece, col, row, id, turn)
   if (blocked) return fail(blocked, 400)
+  // O operador da bancada vai junto: a casa dele sai da pegada (cellsOf).
   getDb()
     .update(gardenPlacements)
-    .set({ col, row })
+    .set({ col, row, flipped: turn })
     .where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId)))
     .run()
   return { ok: true, layout: layoutView(userId, clock.level) }
@@ -143,17 +169,20 @@ buildRoutes.post('/place', requireUser, async (c) => {
   const body = await readObject(c)
   const cell = parseCell(body)
   const piece = body?.piece
-  if (!cell || !isPieceKey(piece)) return c.json({ error: 'invalid_body' }, 400)
-  const result = immediate(() => placePiece(c.get('userId'), piece, cell.col, cell.row, Date.now()))
+  const flipped = parseFlipped(body)
+  if (!cell || !isPieceKey(piece) || flipped === null) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => placePiece(c.get('userId'), piece, cell.col, cell.row, Date.now(), flipped))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json({ layout: result.layout })
 })
 
 buildRoutes.post('/:id/move', requireUser, async (c) => {
   const id = parseId(c.req.param('id'))
-  const cell = parseCell(await readObject(c))
-  if (id === null || !cell) return c.json({ error: 'invalid_body' }, 400)
-  const result = immediate(() => movePiece(c.get('userId'), id, cell.col, cell.row, Date.now()))
+  const body = await readObject(c)
+  const cell = parseCell(body)
+  const flipped = parseFlipped(body)
+  if (id === null || !cell || flipped === null) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => movePiece(c.get('userId'), id, cell.col, cell.row, Date.now(), flipped))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json({ layout: result.layout })
 })
