@@ -180,3 +180,8 @@ export function bandValue(
   if (value === undefined) throw new Error(`empty bands for ${key}`)
   return value
 }
+
+/** HP máximo de luta a partir do stat de HP (o mesmo número da luta e da ficha). */
+export function battleMaxHp(statHp: number): number {
+  return Math.max(1, Math.floor(statHp * simConfig.battleHpMultiplier))
+}

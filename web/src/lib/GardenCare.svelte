@@ -4,7 +4,9 @@
   // carinho e felicidade; a equipe, quem trabalha (com a função) e o resto do
   // jardim; dar berry a um só ou alimentar todos. Faminto não luta.
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type OwnedPokemon } from './api'
+  import { serverClock } from './serverClock.svelte'
   import { play } from './sound'
+  import { formatCountdown } from './time'
 
   let {
     game,
@@ -93,7 +95,56 @@
     void call(`/api/garden/pets/${mon.id}/snack`, { berryKey: itemKey.slice(6) }, () => `${mon.nickname ?? mon.displayName} comeu.`)
   }
 
-  const portraitSrc = (speciesId: number) => `/sprites/pmd-portrait/${speciesId}.png`
+  const clock = serverClock(() => game.now)
+  /** Quanto falta para o carinho voltar (0 = já pode). */
+  function petWaitMs(mon: OwnedPokemon): number {
+    return mon.pet.petReadyAt === null ? 0 : Math.max(0, mon.pet.petReadyAt - clock.now())
+  }
+  const pettable = $derived(pets.filter((mon) => petWaitMs(mon) === 0 && mon.pet.affection < 100))
+
+  async function petOne(mon: OwnedPokemon) {
+    pending = true
+    message = ''
+    try {
+      const response = await api(`/api/garden/pets/${mon.id}/pet`, {})
+      if (!response.ok) {
+        message = errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError)
+        return
+      }
+      play('levelup')
+      choosing = null
+      message = `${mon.nickname ?? mon.displayName} adorou o carinho!`
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
+  /** Carinho em quem pode agora, um por um (não há rota em lote). */
+  async function petAll() {
+    const list = pettable
+    pending = true
+    message = ''
+    let done = 0
+    try {
+      for (const mon of list) {
+        const response = await api(`/api/garden/pets/${mon.id}/pet`, {})
+        if (response.ok) done += 1
+      }
+      if (done > 0) play('levelup')
+      choosing = null
+      message = `Fez carinho em ${done} Pokémon.`
+      await onState()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
+  const portraitSrc =(speciesId: number) => `/sprites/pmd-portrait/${speciesId}.png`
 </script>
 
 {#snippet berryChoice(onPick: (itemKey: string) => void)}
@@ -143,6 +194,9 @@
         <p class="hint">1 berry para cada um com fome, do mais faminto ao menos.</p>
         {@render berryChoice(feedAll)}
       {/if}
+      <button type="button" class="btn" disabled={pending || pettable.length === 0} onclick={() => void petAll()}>
+        {pettable.length === 0 ? 'Carinho já dado' : `Carinho em todos (${pettable.length})`}
+      </button>
     </div>
 
     {#each groups as group (group.key)}
@@ -154,6 +208,7 @@
             {@const fainted = mon.hpRatio <= 0}
             {@const full = mon.pet.hunger >= game.garden.fullAt}
             {@const role = roleOf(mon)}
+            {@const wait = petWaitMs(mon)}
             {@const hpPct = Math.round(Math.max(0, Math.min(1, mon.hpRatio)) * 100)}
             <li class="row">
               <img class="portrait" src={portraitSrc(mon.speciesId)} alt="" width="40" height="40" />
@@ -174,15 +229,25 @@
                 {#if fainted}<small class="warn">desmaiado · não luta</small>
                 {:else if starving}<small class="warn">com fome · não luta</small>{/if}
               </div>
-              <button
-                type="button"
-                class="btn give"
-                disabled={pending || full}
-                aria-expanded={choosing === mon.id}
-                onclick={() => (choosing = choosing === mon.id ? null : mon.id)}
-              >
-                {full ? 'Cheio' : 'Dar berry'}
-              </button>
+              <div class="acts">
+                <button
+                  type="button"
+                  class="btn give"
+                  disabled={pending || full}
+                  aria-expanded={choosing === mon.id}
+                  onclick={() => (choosing = choosing === mon.id ? null : mon.id)}
+                >
+                  {full ? 'Cheio' : 'Dar berry'}
+                </button>
+                <button
+                  type="button"
+                  class="btn give"
+                  disabled={pending || wait > 0 || mon.pet.affection >= 100}
+                  onclick={() => void petOne(mon)}
+                >
+                  {wait > 0 ? `Carinho ${formatCountdown(wait)}` : 'Carinho'}
+                </button>
+              </div>
               {#if choosing === mon.id}
                 <div class="pick">{@render berryChoice((itemKey) => feedOne(mon, itemKey))}</div>
               {/if}
@@ -338,6 +403,11 @@
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     white-space: nowrap;
+  }
+
+  .acts {
+    display: grid;
+    gap: 0.3rem;
   }
 
   .pick {

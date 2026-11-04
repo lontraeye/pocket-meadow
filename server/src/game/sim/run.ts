@@ -11,7 +11,7 @@ import {
   rollCriticalAgainst,
   typeMultiplier,
 } from './damage.js'
-import { simConfig } from './config.js'
+import { battleMaxHp, simConfig } from './config.js'
 import { autoReactionSeed } from './seeds.js'
 import {
   applyStageChange,
@@ -411,7 +411,7 @@ function snapshotSide(side: SideState, t: number): BattleSnapshotSide {
 }
 
 function makeSide(fighter: SimFighter, slot: number): SideState {
-  const maxHp = Math.max(1, Math.floor(fighter.stats.hp * simConfig.battleHpMultiplier))
+  const maxHp = battleMaxHp(fighter.stats.hp)
   const ratio = fighter.startHpRatio
   const hp =
     ratio === undefined

@@ -33,6 +33,7 @@ import {
   trainers,
 } from '../db/schema.js'
 import { catchChance, power } from '../game/battle.js'
+import { battleMaxHp } from '../game/sim/config.js'
 import { energyFullAt, nextEnergyAt } from '../game/catchUp.js'
 import { availableMovesFor, buildTraitView, requireTraitFields } from '../game/traitView.js'
 import type { AbilitySlot } from '../game/traits.js'
@@ -383,6 +384,8 @@ function readState(userId: number, now: number) {
         pet: petView(mon, now),
         /** Fração do HP de luta (0..1); já liquidada no catch-up. */
         hpRatio: mon.hpRatio,
+        /** HP máximo de luta (o atual sai do hpRatio). */
+        maxHp: battleMaxHp(view.stats.hp),
       }
     }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),

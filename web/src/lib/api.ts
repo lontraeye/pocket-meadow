@@ -296,6 +296,8 @@ export type OwnedPokemon = {
   pet: PetView
   /** Fração do HP de luta (0..1); 0 = desmaiado (não luta). */
   hpRatio: number
+  /** HP máximo de luta (o atual = hpRatio × maxHp). */
+  maxHp: number
 }
 
 /** Quadro de missões diárias (5.20). */

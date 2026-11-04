@@ -268,6 +268,9 @@
   )
   const petWaitMs = $derived(mon.pet.petReadyAt === null ? 0 : Math.max(0, mon.pet.petReadyAt - careClock.now()))
   const full = $derived(mon.pet.hunger >= game.garden.fullAt)
+  // HP de luta agora: o mesmo arredondamento da luta (vivo tem pelo menos 1).
+  const hpRatio = $derived(Math.max(0, Math.min(1, mon.hpRatio)))
+  const hpNow = $derived(hpRatio <= 0 ? 0 : Math.max(1, Math.round(mon.maxHp * hpRatio)))
   let choosingSnack = $state(false)
   let hearts = $state(0)
 
@@ -728,6 +731,12 @@
               </div>
               <small>XP {mon.xp}/{mon.xpToNext}</small>
             {/if}
+          </div>
+          <div class="xp hp">
+            <div class="bar" class:mid={hpRatio < 0.5} class:low={hpRatio < 0.25} role="progressbar" aria-valuemin="0" aria-valuemax={mon.maxHp} aria-valuenow={hpNow}>
+              <span style:width="{hpRatio * 100}%"></span>
+            </div>
+            <small>{hpNow <= 0 ? 'Desmaiado' : `HP ${hpNow}/${mon.maxHp}`}</small>
           </div>
           <div class="candies" aria-label="Doces">
             <span class="candy chain" title="Doces da linha evolutiva">
@@ -1445,6 +1454,21 @@
     height: 100%;
     background: #4aa3e0;
     box-shadow: inset 0 calc(var(--px) * -2) 0 #2f7bb0, inset 0 0 0 var(--px) var(--ink);
+  }
+
+  .hp .bar span {
+    background: #4caf7a;
+    box-shadow: inset 0 calc(var(--px) * -2) 0 #33885a, inset 0 0 0 var(--px) var(--ink);
+  }
+
+  .hp .bar.mid span {
+    background: #e8a13a;
+    box-shadow: inset 0 calc(var(--px) * -2) 0 #b87a22, inset 0 0 0 var(--px) var(--ink);
+  }
+
+  .hp .bar.low span {
+    background: #d9534f;
+    box-shadow: inset 0 calc(var(--px) * -2) 0 #a83a37, inset 0 0 0 var(--px) var(--ink);
   }
 
   .xp small {
