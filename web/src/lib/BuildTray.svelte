@@ -180,6 +180,14 @@
   let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
   /** Bandeja recolhida: só a linha de cima, para ver o jardim enquanto constrói. */
   let collapsed = $state(false)
+  /**
+   * Escolher um pincel (chão, borracha ou a Área do habitat) recolhe a
+   * bandeja sozinho, para pintar vendo o jardim; a seta abre de novo.
+   */
+  function choose(tool: PaintTool | null) {
+    onPaint(tool)
+    if (tool !== null || area) collapsed = true
+  }
   /** Escolhendo o tipo do habitat novo. */
   let choosingKind = $state(false)
   function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat') {
@@ -263,7 +271,7 @@
     aria-pressed={paint === floor}
     disabled={pending || unlockAt !== null || (area !== null && (area.dirty || area.id === null))}
     aria-label={unlockAt ? `${FLOOR_NAMES[floor]}: abre no ${unlockAt.name}` : FLOOR_NAMES[floor]}
-    onclick={() => onPaint(paint === floor ? null : floor)}
+    onclick={() => choose(paint === floor ? null : floor)}
   >
     <span class="thumb">
       {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
@@ -393,7 +401,7 @@
           class:focused={paint === null}
           aria-pressed={paint === null}
           disabled={pending}
-          onclick={() => onPaint(null)}
+          onclick={() => choose(null)}
         >
           <span class="thumb">{@render tabIcon('habitat')}</span>
           <span class="card-name">Área</span>
@@ -415,7 +423,7 @@
             class:focused={paint === 'erase'}
             aria-pressed={paint === 'erase'}
             disabled={pending || area.dirty || area.id === null}
-            onclick={() => onPaint(paint === 'erase' ? null : 'erase')}
+            onclick={() => choose(paint === 'erase' ? null : 'erase')}
           >
             <span class="thumb">
               {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
@@ -537,7 +545,7 @@
             aria-pressed={paint === row.floor}
             disabled={pending || row.unlockAt !== null}
             aria-label={row.unlockAt ? `${FLOOR_NAMES[row.floor]}: abre no ${row.unlockAt.name}` : FLOOR_NAMES[row.floor]}
-            onclick={() => onPaint(paint === row.floor ? null : row.floor)}
+            onclick={() => choose(paint === row.floor ? null : row.floor)}
           >
             <span class="thumb">
               {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
@@ -552,7 +560,7 @@
           class:focused={paint === 'erase'}
           aria-pressed={paint === 'erase'}
           disabled={pending}
-          onclick={() => onPaint(paint === 'erase' ? null : 'erase')}
+          onclick={() => choose(paint === 'erase' ? null : 'erase')}
         >
           <span class="thumb">
             {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
