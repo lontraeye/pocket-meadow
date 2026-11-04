@@ -22,6 +22,7 @@
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { play } from './sound'
   import { serverClock } from './serverClock.svelte'
+  import { hpFullInMs, liveHpRatio } from './hp'
   import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
   import StatTable from './StatTable.svelte'
@@ -269,7 +270,8 @@
   const petWaitMs = $derived(mon.pet.petReadyAt === null ? 0 : Math.max(0, mon.pet.petReadyAt - careClock.now()))
   const full = $derived(mon.pet.hunger >= game.garden.fullAt)
   // HP de luta agora: o mesmo arredondamento da luta (vivo tem pelo menos 1).
-  const hpRatio = $derived(Math.max(0, Math.min(1, mon.hpRatio)))
+  const hpRatio = $derived(liveHpRatio(mon, game, careClock.now()))
+  const hpFullIn = $derived(hpFullInMs(mon, game, careClock.now()))
   const hpNow = $derived(hpRatio <= 0 ? 0 : Math.max(1, Math.round(mon.maxHp * hpRatio)))
   let choosingSnack = $state(false)
   let hearts = $state(0)
@@ -736,7 +738,9 @@
             <div class="bar" class:mid={hpRatio < 0.5} class:low={hpRatio < 0.25} role="progressbar" aria-valuemin="0" aria-valuemax={mon.maxHp} aria-valuenow={hpNow}>
               <span style:width="{hpRatio * 100}%"></span>
             </div>
-            <small>{hpNow <= 0 ? 'Desmaiado' : `HP ${hpNow}/${mon.maxHp}`}</small>
+            <small>
+              {hpNow <= 0 ? 'Desmaiado' : `HP ${hpNow}/${mon.maxHp}`}{hpFullIn > 0 ? ` · cheio em ${formatCountdown(hpFullIn)}` : ''}
+            </small>
           </div>
           <div class="candies" aria-label="Doces">
             <span class="candy chain" title="Doces da linha evolutiva">

@@ -603,6 +603,8 @@ export type GameState = {
     fightMinHunger: number
     /** Quanto uma berry enche a fome. */
     berryFill: number
+    /** Descanso: do HP 0 ao cheio no jardim, em ms. */
+    restFullMs: number
     /** Cada estrutura é uma peça (PROGRESSAO.md 4.3, passo 2): listas, com o id de cada uma. */
     trees: TreeView[]
     benches: BenchView[]

@@ -15,6 +15,7 @@ import { progressionConfig } from '../config/progression.js'
 import { trainerConfig, trainerXpToNext } from '../config/trainer.js'
 import { weatherConfig } from '../config/weather.js'
 import { petConfig } from '../config/pets.js'
+import { healConfig } from '../config/heal.js'
 import { loadWeather } from '../db/weather.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -406,6 +407,7 @@ function readState(userId: number, now: number) {
       fullAt: petConfig.fullAt,
       fightMinHunger: petConfig.fightMinHunger,
       berryFill: petConfig.berryFill,
+      restFullMs: healConfig.restFullMs,
       trees,
       benches,
       healMachines: healMachinesView(userId, now),

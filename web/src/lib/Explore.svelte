@@ -3,6 +3,7 @@
   import Journey from './Journey.svelte'
   import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
+  import { liveHpRatio } from './hp'
   import { serverClock } from './serverClock.svelte'
   import { connection } from './connection.svelte'
   import { formatCountdown } from './time'
@@ -355,7 +356,9 @@
       .sort((a, b) => (a.teamSlot ?? 0) - (b.teamSlot ?? 0)),
   )
   /** Desmaiado ou com fome fica fora da luta (o servidor também tira): não abre. */
-  const canFight = (mon: OwnedPokemon) => mon.hpRatio > 0 && mon.pet.hunger >= game.garden.fightMinHunger
+  /** HP agora, com o descanso no jardim desde o último estado. */
+  const hpOf = (mon: OwnedPokemon) => liveHpRatio(mon, game, clock.now())
+  const canFight = (mon: OwnedPokemon) => hpOf(mon) > 0 && mon.pet.hunger >= game.garden.fightMinHunger
   const leadId = $derived(
     roster.some((mon) => mon.id === lead && canFight(mon)) ? lead : ((roster.find(canFight) ?? roster[0])?.id ?? null),
   )
@@ -1211,13 +1214,13 @@
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
                 <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
-                {#if mon.hpRatio <= 0}<small class="starving">desmaiado · fica fora</small>
-                {:else if mon.hpRatio < 1}<small class="hurt">ferido · {Math.round(mon.hpRatio * 100)}% HP</small>
+                {#if hpOf(mon) <= 0}<small class="starving">desmaiado · fica fora</small>
+                {:else if hpOf(mon) < 1}<small class="hurt">ferido · {Math.round(hpOf(mon) * 100)}% HP</small>
                 {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
               </button>
             {/each}
           </div>
-          {#if roster.some((mon) => mon.hpRatio < 1) && healMachine}
+          {#if roster.some((mon) => hpOf(mon) < 1) && healMachine}
             <!-- A máquina do jardim com mais cargas (o servidor escolhe a mesma). -->
             <button
               type="button"

@@ -4,6 +4,7 @@
   // carinho e felicidade; a equipe, quem trabalha (com a função) e o resto do
   // jardim; dar berry a um só ou alimentar todos. Faminto não luta.
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type OwnedPokemon } from './api'
+  import { liveHpRatio } from './hp'
   import { serverClock } from './serverClock.svelte'
   import { play } from './sound'
   import { formatCountdown } from './time'
@@ -205,11 +206,12 @@
         <ul class="list">
           {#each group.list as mon (mon.id)}
             {@const starving = mon.pet.hunger < game.garden.fightMinHunger}
-            {@const fainted = mon.hpRatio <= 0}
+            {@const hp = liveHpRatio(mon, game, clock.now())}
+            {@const fainted = hp <= 0}
             {@const full = mon.pet.hunger >= game.garden.fullAt}
             {@const role = roleOf(mon)}
             {@const wait = petWaitMs(mon)}
-            {@const hpPct = Math.round(Math.max(0, Math.min(1, mon.hpRatio)) * 100)}
+            {@const hpPct = Math.round(hp * 100)}
             <li class="row">
               <img class="portrait" src={portraitSrc(mon.speciesId)} alt="" width="40" height="40" />
               <div class="info">
@@ -223,7 +225,7 @@
                     </span>
                   {/each}
                   <span class="mini" aria-label="HP {hpPct}" title="HP {hpPct}">
-                    <i style:width="{hpPct}%" style:background={hpColor(mon.hpRatio)}></i>
+                    <i style:width="{hpPct}%" style:background={hpColor(hp)}></i>
                   </span>
                 </span>
                 {#if fainted}<small class="warn">desmaiado · não luta</small>
