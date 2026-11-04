@@ -198,9 +198,10 @@ test('manchas: árvore e água aparecem fechadas sem marco; com a ferramenta, so
   assert.equal(await errorOf(await post('/field/use', cookie, { method: 'surf' })), 'spot_not_found')
 
   // Sem item: a árvore sempre dá um Pokémon aqui.
+  const chanceWas = spotDropsConfig.chance
   spotDropsConfig.chance = 0
   const used = await post('/field/use', cookie, { method: 'headbutt' })
-  spotDropsConfig.chance = 0.3
+  spotDropsConfig.chance = chanceWas
   assert.equal(used.status, 201)
   const row = getSqlite()
     .prepare(`select species_id as speciesId, region_slug as regionSlug from encounters where user_id = ? and status = 'pending'`)
@@ -254,15 +255,17 @@ test('árvore e pedra podem soltar item: gasta a energia, credita e não abre en
   const energy = trainerConfig as { energyEnabled: boolean }
   const energyWas = energy.energyEnabled
   energy.energyEnabled = true
+  const chanceWas = spotDropsConfig.chance
   spotDropsConfig.chance = 1
   const response = await post('/field/use', cookie, { method: 'headbutt' })
-  spotDropsConfig.chance = 0.3
+  spotDropsConfig.chance = chanceWas
   energy.energyEnabled = energyWas
   assert.equal(response.status, 200)
   const { drop } = (await response.json()) as { drop: { itemKey: string; quantity: number } }
-  // A árvore solta berry, Apricorn (5.23) ou madeira (2 a 4, construção).
+  // A árvore solta berry, Apricorn (5.23) ou madeira (construção, de min a max do config).
   assert.ok(drop.itemKey.startsWith('berry:') || drop.itemKey === 'mat:apricorn' || drop.itemKey === 'mat:wood', drop.itemKey)
-  if (drop.itemKey === 'mat:wood') assert.ok(drop.quantity >= 2 && drop.quantity <= 4)
+  const wood = spotDropsConfig.tables.headbutt.find((row) => row.itemKey === 'mat:wood') as { min: number; max: number }
+  if (drop.itemKey === 'mat:wood') assert.ok(drop.quantity >= wood.min && drop.quantity <= wood.max, String(drop.quantity))
   else assert.equal(drop.quantity, 1)
   assert.equal(energyOf(), before - 1)
   const pending = getSqlite().prepare(`select count(*) as n from encounters where user_id = ? and status = 'pending'`).get(userId) as {
