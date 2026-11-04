@@ -2,7 +2,7 @@
 // pixel art desenhados como grade de letras (como os ícones do HUD) e o
 // balão montado em volta. Cada letra é uma cor; '.' é transparente.
 
-export type BubbleKind = 'pet' | 'hunger' | 'happy' | 'sad'
+export type BubbleKind = 'pet' | 'hunger' | 'happy' | 'sad' | 'visit'
 
 type Grid = { rows: string[]; colors: Record<string, string> }
 
@@ -24,6 +24,11 @@ const ICONS: Record<BubbleKind, Grid> = {
   sad: {
     rows: ['..OOOO..', '.OSSSSO.', 'OSKSSKSO', 'OSSSSSSO', 'OSSKKSSO', 'OSKSSKSO', '.OSSSSO.', '..OOOO..'],
     colors: { O: '#4a78a8', S: '#9cc4e8', K: '#22324a' },
+  },
+  // Interrogação: um visitante selvagem (5.22); tocar abre o encontro.
+  visit: {
+    rows: ['.QQQQQ.', 'QQ...QQ', '....QQ.', '...QQ..', '...QQ..', '.......', '...QQ..'],
+    colors: { Q: '#d9702a' },
   },
 }
 
@@ -71,4 +76,5 @@ export const BUBBLES: Record<BubbleKind, ReturnType<typeof bubblePixels>> = {
   hunger: bubblePixels('hunger'),
   happy: bubblePixels('happy'),
   sad: bubblePixels('sad'),
+  visit: bubblePixels('visit'),
 }

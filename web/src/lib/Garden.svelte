@@ -2498,7 +2498,6 @@
             <span class="shadow" aria-hidden="true"></span>
             <img src={showdownSrc(visitor.speciesId, visitor.isShiny)} alt="" />
           {/if}
-          <span class="tree-full visitor-tag" aria-hidden="true">{visitor.displayName}{visitor.isShiny ? ' ★' : ''} · visita</span>
         </button>
       {/each}
       {#each benchSpots as { bench, cell, flipped, operatorCell, operatorDir, operator } (bench.id)}
@@ -2762,6 +2761,52 @@
               <span>z</span><span>z</span><span>Z</span>
             </span>
           {/if}
+        </button>
+      {/each}
+      <!-- Balão "?" na cabeça de cada visitante: tocar abre o encontro, como no sprite. -->
+      {#each visitorSpots as { visitor, tile } (visitor.id)}
+        {@const look = gardenSprite(visitor.speciesId, visitor.isShiny)}
+        {@const spot = place(tile.col + playCol0, tile.row + playRow0)}
+        {@const head = headAnchor(
+          {
+            id: visitor.id,
+            speciesId: visitor.speciesId,
+            displayName: visitor.displayName,
+            level: visitor.level,
+            isShiny: visitor.isShiny,
+            col: tile.col + playCol0,
+            row: tile.row + playRow0,
+            dir: 0,
+            anim: 'Idle',
+          },
+          look,
+        )}
+        {@const art = BUBBLES.visit}
+        <button
+          type="button"
+          class="bubble tappable"
+          style:left="{snapToDevice(spot.x + head.x)}px"
+          style:top="{snapToDevice(spot.y + halfH + head.y)}px"
+          style:z-index={depthSpan * 3}
+          aria-label={`${visitor.displayName} Nv ${visitor.level} está visitando`}
+          onclick={() => {
+            if (building) return
+            visitorMessage = ''
+            visitorOpen = visitor
+            play('tap')
+          }}
+        >
+          <svg
+            width={art.width * bubblePx}
+            height={art.height * bubblePx}
+            viewBox="0 0 {art.width} {art.height}"
+            shape-rendering="crispEdges"
+            aria-hidden="true"
+          >
+            {#each art.pixels as px, index (index)}
+              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+            {/each}
+          </svg>
         </button>
       {/each}
       <!-- Balões fora do botão do Pokémon: são botões próprios (o coração faz carinho). -->
@@ -3952,10 +3997,6 @@
 
   .build-grid polygon[data-biome='basico'] {
     fill: #f0e6c838;
-  }
-
-  .visitor-tag {
-    pointer-events: none;
   }
 
   .visitor-panel {
