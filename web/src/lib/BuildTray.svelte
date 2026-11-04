@@ -28,6 +28,7 @@
     area,
     onNewHabitat,
     onEditHabitat,
+    onDeleteHabitat,
     onAreaKind,
     onAreaSave,
     onAreaDelete,
@@ -65,6 +66,8 @@
     area: { id: number | null; kind: HabitatKind; check: HabitatCheck; dirty: boolean } | null
     onNewHabitat: (kind: HabitatKind) => void
     onEditHabitat: (id: number) => void
+    /** Apaga o habitat (o chão pintado fica; os moradores ficam sem casa). */
+    onDeleteHabitat: (id: number) => void
     onAreaKind: (kind: HabitatKind) => void
     onAreaSave: () => void
     onAreaDelete: () => void
@@ -178,6 +181,8 @@
   }
 
   let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
+  /** Habitat com a lixeira armada: o segundo toque apaga. */
+  let confirmDelete = $state<number | null>(null)
   /** Bandeja recolhida: só a linha de cima, para ver o jardim enquanto constrói. */
   let collapsed = $state(false)
   /**
@@ -518,15 +523,49 @@
           <ul class="habitat-list">
             {#each habitats as row (row.id)}
               <li>
-                <button type="button" class="btn habitat-row" disabled={pending} onclick={() => onEditHabitat(row.id)}>
+                <button
+                  type="button"
+                  class="btn habitat-row"
+                  disabled={pending}
+                  onclick={() => {
+                    confirmDelete = null
+                    onEditHabitat(row.id)
+                  }}
+                >
                   <strong>{habitatKind(row.kind).name}</strong>
                   <span class:ready={row.check.ready}>{habitatStatus(row.kind, row.check)}</span>
+                </button>
+                <!-- Lixeira: o primeiro toque pergunta, o segundo apaga. -->
+                <button
+                  type="button"
+                  class="btn trash"
+                  class:armed={confirmDelete === row.id}
+                  disabled={pending}
+                  aria-label={confirmDelete === row.id ? `Apagar ${habitatKind(row.kind).name}: toque de novo` : `Apagar ${habitatKind(row.kind).name}`}
+                  title="Apagar habitat"
+                  onclick={() => {
+                    if (confirmDelete === row.id) {
+                      confirmDelete = null
+                      onDeleteHabitat(row.id)
+                    } else confirmDelete = row.id
+                  }}
+                >
+                  {#if confirmDelete === row.id}
+                    Apagar?
+                  {:else}
+                    <!-- Lixeira em pixels (grade 12×12). -->
+                    <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
+                      <rect x="4" y="0" width="4" height="1" /><rect x="1" y="1" width="10" height="2" />
+                      <rect x="2" y="4" width="8" height="1" /><rect x="2" y="5" width="1" height="6" /><rect x="9" y="5" width="1" height="6" />
+                      <rect x="2" y="11" width="8" height="1" /><rect x="4" y="5" width="1" height="5" /><rect x="7" y="5" width="1" height="5" />
+                    </svg>
+                  {/if}
                 </button>
               </li>
             {/each}
           </ul>
         {/if}
-        <div class="row">
+        <div class="row new-habitat">
           <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (choosingKind = true)}>Novo habitat</button>
         </div>
       {/if}
@@ -1018,11 +1057,35 @@
     list-style: none;
   }
 
+  .habitat-list li {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .new-habitat {
+    margin-top: 0.6rem;
+  }
+
+  .trash {
+    flex: none;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 0.4rem;
+    fill: currentColor;
+    font-size: 14px;
+  }
+
+  .trash.armed {
+    background: #e04030;
+    color: #fff;
+  }
+
   .habitat-row {
     display: flex;
     justify-content: space-between;
     gap: 0.5rem;
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 44px;
   }
 

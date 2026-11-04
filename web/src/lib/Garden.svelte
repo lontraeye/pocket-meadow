@@ -2757,6 +2757,7 @@
         area={areaEdit && areaCheck ? { id: areaEdit.id, kind: areaEdit.kind, check: areaCheck, dirty: areaEdit.dirty } : null}
         onNewHabitat={(kind) => startArea(null, kind)}
         onEditHabitat={(id) => startArea(id, 'basico')}
+        onDeleteHabitat={(id) => void habitatCall(`/api/build/habitat/${id}/delete`, {})}
         onAreaKind={(kind) => {
           if (!areaEdit) return
           areaEdit = { ...areaEdit, kind, dirty: true }
