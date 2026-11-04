@@ -280,6 +280,37 @@
     }
   }
 
+  // Canteiro pronto colhe no toque, como a árvore; os outros abrem o painel.
+  let harvestingPlot = $state(false)
+  async function tapPlot(index: number) {
+    if (plotStage(plotsByIndex.get(index)) !== 'ready') {
+      openPlot(index)
+      return
+    }
+    if (harvestingPlot) return
+    harvestingPlot = true
+    try {
+      const response = await api(`/api/plots/${index}/harvest`, {})
+      const payload = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
+        berryKey?: string
+        berries?: number
+        died?: boolean
+      }
+      if (response.ok) {
+        const label = itemLabel(`berry:${payload.berryKey ?? ''}`, game.berries)
+        showGiftToast(`Colheu ${Number(payload.berries ?? 0)} ${label}.${payload.died === true ? ' O arbusto secou.' : ''}`)
+        play('harvest')
+      } else {
+        showGiftToast(errorText(payload))
+      }
+      await onState()
+    } catch {
+      showGiftToast('Sem conexão com o servidor.')
+    } finally {
+      harvestingPlot = false
+    }
+  }
+
   // Zona andável 12×12. O mundo tem uma margem em volta só para a câmera ter
   // folga; o gramado de fora (mais escuro) é o fundo do .lawn, que não acaba.
   const playCols = 12
@@ -1195,12 +1226,12 @@
     // tocado no vazio, vale o canteiro (losango) sob o dedo, se houver.
     if (picked === null && clicked.kind === 'plot') {
       const under = plotTileAt(event.clientX, event.clientY)
-      if (under !== null) openPlot(under)
+      if (under !== null) void tapPlot(under)
       return
     }
     const hit = picked ?? clicked
     if (hit.kind === 'plot') {
-      openPlot(hit.id)
+      void tapPlot(hit.id)
       return
     }
     if (hit.kind === 'gift') {
@@ -1923,7 +1954,7 @@
             style:z-index={tile.col + tile.row + depthSpan}
             data-plot={plotIdx}
             aria-label={`Canteiro ${plotIdx + 1}`}
-            onclick={() => openPlot(plotIdx)}
+            onclick={() => void tapPlot(plotIdx)}
           >
             <!-- Sem arte para a berry: o desenho antigo do canteiro. -->
             {#if plot && !bushSrc(plot.berryKey, bushLook(plot))}
