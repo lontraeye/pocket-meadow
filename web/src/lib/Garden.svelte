@@ -2982,7 +2982,10 @@
     {@const home = layout.habitats.find((row) => row.id === visitor.habitatId)}
     <Modal label="Visitante" onBackdrop={() => (visitorOpen = null)}>
       <div class="visitor-panel">
-        <img src={showdownSrc(visitor.speciesId, visitor.isShiny)} alt="" width="64" height="64" />
+        <!-- Tamanho natural do sprite (cada um tem o seu), numa caixa fixa, como na ficha. -->
+        <div class="visitor-portrait">
+          <img src={showdownSrc(visitor.speciesId, visitor.isShiny)} alt="" />
+        </div>
         <p>
           <strong>{visitor.displayName}{visitor.isShiny ? ' ★' : ''} Nv {visitor.level}</strong> está visitando
           {home ? `o ${habitatKind(home.kind).name}` : 'o jardim'}. Vai embora em {formatCountdown(Math.max(0, visitor.leavesAt - clock.now()))}.
@@ -3962,7 +3965,16 @@
     text-align: center;
   }
 
-  .visitor-panel img {
+  .visitor-portrait {
+    display: grid;
+    place-items: center;
+    width: 96px;
+    height: 96px;
+  }
+
+  .visitor-portrait img {
+    max-width: 96px;
+    max-height: 96px;
     image-rendering: pixelated;
   }
 
