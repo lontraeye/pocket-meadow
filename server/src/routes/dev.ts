@@ -24,7 +24,9 @@ import {
   trainerPlaces,
   trainers,
   users,
+  habitats,
 } from '../db/schema.js'
+import { settleVisitors, visitorsView } from '../db/visitors.js'
 import { applyBuildScenario, applyReadyScenario } from './devScenario.js'
 import { createEncounter } from './encounters.js'
 import { readObject } from './http.js'
@@ -203,6 +205,19 @@ devRoutes.post('/garden/advance', requireUser, async (c) => {
     persistCatchUp(userId, Date.now())
   })
   return c.json({ hours })
+})
+
+// Visitantes na hora (5.22): cada habitat pronto sem visitante recebe um agora.
+devRoutes.post('/visitors/call', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  const count = immediate(() => {
+    persistCatchUp(userId, now)
+    getDb().update(habitats).set({ visitorNextAt: now - 1 }).where(eq(habitats.userId, userId)).run()
+    settleVisitors(userId, now)
+    return visitorsView(userId).length
+  })
+  return c.json({ visitors: count })
 })
 
 devRoutes.post('/plots/advance', requireUser, async (c) => {

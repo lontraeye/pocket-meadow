@@ -8,6 +8,7 @@ import { ensureGardenLayout } from './gardenLayout.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 import { finishBuilds, grantStructures } from './structures.js'
+import { settleVisitors } from './visitors.js'
 
 export type PlayerClock = {
   level: number
@@ -139,6 +140,8 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   ensureGardenLayout(userId, now)
   finishBuilds(userId, now)
   grantStructures(userId, now)
+  // Visitantes dos habitats prontos (5.22): chegam e vão embora pelo relógio.
+  settleVisitors(userId, now)
 
   return {
     level: trainer.level,

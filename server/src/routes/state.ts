@@ -46,6 +46,7 @@ import { view as petView } from './garden.js'
 import { missionsView } from '../db/missions.js'
 import { treesView } from '../db/apricorn.js'
 import { benchesView } from '../db/bench.js'
+import { visitorsView } from '../db/visitors.js'
 import { healMachinesView } from '../db/healMachine.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
@@ -412,6 +413,8 @@ function readState(userId: number, now: number) {
       berryFill: petConfig.berryFill,
       restFullMs: healConfig.restFullMs,
       trees,
+      /** Visitantes dos habitats (5.22), um por habitat pronto. */
+      visitors: visitorsView(userId),
       benches,
       healMachines: healMachinesView(userId, now),
       // Construção (PROGRESSAO.md 4.3): onde está cada peça e o que está guardado.

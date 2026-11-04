@@ -32,6 +32,7 @@
     residents,
     candidates,
     onHome,
+    onCallVisitors,
     onAreaKind,
     onAreaSave,
     onAreaDelete,
@@ -77,6 +78,8 @@
     candidates: { id: number; name: string; bonus: boolean; elsewhere: string | null }[]
     /** Põe (habitatId) ou tira (null) o Pokémon da casa. */
     onHome: (pokemonId: number, habitatId: number | null) => void
+    /** Só no dev: chama os visitantes na hora (null = sem o botão). */
+    onCallVisitors: (() => void) | null
     onAreaKind: (kind: HabitatKind) => void
     onAreaSave: () => void
     onAreaDelete: () => void
@@ -613,6 +616,9 @@
         {/if}
         <div class="row new-habitat">
           <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (choosingKind = true)}>Novo habitat</button>
+          {#if onCallVisitors}
+            <button type="button" class="btn" disabled={pending} onclick={onCallVisitors}>Chamar visitantes (teste)</button>
+          {/if}
         </div>
       {/if}
     </div>

@@ -15,6 +15,7 @@
     type BenchView,
     type GameState,
     type GardenGift,
+    type GardenVisitor,
     type HealMachineView,
     type PlotState,
     type TreeView,
@@ -86,6 +87,7 @@
     openPlotIndex = null,
     onPlotOpened,
     onBuildMode,
+    onEncounter,
   }: {
     game: GameState
     onState: () => Promise<void>
@@ -93,6 +95,8 @@
     onPlotOpened?: () => void
     /** O modo Construir abriu ou fechou (o App esconde as barras de baixo). */
     onBuildMode?: (on: boolean) => void
+    /** Começou um encontro (visitante): o App leva para a tela da luta. */
+    onEncounter?: () => void
   } = $props()
 
   let plotIndex = $state<number | null>(null)
@@ -497,7 +501,42 @@
   )
 
   function isWalkable(col: number, row: number): boolean {
-    return inPlay(col, row) && !blockedCells.has(worldKey(col, row))
+    const key = worldKey(col, row)
+    return inPlay(col, row) && !blockedCells.has(key) && !visitorCells.has(key)
+  }
+
+  // Visitantes (5.22): cada um parado numa casa do habitat que o atraiu (a
+  // mesma casa sempre, pelo id), fora das peças. Os moradores desviam dele.
+  const visitorSpots = $derived(
+    game.garden.visitors.filter((visitor) => visitor.leavesAt > clock.now()).flatMap((visitor) => {
+      const home = layout.habitats.find((row) => row.id === visitor.habitatId)
+      const free = (home?.tiles ?? []).filter((tile) => !blockedCells.has(cellKey(tile.col, tile.row)))
+      const tile = free[(visitor.id * 7919) % Math.max(1, free.length)]
+      return tile && home ? [{ visitor, tile, kind: home.kind }] : []
+    }),
+  )
+  const visitorCells = $derived(new Set(visitorSpots.map(({ tile }) => cellKey(tile.col, tile.row))))
+  let visitorOpen = $state<GardenVisitor | null>(null)
+  let visitorPending = $state(false)
+  let visitorMessage = $state('')
+
+  async function fightVisitor(visitor: GardenVisitor) {
+    visitorPending = true
+    visitorMessage = ''
+    try {
+      const response = await api(`/api/garden/visitors/${visitor.id}/encounter`, {})
+      if (!response.ok) {
+        visitorMessage = errorText((await response.json().catch(() => ({ error: 'internal' }))) as ApiError)
+        return
+      }
+      visitorOpen = null
+      await onState()
+      onEncounter?.()
+    } catch {
+      visitorMessage = 'Sem conexão com o servidor.'
+    } finally {
+      visitorPending = false
+    }
   }
 
   // Moradores (5.22): quem tem casa passeia só na área do habitat dele; quem
@@ -2426,6 +2465,41 @@
           </button>
         {/if}
       {/each}
+      {#each visitorSpots as { visitor, tile } (visitor.id)}
+        {@const look = gardenSprite(visitor.speciesId, visitor.isShiny)}
+        {@const at = place(tile.col + playCol0, tile.row + playRow0)}
+        <!-- Visitante: parado, de frente, com a etiqueta de quem é (tocar abre o encontro). -->
+        <button
+          type="button"
+          class="mon visitor"
+          style:left="{snapToDevice(at.x)}px"
+          style:top="{snapToDevice(at.y + halfH)}px"
+          style:--size="{showdownSize * scale}px"
+          style:z-index={tile.col + playCol0 + tile.row + playRow0 + depthSpan + 1}
+          aria-label={`${visitor.displayName} Nv ${visitor.level} visitando`}
+          onclick={() => {
+            if (building) return
+            visitorMessage = ''
+            visitorOpen = visitor
+            play('tap')
+          }}
+        >
+          {#if look.kind === 'pmd'}
+            <PmdSprite
+              speciesId={visitor.speciesId}
+              shiny={look.shinySheet}
+              anim="Idle"
+              dir={0}
+              scale={pmdScale}
+              shadow={look.shadow}
+              {time}
+            />
+          {:else}
+            <span class="shadow" aria-hidden="true"></span>
+            <img src={showdownSrc(visitor.speciesId, visitor.isShiny)} alt="" />
+          {/if}
+        </button>
+      {/each}
       {#each benchSpots as { bench, cell, flipped, operatorCell, operatorDir, operator } (bench.id)}
         {@const spot = place(cell.col, cell.row)}
         {@const ready = benchReadyOf(bench)}
@@ -2689,6 +2763,52 @@
           {/if}
         </button>
       {/each}
+      <!-- Balão "?" na cabeça de cada visitante: tocar abre o encontro, como no sprite. -->
+      {#each visitorSpots as { visitor, tile } (visitor.id)}
+        {@const look = gardenSprite(visitor.speciesId, visitor.isShiny)}
+        {@const spot = place(tile.col + playCol0, tile.row + playRow0)}
+        {@const head = headAnchor(
+          {
+            id: visitor.id,
+            speciesId: visitor.speciesId,
+            displayName: visitor.displayName,
+            level: visitor.level,
+            isShiny: visitor.isShiny,
+            col: tile.col + playCol0,
+            row: tile.row + playRow0,
+            dir: 0,
+            anim: 'Idle',
+          },
+          look,
+        )}
+        {@const art = BUBBLES.visit}
+        <button
+          type="button"
+          class="bubble tappable"
+          style:left="{snapToDevice(spot.x + head.x)}px"
+          style:top="{snapToDevice(spot.y + halfH + head.y)}px"
+          style:z-index={depthSpan * 3}
+          aria-label={`${visitor.displayName} Nv ${visitor.level} está visitando`}
+          onclick={() => {
+            if (building) return
+            visitorMessage = ''
+            visitorOpen = visitor
+            play('tap')
+          }}
+        >
+          <svg
+            width={art.width * bubblePx}
+            height={art.height * bubblePx}
+            viewBox="0 0 {art.width} {art.height}"
+            shape-rendering="crispEdges"
+            aria-hidden="true"
+          >
+            {#each art.pixels as px, index (index)}
+              <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
+            {/each}
+          </svg>
+        </button>
+      {/each}
       <!-- Balões fora do botão do Pokémon: são botões próprios (o coração faz carinho). -->
       {#each bubbleWalkers as walker (walker.id)}
         {@const kind = bubbleById.get(walker.id)}
@@ -2851,6 +2971,7 @@
         residents={areaResidents}
         candidates={areaCandidates}
         onHome={(pokemonId, habitatId) => void habitatCall(`/api/garden/pets/${pokemonId}/home`, { habitatId })}
+        onCallVisitors={devTools ? () => void habitatCall('/api/dev/visitors/call', {}) : null}
         onAreaKind={(kind) => {
           if (!areaEdit) return
           areaEdit = { ...areaEdit, kind, dirty: true }
@@ -2900,6 +3021,29 @@
       />
     {/if}
   </div>
+
+  {#if visitorOpen}
+    {@const visitor = visitorOpen}
+    {@const home = layout.habitats.find((row) => row.id === visitor.habitatId)}
+    <Modal label="Visitante" onBackdrop={() => (visitorOpen = null)}>
+      <div class="visitor-panel">
+        <!-- Tamanho natural do sprite (cada um tem o seu), numa caixa fixa, como na ficha. -->
+        <div class="visitor-portrait">
+          <img src={showdownSrc(visitor.speciesId, visitor.isShiny)} alt="" />
+        </div>
+        <p>
+          <strong>{visitor.displayName}{visitor.isShiny ? ' ★' : ''} Nv {visitor.level}</strong> está visitando
+          {home ? `o ${habitatKind(home.kind).name}` : 'o jardim'}. Vai embora em {formatCountdown(Math.max(0, visitor.leavesAt - clock.now()))}.
+        </p>
+        <p class="hint">A luta não gasta energia; vencendo, dá para capturar.</p>
+        {#if visitorMessage}<p class="hint" role="alert">{visitorMessage}</p>{/if}
+        <div class="row">
+          <button type="button" class="btn btn-primary" disabled={visitorPending} onclick={() => void fightVisitor(visitor)}>Lutar</button>
+          <button type="button" class="btn" onclick={() => (visitorOpen = null)}>Agora não</button>
+        </div>
+      </div>
+    </Modal>
+  {/if}
 
   {#if benchOpenId !== null}
     <Modal label="Bancada de bolas" wide onBackdrop={() => (benchOpenId = null)}>
@@ -3853,6 +3997,35 @@
 
   .build-grid polygon[data-biome='basico'] {
     fill: #f0e6c838;
+  }
+
+  .visitor-panel {
+    display: grid;
+    justify-items: center;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  .visitor-portrait {
+    display: grid;
+    place-items: center;
+    width: 96px;
+    height: 96px;
+  }
+
+  .visitor-portrait img {
+    max-width: 96px;
+    max-height: 96px;
+    image-rendering: pixelated;
+  }
+
+  .visitor-panel .row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .visitor-panel .btn {
+    min-height: 44px;
   }
 
   .zone-label {

@@ -13,6 +13,10 @@ import { recordEvent } from '../db/events.js'
 import { creditItems, debitItem } from '../db/inventory.js'
 import { gardenGifts, pokemon, species, trainers } from '../db/schema.js'
 import { checkedHabitats, residentsOf } from '../db/habitat.js'
+import { currentChapter } from '../db/visitors.js'
+import { habitatVisitors } from '../db/schema.js'
+import { loadRegions } from '../config/regions.js'
+import { createEncounter } from './encounters.js'
 import { canLiveInKind } from '../game/habitat/index.js'
 import { petReadyAt } from '../game/pets.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
@@ -76,6 +80,45 @@ function setHome(userId: number, pokemonId: number, habitatId: number | null, no
   db.update(pokemon).set({ habitatId }).where(eq(pokemon.id, pokemonId)).run()
   return { ok: true }
 }
+
+// Visitante (5.22): tocar abre o encontro com ele, sem energia (o mesmo
+// encontro do campo: luta e captura). Ele sai do habitat ao começar.
+gardenRoutes.post('/visitors/:id/encounter', requireUser, (c) => {
+  const id = parseId(c.req.param('id'))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
+  const userId = c.get('userId')
+  const now = Date.now()
+  const result = immediate(() => {
+    persistCatchUp(userId, now)
+    const db = getDb()
+    const visitor = db
+      .select()
+      .from(habitatVisitors)
+      .where(and(eq(habitatVisitors.id, id), eq(habitatVisitors.userId, userId)))
+      .get()
+    if (!visitor) return fail('visitor_not_found', 404)
+    // A área de onde ele vem: a primeira aberta em que a espécie aparece.
+    const chapter = currentChapter(userId)
+    const open = loadRegions().filter((region) => region.chapter !== null && region.chapter <= chapter)
+    const region =
+      open.find((row) =>
+        [row.slots, ...Object.values(row.methods)].some((table) => table?.some((slot) => slot.speciesId === visitor.speciesId)),
+      ) ?? open[0]
+    if (!region) return fail('region_not_found', 404)
+    const created = createEncounter(
+      userId,
+      region,
+      now,
+      { speciesId: visitor.speciesId, level: visitor.level, isShiny: visitor.isShiny },
+      { free: true },
+    )
+    if (!created.ok) return created
+    db.delete(habitatVisitors).where(eq(habitatVisitors.id, id)).run()
+    return created
+  })
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json(result.encounter, 201)
+})
 
 // Alimentar todos (PROGRESSAO.md, 4.2): 1 berry por Pokémon com fome, do mais
 // faminto ao menos, até a berry acabar. `ids` limita (ex.: só o time).

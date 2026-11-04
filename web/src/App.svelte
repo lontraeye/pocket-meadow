@@ -424,6 +424,7 @@
           openPlotIndex={focusPlot}
           onPlotOpened={() => (focusPlot = null)}
           onBuildMode={(on) => (gardenBuilding = on)}
+          onEncounter={() => (screen = 'explore')}
         />
       </div>
     {/if}

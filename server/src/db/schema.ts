@@ -621,8 +621,35 @@ export const habitats = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
     createdAt: integer('created_at').notNull(),
+    /** Quando chega o próximo visitante; null = ainda não agendado (habitat não pronto). */
+    visitorNextAt: integer('visitor_next_at'),
   },
   (table) => [index('idx_habitats_user').on(table.userId)],
+)
+
+/**
+ * Visitante de um habitat (5.22): um Pokémon selvagem que chegou e fica até
+ * `leaves_at`. Um por habitat. Tocar nele abre o encontro (sem energia).
+ */
+export const habitatVisitors = sqliteTable(
+  'habitat_visitors',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    habitatId: integer('habitat_id')
+      .notNull()
+      .references(() => habitats.id, { onDelete: 'cascade' }),
+    speciesId: integer('species_id')
+      .notNull()
+      .references(() => species.id),
+    level: integer('level').notNull(),
+    isShiny: integer('is_shiny', { mode: 'boolean' }).notNull().default(false),
+    arrivedAt: integer('arrived_at').notNull(),
+    leavesAt: integer('leaves_at').notNull(),
+  },
+  (table) => [uniqueIndex('ux_habitat_visitors_habitat').on(table.habitatId), index('idx_habitat_visitors_user').on(table.userId)],
 )
 
 /** As casas de cada habitat: uma casa é de um habitat só (a fronteira). */

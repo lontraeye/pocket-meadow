@@ -175,3 +175,64 @@ test('água: peça não fica na água e água não vai embaixo de peça', async 
   assert.equal(await errorOf(await post(p.cookie, `/build/${plot.id}/move`, { col: 5, row: 2 })), 'on_water')
   assert.equal((await post(p.cookie, `/build/${plot.id}/move`, { col: 6, row: 2 })).status, 200)
 })
+
+test('visitante: chega no habitat pronto, vai embora, não acumula e vira encontro sem energia', async () => {
+  const { settleVisitors, visitorsView } = await import('../db/visitors.js')
+  const p = player('habitat-visita')
+  const hour = 60 * 60 * 1000
+  const pradaria = (await layoutOf(await post(p.cookie, '/build/habitat', { kind: 'pradaria', cells: cells(0, 0, 5) }))).habitats[0]!
+  const nextAt = () =>
+    (getSqlite().prepare('select visitor_next_at as at from habitats where id = ?').get(pradaria.id) as { at: number | null }).at
+  const t0 = Date.now() + 100 * hour
+  const low = () => 0
+
+  // Sem estar pronto, não agenda ninguém.
+  immediate(() => settleVisitors(p.userId, t0, low))
+  assert.equal(nextAt(), null)
+
+  // Pronto: o primeiro chega depois do intervalo (3 h no mínimo) e fica 4 h.
+  await post(p.cookie, '/build/floor', { cells: paint(0, 0, 2, 'flores') })
+  getSqlite().prepare('update habitats set visitor_next_at = null where id = ?').run(pradaria.id)
+  immediate(() => settleVisitors(p.userId, t0, low))
+  assert.equal(nextAt(), t0 + 3 * hour)
+  immediate(() => settleVisitors(p.userId, t0 + 3 * hour, low))
+  const [visitor] = immediate(() => visitorsView(p.userId))
+  assert.ok(visitor, 'chegou')
+  assert.equal(visitor.leavesAt, t0 + 7 * hour)
+  immediate(() => settleVisitors(p.userId, t0 + 7 * hour, low))
+  assert.equal(immediate(() => visitorsView(p.userId)).length, 0, 'foi embora')
+
+  // Fora muito tempo: os que viriam e iriam sem ninguém ver são pulados, sem acumular.
+  immediate(() => settleVisitors(p.userId, t0 + 40 * hour, low))
+  const later = immediate(() => visitorsView(p.userId))
+  assert.equal(later.length, 1)
+  assert.ok(later[0]!.leavesAt > t0 + 40 * hour)
+
+  // Habitat que deixa de estar pronto manda o visitante embora e para o relógio.
+  await post(p.cookie, '/build/floor', { cells: paint(0, 0, 2, null) })
+  immediate(() => settleVisitors(p.userId, t0 + 40 * hour, low))
+  assert.equal(immediate(() => visitorsView(p.userId)).length, 0)
+  assert.equal(nextAt(), null)
+
+  // Tocar no visitante abre o encontro (de graça) e ele sai do habitat.
+  await post(p.cookie, '/build/floor', { cells: paint(0, 0, 2, 'flores') })
+  const now = Date.now()
+  immediate(() => settleVisitors(p.userId, now, low))
+  getSqlite().prepare('update habitats set visitor_next_at = ? where id = ?').run(now - 1, pradaria.id)
+  immediate(() => settleVisitors(p.userId, now, low))
+  const [guest] = immediate(() => visitorsView(p.userId))
+  assert.ok(guest)
+  const energy = () => (getSqlite().prepare('select energy from trainers where user_id = ?').get(p.userId) as { energy: number }).energy
+  const before = energy()
+  const opened = await post(p.cookie, `/garden/visitors/${guest.id}/encounter`)
+  assert.equal(opened.status, 201)
+  const encounter = (await opened.json()) as { speciesId?: number; species?: { id: number } }
+  const pending = getSqlite()
+    .prepare(`select species_id as speciesId, level from encounters where user_id = ? and status = 'pending'`)
+    .get(p.userId) as { speciesId: number; level: number }
+  assert.deepEqual([pending.speciesId, pending.level], [guest.speciesId, guest.level])
+  assert.ok(encounter)
+  assert.equal(energy(), before, 'não gasta energia')
+  assert.equal(immediate(() => visitorsView(p.userId)).length, 0)
+  assert.equal(await errorOf(await post(p.cookie, `/garden/visitors/${guest.id}/encounter`)), 'visitor_not_found')
+})
