@@ -269,7 +269,7 @@
     class:focused={paint === floor}
     class:locked={unlockAt !== null}
     aria-pressed={paint === floor}
-    disabled={pending || unlockAt !== null || (area !== null && (area.dirty || area.id === null))}
+    disabled={unlockAt !== null}
     aria-label={unlockAt ? `${FLOOR_NAMES[floor]}: abre no ${unlockAt.name}` : FLOOR_NAMES[floor]}
     onclick={() => choose(paint === floor ? null : floor)}
   >
@@ -422,7 +422,6 @@
             class="card"
             class:focused={paint === 'erase'}
             aria-pressed={paint === 'erase'}
-            disabled={pending || area.dirty || area.id === null}
             onclick={() => choose(paint === 'erase' ? null : 'erase')}
           >
             <span class="thumb">
@@ -436,22 +435,21 @@
       <p class="hint">
         {#if paint === null}
           {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} para marcar a área; começar numa casa marcada desmarca.
-        {:else if area.dirty || area.id === null}
-          Salve a área para pintar o chão.
         {:else}
           {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} dentro da área para {paint === 'erase' ? 'apagar' : 'pintar'}.
         {/if}
         {mouse ? 'Botão do meio ou direito move a câmera.' : 'Dois dedos movem a câmera.'} A seta recolhe o menu.
       </p>
       <div class="row">
-        {#if area.dirty || area.id === null}
-          <button type="button" class="btn btn-primary" disabled={pending || area.check.size === 0} onclick={onAreaSave}>Salvar área</button>
+        {#if area.dirty && area.check.size > 0}
+          <!-- Só aparece quando o salvar sozinho não deu (área em pedaços). -->
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={onAreaSave}>Salvar área</button>
         {/if}
         {#if area.id !== null}
           <button type="button" class="btn" disabled={pending} onclick={onAreaDelete}>Excluir</button>
         {/if}
         <button type="button" class="btn" disabled={pending} onclick={onAreaCancel}>
-          {area.dirty || area.id === null ? 'Cancelar' : 'Pronto'}
+          Pronto
         </button>
       </div>
     </div>

@@ -21,7 +21,7 @@
   } from './api'
   import { benchOperatorIds } from './structures'
   import { cellKey, inBounds, isFlippable, occupied, type PieceKey } from '@garden/layout'
-  import { checkHabitat, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
+  import { checkHabitat, isConnected, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
   import { habitatLabel, kindFloors } from './habitatView'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
@@ -641,17 +641,32 @@
     areaEdit = { ...edit, cells, dirty: true }
   }
 
+  /**
+   * Salva a área e o tipo (sozinho ao soltar cada pincelada de área e ao
+   * trocar o tipo). Área em pedaços não salva: avisa e fica para a próxima.
+   * O chão nunca fica preso a isso.
+   */
   async function saveArea() {
     const edit = areaEdit
-    if (!edit) return
+    if (!edit || !edit.dirty) return
     const cells = areaTiles
-    const body = { kind: edit.kind, cells }
+    if (cells.length === 0) {
+      buildMessage = edit.id === null ? '' : 'A área precisa de pelo menos uma casa (ou use Excluir).'
+      return
+    }
+    if (!isConnected(cells)) {
+      buildMessage = 'A área precisa ser um bloco só: casas que se tocam pelos lados.'
+      return
+    }
+    const sent = new Set(cells.map((cell) => cellKey(cell.col, cell.row)))
     const path = edit.id === null ? '/api/build/habitat' : `/api/build/habitat/${edit.id}`
-    if (!(await habitatCall(path, body))) return
-    // O menu do habitat continua aberto, agora para pintar o chão dele.
+    if (!(await habitatCall(path, { kind: edit.kind, cells }, true))) return
     const id = edit.id ?? Math.max(...layout.habitats.map((row) => row.id))
-    areaEdit = { ...edit, id, dirty: false }
-    paint = firstKindFloor(edit.kind)
+    // Se o jogador marcou mais casas enquanto salvava, continua com o que fez.
+    const now = areaEdit
+    if (!now) return
+    const same = Object.keys(now.cells).length === sent.size && Object.keys(now.cells).every((key) => sent.has(key))
+    areaEdit = { ...now, id, dirty: !same || now.kind !== edit.kind }
   }
 
   /** O primeiro chão aberto que vale ponto para o tipo (null no básico). */
@@ -666,8 +681,8 @@
     if (await habitatCall(`/api/build/habitat/${edit.id}/delete`, {})) areaEdit = null
   }
 
-  /** Chamada de habitat: avisa quem ficou sem casa. */
-  async function habitatCall(path: string, body: object): Promise<boolean> {
+  /** Chamada de habitat: avisa quem ficou sem casa (`quiet`: sem o som, no salvar sozinho). */
+  async function habitatCall(path: string, body: object, quiet = false): Promise<boolean> {
     buildPending = true
     buildMessage = ''
     try {
@@ -679,7 +694,7 @@
       }
       await onState()
       evictedMessage(out.evicted ?? [])
-      play('tap')
+      if (!quiet) play('tap')
       return true
     } catch {
       buildMessage = 'Sem conexão com o servidor.'
@@ -977,6 +992,7 @@
       strokeStart = null
       buildSkipClick = true
       if (paint) void flushPaint()
+      else if (areaEdit) void saveArea()
       return
     }
     const drag = buildDrag
@@ -2742,8 +2758,9 @@
         onNewHabitat={(kind) => startArea(null, kind)}
         onEditHabitat={(id) => startArea(id, 'basico')}
         onAreaKind={(kind) => {
-          if (areaEdit) areaEdit = { ...areaEdit, kind, dirty: true }
-          paint = null
+          if (!areaEdit) return
+          areaEdit = { ...areaEdit, kind, dirty: true }
+          void saveArea()
         }}
         onAreaSave={() => void saveArea()}
         onAreaDelete={() => void deleteArea()}
