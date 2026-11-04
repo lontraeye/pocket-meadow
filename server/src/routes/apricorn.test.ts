@@ -55,18 +55,14 @@ const clear = (userId: number, ...keys: string[]) => {
 
 const harvest = (cookie: string) =>
   app.request('/garden/tree/harvest', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}' }, env)
-type TreeState = {
-  key: string
-  unlocked: boolean
-  ready: number
-  cap: number
-  readyAts: number[]
-  unlockAt: { milestone: string; name: string } | null
+type TreeState = { id: number; key: string; placed: boolean; ready: number; cap: number; readyAts: number[] }
+type GardenState = {
+  trees: TreeState[]
+  layout: { locked: { piece: string; unlockAt: { milestone: string } }[] }
 }
-const trees = async (cookie: string) => {
-  const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as { garden: { trees: TreeState[] } }
-  return state.garden.trees
-}
+const garden = async (cookie: string) =>
+  ((await (await app.request('/state', { headers: { cookie } }, env)).json()) as { garden: GardenState }).garden
+const trees = async (cookie: string) => (await garden(cookie)).trees
 const tree = async (cookie: string) => (await trees(cookie))[0]!
 const apricorns = (userId: number) =>
   (getSqlite().prepare('select quantity from inventory where user_id = ? and item_key = ?').get(userId, APRICORN_ITEM) as
@@ -77,11 +73,15 @@ const rewind = (userId: number, ms: number) =>
 
 test('a vermelha vem desde o começo; a azul abre no Marco de Goldenrod, a amarela no de Olivine', async () => {
   const p = player('arvore-fechada', 1)
-  const all = await trees(p.cookie)
-  assert.equal(all.find((row) => row.key === 'apricorn_tree')?.unlocked, true)
-  const blue = all.find((row) => row.key === 'apricorn_tree_blue')!
-  assert.deepEqual([blue.unlocked, blue.unlockAt?.milestone], [false, 'goldenrod'])
-  assert.equal(all.find((row) => row.key === 'apricorn_tree_yellow')?.unlockAt?.milestone, 'olivine')
+  const start = await garden(p.cookie)
+  assert.deepEqual(start.trees.map((row) => [row.key, row.placed]), [['apricorn_tree', true]])
+  assert.deepEqual(
+    start.layout.locked.map((row) => [row.piece, row.unlockAt.milestone]),
+    [
+      ['apricorn_tree_blue', 'goldenrod'],
+      ['apricorn_tree_yellow', 'olivine'],
+    ],
+  )
   const response = await app.request(
     '/garden/tree/harvest',
     { method: 'POST', headers: { cookie: p.cookie, 'content-type': 'application/json' }, body: JSON.stringify({ key: 'apricorn_tree_blue' }) },
@@ -91,13 +91,13 @@ test('a vermelha vem desde o começo; a azul abre no Marco de Goldenrod, a amare
 
   clear(p.userId, 'goldenrod')
   const opened = (await trees(p.cookie)).find((row) => row.key === 'apricorn_tree_blue')!
-  assert.deepEqual([opened.unlocked, opened.unlockAt, opened.ready], [true, null, 1])
+  assert.deepEqual([opened.placed, opened.ready], [true, 1])
 })
 
 test('abre com 1 pendurado; colher leva para a mochila e zera', async () => {
   const p = player('arvore-abre', 1)
   const first = await tree(p.cookie)
-  assert.equal(first.unlocked, true)
+  assert.equal(first.placed, true)
   assert.equal(first.ready, 1)
   assert.equal(first.readyAts.length, 4)
 
@@ -236,15 +236,15 @@ test('upgrade da bancada: pede o marco e itens, leva tempo, libera Great Ball', 
   const { benchView } = await import('../db/bench.js')
   const { treesView } = await import('../db/apricorn.js')
   const state = immediate(() => ({
-    garden: { bench: benchView(p.userId, Date.now()), trees: treesView(p.userId, Date.now()) },
+    garden: { bench: benchView(p.userId, Date.now())!, trees: treesView(p.userId, Date.now()) },
   }))
   assert.equal(state.garden.bench.level, 2)
   assert.equal(state.garden.bench.batchSize, 10)
   assert.equal(state.garden.bench.upgrade, null)
   assert.equal(state.garden.bench.recipes.find((r) => r.key === 'great_ball')?.unlocked, true)
   const blue = state.garden.trees.find((t) => t.key === 'apricorn_tree_blue')!
-  assert.deepEqual([blue.unlocked, blue.ready], [true, 1])
-  assert.equal(state.garden.trees.find((t) => t.key === 'apricorn_tree_yellow')?.unlocked, false)
+  assert.deepEqual([blue.placed, blue.ready], [true, 1])
+  assert.equal(state.garden.trees.find((t) => t.key === 'apricorn_tree_yellow'), undefined)
 
   // Colhe o azul e faz uma Great Ball.
   const harvested = (await (
@@ -264,7 +264,7 @@ test('upgrade pede o marco, não o nível de treinador', async () => {
   getSqlite().prepare("insert into inventory (user_id, item_key, quantity) values (?, 'berry:oran', 5)").run(p.userId)
   assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'milestone_needed')
   const state = (await (await app.request('/state', { headers: { cookie: p.cookie } }, env)).json()) as {
-    garden: { bench: { next: { unlockAt: { milestone: string } | null } | null } }
+    garden: { benches: { next: { unlockAt: { milestone: string } | null } | null }[] }
   }
-  assert.equal(state.garden.bench.next?.unlockAt?.milestone, 'goldenrod')
+  assert.equal(state.garden.benches[0]?.next?.unlockAt?.milestone, 'goldenrod')
 })

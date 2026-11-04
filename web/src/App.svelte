@@ -184,7 +184,7 @@
             needThreshold: game.garden.needThreshold,
             // Guardada no inventário de construção não cresce nem avisa.
             trees: game.garden.trees.filter((tree) => tree.placed),
-            benchJob: game.garden.bench.job,
+            benchJobs: game.garden.benches.flatMap((bench) => (bench.job ? [bench.job] : [])),
           },
           clock.now(),
         )

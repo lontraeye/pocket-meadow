@@ -8,13 +8,25 @@
   import { play } from './sound'
   import { spriteLoading } from './spriteLoading'
   import { showdownSrc } from './sprites'
+  import { benchOperatorIds } from './structures'
   import { formatClockTime, formatCountdown } from './time'
   import { typeLabelPt } from './typesPt'
 
-  let { game, onState, onClose }: { game: GameState; onState: () => Promise<void>; onClose: () => void } = $props()
+  let {
+    game,
+    benchId,
+    onState,
+    onClose,
+  }: {
+    game: GameState
+    /** Qual bancada (cada uma tem o seu operador, lote e nível). */
+    benchId: number
+    onState: () => Promise<void>
+    onClose: () => void
+  } = $props()
 
   const clock = serverClock(() => game.now)
-  const bench = $derived(game.garden.bench)
+  const bench = $derived(game.garden.benches.find((row) => row.id === benchId) ?? game.garden.benches[0]!)
   const operator = $derived(game.pokemon.find((mon) => mon.id === bench.operatorId) ?? null)
   const have = (itemKey: string) => game.inventory.find((row) => row.itemKey === itemKey)?.quantity ?? 0
   const ballName = (itemKey: string) => game.balls.list.find((ball) => ball.itemKey === itemKey)?.displayName ?? itemKey
@@ -29,13 +41,15 @@
   const apricorns = $derived(have(recipe.input))
   const maxQuantity = $derived(Math.min(bench.batchSize, apricorns))
 
+  const operators = $derived(benchOperatorIds(game))
   /** Quem pode operar: do jardim, fora do time, de um dos tipos aceitos. */
   const candidates = $derived(
     game.pokemon.filter(
       (mon) =>
         mon.location === 'garden' &&
         mon.teamSlot === null &&
-        mon.id !== bench.operatorId &&
+        // Quem já opera uma bancada (esta ou outra) não aparece.
+        !operators.has(mon.id) &&
         (bench.operatorTypes.includes(mon.type1) || (mon.type2 !== null && bench.operatorTypes.includes(mon.type2))),
     ),
   )
@@ -84,21 +98,21 @@
 
   function pick(id: number | null) {
     choosing = false
-    void call('/api/garden/bench/operator', { pokemonId: id }, () => (id === null ? 'A bancada ficou sem operador.' : ''))
+    void call('/api/garden/bench/operator', { id: bench.id, pokemonId: id }, () => (id === null ? 'A bancada ficou sem operador.' : ''))
   }
 
   function start() {
     play('tap')
-    void call('/api/garden/bench/start', { recipeKey: recipe.key, quantity }, () => '')
+    void call('/api/garden/bench/start', { id: bench.id, recipeKey: recipe.key, quantity }, () => '')
   }
 
   function collect() {
     play('harvest')
-    void call('/api/garden/bench/collect', {}, (body) => `Coletou ${ballsText(String(body.itemKey), Number(body.balls))}!`)
+    void call('/api/garden/bench/collect', { id: bench.id }, (body) => `Coletou ${ballsText(String(body.itemKey), Number(body.balls))}!`)
   }
 
   function cancel() {
-    void call('/api/garden/bench/cancel', {}, (body) => {
+    void call('/api/garden/bench/cancel', { id: bench.id }, (body) => {
       const balls = Number(body.balls)
       const refunded = Number(body.refunded)
       return (
@@ -114,7 +128,7 @@
 
   function upgrade() {
     play('levelup')
-    void call('/api/garden/bench/upgrade', {}, (body) => `Melhorando para o nível ${body.toLevel}.`)
+    void call('/api/garden/bench/upgrade', { id: bench.id }, (body) => `Melhorando para o nível ${body.toLevel}.`)
   }
 </script>
 

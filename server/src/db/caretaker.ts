@@ -72,13 +72,19 @@ export function setCaretaker(
     if (mon.inPc) return { ok: false, error: 'in_pc' }
     if (mon.teamSlot !== null) return { ok: false, error: 'in_team' }
     if (!caretakerTier(mon.speciesId)) return { ok: false, error: 'not_caretaker' }
-    // Quem opera a bancada não cuida do daycare ao mesmo tempo.
+    // Quem opera uma bancada não cuida do daycare ao mesmo tempo.
     const bench = db
-      .select({ id: gardenStructures.operatorPokemonId })
+      .select({ id: gardenStructures.id })
       .from(gardenStructures)
-      .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench')))
+      .where(
+        and(
+          eq(gardenStructures.userId, userId),
+          eq(gardenStructures.key, 'ball_bench'),
+          eq(gardenStructures.operatorPokemonId, pokemonId),
+        ),
+      )
       .get()
-    if (bench?.id === pokemonId) return { ok: false, error: 'operating' }
+    if (bench) return { ok: false, error: 'operating' }
   }
   const found = db.select({ key: gardenStructures.key }).from(gardenStructures).where(keeperWhere(userId)).get()
   if (found) {

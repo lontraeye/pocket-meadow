@@ -12,8 +12,8 @@ function input(over: Partial<ReadyInput> = {}): ReadyInput {
     gifts: [],
     pets: [],
     needThreshold: 40,
-    trees: [{ key: 'apricorn_tree', unlocked: true, ready: 0, cap: 5, readyAts: [now + 1000] }],
-    benchJob: null,
+    trees: [{ id: 1, ready: 0, cap: 5, readyAts: [now + 1000] }],
+    benchJobs: [],
     ...over,
   }
 }
@@ -80,25 +80,23 @@ test('dispensado volta a aparecer quando surge algo novo', () => {
 })
 
 test('árvore cheia entra no aviso, também quando enche com o app aberto', () => {
-  const full = readyStatus(input({ trees: [{ key: 'apricorn_tree', unlocked: true, ready: 5, cap: 5, readyAts: [] }] }), now)
+  const full = readyStatus(input({ trees: [{ id: 1, ready: 5, cap: 5, readyAts: [] }] }), now)
   assert.equal(full.summary, 'árvore cheia')
   assert.equal(full.target, null)
-  const filling = { key: 'apricorn_tree', unlocked: true, ready: 4, cap: 5, readyAts: [now + 1000] }
+  const filling = { id: 1, ready: 4, cap: 5, readyAts: [now + 1000] }
   assert.equal(readyStatus(input({ trees: [filling] }), now).summary, null)
   assert.equal(readyStatus(input({ trees: [filling] }), now + 1000).summary, 'árvore cheia')
-  const locked = { key: 'apricorn_tree', unlocked: false, ready: 0, cap: 5, readyAts: [] }
-  assert.equal(readyStatus(input({ trees: [{ ...locked, ready: 5 }] }), now).summary, null)
 })
 
 test('bolas prontas na bancada, sem contar as já coletadas', () => {
   const job = { id: 3, quantity: 5, unitMs: 1000, startedAt: now - 3500, collected: 1, perUnit: 1 }
-  const ready = readyStatus(input({ benchJob: job }), now)
+  const ready = readyStatus(input({ benchJobs: [job] }), now)
   assert.equal(ready.summary, '2 bolas prontas')
   assert.deepEqual(ready.ids, ['b3@parcial'])
-  assert.equal(readyStatus(input({ benchJob: { ...job, collected: 3 } }), now).summary, null)
-  assert.deepEqual(readyStatus(input({ benchJob: job }), now + 2000).ids, ['b3@fim'])
+  assert.equal(readyStatus(input({ benchJobs: [{ ...job, collected: 3 }] }), now).summary, null)
+  assert.deepEqual(readyStatus(input({ benchJobs: [job] }), now + 2000).ids, ['b3@fim'])
   // Com 2 Poké Balls por Apricorn, o aviso conta bolas.
-  assert.equal(readyStatus(input({ benchJob: { ...job, perUnit: 2 } }), now).summary, '4 bolas prontas')
+  assert.equal(readyStatus(input({ benchJobs: [{ ...job, perUnit: 2 }] }), now).summary, '4 bolas prontas')
 })
 
 test('arbusto seco não conta como berry pronta, mas avisa', () => {

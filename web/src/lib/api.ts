@@ -338,14 +338,13 @@ export type PetView = {
 
 /** Árvore de Apricorn (5.23); `readyAts` = quando cada próximo fica pronto, até encher. */
 export type TreeView = {
+  /** A peça (cada árvore tem o seu estado). */
+  id: number
   key: 'apricorn_tree' | 'apricorn_tree_blue' | 'apricorn_tree_yellow'
   color: 'red' | 'blue' | 'yellow'
   itemKey: string
-  unlocked: boolean
   /** No jardim (false = guardada no inventário de construção, parada). */
   placed: boolean
-  /** O marco que abre a árvore (null = aberta). */
-  unlockAt: UnlockAt | null
   ready: number
   cap: number
   readyAts: number[]
@@ -377,7 +376,8 @@ export type BenchRecipe = {
 
 /** Bancada de bolas (5.23): as bolas do lote ficam prontas uma a uma (`startedAt + k × unitMs`). */
 export type BenchView = {
-  unlocked: boolean
+  /** A peça (cada bancada tem o seu operador, lote e nível). */
+  id: number
   /** No jardim (false = guardada no inventário de construção). */
   placed: boolean
   level: number
@@ -404,6 +404,8 @@ export type BenchView = {
 
 /** Máquina de cura do jardim: cargas que voltam com o tempo. */
 export type HealMachineView = {
+  /** A peça (cada máquina tem as suas cargas). */
+  id: number
   charges: number
   max: number
   nextChargeAt: number | null
@@ -416,9 +418,18 @@ export type HealMachineView = {
 export type GardenLayout = {
   cols: number
   rows: number
-  /** `flipped`: girada (só bancada e máquina de cura). */
-  pieces: { id: number; piece: PieceKey; slot: number; col: number; row: number; flipped: boolean }[]
-  stored: StructurePiece[]
+  /** `flipped`: girada (só bancada e máquina de cura); `structureId`: a estrutura (null nos canteiros). */
+  pieces: {
+    id: number
+    piece: PieceKey
+    structureId: number | null
+    slot: number
+    col: number
+    row: number
+    flipped: boolean
+  }[]
+  /** Estruturas guardadas: a peça e o tipo. */
+  stored: { id: number; piece: StructurePiece }[]
   plotLimit: number
   plotsPlaced: number
   /** O próximo marco que sobe o limite de canteiros (null = já no máximo). */
@@ -576,10 +587,11 @@ export type GameState = {
     fightMinHunger: number
     /** Quanto uma berry enche a fome. */
     berryFill: number
+    /** Cada estrutura é uma peça (PROGRESSAO.md 4.3, passo 2): listas, com o id de cada uma. */
     trees: TreeView[]
-    bench: BenchView
-    /** Máquina de cura do jardim (PROGRESSAO.md, item 4). */
-    healMachine: HealMachineView
+    benches: BenchView[]
+    /** Máquinas de cura do jardim (PROGRESSAO.md, item 4). */
+    healMachines: HealMachineView[]
     layout: GardenLayout
   }
   missions: MissionsView

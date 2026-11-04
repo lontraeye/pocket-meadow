@@ -43,8 +43,8 @@ import { layoutView } from './build.js'
 import { view as petView } from './garden.js'
 import { missionsView } from '../db/missions.js'
 import { treesView } from '../db/apricorn.js'
-import { benchView } from '../db/bench.js'
-import { healMachineView } from '../db/healMachine.js'
+import { benchesView } from '../db/bench.js'
+import { healMachinesView } from '../db/healMachine.js'
 
 export const stateRoutes = new Hono<AuthEnv>()
 
@@ -244,9 +244,9 @@ function readState(userId: number, now: number) {
   }
   for (const list of evolutionsBySpecies.values()) list.sort((a, b) => a.toSpeciesId - b.toSpeciesId)
 
-  // As views criam as estruturas abertas; o layout vem depois delas.
+  // Cada estrutura é uma peça (PROGRESSAO.md 4.3, passo 2): listas, com o id de cada uma.
   const trees = treesView(userId, now)
-  const bench = benchView(userId, now)
+  const benches = benchesView(userId, now)
   return {
     now,
     devTools: devToolsEnabled(),
@@ -404,8 +404,8 @@ function readState(userId: number, now: number) {
       fightMinHunger: petConfig.fightMinHunger,
       berryFill: petConfig.berryFill,
       trees,
-      bench,
-      healMachine: healMachineView(userId, now),
+      benches,
+      healMachines: healMachinesView(userId, now),
       // Construção (PROGRESSAO.md 4.3): onde está cada peça e o que está guardado.
       layout: layoutView(userId),
     },

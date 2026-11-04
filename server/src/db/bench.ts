@@ -1,19 +1,23 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, ne } from 'drizzle-orm'
 import { RECIPES, apricornConfig, benchLevel, benchUnitMs, recipeDef, recipeUnitMs } from '../config/apricorn.js'
 import { benchLevelAt, type UnlockAt } from '../config/gardenUnlocks.js'
 import { getDb } from './client.js'
-import { autoPlace, isPlaced } from './gardenLayout.js'
+import { isPlaced } from './gardenLayout.js'
 import { recordEvent } from './events.js'
 import { creditItems, debitItem, itemQty } from './inventory.js'
 import { clearedMilestones, gardenUnlocksOf } from './milestones.js'
 import { craftJobs, gardenStructures, pokemon, species } from './schema.js'
+import { structureById, structuresOf, type StructureRow } from './structures.js'
 
 // Bancada de bolas (PLANNING.md, seção 5.23): um operador do jardim transforma
 // Apricorns em bolas, em lotes, pela receita escolhida. As bolas ficam prontas
 // uma a uma, por timestamp. A bancada sobe de nível (lote maior, mais rápida,
 // receitas novas); o upgrade leva tempo e ela fica parada enquanto isso. Até
-// onde ela sobe vem dos marcos (config/gardenUnlocks).
+// onde ela sobe vem dos marcos (config/gardenUnlocks). Cada bancada (peça) tem
+// o seu operador, lote e nível (PROGRESSAO.md 4.3, passo 2).
 // Chamar dentro de immediate(), depois do catch-up.
+
+export const BENCH_KEY = 'ball_bench' as const
 
 export type BenchJobView = {
   id: number
@@ -39,7 +43,8 @@ export type RecipeView = {
 }
 
 export type BenchView = {
-  unlocked: boolean
+  /** A peça (garden_structures.id). */
+  id: number
   /** No jardim (false = guardada no inventário de construção). */
   placed: boolean
   level: number
@@ -89,48 +94,24 @@ export type BenchError =
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: BenchError }
 
-const benchWhere = (userId: number) =>
-  and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench'))
+const rowWhere = (userId: number, id: number) => and(eq(gardenStructures.userId, userId), eq(gardenStructures.id, id))
 
-type BenchRow = {
-  level: number
-  operatorId: number | null
-  upgradeTo: number | null
-  upgradeEndsAt: number | null
-  since: number
-}
-
-/** A bancada do jogador; nasce quando o marco abre (desde o começo). Um upgrade vencido é concluído aqui. */
-function ensureBench(userId: number, now: number): BenchRow | null {
-  if (!gardenUnlocksOf(userId).pieces.has('ball_bench')) return null
-  const db = getDb()
-  const found = db
-    .select({
-      level: gardenStructures.level,
-      operatorId: gardenStructures.operatorPokemonId,
-      upgradeTo: gardenStructures.upgradeTo,
-      upgradeEndsAt: gardenStructures.upgradeEndsAt,
-      since: gardenStructures.since,
-    })
-    .from(gardenStructures)
-    .where(benchWhere(userId))
-    .get()
-  if (!found) {
-    db.insert(gardenStructures).values({ userId, key: 'ball_bench', since: now }).run()
-    autoPlace(userId, 'ball_bench', now)
-    return { level: 1, operatorId: null, upgradeTo: null, upgradeEndsAt: null, since: now }
-  }
+/**
+ * A bancada `id` do jogador (sem `id`: a primeira). Um upgrade vencido é
+ * concluído aqui. null = não existe ou não é bancada.
+ */
+function loadBench(userId: number, id: number | undefined, now: number): StructureRow | null {
+  const found = id === undefined ? (structuresOf(userId, BENCH_KEY)[0] ?? null) : structureById(userId, id)
+  if (!found || found.key !== BENCH_KEY) return null
   if (found.upgradeTo !== null && found.upgradeEndsAt !== null && found.upgradeEndsAt <= now) {
-    db.update(gardenStructures)
-      .set({ level: found.upgradeTo, upgradeTo: null, upgradeEndsAt: null, since: found.upgradeEndsAt })
-      .where(benchWhere(userId))
-      .run()
-    return { ...found, level: found.upgradeTo, upgradeTo: null, upgradeEndsAt: null, since: found.upgradeEndsAt }
+    const done = { level: found.upgradeTo, upgradeTo: null, upgradeEndsAt: null, since: found.upgradeEndsAt }
+    getDb().update(gardenStructures).set(done).where(rowWhere(userId, found.id)).run()
+    return { ...found, ...done }
   }
   return found
 }
 
-function activeJob(userId: number): BenchJobView | null {
+function activeJob(userId: number, benchId: number): BenchJobView | null {
   const row = getDb()
     .select({
       id: craftJobs.id,
@@ -144,7 +125,7 @@ function activeJob(userId: number): BenchJobView | null {
     .where(
       and(
         eq(craftJobs.userId, userId),
-        eq(craftJobs.structureKey, 'ball_bench'),
+        eq(craftJobs.structureId, benchId),
         isNull(craftJobs.cancelledAt),
         lt(craftJobs.collected, craftJobs.quantity),
       ),
@@ -160,20 +141,19 @@ export function jobDone(job: Pick<BenchJobView, 'quantity' | 'unitMs' | 'started
   return Math.max(0, Math.min(job.quantity, Math.floor((now - job.startedAt) / job.unitMs)))
 }
 
-export function benchView(userId: number, now: number): BenchView {
+function viewOf(userId: number, bench: StructureRow, cleared: ReadonlySet<string>): BenchView {
   const config = apricornConfig.bench
-  const bench = ensureBench(userId, now)
-  const level = bench?.level ?? 1
+  const level = bench.level
   const nextDef = config.levels[level]
   return {
-    unlocked: bench !== null,
-    placed: bench !== null && isPlaced(userId, 'ball_bench'),
+    id: bench.id,
+    placed: isPlaced(bench.id),
     level,
     maxLevel: config.levels.length,
     batchSize: benchLevel(level).batchSize,
     speedBonus: config.speedBonus,
     operatorTypes: config.operatorTypes,
-    operatorId: bench?.operatorId ?? null,
+    operatorId: bench.operatorPokemonId,
     recipes: RECIPES.map((recipe) => ({
       key: recipe.key,
       input: recipe.input,
@@ -183,24 +163,38 @@ export function benchView(userId: number, now: number): BenchView {
       minBenchLevel: recipe.minBenchLevel,
       unlocked: level >= recipe.minBenchLevel,
     })),
-    job: bench ? activeJob(userId) : null,
+    job: activeJob(userId, bench.id),
     upgrade:
-      bench && bench.upgradeTo !== null && bench.upgradeEndsAt !== null
+      bench.upgradeTo !== null && bench.upgradeEndsAt !== null
         ? { toLevel: bench.upgradeTo, endsAt: bench.upgradeEndsAt, startedAt: bench.since }
         : null,
-    next:
-      nextDef?.upgrade && bench
-        ? {
-            level: level + 1,
-            batchSize: nextDef.batchSize,
-            speed: nextDef.speed,
-            unlockAt: benchLevelAt(clearedMilestones(userId), level + 1),
-            ms: nextDef.upgrade.ms,
-            cost: nextDef.upgrade.cost.map((item) => ({ ...item, have: itemQty(userId, item.itemKey) })),
-            newRecipes: RECIPES.filter((recipe) => recipe.minBenchLevel === level + 1).map((recipe) => recipe.key),
-          }
-        : null,
+    next: nextDef?.upgrade
+      ? {
+          level: level + 1,
+          batchSize: nextDef.batchSize,
+          speed: nextDef.speed,
+          unlockAt: benchLevelAt(cleared, level + 1),
+          ms: nextDef.upgrade.ms,
+          cost: nextDef.upgrade.cost.map((item) => ({ ...item, have: itemQty(userId, item.itemKey) })),
+          newRecipes: RECIPES.filter((recipe) => recipe.minBenchLevel === level + 1).map((recipe) => recipe.key),
+        }
+      : null,
   }
+}
+
+/** As bancadas do jogador, colocadas ou guardadas, na ordem em que vieram. */
+export function benchesView(userId: number, now: number): BenchView[] {
+  const cleared = clearedMilestones(userId)
+  return structuresOf(userId, BENCH_KEY).flatMap((row) => {
+    const bench = loadBench(userId, row.id, now)
+    return bench ? [viewOf(userId, bench, cleared)] : []
+  })
+}
+
+/** Uma bancada (sem `id`: a primeira). */
+export function benchView(userId: number, now: number, id?: number): BenchView | null {
+  const bench = loadBench(userId, id, now)
+  return bench ? viewOf(userId, bench, clearedMilestones(userId)) : null
 }
 
 /** Quem está operando, entre `ids` (para travar time, PC, daycare e soltar). */
@@ -212,7 +206,7 @@ export function operatorAmong(userId: number, ids: readonly number[]): number | 
     .where(
       and(
         eq(gardenStructures.userId, userId),
-        inArray(gardenStructures.key, ['ball_bench', 'daycare_keeper']),
+        inArray(gardenStructures.key, [BENCH_KEY, 'daycare_keeper']),
         inArray(gardenStructures.operatorPokemonId, [...ids]),
       ),
     )
@@ -221,11 +215,11 @@ export function operatorAmong(userId: number, ids: readonly number[]): number | 
 }
 
 /** Põe (ou tira, com `null`) o operador. Só com a bancada parada. */
-export function setOperator(userId: number, pokemonId: number | null, now: number): Result<{}> {
-  const bench = ensureBench(userId, now)
+export function setOperator(userId: number, pokemonId: number | null, now: number, id?: number): Result<{}> {
+  const bench = loadBench(userId, id, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
-  if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
-  if (pokemonId !== null && !isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
+  if (activeJob(userId, bench.id)) return { ok: false, error: 'bench_busy' }
+  if (pokemonId !== null && !isPlaced(bench.id)) return { ok: false, error: 'not_placed' }
   if (pokemonId !== null) {
     const mon = getDb()
       .select({
@@ -247,26 +241,39 @@ export function setOperator(userId: number, pokemonId: number | null, now: numbe
     if (!types.includes(mon.type1) && !(mon.type2 !== null && types.includes(mon.type2))) {
       return { ok: false, error: 'wrong_type' }
     }
-    // Quem cuida do daycare não opera a bancada ao mesmo tempo.
-    const keeper = getDb()
-      .select({ id: gardenStructures.operatorPokemonId })
+    // Quem cuida do daycare ou opera outra bancada não opera esta ao mesmo tempo.
+    const busy = getDb()
+      .select({ id: gardenStructures.id })
       .from(gardenStructures)
-      .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'daycare_keeper')))
+      .where(
+        and(
+          eq(gardenStructures.userId, userId),
+          inArray(gardenStructures.key, [BENCH_KEY, 'daycare_keeper']),
+          eq(gardenStructures.operatorPokemonId, pokemonId),
+          ne(gardenStructures.id, bench.id),
+        ),
+      )
       .get()
-    if (keeper?.id === pokemonId) return { ok: false, error: 'operating' }
+    if (busy) return { ok: false, error: 'operating' }
   }
-  getDb().update(gardenStructures).set({ operatorPokemonId: pokemonId }).where(benchWhere(userId)).run()
+  getDb().update(gardenStructures).set({ operatorPokemonId: pokemonId }).where(rowWhere(userId, bench.id)).run()
   return { ok: true }
 }
 
 /** Começa um lote: os Apricorns saem agora; o tempo de cada um fica fixo. */
-export function startJob(userId: number, recipeKey: string, quantity: number, now: number): Result<{ job: BenchJobView }> {
-  const bench = ensureBench(userId, now)
+export function startJob(
+  userId: number,
+  recipeKey: string,
+  quantity: number,
+  now: number,
+  id?: number,
+): Result<{ job: BenchJobView }> {
+  const bench = loadBench(userId, id, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
-  if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
+  if (!isPlaced(bench.id)) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
-  if (bench.operatorId === null) return { ok: false, error: 'no_operator' }
-  if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
+  if (bench.operatorPokemonId === null) return { ok: false, error: 'no_operator' }
+  if (activeJob(userId, bench.id)) return { ok: false, error: 'bench_busy' }
   const recipe = recipeDef(recipeKey)
   if (!recipe) return { ok: false, error: 'invalid_recipe' }
   if (bench.level < recipe.minBenchLevel) return { ok: false, error: 'recipe_locked' }
@@ -277,12 +284,12 @@ export function startJob(userId: number, recipeKey: string, quantity: number, no
   const operator = getDb()
     .select({ happiness: pokemon.happiness })
     .from(pokemon)
-    .where(eq(pokemon.id, bench.operatorId))
+    .where(eq(pokemon.id, bench.operatorPokemonId))
     .get()
   const unitMs = benchUnitMs(recipeUnitMs(recipe, bench.level), operator?.happiness ?? 0)
   const row = getDb()
     .insert(craftJobs)
-    .values({ userId, structureKey: 'ball_bench', recipeKey: recipe.key, quantity, unitMs, startedAt: now })
+    .values({ userId, structureKey: BENCH_KEY, structureId: bench.id, recipeKey: recipe.key, quantity, unitMs, startedAt: now })
     .returning({ id: craftJobs.id })
     .get()
   if (!row) throw new Error('failed to start craft job')
@@ -302,8 +309,9 @@ export function startJob(userId: number, recipeKey: string, quantity: number, no
 }
 
 /** Entrega as bolas prontas; o resto do lote segue. O lote conta Apricorns. */
-export function collectJob(userId: number, now: number): Result<{ balls: number; itemKey: string }> {
-  const job = activeJob(userId)
+export function collectJob(userId: number, now: number, id?: number): Result<{ balls: number; itemKey: string }> {
+  const bench = loadBench(userId, id, now)
+  const job = bench ? activeJob(userId, bench.id) : null
   if (!job) return { ok: false, error: 'no_job' }
   const done = jobDone(job, now)
   const balls = (done - job.collected) * job.perUnit
@@ -315,8 +323,9 @@ export function collectJob(userId: number, now: number): Result<{ balls: number;
 }
 
 /** Para o lote: entrega as prontas e devolve os Apricorns das que faltavam. */
-export function cancelJob(userId: number, now: number): Result<{ balls: number; refunded: number; itemKey: string }> {
-  const job = activeJob(userId)
+export function cancelJob(userId: number, now: number, id?: number): Result<{ balls: number; refunded: number; itemKey: string }> {
+  const bench = loadBench(userId, id, now)
+  const job = bench ? activeJob(userId, bench.id) : null
   if (!job) return { ok: false, error: 'no_job' }
   const recipe = recipeDef(job.recipeKey) ?? RECIPES[0]!
   const done = jobDone(job, now)
@@ -338,12 +347,12 @@ export function cancelJob(userId: number, now: number): Result<{ balls: number; 
  * Começa o upgrade para o próximo nível: confere o marco e os itens, gasta
  * tudo agora e a bancada fica parada até terminar.
  */
-export function startUpgrade(userId: number, now: number): Result<{ endsAt: number; toLevel: number }> {
-  const bench = ensureBench(userId, now)
+export function startUpgrade(userId: number, now: number, id?: number): Result<{ endsAt: number; toLevel: number }> {
+  const bench = loadBench(userId, id, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
-  if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
+  if (!isPlaced(bench.id)) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
-  if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
+  if (activeJob(userId, bench.id)) return { ok: false, error: 'bench_busy' }
   const next = apricornConfig.bench.levels[bench.level]
   if (!next?.upgrade) return { ok: false, error: 'max_level' }
   if (gardenUnlocksOf(userId).benchMaxLevel < bench.level + 1) return { ok: false, error: 'milestone_needed' }
@@ -357,7 +366,7 @@ export function startUpgrade(userId: number, now: number): Result<{ endsAt: numb
   getDb()
     .update(gardenStructures)
     .set({ upgradeTo: bench.level + 1, upgradeEndsAt: endsAt, since: now })
-    .where(benchWhere(userId))
+    .where(rowWhere(userId, bench.id))
     .run()
   return { ok: true, endsAt, toLevel: bench.level + 1 }
 }
@@ -366,11 +375,11 @@ export function startUpgrade(userId: number, now: number): Result<{ endsAt: numb
  * Antes de guardar a bancada: só parada (sem lote nem melhoria). Ao guardar, o
  * operador volta para o passeio.
  */
-export function storeBench(userId: number, now: number): { ok: true } | { ok: false; error: BenchError } {
-  const bench = ensureBench(userId, now)
+export function storeBench(userId: number, id: number, now: number): { ok: true } | { ok: false; error: BenchError } {
+  const bench = loadBench(userId, id, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
-  if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
+  if (activeJob(userId, bench.id)) return { ok: false, error: 'bench_busy' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
-  getDb().update(gardenStructures).set({ operatorPokemonId: null }).where(benchWhere(userId)).run()
+  getDb().update(gardenStructures).set({ operatorPokemonId: null }).where(rowWhere(userId, bench.id)).run()
   return { ok: true }
 }

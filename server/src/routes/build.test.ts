@@ -35,10 +35,10 @@ after(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-type Piece = { id: number; piece: string; slot: number; col: number; row: number; flipped: boolean }
+type Piece = { id: number; piece: string; structureId: number | null; slot: number; col: number; row: number; flipped: boolean }
 type Layout = {
   pieces: Piece[]
-  stored: string[]
+  stored: { id: number; piece: string }[]
   plotLimit: number
   plotsPlaced: number
   nextPlots: { milestone: string; name: string; plots: number } | null
@@ -48,8 +48,8 @@ type State = {
   garden: {
     layout: Layout
     trees: { key: string; placed: boolean; ready: number }[]
-    bench: { placed: boolean }
-    healMachine: { placed: boolean; charges: number }
+    benches: { id: number; placed: boolean }[]
+    healMachines: { id: number; placed: boolean; charges: number }[]
   }
 }
 
@@ -164,7 +164,7 @@ test('árvore guardada para de crescer, não colhe e volta a contar ao colocar',
   const tree = pieceOf((await state(p.cookie)).garden.layout, 'apricorn_tree')!
   const stored = await post(p.cookie, `/build/${tree.id}/store`)
   assert.equal(stored.status, 200)
-  assert.deepEqual(((await stored.json()) as { layout: Layout }).layout.stored, ['apricorn_tree'])
+  assert.deepEqual(((await stored.json()) as { layout: Layout }).layout.stored, [{ id: tree.structureId, piece: 'apricorn_tree' }])
 
   sqlite.prepare("update garden_structures set since = since - ? where user_id = ? and key = 'apricorn_tree'").run(100 * hourMs, p.userId)
   const frozen = (await state(p.cookie)).garden.trees.find((row) => row.key === 'apricorn_tree')!
@@ -232,18 +232,87 @@ test('bancada só se guarda parada; máquina guardada não cura', async () => {
   const layout = (await state(p.cookie)).garden.layout
   const bench = pieceOf(layout, 'ball_bench')!
   sqlite
-    .prepare("insert into craft_jobs (user_id, structure_key, recipe_key, quantity, unit_ms, started_at) values (?, 'ball_bench', 'poke_ball', 2, ?, ?)")
-    .run(p.userId, hourMs, Date.now())
+    .prepare(
+      "insert into craft_jobs (user_id, structure_key, structure_id, recipe_key, quantity, unit_ms, started_at) values (?, 'ball_bench', ?, 'poke_ball', 2, ?, ?)",
+    )
+    .run(p.userId, bench.structureId, hourMs, Date.now())
   assert.equal(await errorOf(await post(p.cookie, `/build/${bench.id}/store`)), 'bench_busy')
   sqlite.prepare('update craft_jobs set cancelled_at = ? where user_id = ?').run(Date.now(), p.userId)
   assert.equal((await post(p.cookie, `/build/${bench.id}/store`)).status, 200)
-  assert.equal((await state(p.cookie)).garden.bench.placed, false)
+  assert.equal((await state(p.cookie)).garden.benches[0]!.placed, false)
   assert.equal(await errorOf(await post(p.cookie, '/garden/bench/start', { quantity: 1 })), 'not_placed')
 
   const heal = pieceOf(layout, 'heal_machine')!
   sqlite.prepare('update pokemon set hp_ratio = 0.5 where user_id = ?').run(p.userId)
   assert.equal((await post(p.cookie, `/build/${heal.id}/store`)).status, 200)
   assert.equal(await errorOf(await post(p.cookie, '/garden/heal-machine/use')), 'not_placed')
-  const view = (await state(p.cookie)).garden.healMachine
+  const view = (await state(p.cookie)).garden.healMachines[0]!
   assert.equal(view.placed, false)
+})
+
+test('duas bancadas e duas máquinas: cada peça com o seu estado', async () => {
+  const p = player('construcao-duas', 1)
+  const sqlite = getSqlite()
+  const { createStructure } = await import('../db/structures.js')
+  await state(p.cookie)
+  // A segunda de cada vem guardada (as receitas entram no passo 2c).
+  const [bench2, heal2] = immediate(() => [
+    createStructure(p.userId, 'ball_bench', Date.now()),
+    createStructure(p.userId, 'heal_machine', Date.now()),
+  ])
+  const before = (await state(p.cookie)).garden
+  assert.deepEqual(
+    before.layout.stored.map((row) => row.piece).sort(),
+    ['ball_bench', 'heal_machine'],
+  )
+  assert.equal((await post(p.cookie, '/build/place', { piece: 'ball_bench', structureId: bench2, col: 3, row: 3 })).status, 200)
+  assert.equal((await post(p.cookie, '/build/place', { piece: 'heal_machine', col: 6, row: 3 })).status, 200)
+  assert.equal(await errorOf(await post(p.cookie, '/build/place', { piece: 'ball_bench', col: 8, row: 3 })), 'already_placed')
+
+  const garden = (await state(p.cookie)).garden
+  assert.equal(garden.benches.length, 2)
+  assert.equal(garden.healMachines.length, 2)
+  const bench1 = garden.benches.find((row) => row.id !== bench2)!.id
+
+  // Operadores diferentes; o mesmo não opera as duas.
+  const add = (speciesId: number) =>
+    Number(
+      sqlite
+        .prepare('insert into pokemon (user_id, species_id, level, caught_at, original_species_id) values (?, ?, 5, ?, ?)')
+        .run(p.userId, speciesId, Date.now(), speciesId).lastInsertRowid,
+    )
+  const sentret = add(161)
+  const machop = add(66)
+  assert.equal((await post(p.cookie, '/garden/bench/operator', { id: bench1, pokemonId: sentret })).status, 200)
+  assert.equal(await errorOf(await post(p.cookie, '/garden/bench/operator', { id: bench2, pokemonId: sentret })), 'operating')
+  assert.equal((await post(p.cookie, '/garden/bench/operator', { id: bench2, pokemonId: machop })).status, 200)
+
+  // Um lote em cada uma, ao mesmo tempo.
+  sqlite.prepare("insert into inventory (user_id, item_key, quantity) values (?, 'mat:apricorn', 10) on conflict do update set quantity = 10").run(p.userId)
+  // Cada ação devolve a bancada dela (os Pokémon de teste não têm traits para o /state).
+  type BenchBody = { bench: { id: number; job: { quantity: number } | null } }
+  const first = (await (await post(p.cookie, '/garden/bench/start', { id: bench1, quantity: 2 })).json()) as BenchBody
+  const second = (await (await post(p.cookie, '/garden/bench/start', { id: bench2, quantity: 3 })).json()) as BenchBody
+  assert.deepEqual([first.bench.id, first.bench.job?.quantity], [bench1, 2])
+  assert.deepEqual([second.bench.id, second.bench.job?.quantity], [bench2, 3])
+  const collect = (await (await post(p.cookie, '/garden/bench/collect', { id: bench1 })).json()) as { error: string }
+  assert.equal(collect.error, 'nothing_ready')
+
+  // Máquinas: a escolhida gasta; sem id, a de mais cargas.
+  sqlite.prepare('update pokemon set hp_ratio = 0.5 where user_id = ?').run(p.userId)
+  sqlite.prepare('update garden_structures set progress = 1, since = ? where id = ?').run(Date.now(), heal2)
+  const heal1 = garden.healMachines.find((row) => row.id !== heal2)!.id
+  sqlite.prepare('update garden_structures set progress = 3, since = ? where id = ?').run(Date.now(), heal1)
+  const used = (await (await post(p.cookie, '/garden/heal-machine/use', { id: heal2 })).json()) as {
+    machineId: number
+    healMachines: { id: number; charges: number }[]
+  }
+  assert.equal(used.machineId, heal2)
+  assert.deepEqual(
+    used.healMachines.map((row) => [row.id, row.charges]).sort(),
+    [[heal1, 3], [heal2, 0]].sort(),
+  )
+  sqlite.prepare('update pokemon set hp_ratio = 0.5 where user_id = ?').run(p.userId)
+  const auto = (await (await post(p.cookie, '/garden/heal-machine/use')).json()) as { machineId: number }
+  assert.equal(auto.machineId, heal1)
 })

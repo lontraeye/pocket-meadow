@@ -9,8 +9,10 @@ export type ReadyInput = {
   /** Só os Pokémon do jardim (quem está no PC ou no daycare não tem necessidades). */
   pets: { id: number; pet: Pick<PetView, 'hunger' | 'affection' | 'petReadyAt'> }[]
   needThreshold: number
-  trees: (Pick<TreeView, 'unlocked' | 'ready' | 'cap' | 'readyAts'> & { key: string })[]
-  benchJob: Pick<NonNullable<BenchView['job']>, 'id' | 'quantity' | 'unitMs' | 'startedAt' | 'collected' | 'perUnit'> | null
+  /** As árvores no jardim (as guardadas não crescem nem avisam). */
+  trees: Pick<TreeView, 'id' | 'ready' | 'cap' | 'readyAts'>[]
+  /** O lote de cada bancada que está trabalhando. */
+  benchJobs: Pick<NonNullable<BenchView['job']>, 'id' | 'quantity' | 'unitMs' | 'startedAt' | 'collected' | 'perUnit'>[]
 }
 
 /** Para onde o toque no aviso leva: o primeiro item que tem lugar próprio. */
@@ -61,12 +63,12 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
 
   // Árvores cheias (5.23): o que o servidor contou mais o que amadureceu depois.
   const fullTrees = input.trees.filter(
-    (tree) => tree.unlocked && tree.ready + tree.readyAts.filter((at) => at <= now).length >= tree.cap,
+    (tree) => tree.ready + tree.readyAts.filter((at) => at <= now).length >= tree.cap,
   )
 
-  // Poké Balls prontas na bancada, esperando coletar.
-  const job = input.benchJob
-  const benchReady = job ? (benchDone(job, now) - job.collected) * job.perUnit : 0
+  // Poké Balls prontas nas bancadas, esperando coletar.
+  const readyOf = (job: ReadyInput['benchJobs'][number]) => (benchDone(job, now) - job.collected) * job.perUnit
+  const benchReady = input.benchJobs.reduce((sum, job) => sum + readyOf(job), 0)
 
   const readyPlots = plots.map((plot) => plot.plotIndex)
   const berryCount = readyPlots.length
@@ -81,10 +83,12 @@ export function readyStatus(input: ReadyInput, now: number): ReadyStatus {
     ...input.gifts.map((gift) => `g${gift.id}`),
     ...hungry.map((mon) => `h${mon.id}`),
     ...wantPet.map((mon) => `a${mon.id}`),
-    ...fullTrees.map((tree) => `t${tree.key}@${tree.readyAts.at(-1) ?? 'cheia'}`),
+    ...fullTrees.map((tree) => `t${tree.id}@${tree.readyAts.at(-1) ?? 'cheia'}`),
     ...deadPlots.map((plot) => `x${plot.plotIndex}@${plot.deadAt}`),
     // Uma chave por lote, e outra quando ele acaba: o lote inteiro pronto volta a avisar.
-    ...(job && benchReady > 0 ? [`b${job.id}@${benchDone(job, now) === job.quantity ? 'fim' : 'parcial'}`] : []),
+    ...input.benchJobs
+      .filter((job) => readyOf(job) > 0)
+      .map((job) => `b${job.id}@${benchDone(job, now) === job.quantity ? 'fim' : 'parcial'}`),
   ]
 
   // Primeiro o que tem lugar para onde ir (o toque leva ao primeiro), depois o

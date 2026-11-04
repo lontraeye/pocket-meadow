@@ -5,9 +5,9 @@ import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { getDb } from './client.js'
 import { daycareContext } from './caretaker.js'
 import { ensureGardenLayout } from './gardenLayout.js'
-import { ensureHealMachine } from './healMachine.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
+import { grantStructures } from './structures.js'
 
 export type PlayerClock = {
   level: number
@@ -134,10 +134,10 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   }
 
   settleGarden(userId, now)
-  // Máquina de cura: linha criada no catch-up para contas antigas (PROGRESSAO.md, item 4).
-  ensureHealMachine(userId, now)
-  // Construção (PROGRESSAO.md 4.3): o que já existe vira peça colocada, uma vez.
+  // Construção (PROGRESSAO.md 4.3): o que já existe vira peça colocada, uma vez;
+  // depois, a primeira unidade do que os marcos abriram nasce e vai para o jardim.
   ensureGardenLayout(userId, now)
+  grantStructures(userId, now)
 
   return {
     level: trainer.level,

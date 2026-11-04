@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { benchOperatorIds } from './structures'
   import { spriteLoading } from './spriteLoading'
   import { api, errorText, type ApiError, type DaycareSlot, type GameState, type OwnedPokemon } from './api'
   import Highlights from './Highlights.svelte'
@@ -20,7 +21,8 @@
   const byId = $derived(new Map(game.pokemon.map((mon) => [mon.id, mon])))
   const occupied = $derived(new Map(game.daycare.slots.map((slot) => [slot.slotIndex, slot])))
   /** Quem trabalha (bancada ou cuidador) não vai para o daycare. */
-  const working = $derived(new Set([game.garden.bench.operatorId, game.daycare.caretaker?.pokemonId].filter((id) => id != null)))
+  const operators = $derived(benchOperatorIds(game))
+  const working = $derived(new Set([...operators, game.daycare.caretaker?.pokemonId].filter((id) => id != null)))
   const garden = $derived(
     game.pokemon
       .filter((mon) => mon.location === 'garden' && !working.has(mon.id))
@@ -37,7 +39,7 @@
         (mon) =>
           mon.location === 'garden' &&
           mon.teamSlot === null &&
-          mon.id !== game.garden.bench.operatorId &&
+          !operators.has(mon.id) &&
           mon.id !== game.daycare.caretaker?.pokemonId &&
           tierBySpecies.has(mon.speciesId),
       )

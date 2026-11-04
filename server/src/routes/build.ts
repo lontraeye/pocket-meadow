@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { freezeTree, treesView } from '../db/apricorn.js'
-import { benchView, storeBench } from '../db/bench.js'
+import { freezeTree } from '../db/apricorn.js'
+import { storeBench } from '../db/bench.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { insertPlacement, loadPieces, ownedStructures, type PlacedRow } from '../db/gardenLayout.js'
@@ -22,16 +22,17 @@ import {
 } from '../game/garden/layout.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 
-// Construção do jardim (PROGRESSAO.md 4.3, passo 1): colocar, mover e guardar
-// peças. A estrutura guardada para de produzir: o que cresceu até guardar fica
-// liquidado, e o relógio volta a contar ao colocar de novo.
+// Construção do jardim (PROGRESSAO.md 4.3): colocar, mover e guardar peças.
+// Cada estrutura é uma peça com estado próprio (duas bancadas, duas máquinas).
+// A guardada para de produzir: o que cresceu até guardar fica liquidado, e o
+// relógio volta a contar ao colocar de novo.
 
 export type LayoutView = {
   cols: number
   rows: number
   pieces: PlacedRow[]
-  /** Estruturas guardadas no inventário de construção. */
-  stored: StructurePiece[]
+  /** Estruturas guardadas no inventário de construção (a peça e o tipo). */
+  stored: { id: number; piece: StructurePiece }[]
   /** Canteiros: quantos podem estar no jardim e quantos estão. */
   plotLimit: number
   plotsPlaced: number
@@ -41,22 +42,23 @@ export type LayoutView = {
   locked: { piece: StructurePiece; unlockAt: UnlockAt }[]
 }
 
-/** Chamar dentro de immediate(), depois do catch-up e das views (que criam as estruturas abertas). */
+/** Chamar dentro de immediate(), depois do catch-up (que cria as estruturas abertas). */
 export function layoutView(userId: number): LayoutView {
   const pieces = loadPieces(userId)
-  const placed = new Set(pieces.map((row) => row.piece))
+  const placed = new Set(pieces.map((row) => row.structureId))
   const owned = ownedStructures(userId)
+  const ownedKinds = new Set(owned.map((row) => row.piece))
   const cleared = clearedMilestones(userId)
   return {
     cols: GARDEN_COLS,
     rows: GARDEN_ROWS,
     pieces,
-    stored: STRUCTURE_PIECES.filter((piece) => owned.has(piece) && !placed.has(piece)),
+    stored: owned.filter((row) => !placed.has(row.id)),
     plotLimit: gardenUnlocksOf(userId).plotLimit,
     plotsPlaced: pieces.filter((row) => row.piece === 'berry_plot').length,
     nextPlots: nextPlotsAt(cleared),
     locked: STRUCTURE_PIECES.flatMap((piece) => {
-      if (owned.has(piece)) return []
+      if (ownedKinds.has(piece)) return []
       const unlockAt = pieceUnlockAt(cleared, piece)
       return unlockAt ? [{ piece, unlockAt }] : []
     }),
@@ -80,15 +82,19 @@ function parseFlipped(body: Record<string, unknown> | null): boolean | undefined
 }
 
 /** O relógio da estrutura volta a contar agora (árvore e máquina de cura). */
-function resume(userId: number, piece: StructurePiece, now: number): void {
+function resume(userId: number, structureId: number, piece: StructurePiece, now: number): void {
   if (piece === 'ball_bench') return
   getDb()
     .update(gardenStructures)
     .set({ since: now })
-    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, piece)))
+    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.id, structureId)))
     .run()
 }
 
+/**
+ * Coloca um canteiro novo (até o limite) ou uma estrutura guardada: a
+ * `structureId` pedida ou, sem ela, a primeira guardada daquele tipo.
+ */
 export function placePiece(
   userId: number,
   piece: PieceKey,
@@ -96,28 +102,36 @@ export function placePiece(
   row: number,
   now: number,
   flipped = false,
+  structureId?: number,
 ): Ok | Failure {
   // Girar só vale para quem pode (bancada, máquina); nas outras é ignorado.
   const turn = flipped && isFlippable(piece)
   persistCatchUp(userId, now)
-  // As views criam as estruturas que os marcos já abriram.
-  treesView(userId, now)
-  benchView(userId, now)
   const pieces = loadPieces(userId)
   let slot = 0
+  let structure: number | null = null
   if (piece === 'berry_plot') {
     const placedPlots = pieces.filter((row) => row.piece === 'berry_plot')
     if (placedPlots.length >= gardenUnlocksOf(userId).plotLimit) return fail('plot_limit', 400)
     const used = new Set(placedPlots.map((row) => row.slot))
     while (used.has(slot)) slot += 1
   } else {
-    if (!ownedStructures(userId).has(piece)) return fail('piece_locked', 400)
-    if (pieces.some((row) => row.piece === piece)) return fail('already_placed', 409)
+    const mine = ownedStructures(userId).filter((owned) => owned.piece === piece)
+    if (mine.length === 0) return fail('piece_locked', 400)
+    const placed = new Set(pieces.map((placedRow) => placedRow.structureId))
+    const stored = mine.filter((owned) => !placed.has(owned.id))
+    const chosen = structureId === undefined ? stored[0] : stored.find((owned) => owned.id === structureId)
+    if (!chosen) {
+      return structureId !== undefined && !mine.some((owned) => owned.id === structureId)
+        ? fail('piece_not_found', 404)
+        : fail('already_placed', 409)
+    }
+    structure = chosen.id
   }
   const blocked = canPlace(pieces, piece, col, row, undefined, turn)
   if (blocked) return fail(blocked, 400)
-  insertPlacement(userId, piece, slot, col, row, now, turn)
-  if (piece !== 'berry_plot') resume(userId, piece, now)
+  insertPlacement(userId, piece, slot, col, row, now, turn, structure)
+  if (structure !== null && piece !== 'berry_plot') resume(userId, structure, piece, now)
   return { ok: true, layout: layoutView(userId) }
 }
 
@@ -150,6 +164,7 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
   const found = loadPieces(userId).find((row) => row.id === id)
   if (!found) return fail('piece_not_found', 404)
   const db = getDb()
+  const structureId = found.structureId ?? 0
   switch (found.piece) {
     case 'berry_plot': {
       const plant = db
@@ -161,15 +176,15 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
       break
     }
     case 'ball_bench': {
-      const out = storeBench(userId, now)
+      const out = storeBench(userId, structureId, now)
       if (!out.ok) return fail(out.error, 400)
       break
     }
     case 'heal_machine':
-      freezeHealMachine(userId, now)
+      freezeHealMachine(userId, structureId, now)
       break
     default:
-      freezeTree(userId, found.piece, now)
+      freezeTree(userId, structureId, now)
   }
   db.delete(gardenPlacements).where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId))).run()
   return { ok: true, layout: layoutView(userId) }
@@ -182,8 +197,13 @@ buildRoutes.post('/place', requireUser, async (c) => {
   const cell = parseCell(body)
   const piece = body?.piece
   const flipped = parseFlipped(body)
-  if (!cell || !isPieceKey(piece) || flipped === null) return c.json({ error: 'invalid_body' }, 400)
-  const result = immediate(() => placePiece(c.get('userId'), piece, cell.col, cell.row, Date.now(), flipped))
+  // `structureId` (opcional): qual das guardadas daquele tipo.
+  const structureId = body?.structureId
+  const badStructure = structureId !== undefined && (typeof structureId !== 'number' || !Number.isInteger(structureId))
+  if (!cell || !isPieceKey(piece) || flipped === null || badStructure) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() =>
+    placePiece(c.get('userId'), piece, cell.col, cell.row, Date.now(), flipped, structureId as number | undefined),
+  )
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json({ layout: result.layout })
 })

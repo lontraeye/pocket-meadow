@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import {
   DEFAULT_LAYOUT,
   STRUCTURE_PIECES,
@@ -12,17 +12,18 @@ import { getDb } from './client.js'
 import { gardenUnlocksOf } from './milestones.js'
 import { berryPlots, gardenPlacements, gardenStructures, trainers } from './schema.js'
 
-// Peças colocadas no jardim (PROGRESSAO.md 4.3, passo 1). A estrutura guardada
-// tem a linha em `garden_structures` (o estado) e nenhuma aqui; ela não
-// produz enquanto está guardada. Chamar dentro de immediate().
+// Peças colocadas no jardim (PROGRESSAO.md 4.3). Cada estrutura tem a linha
+// dela em `garden_structures` (o estado) e, se estiver no jardim, uma aqui
+// (`structure_id`); guardada, não produz. Chamar dentro de immediate().
 
-export type PlacedRow = PlacedPiece & { slot: number }
+export type PlacedRow = PlacedPiece & { slot: number; structureId: number | null }
 
 export function loadPieces(userId: number): PlacedRow[] {
   return getDb()
     .select({
       id: gardenPlacements.id,
       piece: gardenPlacements.piece,
+      structureId: gardenPlacements.structureId,
       slot: gardenPlacements.slot,
       col: gardenPlacements.col,
       row: gardenPlacements.row,
@@ -35,12 +36,13 @@ export function loadPieces(userId: number): PlacedRow[] {
     .sort((a, b) => a.id - b.id)
 }
 
-export function isPlaced(userId: number, piece: StructurePiece): boolean {
+/** A estrutura `structureId` está no jardim. */
+export function isPlaced(structureId: number): boolean {
   return (
     getDb()
       .select({ id: gardenPlacements.id })
       .from(gardenPlacements)
-      .where(and(eq(gardenPlacements.userId, userId), eq(gardenPlacements.piece, piece)))
+      .where(eq(gardenPlacements.structureId, structureId))
       .get() !== undefined
   )
 }
@@ -58,15 +60,17 @@ export function plotPlaced(userId: number, slot: number): boolean {
   )
 }
 
-/** Estruturas que o jogador tem (colocadas ou guardadas). */
-export function ownedStructures(userId: number): Set<StructurePiece> {
-  const keys = getDb()
-    .select({ key: gardenStructures.key })
+/** As estruturas do jogador (colocadas ou guardadas): id e tipo, na ordem em que vieram. */
+export function ownedStructures(userId: number): { id: number; piece: StructurePiece }[] {
+  return getDb()
+    .select({ id: gardenStructures.id, key: gardenStructures.key })
     .from(gardenStructures)
     .where(eq(gardenStructures.userId, userId))
+    .orderBy(asc(gardenStructures.id))
     .all()
-    .map((row) => row.key)
-  return new Set(STRUCTURE_PIECES.filter((piece) => keys.includes(piece)))
+    .flatMap((row) =>
+      (STRUCTURE_PIECES as readonly string[]).includes(row.key) ? [{ id: row.id, piece: row.key as StructurePiece }] : [],
+    )
 }
 
 export function insertPlacement(
@@ -77,10 +81,11 @@ export function insertPlacement(
   row: number,
   now: number,
   flipped = false,
+  structureId: number | null = null,
 ): number {
   const inserted = getDb()
     .insert(gardenPlacements)
-    .values({ userId, piece, slot, col, row, flipped, placedAt: now })
+    .values({ userId, piece, structureId, slot, col, row, flipped, placedAt: now })
     .returning({ id: gardenPlacements.id })
     .get()
   return inserted.id
@@ -114,7 +119,7 @@ export function ensureGardenLayout(userId: number, now: number): void {
     if (cell) insertPlacement(userId, 'berry_plot', slot, cell.col, cell.row, now)
   }
 
-  for (const piece of ownedStructures(userId)) autoPlace(userId, piece, now)
+  for (const owned of ownedStructures(userId)) autoPlace(userId, owned.id, owned.piece, now)
 
   db.update(trainers).set({ gardenLayoutAt: now }).where(eq(trainers.userId, userId)).run()
 }
@@ -123,11 +128,11 @@ export function ensureGardenLayout(userId: number, now: number): void {
  * Estrutura que acabou de abrir (ou a migração): vai para a casa de sempre se
  * ela estiver livre; senão fica guardada para o jogador colocar.
  */
-export function autoPlace(userId: number, piece: StructurePiece, now: number): boolean {
+export function autoPlace(userId: number, structureId: number, piece: StructurePiece, now: number): boolean {
   const pieces = loadPieces(userId)
-  if (pieces.some((row) => row.piece === piece)) return true
+  if (pieces.some((row) => row.structureId === structureId)) return true
   const cell = DEFAULT_LAYOUT.structures[piece]
   if (canPlace(pieces, piece, cell.col, cell.row)) return false
-  insertPlacement(userId, piece, 0, cell.col, cell.row, now)
+  insertPlacement(userId, piece, 0, cell.col, cell.row, now, false, structureId)
   return true
 }

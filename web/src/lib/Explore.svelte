@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bestHealMachine } from './structures'
   import Journey from './Journey.svelte'
   import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
@@ -683,6 +684,8 @@
     }
   }
 
+  const healMachine = $derived(bestHealMachine(game))
+
   async function healTeamFromMachine() {
     healPending = true
     message = ''
@@ -1208,14 +1211,15 @@
               </button>
             {/each}
           </div>
-          {#if roster.some((mon) => mon.hpRatio < 1) && game.garden.healMachine.placed}
+          {#if roster.some((mon) => mon.hpRatio < 1) && healMachine}
+            <!-- A máquina do jardim com mais cargas (o servidor escolhe a mesma). -->
             <button
               type="button"
               class="btn feed-team"
-              disabled={pending || healPending || game.garden.healMachine.charges < 1}
+              disabled={pending || healPending || healMachine.charges < 1}
               onclick={() => void healTeamFromMachine()}
             >
-              Curar na máquina ({game.garden.healMachine.charges} carga{game.garden.healMachine.charges === 1 ? '' : 's'})
+              Curar na máquina ({healMachine.charges} carga{healMachine.charges === 1 ? '' : 's'})
             </button>
           {/if}
           {#if roster.some((mon) => mon.pet.hunger < game.garden.fullAt)}

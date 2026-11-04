@@ -7,11 +7,14 @@
 
   let {
     game,
+    machineId,
     onState,
     onClose,
     onHealed,
   }: {
     game: GameState
+    /** Qual máquina (cada uma tem as suas cargas). */
+    machineId: number
     onState: () => Promise<void>
     onClose: () => void
     /** Dispara a animação da máquina no jardim (enche → brilha → vazia). */
@@ -22,7 +25,7 @@
   let pending = $state(false)
   let message = $state('')
 
-  const machine = $derived(game.garden.healMachine)
+  const machine = $derived(game.garden.healMachines.find((row) => row.id === machineId) ?? game.garden.healMachines[0]!)
   const nextLeft = $derived(
     machine.nextChargeAt !== null ? Math.max(0, machine.nextChargeAt - clock.now()) : null,
   )
@@ -34,7 +37,7 @@
     pending = true
     message = ''
     try {
-      const response = await api('/api/garden/heal-machine/use', {})
+      const response = await api('/api/garden/heal-machine/use', { id: machine.id })
       const body = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & {
         healed?: number
       }

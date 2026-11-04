@@ -10,7 +10,8 @@ import { hashToken } from '../auth/session.js'
 import { authConfig } from '../config/auth.js'
 import { healConfig } from '../config/heal.js'
 import { getDb, getSqlite, immediate } from '../db/client.js'
-import { HEAL_MACHINE_KEY, ensureHealMachine, healMachineView, useHealMachine } from '../db/healMachine.js'
+import { HEAL_MACHINE_KEY, healMachinesView, useHealMachine } from '../db/healMachine.js'
+import { grantStructures } from '../db/structures.js'
 import { migrateDatabase } from '../db/migrate.js'
 import { settleGarden } from '../db/pets.js'
 import { sessions } from '../db/schema.js'
@@ -121,12 +122,12 @@ test('descanso no jardim recupera HP pelo tempo', () => {
 test('máquina: recarrega pelo tempo, gasta 1 carga, cura a equipe e recusa sem carga', async () => {
   const p = player('heal-machine')
   const now = Date.now()
-  immediate(() => ensureHealMachine(p.userId, now))
+  immediate(() => grantStructures(p.userId, now))
   // Zera cargas e rebobina o since.
   sql()
     .prepare(`update garden_structures set progress = 0, since = ? where user_id = ? and key = ?`)
     .run(now, p.userId, HEAL_MACHINE_KEY)
-  let view = immediate(() => healMachineView(p.userId, now))
+  let view = immediate(() => healMachinesView(p.userId, now)[0]!)
   assert.equal(view.charges, 0)
 
   // Sem carga: recusa.
@@ -139,14 +140,14 @@ test('máquina: recarrega pelo tempo, gasta 1 carga, cura a equipe e recusa sem 
   sql()
     .prepare(`update garden_structures set progress = 0, since = ? where user_id = ? and key = ?`)
     .run(now - healConfig.machine.rechargeMs, p.userId, HEAL_MACHINE_KEY)
-  view = immediate(() => healMachineView(p.userId, now))
+  view = immediate(() => healMachinesView(p.userId, now)[0]!)
   assert.equal(view.charges, 1)
 
   const used = await post(p.cookie, '/garden/heal-machine/use')
   assert.equal(used.status, 200)
-  const body = (await used.json()) as { healed: number; healMachine: { charges: number } }
+  const body = (await used.json()) as { healed: number; healMachines: { charges: number }[] }
   assert.equal(body.healed, 1)
-  assert.equal(body.healMachine.charges, 0)
+  assert.equal(body.healMachines[0]!.charges, 0)
   assert.equal(hpOf(p.starterId).hpRatio, 1)
 
   // Equipe saudável: recusa (com carga).
@@ -159,9 +160,9 @@ test('máquina: recarrega pelo tempo, gasta 1 carga, cura a equipe e recusa sem 
 
   // State manda a máquina.
   const state = (await (await app.request('/state', { headers: { cookie: p.cookie } }, env)).json()) as {
-    garden: { healMachine: { charges: number; max: number; nextChargeAt: number | null } }
+    garden: { healMachines: { charges: number; max: number; nextChargeAt: number | null }[] }
     pokemon: { hpRatio: number }[]
   }
-  assert.equal(state.garden.healMachine.max, healConfig.machine.maxCharges)
+  assert.equal(state.garden.healMachines[0]!.max, healConfig.machine.maxCharges)
   assert.ok(typeof state.pokemon[0]!.hpRatio === 'number')
 })

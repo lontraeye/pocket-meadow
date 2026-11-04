@@ -17,7 +17,8 @@ import type { GardenLayout } from './api'
 export type BuildGhost = { col: number; row: number; flipped: boolean }
 
 export type BuildPick =
-  | ({ kind: 'new'; piece: PieceKey } & BuildGhost)
+  /** Peça nova: um canteiro ou uma estrutura guardada (`structureId`). */
+  | ({ kind: 'new'; piece: PieceKey; structureId: number | null } & BuildGhost)
   | { kind: 'selected'; id: number; piece: PieceKey }
   | ({ kind: 'move'; id: number; piece: PieceKey } & BuildGhost)
 
@@ -75,7 +76,7 @@ export function viewPieces(layout: GardenLayout, pick: BuildPick | null): Placed
   if (pick.kind === 'move') {
     return layout.pieces.map((placed) => (placed.id === pick.id ? { ...placed, col, row, flipped } : placed))
   }
-  return [...layout.pieces, { id: GHOST_ID, piece: pick.piece, slot: GHOST_ID, col, row, flipped }]
+  return [...layout.pieces, { id: GHOST_ID, piece: pick.piece, structureId: pick.structureId, slot: GHOST_ID, col, row, flipped }]
 }
 
 /** Prévia nova: a casa livre mais perto do meio do jardim (ou o meio, se nada couber). */

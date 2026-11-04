@@ -5,7 +5,7 @@ import { TREES, treeDef } from '../config/apricorn.js'
 import { berries } from '../config/berries.js'
 import { harvestApricorns, treesView } from '../db/apricorn.js'
 import { benchView, cancelJob, collectJob, setOperator, startJob, startUpgrade } from '../db/bench.js'
-import { useHealMachine } from '../db/healMachine.js'
+import { healMachinesView, useHealMachine } from '../db/healMachine.js'
 import { GENERIC_CANDY_GIFT, petConfig } from '../config/pets.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
@@ -88,75 +88,102 @@ gardenRoutes.post('/gifts/:id/collect', requireUser, (c) => {
   return c.json(result.gift)
 })
 
-// Árvores de Apricorn (5.23): colhe tudo o que está pendurado. Sem `key`, a vermelha.
+/** Um `id` inteiro opcional no corpo: ausente = undefined; inválido = null. */
+function optionalId(body: Record<string, unknown> | null): number | undefined | null {
+  const id = body?.id
+  if (id === undefined) return undefined
+  return typeof id === 'number' && Number.isInteger(id) ? id : null
+}
+
+// Árvores de Apricorn (5.23): colhe tudo o que está pendurado. Cada árvore é
+// uma peça: `id` diz qual. Sem `id`, a primeira do tipo `key` (sem `key`, a
+// vermelha), de preferência a que está no jardim.
 gardenRoutes.post('/tree/harvest', requireUser, async (c) => {
   const body = (await readObject(c)) ?? {}
+  const id = optionalId(body)
   const key = body.key === undefined ? TREES[0]!.key : body.key
   const tree = typeof key === 'string' ? treeDef(key) : null
-  if (!tree) return c.json({ error: 'invalid_body' }, 400)
+  if (id === null || (id === undefined && !tree)) return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
   const result = immediate(() => {
     persistCatchUp(userId, now)
-    const view = treesView(userId, now).find((row) => row.key === tree.key)
-    if (!view?.unlocked) return fail('tree_locked', 400)
+    const trees = treesView(userId, now)
+    const ofKind = trees.filter((row) => row.key === tree?.key)
+    const view = id !== undefined ? trees.find((row) => row.id === id) : (ofKind.find((row) => row.placed) ?? ofKind[0])
+    if (!view) return fail('tree_locked', 400)
     if (!view.placed) return fail('not_placed', 400)
-    const harvested = harvestApricorns(userId, now, tree.key)
+    const harvested = harvestApricorns(userId, now, view.id)
     if (harvested === null) return fail('nothing_ready', 400)
-    return { ok: true as const, harvested, trees: treesView(userId, now) }
+    return { ok: true as const, harvested, itemKey: view.itemKey, trees: treesView(userId, now) }
   })
   if (!result.ok) return c.json(errorBody(result), result.status)
-  return c.json({ itemKey: tree.itemKey, quantity: result.harvested, trees: result.trees })
+  return c.json({ itemKey: result.itemKey, quantity: result.harvested, trees: result.trees })
 })
 
-// Bancada de bolas (5.23): operador, lote, coletar e cancelar. Cada ação
-// devolve a bancada atualizada.
+// Bancada de bolas (5.23): operador, lote, coletar e cancelar. Cada bancada é
+// uma peça: `id` no corpo diz qual (sem `id`, a primeira). Cada ação devolve a
+// bancada atualizada.
 gardenRoutes.post('/bench/operator', requireUser, async (c) => {
   const body = await readObject(c)
   const pokemonId = body?.pokemonId
-  if (pokemonId !== null && (typeof pokemonId !== 'number' || !Number.isInteger(pokemonId))) {
+  const id = optionalId(body)
+  if ((pokemonId !== null && (typeof pokemonId !== 'number' || !Number.isInteger(pokemonId))) || id === null) {
     return c.json({ error: 'invalid_body' }, 400)
   }
-  return benchAction(c.get('userId'), (userId, now) => setOperator(userId, pokemonId, now), c)
+  return benchAction(c.get('userId'), id, (userId, now) => setOperator(userId, pokemonId, now, id), c)
 })
 
 gardenRoutes.post('/bench/start', requireUser, async (c) => {
   const body = await readObject(c)
   const quantity = body?.quantity
   const recipeKey = body?.recipeKey === undefined ? 'poke_ball' : body.recipeKey
-  if (typeof quantity !== 'number' || typeof recipeKey !== 'string') return c.json({ error: 'invalid_body' }, 400)
-  return benchAction(c.get('userId'), (userId, now) => startJob(userId, recipeKey, quantity, now), c)
+  const id = optionalId(body)
+  if (typeof quantity !== 'number' || typeof recipeKey !== 'string' || id === null) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+  return benchAction(c.get('userId'), id, (userId, now) => startJob(userId, recipeKey, quantity, now, id), c)
 })
 
 // Upgrade da bancada: gasta o custo agora e ela fica parada até terminar.
-gardenRoutes.post('/bench/upgrade', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, now) => startUpgrade(userId, now), c),
-)
+gardenRoutes.post('/bench/upgrade', requireUser, async (c) => {
+  const id = optionalId(await readObject(c))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
+  return benchAction(c.get('userId'), id, (userId, now) => startUpgrade(userId, now, id), c)
+})
 
-gardenRoutes.post('/bench/collect', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, now) => collectJob(userId, now), c),
-)
+gardenRoutes.post('/bench/collect', requireUser, async (c) => {
+  const id = optionalId(await readObject(c))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
+  return benchAction(c.get('userId'), id, (userId, now) => collectJob(userId, now, id), c)
+})
 
-gardenRoutes.post('/bench/cancel', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, now) => cancelJob(userId, now), c),
-)
+gardenRoutes.post('/bench/cancel', requireUser, async (c) => {
+  const id = optionalId(await readObject(c))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
+  return benchAction(c.get('userId'), id, (userId, now) => cancelJob(userId, now, id), c)
+})
 
-// Máquina de cura (PROGRESSAO.md, item 4): 1 carga cura a equipe toda.
-gardenRoutes.post('/heal-machine/use', requireUser, (c) => {
+// Máquina de cura (PROGRESSAO.md, item 4): 1 carga cura a equipe toda. `id`
+// diz qual máquina; sem ele, a do jardim com mais cargas (a cura antes da luta).
+gardenRoutes.post('/heal-machine/use', requireUser, async (c) => {
+  const id = optionalId(await readObject(c))
+  if (id === null) return c.json({ error: 'invalid_body' }, 400)
   const userId = c.get('userId')
   const now = Date.now()
   const result = immediate(() => {
     persistCatchUp(userId, now)
-    const out = useHealMachine(userId, now)
+    const out = useHealMachine(userId, now, id)
     if (!out.ok) return out
-    return { ok: true as const, healed: out.healed, healMachine: out.view }
+    return { ok: true as const, healed: out.healed, machineId: out.machineId, healMachines: healMachinesView(userId, now) }
   })
   if (!result.ok) return c.json({ error: result.error }, 400)
-  return c.json({ healed: result.healed, healMachine: result.healMachine })
+  return c.json({ healed: result.healed, machineId: result.machineId, healMachines: result.healMachines })
 })
 
 function benchAction(
   userId: number,
+  id: number | undefined,
   action: (userId: number, now: number) => { ok: true } | { ok: false; error: string },
   c: Context<AuthEnv>,
 ) {
@@ -165,7 +192,7 @@ function benchAction(
     persistCatchUp(userId, now)
     const out = action(userId, now)
     if (!out.ok) return out
-    return { ...out, bench: benchView(userId, now) }
+    return { ...out, bench: benchView(userId, now, id) }
   })
   if (!result.ok) return c.json({ error: result.error }, 400)
   const { ok: _ok, ...body } = result

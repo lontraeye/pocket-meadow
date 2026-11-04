@@ -12,12 +12,15 @@
     giftLabel,
     itemLabel,
     type ApiError,
+    type BenchView,
     type GameState,
     type GardenGift,
+    type HealMachineView,
     type PlotState,
     type TreeView,
   } from './api'
-  import { cellKey, isFlippable, occupied, type PieceKey, type StructurePiece } from '@garden/layout'
+  import { benchOperatorIds } from './structures'
+  import { cellKey, isFlippable, occupied, type PieceKey } from '@garden/layout'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -394,12 +397,18 @@
   /** Casas ocupadas por alguma peça (pegada inteira, como a casa do operador da bancada). */
   const blockedCells = $derived(occupied(layout.pieces))
 
-  /** A peça desenhada é a prévia (canteiro pelo slot, estrutura pela chave). */
-  function isGhost(piece: PieceKey, slot = 0): boolean {
-    if (!ghost || ghost.piece !== piece) return false
-    if (piece !== 'berry_plot') return true
+  /** O canteiro desenhado (pelo slot) é a prévia. */
+  function isGhostPlot(slot: number): boolean {
+    if (!ghost || ghost.piece !== 'berry_plot') return false
     if (ghost.kind === 'new') return slot === GHOST_ID
     return layout.pieces.find((row) => row.id === ghost.id)?.slot === slot
+  }
+
+  /** A estrutura desenhada (pela peça, garden_structures.id) é a prévia. */
+  function isGhostStructure(structureId: number): boolean {
+    if (!ghost || ghost.piece === 'berry_plot') return false
+    if (ghost.kind === 'new') return ghost.structureId === structureId
+    return layout.pieces.find((row) => row.id === ghost.id)?.structureId === structureId
   }
 
   function isPlotCell(col: number, row: number): boolean {
@@ -410,15 +419,10 @@
     return plotSlotAt.get(worldKey(col, row)) ?? -1
   }
 
-  /** Casa (do mundo) de uma estrutura colocada; null = guardada ou ainda fechada. */
-  function structureCell(piece: StructurePiece): { col: number; row: number } | null {
-    const found = drawnPieces.find((row) => row.piece === piece)
-    return found ? { col: found.col + playCol0, row: found.row + playRow0 } : null
-  }
-
-  /** A estrutura está girada (sprite espelhado). */
-  function structureFlipped(piece: StructurePiece): boolean {
-    return drawnPieces.find((row) => row.piece === piece)?.flipped ?? false
+  /** Casa (do mundo) de uma estrutura colocada e se está girada; null = guardada. */
+  function structureSpot(structureId: number): { col: number; row: number; flipped: boolean } | null {
+    const found = drawnPieces.find((row) => row.structureId === structureId)
+    return found ? { col: found.col + playCol0, row: found.row + playRow0, flipped: found.flipped } : null
   }
 
   // Árvore de Apricorn (5.23): as raízes formam um losango pequeno com o
@@ -427,19 +431,27 @@
   // do losango do chão, então ela se apoia na ponta de baixo do bloco.
   const TREE_FOOT = 2
 
-  // Bancada de bolas (5.23): o operador sai do passeio e fica na casa à
-  // esquerda da máquina (faz parte da pegada da bancada), virado para ela.
-  // Girada, ele fica à direita (cellsOf troca dc por dr) e vira para baixo à esquerda.
-  const benchCell = $derived(structureCell('ball_bench'))
-  const benchFlipped = $derived(structureFlipped('ball_bench'))
-  const operatorCell = $derived(
-    benchCell ? (benchFlipped ? { col: benchCell.col, row: benchCell.row - 1 } : { col: benchCell.col - 1, row: benchCell.row }) : null,
+  // Bancadas de bolas (5.23), uma por peça: o operador sai do passeio e fica
+  // na casa à esquerda da máquina (faz parte da pegada da bancada), virado para
+  // ela. Girada, ele fica à direita (cellsOf troca dc por dr) e vira para baixo
+  // à esquerda (direção PMD 7; sem girar, 1).
+  const benchSpots = $derived(
+    game.garden.benches.flatMap((bench) => {
+      const spot = structureSpot(bench.id)
+      if (!spot) return []
+      const operatorCell = spot.flipped ? { col: spot.col, row: spot.row - 1 } : { col: spot.col - 1, row: spot.row }
+      const operator = bench.operatorId === null ? null : (game.pokemon.find((mon) => mon.id === bench.operatorId) ?? null)
+      return [{ bench, cell: spot, flipped: spot.flipped, operatorCell, operatorDir: spot.flipped ? 7 : 1, operator }]
+    }),
   )
-  /** Direção PMD do operador: 1 = baixo à direita, 7 = baixo à esquerda. */
-  const operatorDir = $derived(benchFlipped ? 7 : 1)
 
-  // Máquina de cura (PROGRESSAO.md, item 4).
-  const healCell = $derived(structureCell('heal_machine'))
+  // Máquinas de cura (PROGRESSAO.md, item 4), uma por peça.
+  const healSpots = $derived(
+    game.garden.healMachines.flatMap((machine) => {
+      const spot = structureSpot(machine.id)
+      return spot ? [{ machine, cell: spot, flipped: spot.flipped }] : []
+    }),
+  )
 
   function isWalkable(col: number, row: number): boolean {
     return inPlay(col, row) && !blockedCells.has(worldKey(col, row))
@@ -505,9 +517,12 @@
     return null
   }
 
+  /** Peça nova do catálogo: canteiro, ou a primeira estrutura guardada daquele tipo. */
   function pickNew(piece: PieceKey) {
     buildMessage = ''
-    buildPick = { kind: 'new', piece, ...startGhost(layout, piece) }
+    const structureId = piece === 'berry_plot' ? null : (layout.stored.find((row) => row.piece === piece)?.id ?? null)
+    if (piece !== 'berry_plot' && structureId === null) return
+    buildPick = { kind: 'new', piece, structureId, ...startGhost(layout, piece) }
   }
 
   function startMove() {
@@ -544,7 +559,7 @@
     const { col, row, flipped } = pick
     const ok =
       pick.kind === 'new'
-        ? await buildCall('/api/build/place', { piece: pick.piece, col, row, flipped })
+        ? await buildCall('/api/build/place', { piece: pick.piece, structureId: pick.structureId ?? undefined, col, row, flipped })
         : await buildCall(`/api/build/${pick.id}/move`, { col, row, flipped })
     if (ok) {
       buildPick = null
@@ -771,7 +786,7 @@
   const halfH = $derived(tileH / 2)
 
   const gardenPokemon = $derived(
-    [...game.pokemon.filter((mon) => mon.location === 'garden' && mon.id !== game.garden.bench.operatorId)]
+    [...game.pokemon.filter((mon) => mon.location === 'garden' && !benchOperatorIds(game).has(mon.id))]
       .sort((a, b) => {
         if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1
         return a.id - b.id
@@ -871,26 +886,26 @@
   }
   const treeReady = $derived.by(() => {
     const now = clock.now()
-    return new Map(game.garden.trees.map((tree) => [tree.key, readyOf(tree, now)]))
+    return new Map(game.garden.trees.map((tree) => [tree.id, readyOf(tree, now)]))
   })
   // Marcador de tempo de cada árvore: quantos estão pendurados, quanto falta
   // para o próximo nascer e a barrinha dele. Cheia, só "cheia".
   const treeTimers = $derived.by(() => {
     const now = clock.now()
-    const out = new Map<string, { text: string; progress: number }>()
+    const out = new Map<number, { text: string; progress: number }>()
     for (const tree of game.garden.trees) {
-      const ready = treeReady.get(tree.key) ?? 0
-      if (!tree.unlocked || ready >= tree.cap) continue
+      const ready = treeReady.get(tree.id) ?? 0
+      if (!tree.placed || ready >= tree.cap) continue
       const next = tree.readyAts.find((at) => at > now)
       if (next === undefined) continue
-      out.set(tree.key, {
+      out.set(tree.id, {
         text: `${ready}/${tree.cap} · ${formatCountdown(next - now)}`,
         progress: Math.max(0, Math.min(1, 1 - (next - now) / tree.unitMs)),
       })
     }
     return out
   })
-  let treeShake = $state<string | null>(null)
+  let treeShake = $state<number | null>(null)
   let treeArts = $state<Partial<Record<TreeColor, TreeArt>>>({})
   $effect(() => {
     for (const color of ['red', 'blue', 'yellow'] as const) {
@@ -899,17 +914,9 @@
   })
   let harvestingTree = $state(false)
 
-  function unlockText(tree: TreeView): string {
-    return tree.unlockAt ? `abre no ${tree.unlockAt.name}` : 'ainda não abriu'
-  }
-
   async function onTree(tree: TreeView) {
     const name = itemLabel(tree.itemKey, game.berries)
-    if (!tree.unlocked) {
-      showGiftToast(`A árvore de ${name} ${unlockText(tree)}.`)
-      return
-    }
-    const ready = treeReady.get(tree.key) ?? 0
+    const ready = treeReady.get(tree.id) ?? 0
     if (ready === 0) {
       const next = tree.readyAts.find((at) => at > clock.now())
       showGiftToast(next ? `Próximo ${name} em ${formatCountdown(next - clock.now())}.` : 'Nada para colher agora.')
@@ -917,10 +924,10 @@
     }
     if (harvestingTree) return
     harvestingTree = true
-    treeShake = tree.key
+    treeShake = tree.id
     setTimeout(() => (treeShake = null), 450)
     try {
-      const response = await api('/api/garden/tree/harvest', { key: tree.key })
+      const response = await api('/api/garden/tree/harvest', { id: tree.id })
       if (response.ok) {
         const body = (await response.json()) as { quantity: number; itemKey: string }
         showGiftToast(`Colheu ${body.quantity} ${itemLabel(body.itemKey, game.berries)}${body.quantity === 1 ? '' : ' ×' + body.quantity}!`)
@@ -934,53 +941,54 @@
     }
   }
 
-  const benchOperator = $derived(
-    benchCell ? (game.pokemon.find((mon) => mon.id === game.garden.bench.operatorId) ?? null) : null,
+  /** Os operadores como "walkers" parados na casa deles, para ganhar os mesmos balões. */
+  const operatorWalkers = $derived(
+    benchSpots.flatMap(({ operator, operatorCell, operatorDir }): Walker[] =>
+      operator
+        ? [
+            {
+              id: operator.id,
+              speciesId: operator.speciesId,
+              displayName: operator.nickname ?? operator.displayName,
+              level: operator.level,
+              isShiny: operator.isShiny,
+              col: operatorCell.col,
+              row: operatorCell.row,
+              dir: operatorDir,
+              anim: 'Idle',
+            },
+          ]
+        : [],
+    ),
   )
-  /** O operador como um "walker" parado na casa dele, para ganhar os mesmos balões. */
-  const operatorWalker = $derived.by((): Walker | null => {
-    const mon = benchOperator
-    const cell = operatorCell
-    if (!mon || !cell) return null
-    return {
-      id: mon.id,
-      speciesId: mon.speciesId,
-      displayName: mon.nickname ?? mon.displayName,
-      level: mon.level,
-      isShiny: mon.isShiny,
-      col: cell.col,
-      row: cell.row,
-      dir: operatorDir,
-      anim: 'Idle',
-    }
-  })
-  const bubbleWalkers = $derived(operatorWalker ? [...walkers, operatorWalker] : walkers)
+  const bubbleWalkers = $derived([...walkers, ...operatorWalkers])
   /** Quadro parado da máquina: pronta (lote acabado com bolas esperando) ou parada. */
-  const benchState = $derived.by((): 'idle' | 'working' | 'ready' => {
-    const job = game.garden.bench.job
+  function benchStateOf(bench: BenchView): 'idle' | 'working' | 'ready' {
+    const job = bench.job
     if (!job) return 'idle'
     return benchDone(job, clock.now()) >= job.quantity ? 'ready' : 'working'
-  })
-  /** Quadro do trabalho, pelo relógio da animação. */
-  const benchWork = $derived(
-    game.garden.bench.unlocked && benchState === 'working' ? benchWorkFrame(time) : null,
-  )
+  }
+  /** Quadro da folha: trabalhando (pelo relógio da animação), pronta ou parada. */
+  function benchFrameOf(bench: BenchView): number {
+    const state = benchStateOf(bench)
+    if (state === 'working') return benchWorkFrame(time)
+    return state === 'ready' ? BENCH_READY : BENCH_IDLE
+  }
   /** Poké Balls prontas no lote, esperando coletar. */
-  const benchReady = $derived.by(() => {
-    const job = game.garden.bench.job
+  function benchReadyOf(bench: BenchView): number {
+    const job = bench.job
     return job ? (benchDone(job, clock.now()) - job.collected) * job.perUnit : 0
-  })
-  let benchOpen = $state(false)
-  let healOpen = $state(false)
-  /** Relógio da animação de cura (`time`); null = idle vazia. */
-  let healAnimAt = $state<number | null>(null)
-  const healCharges = $derived(game.garden.healMachine.charges)
-  const healSpriteFrame = $derived.by(() => {
-    if (healAnimAt === null) return HEAL_IDLE
-    return healAnimFrame(time - healAnimAt) ?? HEAL_IDLE
-  })
-  const healTimer = $derived.by(() => {
-    const machine = game.garden.healMachine
+  }
+  /** A bancada e a máquina abertas no painel (pela peça). */
+  let benchOpenId = $state<number | null>(null)
+  let healOpenId = $state<number | null>(null)
+  /** Animação de cura (`time` em que começou) e em qual máquina; null = idle. */
+  let healAnim = $state<{ at: number; id: number } | null>(null)
+  function healFrameOf(machineId: number): number {
+    if (healAnim === null || healAnim.id !== machineId) return HEAL_IDLE
+    return healAnimFrame(time - healAnim.at) ?? HEAL_IDLE
+  }
+  function healTimerOf(machine: HealMachineView): { text: string; progress: number } | null {
     const next = machine.nextChargeAt
     if (next === null) return null
     const left = next - clock.now()
@@ -989,11 +997,10 @@
       text: formatCountdown(left),
       progress: Math.max(0, Math.min(1, 1 - left / Math.max(1, machine.unitMs))),
     }
-  })
+  }
   // Marcador de tempo da máquina: bolas já prontas, quanto falta para o lote
   // acabar e a barrinha do lote. Acabado, fica só "N prontas".
-  const benchTimer = $derived.by(() => {
-    const bench = game.garden.bench
+  function benchTimerOf(bench: BenchView): { text: string; progress: number } | null {
     const now = clock.now()
     // Upgrade em andamento: o nível novo e quanto falta.
     if (bench.upgrade) {
@@ -1004,35 +1011,31 @@
       }
     }
     const job = bench.job
-    if (!job || benchState !== 'working') return null
+    if (!job || benchStateOf(bench) !== 'working') return null
     const endsAt = job.startedAt + job.quantity * job.unitMs
+    const ready = benchReadyOf(bench)
     return {
-      text: `${benchReady > 0 ? `${benchReady} · ` : ''}${formatCountdown(endsAt - now)}`,
+      text: `${ready > 0 ? `${ready} · ` : ''}${formatCountdown(endsAt - now)}`,
       progress: Math.max(0, Math.min(1, (now - job.startedAt) / (job.quantity * job.unitMs))),
     }
-  })
-
-  function onBench() {
-    const bench = game.garden.bench
-    if (!bench.unlocked) {
-      showGiftToast('A bancada de bolas ainda não abriu.')
-      return
-    }
-    play('tap')
-    benchOpen = true
   }
 
-  function onHealMachine() {
+  function onBench(id: number) {
     play('tap')
-    healOpen = true
+    benchOpenId = id
   }
 
-  /** Depois de curar: enche as bolas, brilha e volta vazia. */
-  function playHealAnim() {
-    const started = time
-    healAnimAt = started
+  function onHealMachine(id: number) {
+    play('tap')
+    healOpenId = id
+  }
+
+  /** Depois de curar: enche as bolas, brilha e volta vazia (na máquina usada). */
+  function playHealAnim(id: number) {
+    const anim = { at: time, id }
+    healAnim = anim
     window.setTimeout(() => {
-      if (healAnimAt === started) healAnimAt = null
+      if (healAnim === anim) healAnim = null
     }, HEAL_ANIM_TOTAL_MS + 50)
   }
 
@@ -1872,8 +1875,8 @@
             class:planted={stage === 'planted'}
             class:growing={stage === 'growing'}
             class:ready={stage === 'ready'}
-            class:ghost={isGhost('berry_plot', plotIdx)}
-            class:bad={isGhost('berry_plot', plotIdx) && !ghostOk}
+            class:ghost={isGhostPlot(plotIdx)}
+            class:bad={isGhostPlot(plotIdx) && !ghostOk}
             style:left="{spot.x}px"
             style:top="{spot.y}px"
             style:width="{tileW}px"
@@ -1904,8 +1907,8 @@
                 type="button"
                 class="bush-art"
                 class:ripe={stage === 'ready'}
-                class:ghost={isGhost('berry_plot', plotIdx)}
-                class:bad={isGhost('berry_plot', plotIdx) && !ghostOk}
+                class:ghost={isGhostPlot(plotIdx)}
+                class:bad={isGhostPlot(plotIdx) && !ghostOk}
                 data-plot={plotIdx}
                 tabindex="-1"
                 aria-hidden="true"
@@ -1925,26 +1928,23 @@
           {/if}
         {/if}
       {/each}
-      {#each game.garden.trees as tree (tree.key)}
-        {@const cell = structureCell(tree.key)}
+      {#each game.garden.trees as tree (tree.id)}
+        {@const cell = structureSpot(tree.id)}
         {@const art = treeArts[tree.color]}
         {#if cell}
           {@const spot = place(cell.col, cell.row)}
-          {@const ready = treeReady.get(tree.key) ?? 0}
-          {@const timer = treeTimers.get(tree.key)}
+          {@const ready = treeReady.get(tree.id) ?? 0}
+          {@const timer = treeTimers.get(tree.id)}
           <button
             type="button"
             class="tree"
-            class:locked={!tree.unlocked}
-            class:shake={treeShake === tree.key}
-            class:ghost={isGhost(tree.key)}
-            class:bad={isGhost(tree.key) && !ghostOk}
+            class:shake={treeShake === tree.id}
+            class:ghost={isGhostStructure(tree.id)}
+            class:bad={isGhostStructure(tree.id) && !ghostOk}
             style:left="{snapToDevice(spot.x)}px"
             style:top="{snapToDevice(spot.y + halfH + TREE_FOOT * pmdScale)}px"
             style:z-index={cell.col + cell.row + depthSpan + 1}
-            aria-label={!tree.unlocked
-              ? `Árvore de ${itemLabel(tree.itemKey, game.berries)}, ${unlockText(tree)}`
-              : `Árvore de ${itemLabel(tree.itemKey, game.berries)}: ${ready} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
+            aria-label={`Árvore de ${itemLabel(tree.itemKey, game.berries)}: ${ready} de ${tree.cap}${tree.raining ? ', chuva acelerando' : ''}`}
             onclick={() => void onTree(tree)}
           >
             {#if art}
@@ -1955,12 +1955,12 @@
                 shape-rendering="crispEdges"
                 aria-hidden="true"
               >
-                {#each treePixels(art, tree.unlocked ? ready : 0) as px, index (index)}
+                {#each treePixels(art, ready) as px, index (index)}
                   <rect x={px.x} y={px.y} width="1" height="1" fill={px.color} />
                 {/each}
               </svg>
             {/if}
-            {#if tree.unlocked && ready >= tree.cap}
+            {#if ready >= tree.cap}
               <span class="tree-full" aria-hidden="true">cheia</span>
             {:else if timer}
               <span class="tree-full timer" aria-hidden="true">
@@ -1971,28 +1971,30 @@
           </button>
         {/if}
       {/each}
-      {#if benchCell && operatorCell}
-        {@const spot = place(benchCell.col, benchCell.row)}
-        {@const bench = game.garden.bench}
-        {#if benchOperator}
-          {@const look = gardenSprite(benchOperator.speciesId, benchOperator.isShiny)}
+      {#each benchSpots as { bench, cell, flipped, operatorCell, operatorDir, operator } (bench.id)}
+        {@const spot = place(cell.col, cell.row)}
+        {@const ready = benchReadyOf(bench)}
+        {@const timer = benchTimerOf(bench)}
+        {@const ghosted = isGhostStructure(bench.id)}
+        {#if operator}
+          {@const look = gardenSprite(operator.speciesId, operator.isShiny)}
           {@const at = place(operatorCell.col, operatorCell.row)}
           <!-- O operador fica na casa ao lado, virado para a máquina. -->
           <button
             type="button"
             class="mon operator"
-            class:ghost={isGhost('ball_bench')}
-            class:bad={isGhost('ball_bench') && !ghostOk}
+            class:ghost={ghosted}
+            class:bad={ghosted && !ghostOk}
             style:left="{snapToDevice(at.x)}px"
             style:top="{snapToDevice(at.y + halfH)}px"
             style:--size="{showdownSize * scale}px"
             style:z-index={operatorCell.col + operatorCell.row + depthSpan + 1}
-            aria-label={`${benchOperator.nickname ?? benchOperator.displayName} operando a bancada`}
-            onclick={() => (bubbleById.get(benchOperator.id) === 'pet' ? void onBubble(benchOperator.id, 'pet') : onBench())}
+            aria-label={`${operator.nickname ?? operator.displayName} operando a bancada`}
+            onclick={() => (bubbleById.get(operator.id) === 'pet' ? void onBubble(operator.id, 'pet') : onBench(bench.id))}
           >
             {#if look.kind === 'pmd'}
               <PmdSprite
-                speciesId={benchOperator.speciesId}
+                speciesId={operator.speciesId}
                 shiny={look.shinySheet}
                 anim="Idle"
                 dir={operatorDir}
@@ -2002,82 +2004,78 @@
               />
             {:else}
               <span class="shadow" aria-hidden="true"></span>
-              <img src={showdownSrc(benchOperator.speciesId, benchOperator.isShiny)} alt="" />
+              <img src={showdownSrc(operator.speciesId, operator.isShiny)} alt="" />
             {/if}
           </button>
         {/if}
         <button
           type="button"
           class="bench"
-          class:locked={!bench.unlocked}
-          class:working={bench.unlocked && benchState === 'working'}
-          class:ghost={isGhost('ball_bench')}
-          class:bad={isGhost('ball_bench') && !ghostOk}
+          class:working={benchStateOf(bench) === 'working'}
+          class:ghost={ghosted}
+          class:bad={ghosted && !ghostOk}
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
-          style:z-index={benchCell.col + benchCell.row + depthSpan + 1}
-          aria-label={!bench.unlocked
-            ? 'Bancada de bolas, ainda fechada'
-            : benchReady > 0
-              ? `Bancada de bolas: ${benchReady} prontas`
-              : 'Bancada de bolas'}
-          onclick={onBench}
+          style:z-index={cell.col + cell.row + depthSpan + 1}
+          aria-label={ready > 0 ? `Bancada de bolas: ${ready} prontas` : 'Bancada de bolas'}
+          onclick={() => onBench(bench.id)}
         >
           <!-- Folha de quadros: parada, 24 de trabalho (em loop) e pronta. -->
           <span
             class="bench-sprite"
-            class:flip={benchFlipped}
+            class:flip={flipped}
             style:width="{BENCH_W * pmdScale}px"
             style:height="{BENCH_H * pmdScale}px"
             style:background-image="url({benchSheet(bench.job?.recipeKey)})"
             style:background-size="{BENCH_W * BENCH_FRAMES * pmdScale}px {BENCH_H * pmdScale}px"
-            style:background-position-x="{-(benchWork ?? (benchState === 'ready' && bench.unlocked ? BENCH_READY : BENCH_IDLE)) * BENCH_W * pmdScale}px"
+            style:background-position-x="{-benchFrameOf(bench) * BENCH_W * pmdScale}px"
             aria-hidden="true"
           ></span>
-          {#if benchTimer}
+          {#if timer}
             <span class="tree-full timer" aria-hidden="true">
-              {benchTimer.text}
-              <i style:width="{benchTimer.progress * 100}%"></i>
+              {timer.text}
+              <i style:width="{timer.progress * 100}%"></i>
             </span>
-          {:else if benchReady > 0}
-            <span class="tree-full" aria-hidden="true">{benchReady} pronta{benchReady === 1 ? '' : 's'}</span>
+          {:else if ready > 0}
+            <span class="tree-full" aria-hidden="true">{ready} pronta{ready === 1 ? '' : 's'}</span>
           {/if}
         </button>
-      {/if}
-      {#if healCell}
-        {@const spot = place(healCell.col, healCell.row)}
-        {@const charges = healCharges}
+      {/each}
+      {#each healSpots as { machine, cell, flipped } (machine.id)}
+        {@const spot = place(cell.col, cell.row)}
+        {@const charges = machine.charges}
+        {@const timer = healTimerOf(machine)}
         <button
           type="button"
           class="heal-machine"
-          class:ghost={isGhost('heal_machine')}
-          class:bad={isGhost('heal_machine') && !ghostOk}
+          class:ghost={isGhostStructure(machine.id)}
+          class:bad={isGhostStructure(machine.id) && !ghostOk}
           style:left="{snapToDevice(spot.x)}px"
           style:top="{snapToDevice(spot.y + tileH)}px"
-          style:z-index={healCell.col + healCell.row + depthSpan + 1}
+          style:z-index={cell.col + cell.row + depthSpan + 1}
           aria-label={`Máquina de cura: ${charges} carga${charges === 1 ? '' : 's'}`}
-          onclick={onHealMachine}
+          onclick={() => onHealMachine(machine.id)}
         >
           <span
             class="heal-sprite"
-            class:flip={structureFlipped('heal_machine')}
+            class:flip={flipped}
             style:width="{HEAL_W * pmdScale}px"
             style:height="{HEAL_H * pmdScale}px"
             style:background-image="url({HEAL_SHEET})"
             style:background-size="{HEAL_W * HEAL_FRAMES * pmdScale}px {HEAL_H * pmdScale}px"
-            style:background-position-x="{-healSpriteFrame * HEAL_W * pmdScale}px"
+            style:background-position-x="{-healFrameOf(machine.id) * HEAL_W * pmdScale}px"
             aria-hidden="true"
           ></span>
-          {#if healTimer}
+          {#if timer}
             <span class="tree-full timer" aria-hidden="true">
-              {healTimer.text}
-              <i style:width="{healTimer.progress * 100}%"></i>
+              {timer.text}
+              <i style:width="{timer.progress * 100}%"></i>
             </span>
           {:else if charges > 0}
             <span class="tree-full" aria-hidden="true">{charges} carga{charges === 1 ? '' : 's'}</span>
           {/if}
         </button>
-      {/if}
+      {/each}
       {#each giftSpots as { gift, spot: cell } (gift.id)}
         {@const spot = place(cell.col, cell.row)}
         <button
@@ -2387,19 +2385,21 @@
     {/if}
   </div>
 
-  {#if benchOpen}
-    <Modal label="Bancada de bolas" wide onBackdrop={() => (benchOpen = false)}>
-      <BenchPanel {game} {onState} onClose={() => (benchOpen = false)} />
+  {#if benchOpenId !== null}
+    <Modal label="Bancada de bolas" wide onBackdrop={() => (benchOpenId = null)}>
+      <BenchPanel {game} benchId={benchOpenId} {onState} onClose={() => (benchOpenId = null)} />
     </Modal>
   {/if}
 
-  {#if healOpen}
-    <Modal label="Máquina de cura" onBackdrop={() => (healOpen = false)}>
+  {#if healOpenId !== null}
+    {@const machineId = healOpenId}
+    <Modal label="Máquina de cura" onBackdrop={() => (healOpenId = null)}>
       <HealMachinePanel
         {game}
+        {machineId}
         {onState}
-        onClose={() => (healOpen = false)}
-        onHealed={playHealAnim}
+        onClose={() => (healOpenId = null)}
+        onHealed={() => playHealAnim(machineId)}
       />
     </Modal>
   {/if}
@@ -2835,10 +2835,6 @@
     filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
   }
 
-  .tree.locked svg {
-    filter: grayscale(0.7) brightness(0.6);
-  }
-
   .tree.shake svg {
     transform-origin: 50% 100%;
     animation: tree-shake 0.45s steps(6, jump-none);
@@ -2894,9 +2890,6 @@
     filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.3));
   }
 
-  .bench.locked .bench-sprite {
-    filter: grayscale(0.7) brightness(0.6);
-  }
 
 
   .tree-full {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { benchOperatorIds } from './structures'
   // Como estão os Pokémon do jardim (PROGRESSAO.md, 4.2): resumo de fome,
   // carinho e felicidade; a equipe, quem trabalha (com a função) e o resto do
   // jardim; dar berry a um só ou alimentar todos. Faminto não luta.
@@ -23,10 +24,10 @@
   const pets = $derived(
     game.pokemon.filter((mon) => mon.location === 'garden' && (ids === null || ids.includes(mon.id))),
   )
-  const operatorId = $derived(game.garden.bench.operatorId)
+  const operators = $derived(benchOperatorIds(game))
   const caretakerId = $derived(game.daycare.caretaker?.pokemonId ?? null)
   function roleOf(mon: OwnedPokemon): string | null {
-    if (mon.id === operatorId) return 'Opera a bancada'
+    if (operators.has(mon.id)) return 'Opera a bancada'
     if (mon.id === caretakerId) return 'Cuida do daycare'
     return null
   }

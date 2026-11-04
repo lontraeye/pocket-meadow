@@ -349,13 +349,16 @@ export const missionDays = sqliteTable(
 )
 
 /**
- * Estruturas fixas do jardim (5.23): `apricorn_tree` usa `progress` (Apricorns,
- * real) no instante `since`; `ball_bench` usa `level` e o operador;
- * `heal_machine` usa `progress` (cargas, real) no instante `since`.
+ * Estruturas do jardim (5.23), uma linha por peça (PROGRESSAO.md 4.3, passo 2:
+ * duas bancadas têm cada uma o seu estado). `apricorn_tree` usa `progress`
+ * (Apricorns, real) no instante `since`; `ball_bench` usa `level` e o operador;
+ * `heal_machine` usa `progress` (cargas, real) no instante `since`;
+ * `daycare_keeper` (uma por jogador) guarda o cuidador.
  */
 export const gardenStructures = sqliteTable(
   'garden_structures',
   {
+    id: integer('id').primaryKey(),
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -377,14 +380,18 @@ export const gardenStructures = sqliteTable(
     upgradeTo: integer('upgrade_to'),
     upgradeEndsAt: integer('upgrade_ends_at'),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.key] })],
+  (table) => [
+    index('idx_garden_structures_user').on(table.userId, table.key),
+    uniqueIndex('ux_garden_structures_keeper').on(table.userId).where(sql`${table.key} = 'daycare_keeper'`),
+  ],
 )
 
 /**
- * Peças colocadas no jardim (construção, PROGRESSAO.md 4.3): estruturas (uma de
- * cada por enquanto, a linha de `garden_structures` guarda o estado) e
- * canteiros (`slot` = `berry_plots.plot_index`; 0 nas estruturas). Sem linha aqui = guardada no
- * inventário de construção. `col`/`row` na grade jogável (0..11), a âncora.
+ * Peças colocadas no jardim (construção, PROGRESSAO.md 4.3): estruturas
+ * (`structure_id`, a linha de `garden_structures` com o estado) e canteiros
+ * (`slot` = `berry_plots.plot_index`; 0 nas estruturas). Estrutura sem linha
+ * aqui = guardada no inventário de construção. `col`/`row` na grade jogável
+ * (0..11), a âncora.
  */
 export const gardenPlacements = sqliteTable(
   'garden_placements',
@@ -394,6 +401,7 @@ export const gardenPlacements = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     piece: text('piece').notNull(),
+    structureId: integer('structure_id').references(() => gardenStructures.id, { onDelete: 'cascade' }),
     slot: integer('slot').notNull().default(0),
     col: integer('col').notNull(),
     row: integer('row').notNull(),
@@ -403,7 +411,8 @@ export const gardenPlacements = sqliteTable(
   },
   (table) => [
     uniqueIndex('ux_garden_placements_cell').on(table.userId, table.col, table.row),
-    uniqueIndex('ux_garden_placements_piece').on(table.userId, table.piece, table.slot),
+    uniqueIndex('ux_garden_placements_plot').on(table.userId, table.slot).where(sql`${table.piece} = 'berry_plot'`),
+    uniqueIndex('ux_garden_placements_structure').on(table.structureId).where(sql`${table.structureId} is not null`),
   ],
 )
 
@@ -419,6 +428,8 @@ export const craftJobs = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     structureKey: text('structure_key').notNull(),
+    /** A bancada do lote (cada uma tem o seu). */
+    structureId: integer('structure_id').references(() => gardenStructures.id, { onDelete: 'cascade' }),
     recipeKey: text('recipe_key').notNull(),
     quantity: integer('quantity').notNull(),
     unitMs: integer('unit_ms').notNull(),
@@ -426,7 +437,10 @@ export const craftJobs = sqliteTable(
     collected: integer('collected').notNull().default(0),
     cancelledAt: integer('cancelled_at'),
   },
-  (table) => [index('idx_craft_jobs_user').on(table.userId, table.structureKey)],
+  (table) => [
+    index('idx_craft_jobs_user').on(table.userId, table.structureKey),
+    index('idx_craft_jobs_structure').on(table.structureId),
+  ],
 )
 
 /**

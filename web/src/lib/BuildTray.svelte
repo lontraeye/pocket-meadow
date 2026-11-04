@@ -78,13 +78,17 @@
     ]
     const base = { more: null, locked: false }
     for (const piece of STRUCTURE_PIECES) {
-      if (layout.stored.includes(piece)) {
-        out.push({ ...base, piece, badge: '1', note: 'guardada', placedId: null, ready: true })
+      // Um cartão por tipo: o selo conta as guardadas; a nota, quantas estão no jardim.
+      const stored = layout.stored.filter((row) => row.piece === piece).length
+      const placed = layout.pieces.filter((row) => row.piece === piece)
+      const inGarden = placed.length > 0 ? (placed.length === 1 ? 'no jardim' : `${placed.length} no jardim`) : ''
+      if (stored > 0) {
+        const note = inGarden || (stored === 1 ? 'guardada' : 'guardadas')
+        out.push({ ...base, piece, badge: String(stored), note, placedId: null, ready: true })
         continue
       }
-      const placed = layout.pieces.find((row) => row.piece === piece)
-      if (placed) {
-        out.push({ ...base, piece, badge: null, note: 'no jardim', placedId: placed.id, ready: false })
+      if (placed.length > 0) {
+        out.push({ ...base, piece, badge: null, note: inGarden, placedId: placed[0]!.id, ready: false })
         continue
       }
       const closed = layout.locked.find((row) => row.piece === piece)
