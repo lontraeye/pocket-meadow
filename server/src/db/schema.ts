@@ -265,6 +265,12 @@ export const pokemon = sqliteTable(
     hpRatio: real('hp_ratio').notNull().default(1),
     /** Até quando o HP de descanso foi liquidado; null = fora do jardim (congelado). */
     hpUpdatedAt: integer('hp_updated_at'),
+    /**
+     * Casa no jardim (habitat, PLANNING 5.22): uma casa da zona onde ele mora.
+     * A zona é a que contém essa casa; null = sem casa (anda pelo jardim).
+     */
+    homeCol: integer('home_col'),
+    homeRow: integer('home_row'),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),
@@ -590,6 +596,23 @@ export const pokedexClaims = sqliteTable(
     claimedAt: integer('claimed_at').notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.blockKey] })],
+)
+
+/**
+ * Chão pintado do jardim (habitats, PLANNING 5.22): uma linha por casa que não
+ * é gramado. Sem custo nem limite; o motor (game/habitat) lê daqui as zonas.
+ */
+export const gardenTiles = sqliteTable(
+  'garden_tiles',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    col: integer('col').notNull(),
+    row: integer('row').notNull(),
+    floor: text('floor').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.col, table.row] })],
 )
 
 export const berryPlots = sqliteTable(

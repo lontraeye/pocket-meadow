@@ -8,16 +8,19 @@ import { getDb, immediate } from '../db/client.js'
 import { insertPlacement, loadPieces, ownedStructures, type PlacedRow } from '../db/gardenLayout.js'
 import { clearedMilestones, gardenUnlocksOf } from '../db/milestones.js'
 import { BUILD_RECIPES } from '../config/buildRecipes.js'
-import { nextCapAt, nextPlotsAt, pieceUnlockAt, recipeUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
+import { floorUnlockAt, nextCapAt, nextPlotsAt, pieceUnlockAt, recipeUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
+import { evictHomeless, loadFloor } from '../db/habitat.js'
+import { PAINT_FLOORS, type PaintFloor, isPaintFloor } from '../game/habitat/index.js'
 import { itemQty } from '../db/inventory.js'
 import { buildingOf, countOf, craftStructure } from '../db/structures.js'
 import { freezeHealMachine } from '../db/healMachine.js'
-import { berryPlots, gardenPlacements, gardenStructures } from '../db/schema.js'
+import { berryPlots, gardenPlacements, gardenStructures, gardenTiles } from '../db/schema.js'
 import {
   GARDEN_COLS,
   GARDEN_ROWS,
   STRUCTURE_PIECES,
   canPlace,
+  inBounds,
   isFlippable,
   isPieceKey,
   type PieceKey,
@@ -47,6 +50,10 @@ export type LayoutView = {
   recipes: RecipeView[]
   /** A construção em andamento (uma por vez), ou null. */
   building: { id: number; piece: StructurePiece; startedAt: number; readyAt: number } | null
+  /** Chão pintado (habitats, 5.22): uma casa por linha, sem as casas de canteiro. */
+  floor: { col: number; row: number; floor: string }[]
+  /** Chãos da paleta, na ordem, com o marco que abre os fechados (null = aberto). */
+  floors: { floor: PaintFloor; unlockAt: UnlockAt | null }[]
 }
 
 export type RecipeView = {
@@ -93,10 +100,12 @@ export function layoutView(userId: number): LayoutView {
       nextCap: nextCapAt(cleared, recipe.piece),
     })),
     building: buildingOf(userId),
+    floor: loadFloor(userId).map(({ col, row, floor }) => ({ col, row, floor: floor ?? '' })),
+    floors: PAINT_FLOORS.map((floor) => ({ floor, unlockAt: floorUnlockAt(cleared, floor) })),
   }
 }
 
-type Ok = { ok: true; layout: LayoutView }
+type Ok = { ok: true; layout: LayoutView; evicted?: number[] }
 
 function parseCell(body: Record<string, unknown> | null): { col: number; row: number } | null {
   const col = body?.col
@@ -163,7 +172,9 @@ export function placePiece(
   if (blocked) return fail(blocked, 400)
   insertPlacement(userId, piece, slot, col, row, now, turn, structure)
   if (structure !== null && piece !== 'berry_plot') resume(userId, structure, piece, now)
-  return { ok: true, layout: layoutView(userId) }
+  // O canteiro tem chão próprio: pôr ou tirar um muda as zonas dos habitats.
+  const evicted = evictHomeless(userId)
+  return { ok: true, layout: layoutView(userId), evicted }
 }
 
 export function movePiece(
@@ -187,7 +198,9 @@ export function movePiece(
     .set({ col, row, flipped: turn })
     .where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId)))
     .run()
-  return { ok: true, layout: layoutView(userId) }
+  // O canteiro tem chão próprio: pôr ou tirar um muda as zonas dos habitats.
+  const evicted = evictHomeless(userId)
+  return { ok: true, layout: layoutView(userId), evicted }
 }
 
 export function storePiece(userId: number, id: number, now: number): Ok | Failure {
@@ -218,7 +231,9 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
       freezeTree(userId, structureId, now)
   }
   db.delete(gardenPlacements).where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId))).run()
-  return { ok: true, layout: layoutView(userId) }
+  // O canteiro tem chão próprio: pôr ou tirar um muda as zonas dos habitats.
+  const evicted = evictHomeless(userId)
+  return { ok: true, layout: layoutView(userId), evicted }
 }
 
 /** Constrói uma peça pela receita (passo 2c): fica pronta depois do tempo dela, guardada. */
@@ -229,7 +244,56 @@ export function craftPiece(userId: number, piece: StructurePiece, now: number): 
   return { ok: true, layout: layoutView(userId) }
 }
 
+export type FloorPaint = { col: number; row: number; floor: PaintFloor | null }
+
+/**
+ * Pinta o chão (habitats, 5.22): sem custo nem limite, só os chãos abertos
+ * pelos marcos; `null` volta ao gramado. Quem perde a casa sai dela (`evicted`).
+ */
+export function paintFloor(userId: number, cells: readonly FloorPaint[], now: number): Ok | Failure {
+  persistCatchUp(userId, now)
+  const open = gardenUnlocksOf(userId).floors
+  for (const cell of cells) {
+    if (!inBounds(cell)) return fail('out_of_bounds', 400)
+    if (cell.floor !== null && !open.has(cell.floor)) return fail('floor_locked', 400)
+  }
+  const db = getDb()
+  for (const cell of cells) {
+    const where = and(eq(gardenTiles.userId, userId), eq(gardenTiles.col, cell.col), eq(gardenTiles.row, cell.row))
+    if (cell.floor === null) db.delete(gardenTiles).where(where).run()
+    else {
+      db.insert(gardenTiles)
+        .values({ userId, col: cell.col, row: cell.row, floor: cell.floor })
+        .onConflictDoUpdate({ target: [gardenTiles.userId, gardenTiles.col, gardenTiles.row], set: { floor: cell.floor } })
+        .run()
+    }
+  }
+  const evicted = evictHomeless(userId)
+  return { ok: true, layout: layoutView(userId), evicted }
+}
+
+function parsePaint(body: Record<string, unknown> | null): FloorPaint[] | null {
+  const cells = body?.cells
+  if (!Array.isArray(cells) || cells.length === 0 || cells.length > GARDEN_COLS * GARDEN_ROWS) return null
+  const out: FloorPaint[] = []
+  for (const raw of cells) {
+    const cell = parseCell(raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : null)
+    const floor = (raw as { floor?: unknown }).floor
+    if (!cell || (floor !== null && !isPaintFloor(floor))) return null
+    out.push({ ...cell, floor: floor as PaintFloor | null })
+  }
+  return out
+}
+
 export const buildRoutes = new Hono<AuthEnv>()
+
+buildRoutes.post('/floor', requireUser, async (c) => {
+  const cells = parsePaint(await readObject(c))
+  if (!cells) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => paintFloor(c.get('userId'), cells, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
+})
 
 buildRoutes.post('/craft', requireUser, async (c) => {
   const piece = (await readObject(c))?.piece
@@ -238,7 +302,7 @@ buildRoutes.post('/craft', requireUser, async (c) => {
   }
   const result = immediate(() => craftPiece(c.get('userId'), piece as StructurePiece, Date.now()))
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ layout: result.layout })
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
 })
 
 buildRoutes.post('/place', requireUser, async (c) => {
@@ -254,7 +318,7 @@ buildRoutes.post('/place', requireUser, async (c) => {
     placePiece(c.get('userId'), piece, cell.col, cell.row, Date.now(), flipped, structureId as number | undefined),
   )
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ layout: result.layout })
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
 })
 
 buildRoutes.post('/:id/move', requireUser, async (c) => {
@@ -265,7 +329,7 @@ buildRoutes.post('/:id/move', requireUser, async (c) => {
   if (id === null || !cell || flipped === null) return c.json({ error: 'invalid_body' }, 400)
   const result = immediate(() => movePiece(c.get('userId'), id, cell.col, cell.row, Date.now(), flipped))
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ layout: result.layout })
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
 })
 
 buildRoutes.post('/:id/store', requireUser, (c) => {
@@ -273,5 +337,5 @@ buildRoutes.post('/:id/store', requireUser, (c) => {
   if (id === null) return c.json({ error: 'invalid_body' }, 400)
   const result = immediate(() => storePiece(c.get('userId'), id, Date.now()))
   if (!result.ok) return c.json({ error: result.error }, result.status)
-  return c.json({ layout: result.layout })
+  return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
 })

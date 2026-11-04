@@ -31,6 +31,28 @@ export const FLOORS = {
 } as const satisfies Record<string, Makeup>
 export type FloorKey = keyof typeof FLOORS
 
+/**
+ * Chãos que o jogador pinta no Construir, na ordem da paleta. A `grama` fica
+ * de fora: é o gramado (neutro) e ficaria igual à grama pintada. Os outros
+ * (neve, lava, chão escuro, caminho) entram quando tiverem arte.
+ */
+export const PAINT_FLOORS = ['grama-alta', 'flores', 'areia', 'terra', 'pedra', 'agua', 'agua-funda'] as const
+export type PaintFloor = (typeof PAINT_FLOORS)[number]
+
+export function isPaintFloor(value: unknown): value is PaintFloor {
+  return typeof value === 'string' && (PAINT_FLOORS as readonly string[]).includes(value)
+}
+
+export const FLOOR_NAMES: Record<PaintFloor, string> = {
+  'grama-alta': 'Grama alta',
+  flores: 'Flores',
+  areia: 'Areia',
+  terra: 'Terra',
+  pedra: 'Pedra',
+  agua: 'Água',
+  'agua-funda': 'Água funda',
+}
+
 /** Objetos, um por casa, em cima do chão. Contam `objectWeight` vezes o chão. */
 export const OBJECTS = {
   rocha: { pedra: 1 },
@@ -66,6 +88,12 @@ export const habitatConfig = {
   /** A partir daqui o habitat tem 3 vagas (antes, 2). */
   bigTiles: 10,
   capacity: { small: 2, big: 3 },
+  /**
+   * Morar no bioma do seu tipo (o básico não conta): a felicidade sobe mais
+   * rápido e os presentes saem com intervalo menor. Sem limite do jardim por
+   * enquanto (decidido em 2026-11-04): habitat é bônus.
+   */
+  bonus: { happinessUpMult: 1.5, giftIntervalMult: 0.75 },
   /** Em ordem: vale a primeira receita que bate. */
   biomes: [
     { key: 'lago', name: 'Lago', rules: [{ materials: ['agua'], min: 0.5 }], types: ['water', 'ice'] },

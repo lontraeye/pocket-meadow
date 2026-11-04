@@ -164,6 +164,16 @@ export function canLiveIn(types: readonly string[], biome: BiomeKey): boolean {
   return !!recipe && types.some((type) => (recipe.types as readonly PokemonType[]).includes(type as PokemonType))
 }
 
+/** A zona que contém a casa (col, row), ou null. */
+export function zoneAt(zones: readonly Zone[], col: number, row: number): Zone | null {
+  return zones.find((zone) => zone.tiles.some((tile) => tile.col === col && tile.row === row)) ?? null
+}
+
+/** Morar ali dá o bônus do bioma: bioma de verdade (não o básico) de um dos tipos. */
+export function biomeBonus(types: readonly string[], biome: BiomeKey | null): boolean {
+  return biome !== null && biome !== BASIC_BIOME.key && canLiveIn(types, biome)
+}
+
 export function biomeName(biome: BiomeKey): string {
   if (biome === BASIC_BIOME.key) return BASIC_BIOME.name
   return habitatConfig.biomes.find((b) => b.key === biome)?.name ?? biome
