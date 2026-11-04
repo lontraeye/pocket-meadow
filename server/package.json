@@ -15,6 +15,7 @@
     "sounds:cries": "tsx scripts/download-cries.ts",
     "db:seed-moves": "tsx scripts/seed-moves.ts",
     "economia": "tsx scripts/economia.ts",
+    "visitantes": "tsx scripts/visitantes.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "sounds:sfx": "tsx scripts/build-sfx.ts"
