@@ -1296,6 +1296,11 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 - **Menu do habitat** no Construir: Área, chãos que valem ponto, outros chãos (enfeite) e Moradores (pôr e tirar); a área salva sozinha a cada pincelada. Morador passeia só dentro da área; quem não tem casa não entra na água.
 - **Visitantes (feito em 2026-11-04, branch `feat/visitantes`):** habitat pronto (menos o Básico) recebe um Pokémon selvagem do tipo dele a cada 3 a 6 h, um por vez, que fica 4 h; tocar abre o encontro do campo sem gastar energia. Quem pode vir sai das tabelas de encontro das áreas já abertas, com quatro travas para não vir algo forte ou raro: raro nas rotas (peso até `RARE_WEIGHT_MAX` em todas as áreas), captura abaixo de 90, lendário/mítico, ou nível mínimo acima da média do mato do capítulo; o nível sai entre o mínimo das rotas e essa média. `npm run visitantes` lista quem vem e quem fica de fora em cada tipo e capítulo (`game/habitat/visitors.ts`, `db/visitors.ts`, migração 0037).
 - **Depois:** móveis e decorativos (arbusto, pedra, boia) com arte, os outros biomas (Cratera, Usina, Bosque sombrio, Campo gelado) quando tiverem chão desenhado, e talvez o limite do jardim.
+- **Em produção desde 2026-11-04** (bc9e906): habitats, moradores e visitantes. Desenvolvimento pausado aqui.
+- **Pontos em aberto, para quando voltar:**
+  - A Pradaria aceita quem tem Voador em qualquer um dos dois tipos, então o Zubat (Veneno/Voador) aparece lá como visitante e pode morar lá. Decidir se o tipo principal tem de ser da Pradaria.
+  - Móveis e decorativos (arbusto, pedra, boia) dependem da arte; a regra de chão de cada um (`OBJECT_GROUND`) já existe.
+  - O próximo item da lista é a Liga, o rival e o pós-jogo (PROGRESSAO.md, item 9); a Liga ainda não tem time no config.
 O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.
 
 **Peças:**
