@@ -116,6 +116,11 @@ export function runBattle(options: RunBattleOptions): BattleResult {
 
   enter(state, 'player', 0, false)
   enter(state, 'wild', 0, false)
+  // Ninguém abre a luta com o ataque pronto: o primeiro golpe espera o tempo
+  // de um ataque rápido, como se tivesse acabado de bater (senão o primeiro
+  // hit sai no instante zero).
+  setReady(state.team[state.activeSlot]!, state.team[state.activeSlot]!.fighter.fastMove, state.t)
+  setReady(state.wild, state.wild.fighter.fastMove, state.t)
   scheduleWild(state)
   if (auto) schedulePlayer(state)
 

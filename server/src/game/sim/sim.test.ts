@@ -104,18 +104,24 @@ test('mesma seed + setup + inputs → mesmo resultado e log', () => {
   assert.deepEqual(a, b)
 })
 
+/** Quando o 1º ataque do jogador fica pronto (ninguém abre a luta com o ataque carregado). */
+function openAt(s: BattleSetup): number {
+  return runBattle({ setup: s, seed: 1, inputs: [], untilMs: 0 }).snapshot.team[0]!.readyAt
+}
+
 test('toque durante cooldown e carregado sem energia são ignorados', () => {
   const s = setup(
     [fighter({ id: 1, speciesId: 1, level: 20 })],
     fighter({ speciesId: 2, level: 50, stats: { hp: 200, attack: 10, defense: 80, spAttack: 10, spDefense: 80, speed: 10 } }),
   )
+  const t0 = openAt(s)
   const result = runBattle({
     setup: s,
     seed: 7,
     inputs: [
-      { t: 0, action: 'charged' }, // sem energia
-      { t: 0, action: 'fast' },
-      { t: 1, action: 'fast' }, // cooldown
+      { t: t0, action: 'charged' }, // sem energia
+      { t: t0, action: 'fast' },
+      { t: t0 + 1, action: 'fast' }, // cooldown
     ],
   })
   const ignored = result.log.filter((e) => e.kind === 'ignored')
@@ -160,8 +166,8 @@ test('evento move traz a efetividade de tipo (super e pouco eficaz)', () => {
   const superLog = runBattle({
     setup: superSetup,
     seed: 11,
-    inputs: [{ t: 0, action: 'fast' }],
-    untilMs: 500,
+    inputs: [{ t: openAt(superSetup), action: 'fast' }],
+    untilMs: openAt(superSetup) + 500,
   }).log.filter((event) => event.kind === 'move' && event.side === 'player')
   assert.equal(superLog[0]?.kind, 'move')
   if (superLog[0]?.kind === 'move') assert.equal(superLog[0].effectiveness, 2)
@@ -188,8 +194,8 @@ test('evento move traz a efetividade de tipo (super e pouco eficaz)', () => {
   const resistLog = runBattle({
     setup: resistSetup,
     seed: 11,
-    inputs: [{ t: 0, action: 'fast' }],
-    untilMs: 500,
+    inputs: [{ t: openAt(resistSetup), action: 'fast' }],
+    untilMs: openAt(resistSetup) + 500,
   }).log.filter((event) => event.kind === 'move' && event.side === 'player')
   assert.equal(resistLog[0]?.kind, 'move')
   if (resistLog[0]?.kind === 'move') assert.equal(resistLog[0].effectiveness, 0.5)
@@ -694,9 +700,10 @@ test('automático: mesma seed → mesmos inputs; demora mais que o perfeito', ()
   // Mesmos inputs manuais reproduzem a luta automática.
   assert.deepEqual(runBattle({ setup: s, seed: 77, inputs: a.inputs }).log, a.log)
 
-  // Perfeito tocaria em t=0; o automático atrasa o 1º toque (e os seguintes) pela reação.
-  assert.ok(a.inputs[0]!.t > 0)
-  assert.ok(a.inputs[0]!.t <= simConfig.autoReactionMaxMs)
+  // Perfeito tocaria quando o 1º ataque fica pronto; o automático atrasa o 1º
+  // toque (e os seguintes) pela reação.
+  assert.ok(a.inputs[0]!.t > openAt(s))
+  assert.ok(a.inputs[0]!.t <= openAt(s) + simConfig.autoReactionMaxMs)
   const gaps = a.inputs.slice(1).map((inp, i) => inp.t - a.inputs[i]!.t)
   assert.ok(gaps.every((g) => g >= simConfig.autoReactionMinMs))
 })
@@ -776,4 +783,21 @@ test('manual: depois do desmaio a luta pausa até escolher quem entra; a escolha
   // Automático: não pausa.
   const auto = runBattle({ setup: base, seed: 1, untilMs: 60_000 })
   assert.equal(auto.snapshot.awaitingSend, false)
+})
+
+test('ninguém abre a luta com o ataque carregado: o 1º golpe espera um ataque rápido', () => {
+  const s = setup(
+    [fighter({ id: 1, speciesId: 19, level: 20, stats: { hp: 60, attack: 55, defense: 30, spAttack: 30, spDefense: 30, speed: 80 } })],
+    fighter({ speciesId: 16, level: 10, stats: { hp: 35, attack: 25, defense: 25, spAttack: 25, spDefense: 25, speed: 40 } }),
+  )
+  const start = runBattle({ setup: s, seed: 3, inputs: [], untilMs: 0 }).snapshot
+  assert.ok(start.team[0]!.readyAt > 0)
+  assert.ok(start.wild.readyAt > 0)
+  // Tocar em t = 0 não ataca.
+  const early = runBattle({ setup: s, seed: 3, inputs: [{ t: 0, action: 'fast' }], untilMs: 10 })
+  assert.ok(early.log.some((e) => e.kind === 'ignored' && e.reason === 'cooldown'))
+  const auto = runBattle({ setup: s, seed: 3 })
+  const firstMoves = ['player', 'wild'].map((side) => auto.log.find((e) => e.kind === 'move' && e.side === side)?.t ?? Infinity)
+  assert.ok(firstMoves[0]! >= start.team[0]!.readyAt)
+  assert.ok(firstMoves[1]! >= start.wild.readyAt)
 })

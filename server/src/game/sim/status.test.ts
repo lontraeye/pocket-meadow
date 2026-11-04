@@ -136,30 +136,33 @@ test('ember pode queimar; giga-drain cura; take-down causa recuo', () => {
     ailmentChance: 100,
   })
   let burned = false
+  const emberSetup = setup(
+    [
+      fighter({
+        id: 1,
+        speciesId: 4,
+        level: 20,
+        types: ['fire'],
+        fastMove: ember,
+        chargedMove: null,
+        stats: { hp: 80, attack: 40, defense: 40, spAttack: 70, spDefense: 40, speed: 60 },
+      }),
+    ],
+    fighter({
+      speciesId: 16,
+      level: 10,
+      types: ['normal', 'flying'],
+      stats: { hp: 200, attack: 20, defense: 40, spAttack: 20, spDefense: 40, speed: 20 },
+    }),
+  )
+  // O 1º ataque só fica pronto depois de um ataque rápido (ninguém abre carregado).
+  const opening = runBattle({ setup: emberSetup, seed: 1, inputs: [], untilMs: 0 }).snapshot.team[0]!.readyAt
   for (let seed = 1; seed < 200 && !burned; seed += 1) {
     const result = runBattle({
-      setup: setup(
-        [
-          fighter({
-            id: 1,
-            speciesId: 4,
-            level: 20,
-            types: ['fire'],
-            fastMove: ember,
-            chargedMove: null,
-            stats: { hp: 80, attack: 40, defense: 40, spAttack: 70, spDefense: 40, speed: 60 },
-          }),
-        ],
-        fighter({
-          speciesId: 16,
-          level: 10,
-          types: ['normal', 'flying'],
-          stats: { hp: 200, attack: 20, defense: 40, spAttack: 20, spDefense: 40, speed: 20 },
-        }),
-      ),
+      setup: emberSetup,
       seed,
-      inputs: [{ t: 0, action: 'fast' }],
-      untilMs: 500,
+      inputs: [{ t: opening, action: 'fast' }],
+      untilMs: opening + 500,
     })
     burned = result.log.some((e) => e.kind === 'status' && e.status === 'burn' && e.applied)
   }
@@ -194,8 +197,9 @@ test('ember pode queimar; giga-drain cura; take-down causa recuo', () => {
       }),
     ),
     seed: 42,
-    inputs: [{ t: 900, action: 'fast' }],
-    untilMs: 1500,
+    // Os dois abrem esperando um ataque rápido: em 3 s o selvagem já acertou.
+    inputs: [{ t: 3000, action: 'fast' }],
+    untilMs: 3600,
   })
   assert.ok(drainResult.log.some((e) => e.kind === 'move' && e.side === 'wild' && e.damage > 0))
   assert.ok(drainResult.log.some((e) => e.kind === 'drain' && e.amount > 0))
@@ -226,8 +230,9 @@ test('ember pode queimar; giga-drain cura; take-down causa recuo', () => {
       }),
     ),
     seed: 7,
-    inputs: [{ t: 0, action: 'fast' }],
-    untilMs: 800,
+    // Toques a cada 100 ms: o primeiro que cair com o ataque pronto vale.
+    inputs: Array.from({ length: 40 }, (_, index) => ({ t: index * 100, action: 'fast' as const })),
+    untilMs: 4000,
   })
   assert.ok(recoilResult.log.some((e) => e.kind === 'recoil' && e.damage > 0))
 
