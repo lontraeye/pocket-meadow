@@ -101,24 +101,36 @@ jardim (horta, árvores, bancada, daycare) ──recursos──▶ exploração 
 | desbloqueios (vagas, níveis da bancada, árvores) | marcos (líderes vencidos) |
 | Apricorns extras | Headbutt |
 
-### 4.3 Desbloqueios do jardim por marco
+### 4.3 Construção do jardim (decidido em 2026-11-03)
 
-Com o nível de treinador fora do portão, os desbloqueios do jardim passam a vir dos líderes:
+Substitui a tabela antiga de "desbloqueio por marco" (cada estrutura abria uma vez, numa casa fixa). O jardim vira um jogo de montar:
 
-| Marco | Mundo | Jardim |
+- **Inventário de construção**, separado da mochila: estruturas (bancada, máquina de cura, árvores de Apricorn, canteiro), e depois peças de habitat (chão e objetos, 5.22) e decoração.
+- **Cada peça colocada é uma instância**, com posição e estado próprios: duas máquinas de cura têm cargas separadas; duas bancadas têm operador, lote e nível separados.
+- **Colocar, mover e guardar:** no modo de construção o jogador põe a peça em qualquer casa livre do jardim, move e guarda de volta no inventário. Guardar uma estrutura com trabalho em andamento pede confirmação (ou espera esvaziar).
+- **O marco dá a receita e uma unidade.** A primeira vem pronta; as próximas se constroem com materiais (receita por peça, no config). Os materiais vêm da exploração (Apricorn, berries, e materiais novos como pedra do Rock Smash e madeira do Headbutt).
+- **Canteiro não se constrói:** o marco só sobe o limite de canteiros colocados no jardim.
+- **Sem moeda e sem loja por enquanto** (fica para o futuro).
+- **Quem já joga:** o que existe hoje vira instância nas mesmas casas; nada some.
+
+Proposta inicial (números a fechar no item 7):
+
+| Marco | Ganha (1 unidade + receita) | Canteiros |
 |---|---|---|
-| Início | — | horta (2 canteiros), daycare (1 vaga), árvore vermelha e bancada |
-| 1 Violet | — | 3º canteiro |
-| 2 Azalea | Old Rod, Headbutt | 2ª vaga do daycare |
-| 3 Goldenrod | — | bancada nível 2 (Great Ball) e árvore azul |
-| 4 Ecruteak | Surf, Rock Smash | 4º canteiro |
-| 5 Cianwood | Good Rod, Voo | 3ª vaga do daycare |
-| 6 Olivine | — | bancada nível 3 (Ultra Ball) e árvore amarela |
-| 7 Mahogany | — | (habitats: primeiro bioma) |
-| 8 Blackthorn | Super Rod | 4ª vaga do daycare; (habitats: mais biomas) |
-| Liga | — | (visitantes) |
+| Início | bancada, árvore vermelha, máquina de cura | 4 |
+| 1 Violet | — | 4 |
+| 2 Azalea | receita da árvore vermelha | 6 |
+| 3 Goldenrod | árvore azul; bancada pode subir ao nível 2 (Great Ball) | 6 |
+| 4 Ecruteak | — | 8 |
+| 5 Cianwood | receita da máquina de cura | 8 |
+| 6 Olivine | árvore amarela; bancada pode subir ao nível 3 (Ultra Ball) | 10 |
+| 7 Mahogany | primeiras peças de habitat (5.22) | 10 |
+| 8 Blackthorn | receita da bancada | 12 |
+| Liga | (visitantes) | 12 |
 
-O nível de treinador continua existindo (XP, recompensas de nível), mas não trava a jornada.
+As vagas do daycare (que não é uma peça do jardim) passam a abrir por marco também: 1 no início, 2ª na Azalea, 3ª na Cianwood, 4ª na Blackthorn.
+
+O nível de treinador continua existindo (XP, recompensas de nível), mas não trava nada do jardim.
 
 ## 5. O que falta construir (em ordem)
 
@@ -128,7 +140,10 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 3. ~~**Fome trava a luta**~~ (feito em 2026-11-03): com fome abaixo de 20 (`fightMinHunger`) o Pokémon fica fora do time da luta (todos famintos: não há luta); cada luta tira 8 de fome de quem entrou (`battleHungerCost`); colheita com +2 berries; "Alimentar todos" (`POST /garden/pets/feed-all`) dá 1 berry a cada um, do mais faminto ao menos; abre pelo aviso "N com fome" e antes da luta ("Alimentar o time").
 4. ~~**HP persistente e máquina de cura**~~ (feito): HP fica depois da luta; cura por descanso no jardim e pela máquina de cura (estrutura do jardim; 1 carga cura a equipe toda; liberada desde o início). Berry de HP fica para depois.
 5. ~~**Captura mais difícil e bolas vindo da bancada**~~ (feito em 2026-11-03): `catchMult` de 1,2 para 0,8 (capture rate 255 sai em 80%, 190 em 60%, 45 em 14%); começa com 15 Poké Balls (eram 30); vencer selvagem não dá mais bola; nível de treinador, missões e baú trocam bola por Apricorn (nível: 2 vermelhos, 2 azuis a cada 5, 2 amarelos a cada 10; missão comum: 2 vermelhos; captura nova: 1 Great e 1 azul; baú: 1 Great, 3 vermelhos e 2 azuis); presentes com menos bolas (pesos 40/10 para 15/4). Pedra (Rock Smash) e Pokédex ficam como estavam.
-6. **Desbloqueios do jardim por marco** (4.3).
+6. **Construção do jardim** (4.3), em passos:
+   1. Inventário de construção e instâncias com posição: o que existe vira peça colocada (migração), modo de construção para colocar, mover e guardar; canteiros soltos com limite.
+   2. Marcos dão peças, receitas e o limite de canteiros (a tabela do 4.3); materiais novos (pedra, madeira) e as receitas; vagas do daycare por marco.
+   3. Peças de habitat por cima disso, com o motor que já está na branch `feat/habitats`.
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script.
 8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
 9. **Liga, rival e pós-jogo.**
@@ -137,5 +152,6 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 ## 6. Pontos a decidir
 
+- Teto por estrutura de produção (bancada, árvore): sem teto, quem junta material faz muitas e as bolas perdem valor. Proposta: o marco também sobe quantas de cada dá para ter.
 - Quanto mais lento o jardim fica e quantas berries a colheita passa a dar (sai do balanço do item 7).
 - ~~A máquina de cura~~: decidido em 2026-11-03: cura na hora, com usos limitados que recarregam com o tempo.
