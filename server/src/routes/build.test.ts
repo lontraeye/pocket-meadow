@@ -36,7 +36,14 @@ after(() => {
 })
 
 type Piece = { id: number; piece: string; slot: number; col: number; row: number; flipped: boolean }
-type Layout = { pieces: Piece[]; stored: string[]; plotLimit: number; plotsPlaced: number }
+type Layout = {
+  pieces: Piece[]
+  stored: string[]
+  plotLimit: number
+  plotsPlaced: number
+  nextPlots: { milestone: string; name: string; plots: number } | null
+  locked: { piece: string; unlockAt: { milestone: string } }[]
+}
 type State = {
   garden: {
     layout: Layout
@@ -66,6 +73,12 @@ const post = (cookie: string, url: string, body: unknown = {}) =>
   app.request(url, { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) }, env)
 const state = async (cookie: string) => (await (await app.request('/state', { headers: { cookie } }, env)).json()) as State
 const errorOf = async (response: Response) => ((await response.json()) as { error: string }).error
+/** Marca marcos como conquistados (o jardim abre por eles). */
+const clear = (userId: number, ...keys: string[]) => {
+  for (const key of keys) {
+    getSqlite().prepare('insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, ?)').run(userId, key, Date.now())
+  }
+}
 const pieceOf = (layout: Layout, piece: string) => layout.pieces.find((row) => row.piece === piece)
 
 test('conta de antes da construção: o que já existe fica nas casas de sempre', async () => {
@@ -81,10 +94,10 @@ test('conta de antes da construção: o que já existe fica nas casas de sempre'
 
   const { garden } = await state(p.cookie)
   const layout = garden.layout
-  // Nível 8: 3 canteiros abertos, nas casas da horta antiga.
+  // Desde o começo: 4 canteiros, nas casas da horta antiga.
   assert.deepEqual(
     layout.pieces.filter((row) => row.piece === 'berry_plot').map((row) => [row.slot, row.col, row.row]),
-    [0, 1, 2].map((slot) => [slot, DEFAULT_LAYOUT.plots[slot]!.col, DEFAULT_LAYOUT.plots[slot]!.row]),
+    [0, 1, 2, 3].map((slot) => [slot, DEFAULT_LAYOUT.plots[slot]!.col, DEFAULT_LAYOUT.plots[slot]!.row]),
   )
   for (const key of ['apricorn_tree', 'ball_bench', 'heal_machine'] as const) {
     const placed = pieceOf(layout, key)
@@ -92,7 +105,7 @@ test('conta de antes da construção: o que já existe fica nas casas de sempre'
     assert.deepEqual([placed.col, placed.row], [DEFAULT_LAYOUT.structures[key].col, DEFAULT_LAYOUT.structures[key].row])
   }
   assert.deepEqual(layout.stored, [])
-  assert.equal(layout.plotLimit, 3)
+  assert.equal(layout.plotLimit, 4)
   assert.equal(garden.trees.find((row) => row.key === 'apricorn_tree')!.ready, 2)
 
   // Recarregar não duplica.
@@ -168,19 +181,30 @@ test('árvore guardada para de crescer, não colhe e volta a contar ao colocar',
 })
 
 test('peça que ainda não abriu não se coloca', async () => {
-  const p = player('construcao-fechada', 1)
+  const p = player('construcao-fechada', 30)
   await state(p.cookie)
-  assert.equal(await errorOf(await post(p.cookie, '/build/place', { piece: 'ball_bench', col: 5, row: 5 })), 'piece_locked')
+  // A árvore azul vem do Marco de Goldenrod, não do nível.
+  assert.equal(await errorOf(await post(p.cookie, '/build/place', { piece: 'apricorn_tree_blue', col: 5, row: 5 })), 'piece_locked')
+  clear(p.userId, 'goldenrod')
+  assert.equal((await post(p.cookie, '/build/place', { piece: 'apricorn_tree_blue', col: 5, row: 5 })).status, 409, 'já foi para o jardim sozinha')
   assert.equal(await errorOf(await post(p.cookie, '/build/place', { piece: 'nada', col: 5, row: 5 })), 'invalid_body')
 })
 
-test('canteiros: limite pelo nível, guardar só vazio, plantar só no colocado', async () => {
+test('canteiros: limite pelo marco, guardar só vazio, plantar só no colocado', async () => {
   const p = player('construcao-canteiro', 1)
   const sqlite = getSqlite()
   sqlite.prepare("insert into inventory (user_id, item_key, quantity) values (?, 'seed:oran', 5) on conflict do update set quantity = 5").run(p.userId)
   const layout = (await state(p.cookie)).garden.layout
-  assert.equal(layout.plotLimit, 2)
-  assert.equal(layout.plotsPlaced, 2)
+  assert.equal(layout.plotLimit, 4)
+  assert.equal(layout.plotsPlaced, 4)
+  assert.deepEqual(layout.nextPlots, { milestone: 'azalea', name: 'Marco de Azalea', plots: 6 })
+  assert.deepEqual(
+    layout.locked.map((row) => [row.piece, row.unlockAt.milestone]),
+    [
+      ['apricorn_tree_blue', 'goldenrod'],
+      ['apricorn_tree_yellow', 'olivine'],
+    ],
+  )
   assert.equal(await errorOf(await post(p.cookie, '/build/place', { piece: 'berry_plot', col: 0, row: 0 })), 'plot_limit')
 
   const [first, second] = layout.pieces.filter((row) => row.piece === 'berry_plot')
@@ -195,7 +219,11 @@ test('canteiros: limite pelo nível, guardar só vazio, plantar só no colocado'
   const placed = await post(p.cookie, '/build/place', { piece: 'berry_plot', col: 7, row: 6 })
   assert.equal(placed.status, 200)
   const plots = (await state(p.cookie)).garden.layout.pieces.filter((row) => row.piece === 'berry_plot')
-  assert.deepEqual(plots.map((row) => row.slot).sort(), [first!.slot, second!.slot].sort(), 'reaproveita o slot livre')
+  assert.deepEqual(
+    plots.map((row) => row.slot).sort(),
+    layout.pieces.filter((row) => row.piece === 'berry_plot').map((row) => row.slot).sort(),
+    'reaproveita o slot livre',
+  )
 })
 
 test('bancada só se guarda parada; máquina guardada não cura', async () => {

@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { TREES, type TreeDef, treeDef } from '../config/apricorn.js'
+import { pieceUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
 import type { WeatherKey } from '../config/weather.js'
 import { harvestTree, settleTree, treeReadyTimes, treeUnitMs, type WeatherOf } from '../game/apricornTree.js'
 import { currentWeather, weatherDay, weatherForDay } from '../game/weather.js'
@@ -7,10 +8,11 @@ import { getDb } from './client.js'
 import { recordEvent } from './events.js'
 import { autoPlace, isPlaced } from './gardenLayout.js'
 import { creditItems } from './inventory.js'
+import { clearedMilestones, gardenUnlocksOf } from './milestones.js'
 import { gardenStructures, trainers } from './schema.js'
 
-// Árvores de Apricorn (PLANNING.md, seção 5.23): a vermelha abre pelo nível de
-// treinador; a azul e a amarela, pelo nível da bancada. Chamar dentro de immediate().
+// Árvores de Apricorn (PLANNING.md, seção 5.23): abrem pelos marcos (a vermelha
+// desde o começo; config/gardenUnlocks). Chamar dentro de immediate().
 
 export type TreeView = {
   key: TreeDef['key']
@@ -19,8 +21,8 @@ export type TreeView = {
   unlocked: boolean
   /** No jardim (false = guardada no inventário de construção, parada). */
   placed: boolean
-  /** O que abre a árvore, para o texto do cadeado. */
-  unlock: TreeDef['unlock']
+  /** O marco que abre a árvore, para o texto do cadeado (null = aberta). */
+  unlockAt: UnlockAt | null
   /** Pendurados agora. */
   ready: number
   cap: number
@@ -41,24 +43,9 @@ function weatherFor(userId: number, now: number): { today: WeatherKey; of: Weath
   return { today, of: (day) => (day === todayDay ? today : weatherForDay(row.seed, day)) }
 }
 
-/** Nível da bancada, contando uma melhoria que já terminou (e ainda não foi gravada). */
-function benchLevelOf(userId: number, now: number): number {
-  const row = getDb()
-    .select({ level: gardenStructures.level, upgradeTo: gardenStructures.upgradeTo, upgradeEndsAt: gardenStructures.upgradeEndsAt })
-    .from(gardenStructures)
-    .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'ball_bench')))
-    .get()
-  if (!row) return 0
-  return row.upgradeTo !== null && row.upgradeEndsAt !== null && row.upgradeEndsAt <= now ? row.upgradeTo : row.level
-}
-
-export function treeOpen(tree: TreeDef, trainerLevel: number, benchLevel: number): boolean {
-  return 'trainerLevel' in tree.unlock ? trainerLevel >= tree.unlock.trainerLevel : benchLevel >= tree.unlock.benchLevel
-}
-
-/** A árvore do jogador; nasce (com o primeiro Apricorn) quando abre. */
-function ensureTree(userId: number, tree: TreeDef, trainerLevel: number, now: number): TreeRow | null {
-  if (!treeOpen(tree, trainerLevel, benchLevelOf(userId, now))) return null
+/** A árvore do jogador; nasce (com o primeiro Apricorn) quando o marco abre. */
+function ensureTree(userId: number, tree: TreeDef, now: number): TreeRow | null {
+  if (!gardenUnlocksOf(userId).pieces.has(tree.key)) return null
   const db = getDb()
   const where = and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, tree.key))
   const found = db.select({ progress: gardenStructures.progress, since: gardenStructures.since }).from(gardenStructures).where(where).get()
@@ -69,10 +56,13 @@ function ensureTree(userId: number, tree: TreeDef, trainerLevel: number, now: nu
   return row
 }
 
-function viewOf(userId: number, tree: TreeDef, trainerLevel: number, now: number): TreeView {
-  const base = { key: tree.key, color: tree.color, itemKey: tree.itemKey, unlock: tree.unlock, cap: tree.cap }
-  const row = ensureTree(userId, tree, trainerLevel, now)
-  if (!row) return { ...base, unlocked: false, placed: false, ready: 0, readyAts: [], unitMs: tree.intervalMs, raining: false }
+function viewOf(userId: number, tree: TreeDef, now: number): TreeView {
+  const base = { key: tree.key, color: tree.color, itemKey: tree.itemKey, unlockAt: null, cap: tree.cap }
+  const row = ensureTree(userId, tree, now)
+  if (!row) {
+    const unlockAt = pieceUnlockAt(clearedMilestones(userId), tree.key)
+    return { ...base, unlockAt, unlocked: false, placed: false, ready: 0, readyAts: [], unitMs: tree.intervalMs, raining: false }
+  }
   // Guardada: não cresce (o `progress` foi liquidado ao guardar).
   if (!isPlaced(userId, tree.key)) {
     return { ...base, unlocked: true, placed: false, ready: Math.floor(row.progress), readyAts: [], unitMs: tree.intervalMs, raining: false }
@@ -91,20 +81,20 @@ function viewOf(userId: number, tree: TreeDef, trainerLevel: number, now: number
 }
 
 /** Todas as árvores, abertas ou não (as fechadas aparecem com cadeado). */
-export function treesView(userId: number, trainerLevel: number, now: number): TreeView[] {
-  return TREES.map((tree) => viewOf(userId, tree, trainerLevel, now))
+export function treesView(userId: number, now: number): TreeView[] {
+  return TREES.map((tree) => viewOf(userId, tree, now))
 }
 
 /** Só a vermelha (cenário de teste). */
-export function treeView(userId: number, trainerLevel: number, now: number): TreeView {
-  return viewOf(userId, TREES[0]!, trainerLevel, now)
+export function treeView(userId: number, now: number): TreeView {
+  return viewOf(userId, TREES[0]!, now)
 }
 
 /** Colhe tudo o que está pendurado. `null` = nada pronto, árvore fechada ou desconhecida. */
-export function harvestApricorns(userId: number, trainerLevel: number, now: number, key: string = TREES[0]!.key): number | null {
+export function harvestApricorns(userId: number, now: number, key: string = TREES[0]!.key): number | null {
   const tree = treeDef(key)
   if (!tree) return null
-  const row = ensureTree(userId, tree, trainerLevel, now)
+  const row = ensureTree(userId, tree, now)
   if (!row || !isPlaced(userId, tree.key)) return null
   const settled = settleTree(row.progress, row.since, now, weatherFor(userId, now).of, tree)
   const { harvested, progress } = harvestTree(settled)

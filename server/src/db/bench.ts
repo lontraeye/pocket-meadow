@@ -1,15 +1,18 @@
 import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { RECIPES, apricornConfig, benchLevel, benchUnitMs, recipeDef, recipeUnitMs } from '../config/apricorn.js'
+import { benchLevelAt, type UnlockAt } from '../config/gardenUnlocks.js'
 import { getDb } from './client.js'
 import { autoPlace, isPlaced } from './gardenLayout.js'
 import { recordEvent } from './events.js'
 import { creditItems, debitItem, itemQty } from './inventory.js'
+import { clearedMilestones, gardenUnlocksOf } from './milestones.js'
 import { craftJobs, gardenStructures, pokemon, species } from './schema.js'
 
 // Bancada de bolas (PLANNING.md, seção 5.23): um operador do jardim transforma
 // Apricorns em bolas, em lotes, pela receita escolhida. As bolas ficam prontas
 // uma a uma, por timestamp. A bancada sobe de nível (lote maior, mais rápida,
-// receitas novas); o upgrade leva tempo e ela fica parada enquanto isso.
+// receitas novas); o upgrade leva tempo e ela fica parada enquanto isso. Até
+// onde ela sobe vem dos marcos (config/gardenUnlocks).
 // Chamar dentro de immediate(), depois do catch-up.
 
 export type BenchJobView = {
@@ -39,7 +42,6 @@ export type BenchView = {
   unlocked: boolean
   /** No jardim (false = guardada no inventário de construção). */
   placed: boolean
-  unlockLevel: number
   level: number
   maxLevel: number
   batchSize: number
@@ -55,7 +57,8 @@ export type BenchView = {
     level: number
     batchSize: number
     speed: number
-    trainerLevel: number
+    /** O marco que falta para subir (null = já pode). */
+    unlockAt: UnlockAt | null
     ms: number
     cost: { itemKey: string; quantity: number; have: number }[]
     newRecipes: string[]
@@ -79,7 +82,7 @@ export type BenchError =
   | 'no_job'
   | 'nothing_ready'
   | 'max_level'
-  | 'trainer_level'
+  | 'milestone_needed'
   | 'missing_items'
   | 'operating'
   | 'not_placed'
@@ -97,9 +100,9 @@ type BenchRow = {
   since: number
 }
 
-/** A bancada do jogador; nasce quando o nível abre. Um upgrade vencido é concluído aqui. */
-function ensureBench(userId: number, trainerLevel: number, now: number): BenchRow | null {
-  if (trainerLevel < apricornConfig.unlockLevel) return null
+/** A bancada do jogador; nasce quando o marco abre (desde o começo). Um upgrade vencido é concluído aqui. */
+function ensureBench(userId: number, now: number): BenchRow | null {
+  if (!gardenUnlocksOf(userId).pieces.has('ball_bench')) return null
   const db = getDb()
   const found = db
     .select({
@@ -157,15 +160,14 @@ export function jobDone(job: Pick<BenchJobView, 'quantity' | 'unitMs' | 'started
   return Math.max(0, Math.min(job.quantity, Math.floor((now - job.startedAt) / job.unitMs)))
 }
 
-export function benchView(userId: number, trainerLevel: number, now: number): BenchView {
+export function benchView(userId: number, now: number): BenchView {
   const config = apricornConfig.bench
-  const bench = ensureBench(userId, trainerLevel, now)
+  const bench = ensureBench(userId, now)
   const level = bench?.level ?? 1
   const nextDef = config.levels[level]
   return {
     unlocked: bench !== null,
     placed: bench !== null && isPlaced(userId, 'ball_bench'),
-    unlockLevel: apricornConfig.unlockLevel,
     level,
     maxLevel: config.levels.length,
     batchSize: benchLevel(level).batchSize,
@@ -192,7 +194,7 @@ export function benchView(userId: number, trainerLevel: number, now: number): Be
             level: level + 1,
             batchSize: nextDef.batchSize,
             speed: nextDef.speed,
-            trainerLevel: nextDef.upgrade.trainerLevel,
+            unlockAt: benchLevelAt(clearedMilestones(userId), level + 1),
             ms: nextDef.upgrade.ms,
             cost: nextDef.upgrade.cost.map((item) => ({ ...item, have: itemQty(userId, item.itemKey) })),
             newRecipes: RECIPES.filter((recipe) => recipe.minBenchLevel === level + 1).map((recipe) => recipe.key),
@@ -219,8 +221,8 @@ export function operatorAmong(userId: number, ids: readonly number[]): number | 
 }
 
 /** Põe (ou tira, com `null`) o operador. Só com a bancada parada. */
-export function setOperator(userId: number, level: number, pokemonId: number | null, now: number): Result<{}> {
-  const bench = ensureBench(userId, level, now)
+export function setOperator(userId: number, pokemonId: number | null, now: number): Result<{}> {
+  const bench = ensureBench(userId, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
   if (pokemonId !== null && !isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
@@ -258,14 +260,8 @@ export function setOperator(userId: number, level: number, pokemonId: number | n
 }
 
 /** Começa um lote: os Apricorns saem agora; o tempo de cada um fica fixo. */
-export function startJob(
-  userId: number,
-  trainerLevel: number,
-  recipeKey: string,
-  quantity: number,
-  now: number,
-): Result<{ job: BenchJobView }> {
-  const bench = ensureBench(userId, trainerLevel, now)
+export function startJob(userId: number, recipeKey: string, quantity: number, now: number): Result<{ job: BenchJobView }> {
+  const bench = ensureBench(userId, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
   if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
@@ -339,18 +335,18 @@ export function cancelJob(userId: number, now: number): Result<{ balls: number; 
 }
 
 /**
- * Começa o upgrade para o próximo nível: confere o nível de treinador e os
- * itens, gasta tudo agora e a bancada fica parada até terminar.
+ * Começa o upgrade para o próximo nível: confere o marco e os itens, gasta
+ * tudo agora e a bancada fica parada até terminar.
  */
-export function startUpgrade(userId: number, trainerLevel: number, now: number): Result<{ endsAt: number; toLevel: number }> {
-  const bench = ensureBench(userId, trainerLevel, now)
+export function startUpgrade(userId: number, now: number): Result<{ endsAt: number; toLevel: number }> {
+  const bench = ensureBench(userId, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
   if (!isPlaced(userId, 'ball_bench')) return { ok: false, error: 'not_placed' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
   const next = apricornConfig.bench.levels[bench.level]
   if (!next?.upgrade) return { ok: false, error: 'max_level' }
-  if (trainerLevel < next.upgrade.trainerLevel) return { ok: false, error: 'trainer_level' }
+  if (gardenUnlocksOf(userId).benchMaxLevel < bench.level + 1) return { ok: false, error: 'milestone_needed' }
   if (next.upgrade.cost.some((item) => itemQty(userId, item.itemKey) < item.quantity)) {
     return { ok: false, error: 'missing_items' }
   }
@@ -370,8 +366,8 @@ export function startUpgrade(userId: number, trainerLevel: number, now: number):
  * Antes de guardar a bancada: só parada (sem lote nem melhoria). Ao guardar, o
  * operador volta para o passeio.
  */
-export function storeBench(userId: number, trainerLevel: number, now: number): { ok: true } | { ok: false; error: BenchError } {
-  const bench = ensureBench(userId, trainerLevel, now)
+export function storeBench(userId: number, now: number): { ok: true } | { ok: false; error: BenchError } {
+  const bench = ensureBench(userId, now)
   if (!bench) return { ok: false, error: 'bench_locked' }
   if (activeJob(userId)) return { ok: false, error: 'bench_busy' }
   if (bench.upgradeTo !== null) return { ok: false, error: 'bench_upgrading' }

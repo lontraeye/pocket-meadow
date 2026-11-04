@@ -4,8 +4,10 @@ import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
 import { ballList, ballsConfig } from '../config/balls.js'
 import { battleConfig } from '../config/battle.js'
-import { FIRST_GROWTH_MULT, berryConfig, berryList, energyBerryOff, nextPlotSlotLevel, plotSlotsUnlocked } from '../config/berries.js'
-import { CARETAKER_TIERS, daycareConfig, daycareSlotsUnlocked, nextDaycareSlotLevel } from '../config/daycare.js'
+import { FIRST_GROWTH_MULT, berryConfig, berryList, energyBerryOff } from '../config/berries.js'
+import { CARETAKER_TIERS, daycareConfig } from '../config/daycare.js'
+import { gardenUnlocks, nextDaycareSlotAt } from '../config/gardenUnlocks.js'
+import { clearedMilestones } from '../db/milestones.js'
 import { caretakerOf, daycareContext } from '../db/caretaker.js'
 import { applyDaycareHours } from '../game/daycare.js'
 import { progressConfig, xpToNext } from '../config/progress.js'
@@ -124,7 +126,8 @@ function readState(userId: number, now: number) {
     .from(daycareSlots)
     .where(eq(daycareSlots.userId, userId))
     .all()
-  const slotsUnlocked = daycareSlotsUnlocked(trainer.level)
+  const cleared = clearedMilestones(userId)
+  const slotsUnlocked = gardenUnlocks(cleared).daycareSlots
   // Cuidador e time (5.21): o bônus de alcance, o teto e a prévia de cada vaga.
   const context = daycareContext(userId)
   const speciesNames = new Map(
@@ -145,7 +148,8 @@ function readState(userId: number, now: number) {
   )
   const daycare = {
     slotsUnlocked,
-    nextSlotLevel: nextDaycareSlotLevel(trainer.level),
+    /** O marco que abre a próxima vaga (null = todas abertas). */
+    nextSlotAt: nextDaycareSlotAt(cleared),
     slots: daycareRows
       .map((row) => {
         const fullAt = row.enteredAt + daycareConfig.maxMs
@@ -241,14 +245,12 @@ function readState(userId: number, now: number) {
   for (const list of evolutionsBySpecies.values()) list.sort((a, b) => a.toSpeciesId - b.toSpeciesId)
 
   // As views criam as estruturas abertas; o layout vem depois delas.
-  const trees = treesView(userId, trainer.level, now)
-  const bench = benchView(userId, trainer.level, now)
+  const trees = treesView(userId, now)
+  const bench = benchView(userId, now)
   return {
     now,
     devTools: devToolsEnabled(),
     gardenMaxVisible: progressConfig.gardenMaxVisible,
-    plotSlotsUnlocked: plotSlotsUnlocked(trainer.level),
-    nextPlotSlotLevel: nextPlotSlotLevel(trainer.level),
     uprootSeedReturnChance: berryConfig.uprootSeedReturnChance,
     firstGrowthMult: FIRST_GROWTH_MULT,
     weather: loadWeather(userId, now),
@@ -405,7 +407,7 @@ function readState(userId: number, now: number) {
       bench,
       healMachine: healMachineView(userId, now),
       // Construção (PROGRESSAO.md 4.3): onde está cada peça e o que está guardado.
-      layout: layoutView(userId, trainer.level),
+      layout: layoutView(userId),
     },
     daycare,
     plots: db

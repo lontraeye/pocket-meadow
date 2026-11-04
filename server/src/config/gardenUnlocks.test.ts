@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { benchLevelAt, gardenUnlocks, nextDaycareSlotAt, nextPlotsAt, pieceUnlockAt } from './gardenUnlocks.js'
+
+test('começo: bancada, árvore vermelha e máquina de cura; 4 canteiros, 1 vaga, bancada nível 1', () => {
+  const start = gardenUnlocks(new Set())
+  assert.deepEqual([...start.pieces].sort(), ['apricorn_tree', 'ball_bench', 'heal_machine'])
+  assert.deepEqual([start.plotLimit, start.daycareSlots, start.benchMaxLevel], [4, 1, 1])
+})
+
+test('os marcos somam pela tabela do 4.3', () => {
+  const mid = gardenUnlocks(new Set(['violet', 'azalea', 'goldenrod', 'ecruteak', 'cianwood']))
+  assert.ok(mid.pieces.has('apricorn_tree_blue'))
+  assert.ok(!mid.pieces.has('apricorn_tree_yellow'))
+  assert.deepEqual([mid.plotLimit, mid.daycareSlots, mid.benchMaxLevel], [8, 3, 2])
+  const all = gardenUnlocks(new Set(['azalea', 'goldenrod', 'ecruteak', 'cianwood', 'olivine', 'mahogany', 'blackthorn']))
+  assert.deepEqual([all.plotLimit, all.daycareSlots, all.benchMaxLevel], [12, 4, 3])
+})
+
+test('o próximo marco de cada coisa, para o cadeado', () => {
+  const none = new Set<string>()
+  assert.equal(pieceUnlockAt(none, 'apricorn_tree_yellow')?.milestone, 'olivine')
+  assert.equal(pieceUnlockAt(none, 'ball_bench'), null)
+  assert.deepEqual(nextPlotsAt(none), { milestone: 'azalea', name: 'Marco de Azalea', plots: 6 })
+  assert.equal(nextDaycareSlotAt(new Set(['azalea']))?.milestone, 'cianwood')
+  assert.equal(benchLevelAt(none, 2)?.milestone, 'goldenrod')
+  assert.equal(benchLevelAt(new Set(['goldenrod']), 2), null)
+  assert.equal(nextPlotsAt(new Set(['blackthorn'])), null)
+})

@@ -18,23 +18,21 @@ export type TreeDef = {
   /** Cor do fruto, para a arte. */
   color: 'red' | 'blue' | 'yellow'
   itemKey: string
-  /** Abre pelo nível de treinador ou pelo nível da bancada. */
-  unlock: { trainerLevel: number } | { benchLevel: number }
   /** Um Apricorn a cada intervalo, até `cap` pendurados. */
   intervalMs: number
   cap: number
   /** Nos dias de chuva o intervalo é multiplicado por isto. */
   rainMult: number
-  /** Ao abrir, a árvore já vem com este tanto pendurado (o primeiro toque). */
+  /** Ao abrir (pelo marco, config/gardenUnlocks), já vem com este tanto pendurado. */
   startWith: number
 }
 
 const treeBase = { cap: 5, rainMult: 0.6, startWith: 1 }
 
 export const TREES: TreeDef[] = [
-  { key: 'apricorn_tree', color: 'red', itemKey: APRICORN_ITEM, unlock: { trainerLevel: 2 }, intervalMs: 3 * hourMs, ...treeBase },
-  { key: 'apricorn_tree_blue', color: 'blue', itemKey: APRICORN_BLUE, unlock: { benchLevel: 2 }, intervalMs: 4 * hourMs, ...treeBase },
-  { key: 'apricorn_tree_yellow', color: 'yellow', itemKey: APRICORN_YELLOW, unlock: { benchLevel: 3 }, intervalMs: 6 * hourMs, ...treeBase },
+  { key: 'apricorn_tree', color: 'red', itemKey: APRICORN_ITEM, intervalMs: 3 * hourMs, ...treeBase },
+  { key: 'apricorn_tree_blue', color: 'blue', itemKey: APRICORN_BLUE, intervalMs: 4 * hourMs, ...treeBase },
+  { key: 'apricorn_tree_yellow', color: 'yellow', itemKey: APRICORN_YELLOW, intervalMs: 6 * hourMs, ...treeBase },
 ]
 
 export function treeDef(key: string): TreeDef | null {
@@ -67,13 +65,11 @@ export type BenchLevelDef = {
   batchSize: number
   /** Fração do tempo de cada receita (1 = o tempo do nível 1). */
   speed: number
-  /** Como chegar neste nível (o 1 já vem). */
-  upgrade?: { trainerLevel: number; ms: number; cost: { itemKey: string; quantity: number }[] }
+  /** Como chegar neste nível (o 1 já vem); o marco que deixa vem de config/gardenUnlocks. */
+  upgrade?: { ms: number; cost: { itemKey: string; quantity: number }[] }
 }
 
 export const apricornConfig = {
-  /** A árvore vermelha e a bancada abrem neste nível de treinador. */
-  unlockLevel: 2,
   bench: {
     /** Tipos de quem pode operar ("quem tem mãos"). */
     operatorTypes: ['normal', 'fighting', 'steel'] as string[],
@@ -83,7 +79,6 @@ export const apricornConfig = {
         batchSize: 10,
         speed: 25 / 30,
         upgrade: {
-          trainerLevel: 6,
           ms: 2 * hourMs,
           cost: [
             { itemKey: APRICORN_ITEM, quantity: 15 },
@@ -95,7 +90,6 @@ export const apricornConfig = {
         batchSize: 15,
         speed: 20 / 30,
         upgrade: {
-          trainerLevel: 12,
           ms: 6 * hourMs,
           cost: [
             { itemKey: APRICORN_ITEM, quantity: 30 },

@@ -29,7 +29,6 @@ export function bushDeathChance(harvest: number): number {
 export const SEED_DROP_CHANCE = 0.1
 // Arrancar antes de ficar pronta (clique errado): chance de a semente voltar.
 export const UPROOT_SEED_RETURN_CHANCE = 0.5
-export const PLOT_SLOT_LEVELS = [1, 1, 8, 20] as const
 
 export const SEED_DROP_WEIGHTS = [
   { berryKey: 'oran', weight: 46 },
@@ -186,22 +185,8 @@ export const berryConfig = {
   seedDropChance: SEED_DROP_CHANCE,
   uprootSeedReturnChance: UPROOT_SEED_RETURN_CHANCE,
   seedDropWeights: SEED_DROP_WEIGHTS,
-  plotSlotLevels: PLOT_SLOT_LEVELS,
 } as const
 
-export function plotSlotsUnlocked(trainerLevel: number): number {
-  let unlocked = 0
-  for (const level of PLOT_SLOT_LEVELS) {
-    if (trainerLevel >= level) unlocked += 1
-  }
-  return unlocked
-}
-
-export function nextPlotSlotLevel(trainerLevel: number): number | null {
-  const unlocked = plotSlotsUnlocked(trainerLevel)
-  if (unlocked >= PLOT_SLOT_LEVELS.length) return null
-  return PLOT_SLOT_LEVELS[unlocked] ?? null
-}
 
 export function getBerry(key: string): BerryDef | null {
   return key in berries ? berries[key as BerryKey] : null

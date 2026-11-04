@@ -97,13 +97,13 @@ gardenRoutes.post('/tree/harvest', requireUser, async (c) => {
   const userId = c.get('userId')
   const now = Date.now()
   const result = immediate(() => {
-    const clock = persistCatchUp(userId, now)
-    const view = treesView(userId, clock.level, now).find((row) => row.key === tree.key)
+    persistCatchUp(userId, now)
+    const view = treesView(userId, now).find((row) => row.key === tree.key)
     if (!view?.unlocked) return fail('tree_locked', 400)
     if (!view.placed) return fail('not_placed', 400)
-    const harvested = harvestApricorns(userId, clock.level, now, tree.key)
+    const harvested = harvestApricorns(userId, now, tree.key)
     if (harvested === null) return fail('nothing_ready', 400)
-    return { ok: true as const, harvested, trees: treesView(userId, clock.level, now) }
+    return { ok: true as const, harvested, trees: treesView(userId, now) }
   })
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json({ itemKey: tree.itemKey, quantity: result.harvested, trees: result.trees })
@@ -117,7 +117,7 @@ gardenRoutes.post('/bench/operator', requireUser, async (c) => {
   if (pokemonId !== null && (typeof pokemonId !== 'number' || !Number.isInteger(pokemonId))) {
     return c.json({ error: 'invalid_body' }, 400)
   }
-  return benchAction(c.get('userId'), (userId, level, now) => setOperator(userId, level, pokemonId, now), c)
+  return benchAction(c.get('userId'), (userId, now) => setOperator(userId, pokemonId, now), c)
 })
 
 gardenRoutes.post('/bench/start', requireUser, async (c) => {
@@ -125,20 +125,20 @@ gardenRoutes.post('/bench/start', requireUser, async (c) => {
   const quantity = body?.quantity
   const recipeKey = body?.recipeKey === undefined ? 'poke_ball' : body.recipeKey
   if (typeof quantity !== 'number' || typeof recipeKey !== 'string') return c.json({ error: 'invalid_body' }, 400)
-  return benchAction(c.get('userId'), (userId, level, now) => startJob(userId, level, recipeKey, quantity, now), c)
+  return benchAction(c.get('userId'), (userId, now) => startJob(userId, recipeKey, quantity, now), c)
 })
 
 // Upgrade da bancada: gasta o custo agora e ela fica parada até terminar.
 gardenRoutes.post('/bench/upgrade', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, level, now) => startUpgrade(userId, level, now), c),
+  benchAction(c.get('userId'), (userId, now) => startUpgrade(userId, now), c),
 )
 
 gardenRoutes.post('/bench/collect', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, _level, now) => collectJob(userId, now), c),
+  benchAction(c.get('userId'), (userId, now) => collectJob(userId, now), c),
 )
 
 gardenRoutes.post('/bench/cancel', requireUser, (c) =>
-  benchAction(c.get('userId'), (userId, _level, now) => cancelJob(userId, now), c),
+  benchAction(c.get('userId'), (userId, now) => cancelJob(userId, now), c),
 )
 
 // Máquina de cura (PROGRESSAO.md, item 4): 1 carga cura a equipe toda.
@@ -157,15 +157,15 @@ gardenRoutes.post('/heal-machine/use', requireUser, (c) => {
 
 function benchAction(
   userId: number,
-  action: (userId: number, level: number, now: number) => { ok: true } | { ok: false; error: string },
+  action: (userId: number, now: number) => { ok: true } | { ok: false; error: string },
   c: Context<AuthEnv>,
 ) {
   const now = Date.now()
   const result = immediate(() => {
-    const clock = persistCatchUp(userId, now)
-    const out = action(userId, clock.level, now)
+    persistCatchUp(userId, now)
+    const out = action(userId, now)
     if (!out.ok) return out
-    return { ...out, bench: benchView(userId, clock.level, now) }
+    return { ...out, bench: benchView(userId, now) }
   })
   if (!result.ok) return c.json({ error: result.error }, 400)
   const { ok: _ok, ...body } = result

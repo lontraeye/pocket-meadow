@@ -63,7 +63,6 @@
   /** Fração de tempo que o operador tira (felicidade de agora; o servidor fixa ao começar). */
   const operatorCut = $derived(bench.speedBonus * Math.max(0, Math.min(100, operator?.pet.happiness ?? 0)) / 100)
   const unitMs = $derived(Math.round(recipe.unitMs * (1 - operatorCut)))
-  const trainerLevel = $derived(game.trainer.level)
 
   async function call(path: string, body: unknown, done: (result: Record<string, number | string>) => string) {
     pending = true
@@ -269,7 +268,7 @@
       <p class="hint">Pronta em {formatCountdown(bench.upgrade.endsAt - now)} (às {formatClockTime(bench.upgrade.endsAt)})</p>
     {:else if bench.next}
       {@const next = bench.next}
-      {@const enoughLevel = trainerLevel >= next.trainerLevel}
+      {@const enoughLevel = next.unlockAt === null}
       {@const enoughItems = next.cost.every((item) => item.have >= item.quantity)}
       <p class="hint">
         Nível {next.level}: lote de {next.batchSize}, {Math.round((1 - next.speed) * 100)}% mais rápida{next.newRecipes.length > 0
@@ -286,10 +285,12 @@
             <strong>{Math.min(item.have, item.quantity)}/{item.quantity}</strong>
           </li>
         {/each}
-        <li class:short={!enoughLevel}>
-          <span>Nível de treinador</span>
-          <strong>{trainerLevel}/{next.trainerLevel}</strong>
-        </li>
+        {#if next.unlockAt}
+          <li class="short">
+            <span>{next.unlockAt.name}</span>
+            <strong>falta</strong>
+          </li>
+        {/if}
       </ul>
       <p class="hint">Leva {formatCountdown(next.ms)}; a bancada fica parada enquanto isso.</p>
       <button

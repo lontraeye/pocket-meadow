@@ -1,5 +1,4 @@
 import { and, eq } from 'drizzle-orm'
-import { plotSlotsUnlocked } from '../config/berries.js'
 import {
   DEFAULT_LAYOUT,
   STRUCTURE_PIECES,
@@ -10,6 +9,7 @@ import {
   type StructurePiece,
 } from '../game/garden/layout.js'
 import { getDb } from './client.js'
+import { gardenUnlocksOf } from './milestones.js'
 import { berryPlots, gardenPlacements, gardenStructures, trainers } from './schema.js'
 
 // Peças colocadas no jardim (PROGRESSAO.md 4.3, passo 1). A estrutura guardada
@@ -91,7 +91,7 @@ export function insertPlacement(
  * jogador já tem, nas casas de antes: os canteiros abertos (e os plantados) e
  * as estruturas que já existem. O que abrir depois vai para o inventário.
  */
-export function ensureGardenLayout(userId: number, trainerLevel: number, now: number): void {
+export function ensureGardenLayout(userId: number, now: number): void {
   const db = getDb()
   const trainer = db
     .select({ layoutAt: trainers.gardenLayoutAt })
@@ -106,7 +106,7 @@ export function ensureGardenLayout(userId: number, trainerLevel: number, now: nu
     .where(eq(berryPlots.userId, userId))
     .all()
     .map((row) => row.slot)
-  const limit = Math.min(plotSlotsUnlocked(trainerLevel), DEFAULT_LAYOUT.plots.length)
+  const limit = Math.min(gardenUnlocksOf(userId).plotLimit, DEFAULT_LAYOUT.plots.length)
   const slots = new Set<number>(planted)
   for (let slot = 0; slot < limit; slot += 1) slots.add(slot)
   for (const slot of [...slots].sort((a, b) => a - b)) {

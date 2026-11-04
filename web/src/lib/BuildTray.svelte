@@ -46,11 +46,23 @@
   const plotsFree = $derived(Math.max(0, layout.plotLimit - layout.plotsPlaced))
   const name = (piece: PieceKey) => PIECES[piece].name
 
+  /** "Marco de Azalea" → "Azalea", para caber no cartão. */
+  const town = (name: string) => name.replace(/^Marco de /, '')
+
   /**
-   * Um cartão por peça que o jogador tem: guardada (toca para colocar), no
-   * jardim (toca para achar lá) ou, no canteiro, quantos ainda cabem.
+   * Um cartão por peça: guardada (toca para colocar), no jardim (toca para achar
+   * lá), ainda fechada (com o marco que abre) ou, no canteiro, quantos ainda cabem.
    */
-  type Card = { piece: PieceKey; badge: string | null; note: string; placedId: number | null; ready: boolean }
+  type Card = {
+    piece: PieceKey
+    badge: string | null
+    note: string
+    /** Segunda linha: o que o próximo marco traz. */
+    more: string | null
+    placedId: number | null
+    ready: boolean
+    locked: boolean
+  }
 
   const cards = $derived.by((): Card[] => {
     const out: Card[] = [
@@ -58,17 +70,27 @@
         piece: 'berry_plot',
         badge: plotsFree > 0 ? String(plotsFree) : null,
         note: `${layout.plotsPlaced}/${layout.plotLimit}`,
+        more: layout.nextPlots ? `+${layout.nextPlots.plots - layout.plotLimit} em ${town(layout.nextPlots.name)}` : null,
         placedId: null,
         ready: plotsFree > 0,
+        locked: false,
       },
     ]
+    const base = { more: null, locked: false }
     for (const piece of STRUCTURE_PIECES) {
       if (layout.stored.includes(piece)) {
-        out.push({ piece, badge: '1', note: 'guardada', placedId: null, ready: true })
+        out.push({ ...base, piece, badge: '1', note: 'guardada', placedId: null, ready: true })
         continue
       }
       const placed = layout.pieces.find((row) => row.piece === piece)
-      if (placed) out.push({ piece, badge: null, note: 'no jardim', placedId: placed.id, ready: false })
+      if (placed) {
+        out.push({ ...base, piece, badge: null, note: 'no jardim', placedId: placed.id, ready: false })
+        continue
+      }
+      const closed = layout.locked.find((row) => row.piece === piece)
+      if (closed) {
+        out.push({ ...base, piece, badge: null, note: town(closed.unlockAt.name), placedId: null, ready: false, locked: true })
+      }
     }
     return out
   })
@@ -209,16 +231,27 @@
             type="button"
             class="card"
             class:placed={!card.ready}
+            class:locked={card.locked}
             disabled={pending || (!card.ready && card.placedId === null)}
-            aria-label={`${name(card.piece)}: ${card.note}`}
+            aria-label={card.locked
+              ? `${name(card.piece)}: abre no Marco de ${card.note}`
+              : `${name(card.piece)}: ${card.note}${card.more ? `, ${card.more}` : ''}`}
             onclick={() => onCard(card)}
           >
             <span class="thumb">
               {@render icon(card.piece, 2)}
               {#if card.badge}<span class="badge">{card.badge}</span>{/if}
+              {#if card.locked}
+                <!-- Cadeado em pixels (grade 12×12). -->
+                <svg class="lock" viewBox="0 0 12 12" width="20" height="20" shape-rendering="crispEdges" aria-hidden="true">
+                  <rect x="3" y="1" width="6" height="2" /><rect x="2" y="2" width="2" height="4" /><rect x="8" y="2" width="2" height="4" />
+                  <rect x="1" y="5" width="10" height="7" /><rect x="5" y="7" width="2" height="3" fill="var(--panel-face)" />
+                </svg>
+              {/if}
             </span>
             <span class="card-name">{name(card.piece)}</span>
             <small>{card.note}</small>
+            {#if card.more}<small class="more">{card.more}</small>{/if}
           </button>
         {/each}
       </div>
@@ -369,6 +402,28 @@
   }
 
   .card.placed small {
+    color: var(--ink-soft);
+  }
+
+  /* Fechada: só a silhueta escura, com o cadeado em cima. */
+  .card.locked .icon {
+    filter: brightness(0) opacity(0.35);
+  }
+
+  .card.locked:disabled {
+    opacity: 1;
+  }
+
+  .lock {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    fill: var(--ink);
+  }
+
+  .card small.more {
+    font-size: 0.62rem;
     color: var(--ink-soft);
   }
 

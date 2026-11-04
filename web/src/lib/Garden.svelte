@@ -900,9 +900,7 @@
   let harvestingTree = $state(false)
 
   function unlockText(tree: TreeView): string {
-    return 'trainerLevel' in tree.unlock
-      ? `abre no nível ${tree.unlock.trainerLevel} de treinador`
-      : `abre com a bancada no nível ${tree.unlock.benchLevel}`
+    return tree.unlockAt ? `abre no ${tree.unlockAt.name}` : 'ainda não abriu'
   }
 
   async function onTree(tree: TreeView) {
@@ -1017,7 +1015,7 @@
   function onBench() {
     const bench = game.garden.bench
     if (!bench.unlocked) {
-      showGiftToast(`A bancada de bolas abre no nível ${bench.unlockLevel} de treinador.`)
+      showGiftToast('A bancada de bolas ainda não abriu.')
       return
     }
     play('tap')
@@ -2019,7 +2017,7 @@
           style:top="{snapToDevice(spot.y + tileH)}px"
           style:z-index={benchCell.col + benchCell.row + depthSpan + 1}
           aria-label={!bench.unlocked
-            ? `Bancada de bolas, abre no nível ${bench.unlockLevel}`
+            ? 'Bancada de bolas, ainda fechada'
             : benchReady > 0
               ? `Bancada de bolas: ${benchReady} prontas`
               : 'Bancada de bolas'}

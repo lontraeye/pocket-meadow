@@ -1,12 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { plotSlotsUnlocked } from '../config/berries.js'
 import { freezeTree, treesView } from '../db/apricorn.js'
 import { benchView, storeBench } from '../db/bench.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { insertPlacement, loadPieces, ownedStructures, type PlacedRow } from '../db/gardenLayout.js'
+import { clearedMilestones, gardenUnlocksOf } from '../db/milestones.js'
+import { nextPlotsAt, pieceUnlockAt, type UnlockAt } from '../config/gardenUnlocks.js'
 import { freezeHealMachine } from '../db/healMachine.js'
 import { berryPlots, gardenPlacements, gardenStructures } from '../db/schema.js'
 import {
@@ -34,20 +35,31 @@ export type LayoutView = {
   /** Canteiros: quantos podem estar no jardim e quantos estão. */
   plotLimit: number
   plotsPlaced: number
+  /** O próximo marco que sobe o limite de canteiros (null = já no máximo). */
+  nextPlots: (UnlockAt & { plots: number }) | null
+  /** Peças que ainda não abriram e o marco que abre cada uma (o catálogo mostra com cadeado). */
+  locked: { piece: StructurePiece; unlockAt: UnlockAt }[]
 }
 
 /** Chamar dentro de immediate(), depois do catch-up e das views (que criam as estruturas abertas). */
-export function layoutView(userId: number, trainerLevel: number): LayoutView {
+export function layoutView(userId: number): LayoutView {
   const pieces = loadPieces(userId)
   const placed = new Set(pieces.map((row) => row.piece))
   const owned = ownedStructures(userId)
+  const cleared = clearedMilestones(userId)
   return {
     cols: GARDEN_COLS,
     rows: GARDEN_ROWS,
     pieces,
     stored: STRUCTURE_PIECES.filter((piece) => owned.has(piece) && !placed.has(piece)),
-    plotLimit: plotSlotsUnlocked(trainerLevel),
+    plotLimit: gardenUnlocksOf(userId).plotLimit,
     plotsPlaced: pieces.filter((row) => row.piece === 'berry_plot').length,
+    nextPlots: nextPlotsAt(cleared),
+    locked: STRUCTURE_PIECES.flatMap((piece) => {
+      if (owned.has(piece)) return []
+      const unlockAt = pieceUnlockAt(cleared, piece)
+      return unlockAt ? [{ piece, unlockAt }] : []
+    }),
   }
 }
 
@@ -87,15 +99,15 @@ export function placePiece(
 ): Ok | Failure {
   // Girar só vale para quem pode (bancada, máquina); nas outras é ignorado.
   const turn = flipped && isFlippable(piece)
-  const clock = persistCatchUp(userId, now)
-  // As views criam as estruturas que o nível já abriu.
-  treesView(userId, clock.level, now)
-  benchView(userId, clock.level, now)
+  persistCatchUp(userId, now)
+  // As views criam as estruturas que os marcos já abriram.
+  treesView(userId, now)
+  benchView(userId, now)
   const pieces = loadPieces(userId)
   let slot = 0
   if (piece === 'berry_plot') {
     const placedPlots = pieces.filter((row) => row.piece === 'berry_plot')
-    if (placedPlots.length >= plotSlotsUnlocked(clock.level)) return fail('plot_limit', 400)
+    if (placedPlots.length >= gardenUnlocksOf(userId).plotLimit) return fail('plot_limit', 400)
     const used = new Set(placedPlots.map((row) => row.slot))
     while (used.has(slot)) slot += 1
   } else {
@@ -106,7 +118,7 @@ export function placePiece(
   if (blocked) return fail(blocked, 400)
   insertPlacement(userId, piece, slot, col, row, now, turn)
   if (piece !== 'berry_plot') resume(userId, piece, now)
-  return { ok: true, layout: layoutView(userId, clock.level) }
+  return { ok: true, layout: layoutView(userId) }
 }
 
 export function movePiece(
@@ -117,7 +129,7 @@ export function movePiece(
   now: number,
   flipped?: boolean,
 ): Ok | Failure {
-  const clock = persistCatchUp(userId, now)
+  persistCatchUp(userId, now)
   const pieces = loadPieces(userId)
   const found = pieces.find((row) => row.id === id)
   if (!found) return fail('piece_not_found', 404)
@@ -130,11 +142,11 @@ export function movePiece(
     .set({ col, row, flipped: turn })
     .where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId)))
     .run()
-  return { ok: true, layout: layoutView(userId, clock.level) }
+  return { ok: true, layout: layoutView(userId) }
 }
 
 export function storePiece(userId: number, id: number, now: number): Ok | Failure {
-  const clock = persistCatchUp(userId, now)
+  persistCatchUp(userId, now)
   const found = loadPieces(userId).find((row) => row.id === id)
   if (!found) return fail('piece_not_found', 404)
   const db = getDb()
@@ -149,7 +161,7 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
       break
     }
     case 'ball_bench': {
-      const out = storeBench(userId, clock.level, now)
+      const out = storeBench(userId, now)
       if (!out.ok) return fail(out.error, 400)
       break
     }
@@ -160,7 +172,7 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
       freezeTree(userId, found.piece, now)
   }
   db.delete(gardenPlacements).where(and(eq(gardenPlacements.id, id), eq(gardenPlacements.userId, userId))).run()
-  return { ok: true, layout: layoutView(userId, clock.level) }
+  return { ok: true, layout: layoutView(userId) }
 }
 
 export const buildRoutes = new Hono<AuthEnv>()

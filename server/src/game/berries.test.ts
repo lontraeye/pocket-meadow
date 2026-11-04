@@ -6,8 +6,6 @@ import {
   UPROOT_SEED_RETURN_CHANCE,
   berries,
   getBerry,
-  plotSlotsUnlocked,
-  nextPlotSlotLevel,
   trainerLevelRewards,
 } from '../config/berries.js'
 import { mulberry32 } from './rng.js'
@@ -115,14 +113,5 @@ describe('recompensas e sementes', () => {
     }
     const key = pickSeedByWeight(mulberry32(42))
     assert.ok(getBerry(key))
-  })
-
-  test('canteiros: 2 no nível 1, o 3º no 8 e o 4º no 20', () => {
-    assert.equal(plotSlotsUnlocked(1), 2)
-    assert.equal(nextPlotSlotLevel(1), 8)
-    assert.equal(plotSlotsUnlocked(8), 3)
-    assert.equal(nextPlotSlotLevel(8), 20)
-    assert.equal(plotSlotsUnlocked(20), 4)
-    assert.equal(nextPlotSlotLevel(20), null)
   })
 })

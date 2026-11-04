@@ -344,8 +344,8 @@ export type TreeView = {
   unlocked: boolean
   /** No jardim (false = guardada no inventário de construção, parada). */
   placed: boolean
-  /** O que abre a árvore: nível de treinador ou nível da bancada. */
-  unlock: { trainerLevel: number } | { benchLevel: number }
+  /** O marco que abre a árvore (null = aberta). */
+  unlockAt: UnlockAt | null
   ready: number
   cap: number
   readyAts: number[]
@@ -380,7 +380,6 @@ export type BenchView = {
   unlocked: boolean
   /** No jardim (false = guardada no inventário de construção). */
   placed: boolean
-  unlockLevel: number
   level: number
   maxLevel: number
   batchSize: number
@@ -395,7 +394,8 @@ export type BenchView = {
     level: number
     batchSize: number
     speed: number
-    trainerLevel: number
+    /** O marco que falta para subir (null = já pode). */
+    unlockAt: UnlockAt | null
     ms: number
     cost: { itemKey: string; quantity: number; have: number }[]
     newRecipes: string[]
@@ -421,7 +421,14 @@ export type GardenLayout = {
   stored: StructurePiece[]
   plotLimit: number
   plotsPlaced: number
+  /** O próximo marco que sobe o limite de canteiros (null = já no máximo). */
+  nextPlots: (UnlockAt & { plots: number }) | null
+  /** Peças que ainda não abriram e o marco que abre cada uma. */
+  locked: { piece: StructurePiece; unlockAt: UnlockAt }[]
 }
+
+/** O marco (líder vencido) que abre algo no jardim. */
+export type UnlockAt = { milestone: string; name: string }
 
 /** Presente que um pet deixou no chão; `generic_candy` = doce genérico. */
 export type GardenGift = {
@@ -473,7 +480,8 @@ export type DaycareContext = { teamAverage: number | null; caretakerMult: number
 
 export type DaycareState = {
   slotsUnlocked: number
-  nextSlotLevel: number | null
+  /** O marco que abre a próxima vaga (null = todas abertas). */
+  nextSlotAt: UnlockAt | null
   slots: DaycareSlot[]
   /** Cuidador (5.21): acelera o daycare conforme a espécie. */
   caretaker: { pokemonId: number; speciesId: number; tier: string; tierName: string; mult: number } | null
@@ -530,8 +538,6 @@ export type GameState = {
   now: number
   devTools: boolean
   gardenMaxVisible: number
-  plotSlotsUnlocked: number
-  nextPlotSlotLevel: number | null
   /** Clima de hoje (5.11): muda à meia-noite de Brasília (`until`). */
   weather: { key: WeatherKey; name: string; until: number }
   /** Plantar no clima favorito: tempo de crescimento × isto. */
@@ -802,7 +808,7 @@ export function errorText(error: ApiError): string {
     case 'last_in_garden':
       return 'Deixe pelo menos um Pokémon no jardim.'
     case 'slot_locked':
-      return 'Esse slot ainda está bloqueado.'
+      return 'Essa vaga abre com um marco da jornada.'
     case 'slot_taken':
       return 'Esse slot já está ocupado.'
     case 'last_pokemon':
@@ -853,8 +859,8 @@ export function errorText(error: ApiError): string {
       return 'Essa bola pede a bancada num nível maior.'
     case 'max_level':
       return 'A bancada já está no nível máximo.'
-    case 'trainer_level':
-      return 'Seu nível de treinador ainda não basta para essa melhoria.'
+    case 'milestone_needed':
+      return 'Essa melhoria abre com um marco da jornada.'
     case 'missing_items':
       return 'Faltam itens para a melhoria.'
     case 'bench_busy':

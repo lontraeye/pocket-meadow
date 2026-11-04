@@ -59,20 +59,23 @@
   }
 
   type Card =
-    | { kind: 'locked'; slotIndex: number; opensAt: number }
+    | { kind: 'locked'; slotIndex: number; opensAt: string }
     | { kind: 'empty'; slotIndex: number }
     | { kind: 'filled'; slotIndex: number; slot: DaycareSlot; mon: OwnedPokemon }
 
   const cards = $derived.by(() => {
     const list: Card[] = []
-    for (let i = 0; i < game.daycare.slotsUnlocked; i += 1) {
+    // Uma vaga que fechou (abria pelo nível antes dos marcos) com alguém dentro
+    // continua aparecendo, para dar para tirar; vazia, some.
+    const shown = Math.max(game.daycare.slotsUnlocked, ...game.daycare.slots.map((slot) => slot.slotIndex + 1))
+    for (let i = 0; i < shown; i += 1) {
       const slot = occupied.get(i)
       const mon = slot ? byId.get(slot.pokemonId) : undefined
       if (slot && mon) list.push({ kind: 'filled', slotIndex: i, slot, mon })
-      else list.push({ kind: 'empty', slotIndex: i })
+      else if (i < game.daycare.slotsUnlocked) list.push({ kind: 'empty', slotIndex: i })
     }
-    if (game.daycare.nextSlotLevel !== null) {
-      list.push({ kind: 'locked', slotIndex: game.daycare.slotsUnlocked, opensAt: game.daycare.nextSlotLevel })
+    if (game.daycare.nextSlotAt !== null) {
+      list.push({ kind: 'locked', slotIndex: shown, opensAt: game.daycare.nextSlotAt.name })
     }
     return list
   })
@@ -230,7 +233,7 @@
           {#if card.kind === 'locked'}
             <section class="panel card locked">
               <h2>Slot {card.slotIndex + 1}</h2>
-              <p class="hint">Abre no nível {card.opensAt}</p>
+              <p class="hint">Abre no {card.opensAt}</p>
             </section>
           {:else if card.kind === 'empty'}
             <section class="panel card">

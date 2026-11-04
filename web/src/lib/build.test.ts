@@ -13,6 +13,8 @@ const layout: GardenLayout = {
   stored: ['apricorn_tree'],
   plotLimit: 2,
   plotsPlaced: 1,
+  nextPlots: null,
+  locked: [],
 }
 
 test('a casa do operador também é da bancada', () => {

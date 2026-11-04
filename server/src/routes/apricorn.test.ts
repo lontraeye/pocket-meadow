@@ -46,14 +46,28 @@ function player(username: string, level: number): { cookie: string; userId: numb
   return { cookie: `${authConfig.cookieName}=${token}`, userId }
 }
 
+/** Marca marcos como conquistados (o jardim abre por eles). */
+const clear = (userId: number, ...keys: string[]) => {
+  for (const key of keys) {
+    getSqlite().prepare('insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, ?)').run(userId, key, Date.now())
+  }
+}
+
 const harvest = (cookie: string) =>
   app.request('/garden/tree/harvest', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}' }, env)
-const tree = async (cookie: string) => {
-  const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as {
-    garden: { trees: { key: string; unlocked: boolean; ready: number; cap: number; readyAts: number[] }[] }
-  }
-  return state.garden.trees[0]!
+type TreeState = {
+  key: string
+  unlocked: boolean
+  ready: number
+  cap: number
+  readyAts: number[]
+  unlockAt: { milestone: string; name: string } | null
 }
+const trees = async (cookie: string) => {
+  const state = (await (await app.request('/state', { headers: { cookie } }, env)).json()) as { garden: { trees: TreeState[] } }
+  return state.garden.trees
+}
+const tree = async (cookie: string) => (await trees(cookie))[0]!
 const apricorns = (userId: number) =>
   (getSqlite().prepare('select quantity from inventory where user_id = ? and item_key = ?').get(userId, APRICORN_ITEM) as
     | { quantity: number }
@@ -61,16 +75,27 @@ const apricorns = (userId: number) =>
 const rewind = (userId: number, ms: number) =>
   getSqlite().prepare("update garden_structures set since = since - ? where user_id = ? and key = 'apricorn_tree'").run(ms, userId)
 
-test('fechada abaixo do nível', async () => {
+test('a vermelha vem desde o começo; a azul abre no Marco de Goldenrod, a amarela no de Olivine', async () => {
   const p = player('arvore-fechada', 1)
-  assert.equal((await tree(p.cookie)).unlocked, false)
-  const response = await harvest(p.cookie)
-  assert.equal(response.status, 400)
+  const all = await trees(p.cookie)
+  assert.equal(all.find((row) => row.key === 'apricorn_tree')?.unlocked, true)
+  const blue = all.find((row) => row.key === 'apricorn_tree_blue')!
+  assert.deepEqual([blue.unlocked, blue.unlockAt?.milestone], [false, 'goldenrod'])
+  assert.equal(all.find((row) => row.key === 'apricorn_tree_yellow')?.unlockAt?.milestone, 'olivine')
+  const response = await app.request(
+    '/garden/tree/harvest',
+    { method: 'POST', headers: { cookie: p.cookie, 'content-type': 'application/json' }, body: JSON.stringify({ key: 'apricorn_tree_blue' }) },
+    env,
+  )
   assert.equal(((await response.json()) as { error: string }).error, 'tree_locked')
+
+  clear(p.userId, 'goldenrod')
+  const opened = (await trees(p.cookie)).find((row) => row.key === 'apricorn_tree_blue')!
+  assert.deepEqual([opened.unlocked, opened.unlockAt, opened.ready], [true, null, 1])
 })
 
 test('abre com 1 pendurado; colher leva para a mochila e zera', async () => {
-  const p = player('arvore-abre', 2)
+  const p = player('arvore-abre', 1)
   const first = await tree(p.cookie)
   assert.equal(first.unlocked, true)
   assert.equal(first.ready, 1)
@@ -186,8 +211,9 @@ test('Headbutt pode soltar Apricorn', async () => {
   assert.ok(row && row.weight > 0)
 })
 
-test('upgrade da bancada: pede nível e itens, leva tempo, libera Great Ball e a árvore azul', async () => {
-  const p = player('bancada-upgrade', 6)
+test('upgrade da bancada: pede o marco e itens, leva tempo, libera Great Ball', async () => {
+  const p = player('bancada-upgrade', 1)
+  clear(p.userId, 'goldenrod')
   const sentret = addMon(p.userId, 161)
   await bench(p.cookie, 'operator', { pokemonId: sentret })
   assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'missing_items')
@@ -205,12 +231,12 @@ test('upgrade da bancada: pede nível e itens, leva tempo, libera Great Ball e a
   giveApricorns(p.userId, 1)
   assert.equal(await errorOf(await bench(p.cookie, 'start', { quantity: 1 })), 'bench_upgrading')
 
-  // Termina: nível 2, lote de 10, Great Ball liberada e a árvore azul nasce.
+  // Termina: nível 2, lote de 10, Great Ball liberada (a árvore azul veio com o marco).
   getSqlite().prepare("update garden_structures set upgrade_ends_at = ? where user_id = ? and key = 'ball_bench'").run(Date.now() - 1, p.userId)
   const { benchView } = await import('../db/bench.js')
   const { treesView } = await import('../db/apricorn.js')
   const state = immediate(() => ({
-    garden: { bench: benchView(p.userId, 6, Date.now()), trees: treesView(p.userId, 6, Date.now()) },
+    garden: { bench: benchView(p.userId, Date.now()), trees: treesView(p.userId, Date.now()) },
   }))
   assert.equal(state.garden.bench.level, 2)
   assert.equal(state.garden.bench.batchSize, 10)
@@ -232,9 +258,13 @@ test('upgrade da bancada: pede nível e itens, leva tempo, libera Great Ball e a
   assert.deepEqual([collected.balls, collected.itemKey], [1, 'ball:great'])
 })
 
-test('upgrade pede o nível de treinador', async () => {
-  const p = player('bancada-nivel', 3)
+test('upgrade pede o marco, não o nível de treinador', async () => {
+  const p = player('bancada-nivel', 30)
   giveApricorns(p.userId, 15)
   getSqlite().prepare("insert into inventory (user_id, item_key, quantity) values (?, 'berry:oran', 5)").run(p.userId)
-  assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'trainer_level')
+  assert.equal(await errorOf(await bench(p.cookie, 'upgrade')), 'milestone_needed')
+  const state = (await (await app.request('/state', { headers: { cookie: p.cookie } }, env)).json()) as {
+    garden: { bench: { next: { unlockAt: { milestone: string } | null } | null } }
+  }
+  assert.equal(state.garden.bench.next?.unlockAt?.milestone, 'goldenrod')
 })

@@ -1,12 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { daycareConfig, daycareSlotsUnlocked } from '../config/daycare.js'
+import { daycareConfig } from '../config/daycare.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { daycareSlots, pokemon } from '../db/schema.js'
 import { operatorAmong } from '../db/bench.js'
 import { caretakerOf, setCaretaker } from '../db/caretaker.js'
+import { gardenUnlocksOf } from '../db/milestones.js'
 import { leaveTeam } from '../db/team.js'
 import { levelsGainedFromStay } from '../game/daycare.js'
 import { type Failure, fail, parseSlot, readObject } from './http.js'
@@ -80,8 +81,8 @@ function place(
   pokemonId: number,
   now: number,
 ): Ok<{ placed: { slotIndex: number; pokemonId: number; enteredAt: number; fullAt: number } }> | Failure {
-  const clock = persistCatchUp(userId, now)
-  const unlocked = daycareSlotsUnlocked(clock.level)
+  persistCatchUp(userId, now)
+  const unlocked = gardenUnlocksOf(userId).daycareSlots
   if (slotIndex < 0 || slotIndex >= unlocked) return fail('slot_locked', 400)
 
   const db = getDb()

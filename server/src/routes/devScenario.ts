@@ -99,10 +99,9 @@ export function applyReadyScenario(userId: number, now: number): void {
     .values([0, 1].map((plotIndex) => ({ userId, plotIndex, berryKey: 'oran', plantedAt: now - 3_600_000, readyAt: now - 60_000 })))
     .run()
 
-  // Árvore de Apricorn cheia (5.23); sobe o treinador até o nível que abre a árvore.
-  const level = Math.max(trainer.level, apricornConfig.unlockLevel)
-  if (level !== trainer.level) db.update(trainers).set({ level, xp: 0 }).where(eq(trainers.userId, userId)).run()
-  treeView(userId, level, now)
+  // Árvore de Apricorn cheia (5.23): aberta desde o começo.
+  const level = trainer.level
+  treeView(userId, now)
   db.update(gardenStructures)
     .set({ progress: TREES[0]!.cap, since: now })
     .where(and(eq(gardenStructures.userId, userId), eq(gardenStructures.key, 'apricorn_tree')))
@@ -110,9 +109,9 @@ export function applyReadyScenario(userId: number, now: number): void {
 
   // Bancada (5.23): o Sentret opera um lote de 5 com 2 bolas já prontas.
   const operatorId = ids[0]!
-  if (setOperator(userId, level, operatorId, now).ok) {
+  if (setOperator(userId, operatorId, now).ok) {
     creditItems(userId, [{ itemKey: APRICORN_ITEM, quantity: 5 }])
-    const started = startJob(userId, level, 'poke_ball', 5, now)
+    const started = startJob(userId, 'poke_ball', 5, now)
     if (started.ok) {
       db.update(craftJobs)
         .set({ startedAt: now - Math.round(started.job.unitMs * 2.5) })

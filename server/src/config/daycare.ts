@@ -4,7 +4,6 @@
 // Pokémon cuidador. Ninguém passa do nível mais alto do time.
 import { xpToNext } from './progress.js'
 
-export const DAYCARE_SLOT_LEVELS = [1, 5, 15, 30] as const
 export const DAYCARE_MAX_HOURS = 24
 
 export const daycareConfig = {
@@ -13,25 +12,9 @@ export const daycareConfig = {
   /** Bônus de alcance: +15% por nível abaixo da média do time, até ×4. */
   catchUpPerLevel: 0.15,
   catchUpMax: 4,
-  slotLevels: DAYCARE_SLOT_LEVELS,
   maxHours: DAYCARE_MAX_HOURS,
   maxMs: DAYCARE_MAX_HOURS * 60 * 60 * 1000,
 } as const
-
-export function daycareSlotsUnlocked(trainerLevel: number): number {
-  let unlocked = 0
-  for (const level of DAYCARE_SLOT_LEVELS) {
-    if (trainerLevel >= level) unlocked += 1
-  }
-  return unlocked
-}
-
-export function nextDaycareSlotLevel(trainerLevel: number): number | null {
-  for (const level of DAYCARE_SLOT_LEVELS) {
-    if (trainerLevel < level) return level
-  }
-  return null
-}
 
 /** XP de uma hora de daycare no nível, com um multiplicador (berry, alcance, cuidador). */
 export function daycareXpPerHour(level: number, boost = 1): number {

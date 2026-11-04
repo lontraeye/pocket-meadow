@@ -126,8 +126,8 @@
     inDaycare
       ? ''
       : freeSlot === null
-        ? game.daycare.nextSlotLevel
-          ? `Abre no nível ${game.daycare.nextSlotLevel}`
+        ? game.daycare.nextSlotAt
+          ? `Mais vagas no ${game.daycare.nextSlotAt.name}`
           : 'Sem slot livre'
         : inPc
           ? 'Está no PC'

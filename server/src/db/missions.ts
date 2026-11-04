@@ -1,8 +1,8 @@
 import { and, eq, lt, sql } from 'drizzle-orm'
+import { gardenUnlocks } from '../config/gardenUnlocks.js'
 import { currentChapter } from '../config/milestones.js'
 import { type MissionKind, type MissionReward, missionConfig } from '../config/missions.js'
 import { loadRegions, regionOpen } from '../config/regions.js'
-import { apricornConfig } from '../config/apricorn.js'
 import { trainerXpToNext } from '../config/trainer.js'
 import { pickSeedByWeight } from '../game/berries.js'
 import { type MissionContext, type MissionParams, drawDay, drawMission, missionText } from '../game/missions.js'
@@ -52,7 +52,7 @@ export function missionContext(userId: number, level: number): MissionContext {
     areaTypes: [...types].sort(),
     teamTypes: [...progress.teamTypes].sort(),
     hasNewSpecies: [...speciesIds].some((id) => !caught.has(id)),
-    gardenOpen: level >= apricornConfig.unlockLevel,
+    gardenOpen: gardenUnlocks(progress.cleared).pieces.has('ball_bench'),
   }
 }
 

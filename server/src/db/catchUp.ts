@@ -137,7 +137,7 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   // Máquina de cura: linha criada no catch-up para contas antigas (PROGRESSAO.md, item 4).
   ensureHealMachine(userId, now)
   // Construção (PROGRESSAO.md 4.3): o que já existe vira peça colocada, uma vez.
-  ensureGardenLayout(userId, trainer.level, now)
+  ensureGardenLayout(userId, now)
 
   return {
     level: trainer.level,
