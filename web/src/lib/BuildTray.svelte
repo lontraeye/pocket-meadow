@@ -184,6 +184,8 @@
    * Escolher um pincel (chão, borracha ou a Área do habitat) recolhe a
    * bandeja sozinho, para pintar vendo o jardim; a seta abre de novo.
    */
+  // No menu do habitat, tocar no pincel já escolhido não desliga (desligar
+  // virava "marcar área" sem querer); a Área tem botão próprio.
   function choose(tool: PaintTool | null) {
     onPaint(tool)
     if (tool !== null || area) collapsed = true
@@ -271,7 +273,7 @@
     aria-pressed={paint === floor}
     disabled={unlockAt !== null}
     aria-label={unlockAt ? `${FLOOR_NAMES[floor]}: abre no ${unlockAt.name}` : FLOOR_NAMES[floor]}
-    onclick={() => choose(paint === floor ? null : floor)}
+    onclick={() => choose(floor)}
   >
     <span class="thumb">
       {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
@@ -422,7 +424,7 @@
             class="card"
             class:focused={paint === 'erase'}
             aria-pressed={paint === 'erase'}
-            onclick={() => choose(paint === 'erase' ? null : 'erase')}
+            onclick={() => choose('erase')}
           >
             <span class="thumb">
               {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
