@@ -30,10 +30,10 @@ export function habitatLabel(kind: HabitatKind, check: HabitatCheck): string {
   return `${habitatKind(kind).name} · ${habitatStatus(kind, check)}`
 }
 
-/** O requisito por extenso: "Pede 4 pontos de água (metade da área)." */
+/** O requisito curto: "Pede 4 de água (metade da área). Chão vale 1; móvel, +1." */
 export function needText(kind: HabitatKind, check: HabitatCheck): string {
   if (check.need === 0) return 'Não pede pontos: aceita qualquer tipo, sem bônus.'
-  return `Pede ${check.need} pontos de ${materialText(kind)} (metade da área); cada chão vale 1 e cada móvel, mais 1.`
+  return `Pede ${check.need} de ${materialText(kind)} (metade da área). Chão vale 1; móvel, +1.`
 }
 
 /** Chãos que valem ponto para o tipo (os outros são enfeite), na ordem da paleta. */

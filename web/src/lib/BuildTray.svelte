@@ -178,6 +178,8 @@
   }
 
   let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
+  /** Bandeja recolhida: só a linha de cima, para ver o jardim enquanto constrói. */
+  let collapsed = $state(false)
   /** Escolhendo o tipo do habitat novo. */
   let choosingKind = $state(false)
   function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat') {
@@ -326,15 +328,42 @@
 
 <div class="build-tray panel" role="region" aria-label="Construir">
   <div class="head">
-    {#if pick}
-      <strong>Construir</strong>
+    {#if area}
+      <!-- No menu do habitat, a linha de cima diz qual é e como está. -->
+      <p class="title">
+        <strong>{habitatKind(area.kind).name}</strong>
+        <span>{area.check.size === 0 ? 'marque a área' : `${area.check.size} casas · ${habitatStatus(area.kind, area.check)}`}</span>
+      </p>
+    {:else if pick || collapsed}
+      <strong class="title">Construir</strong>
     {:else}
       {@render catalogTabs()}
     {/if}
-    <button type="button" class="btn" onclick={onClose}>{area ? 'Sair' : 'Pronto'}</button>
+    <button
+      type="button"
+      class="btn fold"
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? 'Abrir menu' : 'Recolher menu'}
+      title={collapsed ? 'Abrir menu' : 'Recolher menu'}
+      onclick={() => (collapsed = !collapsed)}
+    >
+      <!-- Seta em pixels: para baixo recolhe, para cima abre. -->
+      <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true">
+        {#if collapsed}
+          <rect x="5" y="3" width="2" height="1" /><rect x="4" y="4" width="4" height="1" /><rect x="3" y="5" width="6" height="1" />
+          <rect x="2" y="6" width="8" height="1" /><rect x="1" y="7" width="10" height="1" />
+        {:else}
+          <rect x="1" y="4" width="10" height="1" /><rect x="2" y="5" width="8" height="1" /><rect x="3" y="6" width="6" height="1" />
+          <rect x="4" y="7" width="4" height="1" /><rect x="5" y="8" width="2" height="1" />
+        {/if}
+      </svg>
+    </button>
+    <button type="button" class="btn done" onclick={onClose}>{area ? 'Sair' : 'Pronto'}</button>
   </div>
 
-  {#if area}
+  {#if collapsed}
+    <!-- Recolhida: nada além da linha de cima (o pincel continua valendo). -->
+  {:else if area}
     <!-- Menu de construção do habitat: tipo, área e os chãos do tipo separados
          dos outros. O pincel de chão só pinta dentro da área. -->
     <div class="catalog habitat-menu">
@@ -353,9 +382,6 @@
           </button>
         {/each}
       </div>
-      <p class="hint habitat">
-        {area.check.size === 0 ? 'Marque a área: toque ou arraste nas casas.' : `${area.check.size} casas · ${habitatStatus(area.kind, area.check)}`}
-      </p>
       <p class="hint">{needText(area.kind, area.check)}</p>
 
       <div class="cards floors" role="group" aria-label="Ferramentas do habitat">
@@ -405,7 +431,7 @@
         {:else}
           {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} dentro da área para {paint === 'erase' ? 'apagar' : 'pintar'}.
         {/if}
-        {mouse ? 'Botão do meio ou direito move a câmera.' : 'Dois dedos movem a câmera.'}
+        {mouse ? 'Botão do meio ou direito move a câmera.' : 'Dois dedos movem a câmera.'} A seta recolhe o menu.
       </p>
       <div class="row">
         {#if area.dirty || area.id === null}
@@ -637,7 +663,11 @@
     width: min(30rem, calc(100% - 1rem));
     box-sizing: border-box;
     display: grid;
+    /* Sem isso, a fileira de cartões (que rola para o lado) estica a bandeja. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.4rem;
+    max-height: 60vh;
+    overflow-y: auto;
     color: var(--ink);
     pointer-events: auto;
   }
@@ -646,7 +676,34 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .head .title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .head .title span {
+    margin-left: 0.4rem;
+    font-size: 0.9rem;
+  }
+
+  .head .fold,
+  .head .done {
+    flex: none;
+  }
+
+  .head .fold {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    fill: currentColor;
   }
 
   .hint,
@@ -688,7 +745,15 @@
 
   .tabs {
     display: flex;
+    flex: 1 1 auto;
     gap: 0.25rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .tabs .tab {
+    flex: none;
   }
 
   .tab {
@@ -896,6 +961,11 @@
     font-weight: 600;
   }
 
+  .habitat-menu {
+    display: grid;
+    gap: 0.35rem;
+  }
+
   .section {
     margin-top: 0.2rem;
     font-weight: 600;
@@ -903,8 +973,14 @@
 
   .kinds {
     display: flex;
-    flex-wrap: wrap;
     gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .kinds .kind {
+    flex: none;
   }
 
   .kind {
