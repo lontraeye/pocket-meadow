@@ -147,7 +147,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
       - 2b: cada estrutura é uma peça com estado próprio (`garden_structures.id`): duas bancadas têm operador, lote e nível separados (o mesmo Pokémon não opera duas); duas máquinas têm cargas separadas (a cura antes da luta usa a de mais cargas).
       - 2c: materiais novos (madeira do Headbutt e pedra do Rock Smash, 2 a 4 por vez) e receitas (`config/buildRecipes`): árvore vermelha (Azalea; 10 madeiras, 5 Apricorns, 3 Oran; 1 h), máquina de cura (Cianwood; 10 pedras, 5 madeiras, 5 Oran; 2 h), bancada (Blackthorn; 15 madeiras, 10 pedras, 10 Apricorns; 4 h). Construir leva tempo, uma obra por vez, e para no teto do tipo: árvore vermelha 1 → 2 (Azalea) → 3 (Ecruteak), máquina 1 → 2 (Cianwood), bancada 1 → 2 (Blackthorn). Números de partida; o balanço é do item 7.
    3. Peças de habitat por cima disso, com o motor que já está na branch `feat/habitats`.
-7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); falta conferir jogando e, depois, o tempo da campanha (XP do time contra o ás de cada líder).
+7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); tempo da campanha medido no mesmo script (seção 7.1: ~12 dias de treino até a Blackthorn); falta conferir jogando.
 8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
 9. **Liga, rival e pós-jogo.**
 
@@ -164,7 +164,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 
 Valores de partida, para ajustar jogando. A conta sai de `npm run economia` (server/scripts/economia.ts), que lê os configs: quando um número mudar, rodar de novo e atualizar a tabela de baixo.
 
-**Jogador de referência:** 4 sessões por dia, uma a cada ~4 h, e a noite de 8 h; Johto em ~21 dias (9 capítulos, ~2,3 dias cada). Da energia, 70% vai para revelar campo e 30% para as manchas (árvore e pedra, quando abrem); tenta capturar 1 de cada 3 Pokémon; o time cresce de 2 (cap. 1) a 6 (cap. 5); metade dos canteiros com Oran.
+**Jogador de referência:** 4 sessões por dia de ~12 min, uma a cada ~4 h, e a noite de 8 h; Johto em ~21 dias (9 capítulos, ~2,3 dias cada). Uma luta leva ~1,5 min contando achar o encontro, então cabem ~32 lutas por dia: **o tempo limita antes da energia** (que daria 88). Da energia, 70% vai para revelar campo e 30% para as manchas (árvore e pedra, quando abrem); tenta capturar 1 de cada 3 Pokémon; o time cresce de 2 (cap. 1) a 6 (cap. 5); metade dos canteiros com Oran.
 
 **O que mudou:**
 
@@ -183,24 +183,49 @@ Valores de partida, para ajustar jogando. A conta sai de `npm run economia` (ser
 | Descanso (HP 0 → cheio) | 2 h | 4 h | o HP vale alguma coisa entre sessões |
 | Recarga da máquina de cura | 3 h por carga | 6 h por carga | 4 curas da equipe por dia por máquina (eram 8) |
 
-**Conta por dia** (entra / sai):
+**Conta por dia** (entra / sai), com as ~32 lutas que cabem no tempo:
 
 | Cap. | Energia | Lutas | Manchas | Madeira | Pedra | Berries | Bolas | Curas |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 22 | 88 | 0 | 0 | 0 | 30 / 27 | 37 / 39 | 4 |
-| 2 | 22 | 88 | 0 | 0 | 0 | 30 / 31 | 37 / 41 | 4 |
-| 3 | 22 | 62 | 7 | 6 | 0 | 45 / 29 | 40 / 30 | 4 |
-| 4 | 22 | 62 | 7 | 6 | 0 | 45 / 33 | 58 / 32 | 4 |
-| 5 | 22 | 62 | 7 | 3 | 4 | 59 / 36 | 76 / 34 | 4 |
-| 6 | 22 | 62 | 7 | 3 | 4 | 59 / 36 | 76 / 37 | 8 |
-| 7 | 22 | 62 | 7 | 3 | 4 | 74 / 36 | 76 / 39 | 8 |
-| 8 | 22 | 62 | 7 | 3 | 4 | 74 / 36 | 76 / 42 | 8 |
-| 9 | 22 | 62 | 7 | 3 | 4 | 89 / 36 | 76 / 46 | 8 |
+| 1 | 22 | 32 | 0 | 0 | 0 | 30 / 15 | 37 / 14 | 4 |
+| 2 | 22 | 32 | 0 | 0 | 0 | 30 / 18 | 37 / 15 | 4 |
+| 3 | 22 | 32 | 7 | 6 | 0 | 45 / 22 | 40 / 16 | 4 |
+| 4 | 22 | 32 | 7 | 6 | 0 | 45 / 26 | 58 / 17 | 4 |
+| 5 | 22 | 32 | 7 | 3 | 4 | 59 / 30 | 76 / 18 | 4 |
+| 6 | 22 | 32 | 7 | 3 | 4 | 59 / 30 | 76 / 19 | 8 |
+| 7 | 22 | 32 | 7 | 3 | 4 | 74 / 30 | 76 / 20 | 8 |
+| 8 | 22 | 32 | 7 | 3 | 4 | 74 / 30 | 76 / 22 | 8 |
+| 9 | 22 | 32 | 7 | 3 | 4 | 89 / 30 | 76 / 24 | 8 |
 
 Berries: Oran dos canteiros contra a fome do time (o dia e as lutas). Bolas: Poké Balls das árvores vermelhas (todas as que o teto deixa), do Headbutt e das missões, limitadas pela bancada, contra as tentativas de captura. Curas: cargas da máquina por dia.
 
+Quem gasta a energia toda (88 lutas, ~2 h por dia) fica perto do empate nos capítulos 1 e 2 (berries 30 / 27, bolas 37 / 39) e com sobra do 3 em diante.
+
 **Leitura:**
-- Capítulos 1 e 2 são os mais apertados: berries e bolas quase empatam com o uso, e o jogador escolhe o que capturar.
-- Do capítulo 3 em diante sobram berries (vão para energia, +2 por Oran, e receitas) e, do 4 em diante, Apricorns (vão para as receitas e as melhorias da bancada, 15 e 30). A conta não desconta esses gastos nem as Great e Ultra, que dividem o tempo da bancada.
+- Para o jogador de referência, berries e bolas sobram em todos os capítulos (o dobro do uso): o aperto só aparece para quem gasta a energia toda. Se a captura tiver de pesar mais para quem joga pouco, o caminho é cortar a produção (árvore vermelha de volta a 3 h, missões com menos Apricorn), não a energia.
+- A conta não desconta os Apricorns das receitas e das melhorias da bancada (15 e 30), nem as Great e Ultra, que dividem o tempo da bancada.
 - Madeira e pedra: uma receita a cada 1 a 3 dias, o que fecha com o teto de peças subindo por marco.
 - Não entra na conta: presentes do chão, nível de treinador, sementes e as berries de captura.
+
+### 7.1 Tempo da campanha
+
+O mesmo script anda hora a hora com o time: XP das lutas no mato do capítulo (fórmula da luta, com o nível de cada um), do daycare (as vagas do marco, os mais baixos do time, com o bônus de alcance e um cuidador ×1,25 do capítulo 2) e do jardim (pet com felicidade 80). O capítulo acaba quando o time tem **tantos membros quanto o líder, cada um no ás − 2**; quem falta entra capturado no nível médio do mato.
+
+| Cap. | Líder (ás) | Alvo | Selvagem | Time no início | Dias | Lutas | Luta | Daycare | Jardim |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Violet (9) | 2 × 7 | 3 | 5, 3 | 0,9 | 29 | 54% | 36% | 10% |
+| 2 | Azalea (16) | 3 × 14 | 6 | 9, 7, 6 | 2,3 | 75 | 48% | 37% | 14% |
+| 3 | Goldenrod (20) | 2 × 18 | 8 | 14, 14 | 1,3 | 40 | 45% | 47% | 7% |
+| 4 | Ecruteak (25) | 4 × 23 | 12 | 18, 18, 14, 12 | 2,6 | 83 | 32% | 60% | 8% |
+| 5 | Cianwood (30) | 2 × 28 | 19 | 23, 23 | 1,0 | 33 | 52% | 44% | 4% |
+| 6 | Olivine (35) | 3 × 33 | 14 | 29, 28, 23 | 2,4 | 76 | 25% | 70% | 5% |
+| 7 | Mahogany (31) | 3 × 29 | 23 | 33, 33, 33 | 0 | 0 | — | — | — |
+| 8 | Blackthorn (40) | 4 × 38 | 23 | 33, 33, 33, 23 | 1,8 | 57 | 22% | 76% | 2% |
+
+**Total até a Blackthorn: ~12 dias** de treino, contra ~19 do alvo (8 × 2,3). A Liga ainda não tem time no config e fica fora.
+
+**Leitura:**
+- O treino sozinho fecha em ~2/3 do alvo. O resto do tempo é o que a conta não vê: abrir as áreas do capítulo, capturar as espécies, pegar o tipo certo para as ferramentas, perder para o líder e tentar de novo. Por isso **não mexer no XP ainda**: primeiro ver jogando quanto tempo isso leva.
+- Os capítulos alternam: 2, 4 e 6 levam ~2,5 dias (o líder tem 3 ou 4 Pokémon, ou o salto de nível é grande); 1, 3 e 5 levam ~1 dia (2 Pokémon). O 7 sai de graça: o ás de Mahogany (31) é mais baixo que o de Olivine (35), como no Crystal.
+- O daycare carrega a segunda metade: de 60% a 76% do XP do capítulo 4 em diante. Combina com o jardim no centro; se pesar demais, a alavanca é `levelsPerHour` (hoje 4 níveis por dia).
+- Se depois de jogar faltar tempo: subir o ás dos capítulos rápidos (1, 3, 5, 7) ou cortar o daycare. Se sobrar: o contrário. O XP da luta fica por último, porque mexe em tudo.

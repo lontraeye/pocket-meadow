@@ -17,11 +17,21 @@ import { petConfig } from '../src/config/pets.js'
 import { progressConfig } from '../src/config/progress.js'
 import { spotDropsConfig } from '../src/config/spotDrops.js'
 import { trainerConfig } from '../src/config/trainer.js'
+import { catchUpMult, daycareConfig, daycareXpPerHour } from '../src/config/daycare.js'
+import { leaderConfigs } from '../src/config/leaders.js'
+import { loadRegions } from '../src/config/regions.js'
+import { battleXp } from '../src/game/battle.js'
+import { gardenXp } from '../src/game/pets.js'
+import { grantXp } from '../src/game/xp.js'
+import { readSpeciesSnapshot } from '../src/seed/apply.js'
 
 const PLAYER = {
   /** Sessões por dia e o intervalo entre elas (a noite fecha as 24 h). */
   sessionsPerDay: 4,
   gapHours: 4,
+  /** Minutos de cada sessão e de cada luta (contando achar o encontro): o tempo também limita as lutas. */
+  minutesPerSession: 12,
+  minutesPerFight: 1.5,
   /** Johto em ~3 semanas: 9 capítulos (8 líderes + Liga). */
   daysPerChapter: 21 / 9,
   /** Da energia, quanto vai para revelar campo; o resto vai para as manchas (árvore, pedra). */
@@ -38,6 +48,12 @@ const PLAYER = {
   oranPlotShare: 0.5,
   /** Apricorns vermelhos das missões do dia (3 comuns × 2 e o baú com 3; config/missions). */
   missionApricorns: 9,
+  /** O time vence o líder com tantos membros quanto ele tem, cada um neste tanto abaixo do ás. */
+  leaderMargin: 2,
+  /** Felicidade média do time no jardim (XP de pet). */
+  happiness: 80,
+  /** Cuidador do daycare a partir do capítulo 2 (o primeiro tier, Sentret e cia.). */
+  caretakerMult: 1.25,
 }
 
 const hour = 60 * 60 * 1000
@@ -80,6 +96,15 @@ function energyPerDay(): number {
   return trainerConfig.energyMax + (PLAYER.sessionsPerDay - 1) * perGap
 }
 
+/** Lutas por dia no capítulo: a energia dos campos ou o tempo das sessões, o que acabar antes. */
+function fightsPerDay(chapter: number): number {
+  const cleared = new Set(milestoneConfigs.slice(0, chapter - 1).map((milestone) => milestone.key))
+  const spotShare = cleared.has('azalea') ? 1 - PLAYER.fieldShare : 0
+  const byEnergy = energyPerDay() * (1 - spotShare) * battleConfig.fieldSize
+  const byTime = (PLAYER.sessionsPerDay * PLAYER.minutesPerSession) / PLAYER.minutesPerFight
+  return Math.min(byEnergy, byTime)
+}
+
 function fmt(value: number, digits = 0): string {
   return value.toFixed(digits).replace('.', ',')
 }
@@ -120,7 +145,7 @@ for (let chapter = 1; chapter <= milestoneConfigs.length; chapter += 1) {
 
   const energy = energyPerDay()
   const spotShare = hasHeadbutt ? 1 - PLAYER.fieldShare : 0
-  const fights = energy * (1 - spotShare) * battleConfig.fieldSize
+  const fights = fightsPerDay(chapter)
   const spots = energy * spotShare
   const headbutts = hasRockSmash ? spots / 2 : spots
   const smashes = hasRockSmash ? spots / 2 : 0
@@ -159,3 +184,120 @@ for (let chapter = 1; chapter <= milestoneConfigs.length; chapter += 1) {
     ].join(' | ')} |`,
   )
 }
+
+// ---------------------------------------------------------------------------
+// Tempo da campanha: quantos dias o time leva para chegar ao nível de cada
+// líder, com o XP das lutas (no mato do capítulo), do daycare e do jardim.
+
+
+const baseExperience = new Map(readSpeciesSnapshot().species.map((row) => [row.id, row.baseExperience]))
+const regions = loadRegions()
+
+/** Mato do capítulo: espécie, nível do meio e peso de cada slot. */
+function chapterSlots(chapter: number) {
+  return regions
+    .filter((region) => region.chapter === chapter)
+    .flatMap((region) => region.slots)
+    .map((slot) => ({
+      base: baseExperience.get(slot.speciesId) ?? 50,
+      level: Math.round((slot.minLevel + slot.maxLevel) / 2),
+      weight: slot.weight,
+    }))
+}
+
+/** XP médio de uma vitória no mato do capítulo para um Pokémon do nível dado. */
+function xpPerFight(chapter: number, fighterLevel: number): number {
+  const slots = chapterSlots(chapter)
+  const total = slots.reduce((sum, slot) => sum + slot.weight, 0)
+  return slots.reduce((sum, slot) => sum + battleXp(slot.base, slot.level, fighterLevel) * slot.weight, 0) / total
+}
+
+function wildAverage(chapter: number): number {
+  const slots = chapterSlots(chapter)
+  const total = slots.reduce((sum, slot) => sum + slot.weight, 0)
+  return slots.reduce((sum, slot) => sum + slot.level * slot.weight, 0) / total
+}
+
+type Member = { level: number; xp: number }
+
+function give(member: Member, gain: number): void {
+  const next = grantXp(member.level, member.xp, Math.max(0, gain))
+  member.level = next.level
+  member.xp = next.xp
+}
+
+console.log('')
+console.log(
+  `Tempo da campanha: o time vence com tantos membros quanto o líder tem, cada um no ás − ${PLAYER.leaderMargin}; ` +
+    `luta no mato do capítulo, daycare nas vagas do marco (cuidador ×${fmt(PLAYER.caretakerMult, 2)} do cap. 2) e XP de pet com felicidade ${PLAYER.happiness}.`,
+)
+console.log('')
+const campaignHeader = ['Cap.', 'Líder (ás)', 'Alvo', 'Selvagem', 'Time no início', 'Dias', 'Lutas', 'XP da luta', 'Daycare', 'Jardim']
+console.log(`| ${campaignHeader.join(' | ')} |`)
+console.log(`|${campaignHeader.map(() => '---').join('|')}|`)
+
+const team: Member[] = [{ level: trainerConfig.starterLevel, xp: 0 }]
+let totalDays = 0
+for (const [index, leader] of leaderConfigs.entries()) {
+  const chapter = index + 1
+  const cleared = new Set(milestoneConfigs.slice(0, chapter - 1).map((milestone) => milestone.key))
+  const daycareSlots = gardenUnlocks(cleared).daycareSlots
+  const ace = Math.max(...leader.foes.map((foe) => foe.level))
+  const target = ace - PLAYER.leaderMargin
+  const needed = leader.foes.length
+  // Quem falta no time entra capturado no nível médio do mato do capítulo.
+  while (team.length < needed) team.push({ level: Math.round(wildAverage(chapter)), xp: 0 })
+  team.sort((a, b) => b.level - a.level)
+  const startLevels = team.slice(0, needed).map((member) => member.level).join(', ')
+
+  const fightsPerHour = fightsPerDay(chapter) / dayHours
+  const caretaker = chapter >= 2 ? PLAYER.caretakerMult : 1
+  const got = { fight: 0, daycare: 0, garden: 0 }
+  let hours = 0
+  const core = () => [...team].sort((a, b) => b.level - a.level).slice(0, needed)
+  while (core().some((member) => member.level < target) && hours < 60 * dayHours) {
+    const members = core()
+    // Daycare: os mais baixos (o mais alto fica lutando); ninguém passa do mais alto do time.
+    const sorted = [...members].sort((a, b) => a.level - b.level)
+    const inDaycare = new Set(sorted.slice(0, Math.min(daycareSlots, members.length - 1)))
+    const fighters = members.filter((member) => !inDaycare.has(member))
+    const top = Math.max(...fighters.map((member) => member.level))
+    const average = members.reduce((sum, member) => sum + member.level, 0) / members.length
+    for (const member of inDaycare) {
+      if (member.level >= top) continue
+      const gain = daycareXpPerHour(member.level, catchUpMult(member.level, average) * caretaker)
+      got.daycare += gain
+      give(member, gain)
+    }
+    // Luta: as vitórias da hora divididas entre quem luta (cada um no próprio nível).
+    for (const member of fighters) {
+      const gain = (fightsPerHour / fighters.length) * xpPerFight(chapter, member.level)
+      got.fight += gain
+      give(member, gain)
+      const pet = gardenXp(member.level, PLAYER.happiness, 1)
+      got.garden += pet
+      give(member, pet)
+    }
+    hours += 1
+  }
+  const days = hours / dayHours
+  totalDays += days
+  const all = got.fight + got.daycare + got.garden || 1
+  const pct = (value: number) => `${fmt((value / all) * 100)}%`
+  console.log(
+    `| ${[
+      chapter,
+      `${leader.name.replace('Líder de ', '')} (${ace})`,
+      `${needed} × ${target}`,
+      fmt(wildAverage(chapter)),
+      startLevels,
+      fmt(days, 1),
+      fmt(days * fightsPerDay(chapter)),
+      pct(got.fight),
+      pct(got.daycare),
+      pct(got.garden),
+    ].join(' | ')} |`,
+  )
+}
+console.log('')
+console.log(`Total até a Blackthorn: ${fmt(totalDays, 1)} dias (alvo: ~${fmt(PLAYER.daysPerChapter * leaderConfigs.length, 1)}). Daycare: ${fmt(daycareConfig.levelsPerHour * 24, 1)} níveis por dia no ritmo normal.`)
