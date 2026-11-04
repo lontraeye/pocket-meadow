@@ -326,7 +326,9 @@
   </div>
 {/snippet}
 
-<div class="build-tray panel" role="region" aria-label="Construir">
+<!-- Catálogo e menu do habitat: altura fixa (não muda de tamanho entre as abas);
+     movendo peça ou recolhida, fica só o que precisa. -->
+<div class="build-tray panel" class:fixed={!collapsed && (area !== null || !pick)} role="region" aria-label="Construir">
   <div class="head">
     {#if area}
       <!-- No menu do habitat, a linha de cima diz qual é e como está. -->
@@ -666,10 +668,23 @@
     /* Sem isso, a fileira de cartões (que rola para o lado) estica a bandeja. */
     grid-template-columns: minmax(0, 1fr);
     gap: 0.4rem;
+    align-content: start;
     max-height: 60vh;
     overflow-y: auto;
     color: var(--ink);
     pointer-events: auto;
+  }
+
+  .build-tray.fixed {
+    height: min(21rem, 60vh);
+  }
+
+  /* Filas que rolam para o lado: a barra fica embaixo dos botões, não por cima. */
+  .tabs,
+  .kinds,
+  .cards {
+    scrollbar-width: thin;
+    padding-bottom: 8px;
   }
 
   .head {
@@ -796,7 +811,7 @@
     overflow-x: auto;
     overscroll-behavior-x: contain;
     /* Folga para o selo do cartão, que passa um pouco da borda. */
-    padding: 6px 6px 2px 0;
+    padding: 6px 6px 8px 0;
   }
 
   .card {
