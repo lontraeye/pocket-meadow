@@ -574,6 +574,25 @@
   }
   let buildDrag: BuildDrag | null = null
   let buildSkipClick = false
+  let buildHit = $state<HTMLDivElement | null>(null)
+
+  // Ligados direto na camada, não pelo onpointerdown do Svelte: esse é delegado
+  // (escuta na raiz), e o pan do gramado, que fica no caminho, já teria
+  // começado antes do stopPropagation de quem arrasta a peça.
+  $effect(() => {
+    const node = buildHit
+    if (!node) return
+    node.addEventListener('pointerdown', onBuildDown)
+    node.addEventListener('pointermove', onBuildMove)
+    node.addEventListener('pointerup', onBuildUp)
+    node.addEventListener('pointercancel', onBuildUp)
+    return () => {
+      node.removeEventListener('pointerdown', onBuildDown)
+      node.removeEventListener('pointermove', onBuildMove)
+      node.removeEventListener('pointerup', onBuildUp)
+      node.removeEventListener('pointercancel', onBuildUp)
+    }
+  })
 
   function ghostId(pick: BuildPick): number {
     return pick.kind === 'move' ? pick.id : GHOST_ID
@@ -1378,6 +1397,8 @@
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.pointerType === 'mouse') return
+      // Setas do Construir: tocar nelas não começa pan.
+      if ((event.target as Element | null)?.closest?.('.build-arrow')) return
       // Prepara as máscaras dos sprites sob o dedo para o click (onGardenTap).
       warmSpriteMasks(event.clientX, event.clientY)
       if (event.pointerType === 'touch') {
@@ -2099,10 +2120,7 @@
           style:width="{stageW}px"
           style:height="{stageH}px"
           style:z-index={depthSpan * 5}
-          onpointerdown={onBuildDown}
-          onpointermove={onBuildMove}
-          onpointerup={onBuildUp}
-          onpointercancel={onBuildUp}
+          bind:this={buildHit}
           onclick={onBuildClick}
         ></div>
         {#if ghost && !buildMouse}
@@ -2117,7 +2135,6 @@
               style:z-index={depthSpan * 5 + 1}
               aria-label="Mover a peça uma casa"
               disabled={buildPending}
-              onpointerdown={(event) => event.stopPropagation()}
               onclick={() => nudgeGhost(dc, dr)}
             >
               <svg viewBox="0 0 12 12" width="18" height="18" style:transform="rotate({angle}deg)" aria-hidden="true">
@@ -2352,6 +2369,13 @@
         fits={ghostOk}
         mouse={buildMouse}
         onPick={pickNew}
+        onSelectPlaced={(id) => {
+          const placed = layout.pieces.find((row) => row.id === id)
+          if (!placed) return
+          buildMessage = ''
+          buildPick = { kind: 'selected', id, piece: placed.piece }
+          play('tap')
+        }}
         onMove={startMove}
         onTurn={() => void turnPick()}
         onConfirm={() => void commitGhost()}

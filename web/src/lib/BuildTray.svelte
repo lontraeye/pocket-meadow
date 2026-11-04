@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { isFlippable, PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
+  import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey } from '@garden/layout'
   import type { GardenLayout } from './api'
   import type { BuildPick } from './build'
+  import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
-  // Construir. O jardim cuida dos toques na grade; aqui ficam o inventário
-  // (o que está guardado) e as ações da peça escolhida.
+  // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
+  // por categoria e um cartão com ícone por peça) e as ações da peça escolhida.
 
   let {
     layout,
@@ -15,6 +16,7 @@
     fits,
     mouse,
     onPick,
+    onSelectPlaced,
     onMove,
     onTurn,
     onConfirm,
@@ -31,6 +33,8 @@
     /** Mouse (a prévia segue o ponteiro e o clique coloca) ou toque (setas e Confirmar). */
     mouse: boolean
     onPick: (piece: PieceKey) => void
+    /** Cartão de uma peça que já está no jardim: seleciona ela lá. */
+    onSelectPlaced: (id: number) => void
     onMove: () => void
     onTurn: () => void
     onConfirm: () => void
@@ -41,16 +45,132 @@
 
   const plotsFree = $derived(Math.max(0, layout.plotLimit - layout.plotsPlaced))
   const name = (piece: PieceKey) => PIECES[piece].name
+
+  /**
+   * Um cartão por peça que o jogador tem: guardada (toca para colocar), no
+   * jardim (toca para achar lá) ou, no canteiro, quantos ainda cabem.
+   */
+  type Card = { piece: PieceKey; badge: string | null; note: string; placedId: number | null; ready: boolean }
+
+  const cards = $derived.by((): Card[] => {
+    const out: Card[] = [
+      {
+        piece: 'berry_plot',
+        badge: plotsFree > 0 ? String(plotsFree) : null,
+        note: `${layout.plotsPlaced}/${layout.plotLimit}`,
+        placedId: null,
+        ready: plotsFree > 0,
+      },
+    ]
+    for (const piece of STRUCTURE_PIECES) {
+      if (layout.stored.includes(piece)) {
+        out.push({ piece, badge: '1', note: 'guardada', placedId: null, ready: true })
+        continue
+      }
+      const placed = layout.pieces.find((row) => row.piece === piece)
+      if (placed) out.push({ piece, badge: null, note: 'no jardim', placedId: placed.id, ready: false })
+    }
+    return out
+  })
+
+  let tab = $state<BuildCategory | 'all'>('all')
+  const tabs = $derived(
+    BUILD_CATEGORIES.map((category) => ({
+      ...category,
+      waiting: cards.filter((card) => card.ready && category.pieces.includes(card.piece)).length,
+    })).filter((category) => cards.some((card) => category.pieces.includes(card.piece))),
+  )
+  const shown = $derived(
+    tab === 'all' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
+  )
+  const waitingAll = $derived(cards.filter((card) => card.ready).length)
+
+  function onCard(card: Card) {
+    if (card.ready) onPick(card.piece)
+    else if (card.placedId !== null) onSelectPlaced(card.placedId)
+  }
 </script>
+
+{#snippet icon(piece: PieceKey, px: number)}
+  {@const art = PIECE_ICONS[piece]}
+  <span
+    class="icon"
+    style:width="{ICON_W * px}px"
+    style:height="{ICON_H * px}px"
+    style:background-image="url({art.src})"
+    style:background-size="{ICON_W * art.frames * px}px {ICON_H * px}px"
+    style:background-position-x="{-art.frame * ICON_W * px}px"
+    aria-hidden="true"
+  ></span>
+{/snippet}
+
+{#snippet tabIcon(key: BuildCategory | 'all')}
+  <!-- Ícones em pixels (grade 12×12), como os do jardim. -->
+  <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
+    {#if key === 'all'}
+      <rect x="1" y="1" width="4" height="4" /><rect x="7" y="1" width="4" height="4" />
+      <rect x="1" y="7" width="4" height="4" /><rect x="7" y="7" width="4" height="4" />
+    {:else if key === 'horta'}
+      <!-- Broto saindo da terra. -->
+      <rect x="5" y="3" width="2" height="6" /><rect x="2" y="2" width="3" height="2" /><rect x="7" y="4" width="3" height="2" />
+      <rect x="1" y="9" width="10" height="2" />
+    {:else if key === 'producao'}
+      <!-- Engrenagem. -->
+      <rect x="4" y="1" width="4" height="10" /><rect x="1" y="4" width="10" height="4" />
+      <rect x="2" y="2" width="8" height="8" /><rect x="5" y="5" width="2" height="2" fill="var(--panel-face)" />
+    {:else}
+      <!-- Cruz da cura. -->
+      <rect x="4" y="1" width="4" height="10" /><rect x="1" y="4" width="10" height="4" />
+    {/if}
+  </svg>
+{/snippet}
+
+{#snippet catalogTabs()}
+  <div class="tabs" role="tablist" aria-label="Categorias">
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'all'}
+      aria-label="Tudo"
+      title="Tudo"
+      onclick={() => (tab = 'all')}
+    >
+      {@render tabIcon('all')}
+      {#if waitingAll > 0}<span class="dot" aria-hidden="true"></span>{/if}
+    </button>
+    {#each tabs as category (category.key)}
+      <button
+        type="button"
+        class="tab"
+        role="tab"
+        aria-selected={tab === category.key}
+        aria-label={category.name}
+        title={category.name}
+        onclick={() => (tab = category.key)}
+      >
+        {@render tabIcon(category.key)}
+        {#if category.waiting > 0}<span class="dot" aria-hidden="true"></span>{/if}
+      </button>
+    {/each}
+  </div>
+{/snippet}
 
 <div class="build-tray panel" role="region" aria-label="Construir">
   <div class="head">
-    <strong>Construir</strong>
+    {#if pick}
+      <strong>Construir</strong>
+    {:else}
+      {@render catalogTabs()}
+    {/if}
     <button type="button" class="btn" onclick={onClose}>Pronto</button>
   </div>
 
   {#if pick?.kind === 'selected'}
-    <p class="hint">{name(pick.piece)}</p>
+    <div class="picked">
+      <span class="thumb small">{@render icon(pick.piece, 1)}</span>
+      <p class="hint"><strong>{name(pick.piece)}</strong></p>
+    </div>
     <div class="row">
       <button type="button" class="btn btn-primary" disabled={pending} onclick={onMove}>Mover</button>
       {#if isFlippable(pick.piece)}
@@ -60,15 +180,18 @@
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Voltar</button>
     </div>
   {:else if pick}
-    <p class="hint">
-      {#if mouse}
-        Clique numa casa para {pick.kind === 'move' ? 'levar' : 'colocar'} {name(pick.piece).toLowerCase()}.{isFlippable(pick.piece)
-          ? ' R gira.'
-          : ''} Esc cancela.
-      {:else}
-        Arraste {name(pick.piece).toLowerCase()} ou use as setas, e confirme.
-      {/if}
-    </p>
+    <div class="picked">
+      <span class="thumb small">{@render icon(pick.piece, 1)}</span>
+      <p class="hint">
+        {#if mouse}
+          Clique numa casa para {pick.kind === 'move' ? 'levar' : 'colocar'} {name(pick.piece).toLowerCase()}.{isFlippable(pick.piece)
+            ? ' R gira.'
+            : ''} Esc cancela.
+        {:else}
+          Arraste {name(pick.piece).toLowerCase()} ou use as setas, e confirme.
+        {/if}
+      </p>
+    </div>
     <div class="row">
       {#if !mouse}
         <button type="button" class="btn btn-primary" disabled={pending || !fits} onclick={onConfirm}>Confirmar</button>
@@ -79,21 +202,26 @@
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Cancelar</button>
     </div>
   {:else}
-    <p class="hint">Toque numa peça do jardim para mover ou guardar, ou escolha uma guardada.</p>
-    <div class="row pieces">
-      <button
-        type="button"
-        class="btn piece"
-        disabled={pending || plotsFree === 0}
-        onclick={() => onPick('berry_plot')}
-      >
-        Canteiro <small>{layout.plotsPlaced}/{layout.plotLimit}</small>
-      </button>
-      {#each layout.stored as piece (piece)}
-        <button type="button" class="btn piece" disabled={pending} onclick={() => onPick(piece as StructurePiece)}>
-          {name(piece)}
-        </button>
-      {/each}
+    <div class="catalog">
+      <div class="cards" role="tabpanel">
+        {#each shown as card (card.piece)}
+          <button
+            type="button"
+            class="card"
+            class:placed={!card.ready}
+            disabled={pending || (!card.ready && card.placedId === null)}
+            aria-label={`${name(card.piece)}: ${card.note}`}
+            onclick={() => onCard(card)}
+          >
+            <span class="thumb">
+              {@render icon(card.piece, 2)}
+              {#if card.badge}<span class="badge">{card.badge}</span>{/if}
+            </span>
+            <span class="card-name">{name(card.piece)}</span>
+            <small>{card.note}</small>
+          </button>
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -134,14 +262,165 @@
     font-weight: 700;
   }
 
+  /* As ações numa linha só, em colunas iguais (no celular não sobra um botão
+     sozinho embaixo). */
   .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.3rem;
   }
 
-  .piece small {
-    opacity: 0.7;
-    margin-left: 0.25rem;
+  .row .btn {
+    min-width: 0;
+    padding: 0 0.3rem;
+    font-size: 15px;
+  }
+
+  .picked {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Catálogo: as abas na linha de cima (ao lado do Pronto) e os cartões numa
+     fileira só, que rola para o lado: a bandeja fica baixa no celular. */
+  .catalog {
+    min-width: 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .tab {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 2px solid var(--panel-edge);
+    background: var(--paper);
+    color: var(--ink-soft);
+    fill: currentColor;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tab[aria-selected='true'] {
+    background: var(--accent);
+    color: var(--ink);
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
+  }
+
+  .dot {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 7px;
+    height: 7px;
+    border: 1px solid var(--panel-edge);
+    background: #e04030;
+  }
+
+  .cards {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 5.4rem;
+    align-items: stretch;
+    gap: 0.35rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    /* Folga para o selo do cartão, que passa um pouco da borda. */
+    padding: 6px 6px 2px 0;
+  }
+
+  .card {
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 0.15rem;
+    padding: 0.3rem 0.2rem 0.35rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--panel-hi);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: inset 0 -3px 0 var(--panel-shade);
+  }
+
+  .card:not(:disabled):hover,
+  .card:not(:disabled):focus-visible {
+    background: #fff8d8;
+    box-shadow: inset 0 -3px 0 var(--accent-shade);
+  }
+
+  .card:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  /* Já está no jardim: o cartão fica apagado, mas tocar acha a peça lá. */
+  .card.placed .icon {
+    filter: grayscale(0.6) opacity(0.7);
+  }
+
+  .card.placed small {
+    color: var(--ink-soft);
+  }
+
+  .card-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  .card small {
+    font-size: 0.68rem;
+    color: var(--ink-soft);
+  }
+
+  /* O ícone em cima de um pedacinho de gramado. */
+  .thumb {
+    position: relative;
+    display: grid;
+    place-items: end center;
+    width: 4rem;
+    height: 4.4rem;
+    border: 1px solid var(--panel-shade);
+    background: linear-gradient(#e6f2dc, #b9d9a2);
+  }
+
+  .thumb.small {
+    flex: none;
+    width: 2.2rem;
+    height: 2.6rem;
+  }
+
+  .icon {
+    display: block;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 1px 0 rgb(0 0 0 / 0.25));
+  }
+
+  .badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 1.2rem;
+    height: 1.2rem;
+    padding: 0 0.2rem;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--panel-edge);
+    background: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 700;
   }
 </style>
