@@ -21,7 +21,8 @@
   } from './api'
   import { benchOperatorIds } from './structures'
   import { cellKey, inBounds, isFlippable, occupied, type PieceKey } from '@garden/layout'
-  import { biomeName, habitatConfig, recognizeHabitats, type GardenCell, type PaintFloor, type Zone } from '@habitat'
+  import { checkHabitat, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
+  import { habitatLabel } from './habitatView'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -515,6 +516,7 @@
     building = on
     buildPick = null
     paint = null
+    areaEdit = null
     buildMessage = ''
     onBuildMode?.(on)
   }
@@ -552,19 +554,46 @@
     }
     return out
   })
-  /** Zonas ao vivo pelo motor (as casas de canteiro ficam de fora, como no servidor). */
-  const zones = $derived.by((): Zone[] => {
-    const cells: GardenCell[] = []
-    for (const [key, floor] of floorMap) {
-      const [col, row] = key.split(',').map(Number) as [number, number]
-      if (!isPlotCell(playCol0 + col, playRow0 + row)) cells.push({ col, row, floor, object: null })
-    }
-    return recognizeHabitats(cells)
-  })
+  /** Casas com peça (canteiro, árvore, bancada, máquina): não aceitam água. */
+  const occupiedCells = $derived(occupied(layout.pieces))
 
-  /** Zona de cada casa (para pintar a grade do Construir). */
-  const zoneByCell = $derived(
-    new Map(zones.flatMap((zone) => zone.tiles.map((tile) => [cellKey(tile.col, tile.row), zone] as const))),
+  /** O que tem em cada casa para o motor (canteiro não conta: tem chão próprio). */
+  function lookAt(col: number, row: number) {
+    if (isPlotCell(playCol0 + col, playRow0 + row)) return null
+    const floor = floorMap.get(cellKey(col, row)) ?? null
+    return floor === null ? null : { floor, object: null }
+  }
+
+  // Habitats (5.22): área e tipo escolhidos. Criar ou editar abre um rascunho
+  // da área (casas marcadas com o pincel de área), salvo de uma vez.
+  type AreaEdit = { id: number | null; kind: HabitatKind; cells: Record<string, true> }
+  let areaEdit = $state<AreaEdit | null>(null)
+  /** Ao arrastar, o primeiro toque decide se marca ou desmarca. */
+  let areaAdding = true
+
+  type HabitatView = { id: number | null; kind: HabitatKind; tiles: { col: number; row: number }[]; check: HabitatCheck }
+  const areaTiles = $derived(
+    areaEdit
+      ? Object.keys(areaEdit.cells).map((key) => {
+          const [col, row] = key.split(',').map(Number) as [number, number]
+          return { col, row }
+        })
+      : [],
+  )
+  /** Os habitats com a conta ao vivo; o que está em edição aparece como o rascunho. */
+  const habitatViews = $derived.by((): HabitatView[] => {
+    const out: HabitatView[] = layout.habitats
+      .filter((row) => !areaEdit || row.id !== areaEdit.id)
+      .map((row) => ({ ...row, check: checkHabitat(row.kind, row.tiles, lookAt) }))
+    if (areaEdit && areaTiles.length > 0) {
+      out.push({ id: areaEdit.id, kind: areaEdit.kind, tiles: areaTiles, check: checkHabitat(areaEdit.kind, areaTiles, lookAt) })
+    }
+    return out
+  })
+  const areaCheck = $derived(areaEdit ? checkHabitat(areaEdit.kind, areaTiles, lookAt) : null)
+  /** Habitat de cada casa (para pintar a grade do Construir). */
+  const habitatByCell = $derived(
+    new Map(habitatViews.flatMap((view) => view.tiles.map((tile) => [cellKey(tile.col, tile.row), view] as const))),
   )
 
   /** Amostra da paleta: a primeira variação do tile do chão. */
@@ -572,29 +601,83 @@
     return Object.entries(tileFiles).find(([file]) => file.endsWith(`/${floor}-1.png`))?.[1] ?? null
   }
 
-  function zoneLabel(zone: Zone): string {
-    if (zone.tooSmall) return `${zone.tiles.length}/${habitatConfig.minTiles} casas`
-    const slots = `${zone.capacity} vagas`
-    return zone.biome ? `${biomeName(zone.biome)} · ${slots}` : slots
+  function startArea(id: number | null, kind: HabitatKind) {
+    const found = id === null ? null : layout.habitats.find((row) => row.id === id)
+    const cells: Record<string, true> = {}
+    for (const tile of found?.tiles ?? []) cells[cellKey(tile.col, tile.row)] = true
+    areaEdit = { id, kind: found?.kind ?? kind, cells }
+    paint = null
+    buildPick = null
+    buildMessage = ''
   }
 
-  /** Resumo para a bandeja: os habitats e o que falta no primeiro básico. */
-  const habitatHint = $derived.by(() => {
-    const homes = zones.filter((zone) => zone.biome)
-    if (homes.length === 0) return ''
-    const basic = homes.find((zone) => zone.biome === 'basico' && zone.nearest)
-    const near = basic?.nearest
-    const tip =
-      near && near.gaps.length > 0
-        ? ` Para ${biomeName(near.biome)}: falta ${near.gaps.map((gap) => `${gap.materials.join('/')} (${gap.have} de ${gap.need})`).join(', ')}.`
-        : ''
-    return homes.map(zoneLabel).join(' · ') + tip
-  })
+  /** Marca ou desmarca a casa na área (casa de outro habitat não entra). */
+  function areaAt(cell: { col: number; row: number }, first: boolean) {
+    const edit = areaEdit
+    if (!edit || !inBounds(cell)) return
+    const key = cellKey(cell.col, cell.row)
+    const owner = layout.habitats.find((row) => row.tiles.some((tile) => tile.col === cell.col && tile.row === cell.row))
+    if (owner && owner.id !== edit.id) return
+    if (first) areaAdding = !edit.cells[key]
+    if (areaAdding === Boolean(edit.cells[key])) return
+    const cells = { ...edit.cells }
+    if (areaAdding) cells[key] = true
+    else delete cells[key]
+    areaEdit = { ...edit, cells }
+  }
+
+  async function saveArea() {
+    const edit = areaEdit
+    if (!edit) return
+    const cells = areaTiles
+    const body = { kind: edit.kind, cells }
+    const path = edit.id === null ? '/api/build/habitat' : `/api/build/habitat/${edit.id}`
+    if (await habitatCall(path, body)) areaEdit = null
+  }
+
+  async function deleteArea() {
+    const edit = areaEdit
+    if (!edit || edit.id === null) return
+    if (await habitatCall(`/api/build/habitat/${edit.id}/delete`, {})) areaEdit = null
+  }
+
+  /** Chamada de habitat: avisa quem ficou sem casa. */
+  async function habitatCall(path: string, body: object): Promise<boolean> {
+    buildPending = true
+    buildMessage = ''
+    try {
+      const response = await api(path, body)
+      const out = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & { evicted?: number[] }
+      if (!response.ok) {
+        buildMessage = errorText(out)
+        return false
+      }
+      await onState()
+      evictedMessage(out.evicted ?? [])
+      play('tap')
+      return true
+    } catch {
+      buildMessage = 'Sem conexão com o servidor.'
+      return false
+    } finally {
+      buildPending = false
+    }
+  }
+
+  function evictedMessage(ids: readonly number[]) {
+    const names = ids
+      .map((id) => game.pokemon.find((mon) => mon.id === id))
+      .map((mon) => (mon ? (mon.nickname ?? mon.displayName) : null))
+      .filter(Boolean)
+    if (names.length > 0) buildMessage = `${names.join(', ')} ficou sem casa: o habitat mudou.`
+  }
 
   function paintAt(cell: { col: number; row: number }) {
     if (!paint || !inBounds(cell) || isPlotCell(playCol0 + cell.col, playRow0 + cell.row)) return
     const floor = paint === 'erase' ? null : paint
     const key = cellKey(cell.col, cell.row)
+    // Água não vai embaixo de peça (o servidor também recusa).
+    if (floor !== null && WATER_FLOORS.includes(floor) && occupiedCells.has(key)) return
     if ((floorMap.get(key) ?? null) === floor) return
     paintDraft = { ...paintDraft, [key]: floor }
   }
@@ -615,11 +698,7 @@
         buildMessage = errorText(body)
       } else {
         await onState()
-        const names = (body.evicted ?? [])
-          .map((id) => game.pokemon.find((mon) => mon.id === id))
-          .map((mon) => (mon ? (mon.nickname ?? mon.displayName) : null))
-          .filter(Boolean)
-        if (names.length > 0) buildMessage = `${names.join(', ')} ficou sem casa: o habitat mudou.`
+        evictedMessage(body.evicted ?? [])
       }
     } catch {
       buildMessage = 'Sem conexão com o servidor.'
@@ -776,8 +855,9 @@
     // Um arrasto anterior que soltou fora não deixa o próximo clique preso.
     buildSkipClick = false
     if (buildPending || (buildMouse && event.button !== 0)) return
-    // Pincel do chão: tocar pinta a casa e arrastar pinta o caminho (sem pan).
-    if (paint && !buildPick) {
+    // Pincel do chão ou da área do habitat: tocar marca a casa e arrastar
+    // marca o caminho (sem pan).
+    if ((paint || areaEdit) && !buildPick) {
       event.stopPropagation()
       painting = event.pointerId
       try {
@@ -785,7 +865,9 @@
       } catch {
         // Sem capture, pinta enquanto o dedo estiver na camada.
       }
-      paintAt(gridCellAt(event.clientX, event.clientY))
+      const cell = gridCellAt(event.clientX, event.clientY)
+      if (areaEdit) areaAt(cell, true)
+      else paintAt(cell)
       return
     }
     const cell = gridCellAt(event.clientX, event.clientY)
@@ -814,7 +896,11 @@
 
   function onBuildMove(event: PointerEvent) {
     if (painting !== null) {
-      if (event.pointerId === painting) paintAt(gridCellAt(event.clientX, event.clientY))
+      if (event.pointerId === painting) {
+        const cell = gridCellAt(event.clientX, event.clientY)
+        if (areaEdit) areaAt(cell, false)
+        else paintAt(cell)
+      }
       return
     }
     const drag = buildDrag
@@ -856,7 +942,7 @@
     if (painting !== null && event.pointerId === painting) {
       painting = null
       buildSkipClick = true
-      void flushPaint()
+      if (!areaEdit) void flushPaint()
       return
     }
     const drag = buildDrag
@@ -890,6 +976,12 @@
     const found = pieceUnder(layout.pieces, event.clientX, event.clientY)
     buildPick = found ? { kind: 'selected', id: found.id, piece: found.piece } : null
     if (found) play('tap')
+    else {
+      // Fora de peça: tocar num habitat abre a edição dele.
+      const cell = gridCellAt(event.clientX, event.clientY)
+      const home = layout.habitats.find((row) => row.tiles.some((tile) => tile.col === cell.col && tile.row === cell.row))
+      if (home) startArea(home.id, home.kind)
+    }
   }
 
   // Teclado no Construir: R gira a prévia, Esc desiste dela.
@@ -2291,9 +2383,10 @@
           {#each playCells as cell (`${cell.col}-${cell.row}`)}
             {@const at = place(cell.col, cell.row)}
             {@const key = worldKey(cell.col, cell.row)}
-            {@const zone = zoneByCell.get(cellKey(cell.col - playCol0, cell.row - playRow0))}
+            {@const home = habitatByCell.get(cellKey(cell.col - playCol0, cell.row - playRow0))}
             <polygon
-              data-biome={zone ? (zone.biome ?? 'small') : undefined}
+              data-biome={home ? (home.check.ready ? home.kind : 'small') : undefined}
+              class:draft={areaEdit !== null && home !== undefined && home.id === areaEdit.id}
               class:busy={buildBusy.has(key)}
               class:ok={buildValid.has(key)}
               class:picked={buildPicked.has(key)}
@@ -2303,15 +2396,15 @@
           {/each}
         </svg>
         <!-- Etiqueta de cada zona de chão na casa de cima (a âncora). -->
-        {#each zones as zone (cellKey(zone.tiles[0]!.col, zone.tiles[0]!.row))}
-          {@const at = place(zone.tiles[0]!.col + playCol0, zone.tiles[0]!.row + playRow0)}
+        {#each habitatViews as view (view.id ?? 'novo')}
+          {@const at = place(view.tiles[0]!.col + playCol0, view.tiles[0]!.row + playRow0)}
           <span
             class="zone-label"
-            class:small={zone.tooSmall}
+            class:small={!view.check.ready}
             style:left="{at.x}px"
             style:top="{at.y}px"
             style:z-index={depthSpan * 5 + 2}
-            aria-hidden="true">{zoneLabel(zone)}</span
+            aria-hidden="true">{habitatLabel(view.kind, view.check)}</span
           >
         {/each}
         <!-- Camada transparente por cima de tudo: os toques do Construir caem
@@ -2575,9 +2668,22 @@
         itemName={(itemKey) => itemLabel(itemKey, game.berries)}
         {paint}
         {floorSrc}
-        {habitatHint}
+        habitats={layout.habitats.map((row) => ({ id: row.id, kind: row.kind, check: checkHabitat(row.kind, row.tiles, lookAt) }))}
+        area={areaEdit && areaCheck ? { id: areaEdit.id, kind: areaEdit.kind, check: areaCheck } : null}
+        onNewHabitat={(kind) => startArea(null, kind)}
+        onEditHabitat={(id) => startArea(id, 'basico')}
+        onAreaKind={(kind) => {
+          if (areaEdit) areaEdit = { ...areaEdit, kind }
+        }}
+        onAreaSave={() => void saveArea()}
+        onAreaDelete={() => void deleteArea()}
+        onAreaCancel={() => {
+          areaEdit = null
+          buildMessage = ''
+        }}
         onPaint={(tool) => {
           paint = tool
+          areaEdit = null
           buildPick = null
           buildMessage = ''
           if (tool) play('tap')
@@ -3557,6 +3663,11 @@
 
   .build-grid polygon[data-biome='lago'] {
     fill: #5ab0f048;
+  }
+
+  .build-grid polygon.draft {
+    stroke: #f8d030;
+    stroke-width: 2;
   }
 
   .build-grid polygon[data-biome='basico'] {

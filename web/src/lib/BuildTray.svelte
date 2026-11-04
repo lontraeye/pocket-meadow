@@ -5,6 +5,8 @@
   import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
   import { formatCountdown } from './time'
   import { FLOOR_NAMES, type PaintFloor } from '@habitat/config'
+  import { habitatKind, type HabitatCheck, type HabitatKind } from '@habitat'
+  import { habitatStatus, needText } from './habitatView'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
   // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
@@ -22,7 +24,14 @@
     itemName,
     paint,
     floorSrc,
-    habitatHint,
+    habitats,
+    area,
+    onNewHabitat,
+    onEditHabitat,
+    onAreaKind,
+    onAreaSave,
+    onAreaDelete,
+    onAreaCancel,
     onPaint,
     onPick,
     onSelectPlaced,
@@ -50,8 +59,16 @@
     paint: PaintTool | null
     /** Amostra do chão (o tile). */
     floorSrc: (floor: PaintFloor) => string | null
-    /** Resumo dos habitats ao vivo (ex.: "Pradaria · 2 vagas"). */
-    habitatHint: string
+    /** Habitats com a conta ao vivo. */
+    habitats: { id: number; kind: HabitatKind; check: HabitatCheck }[]
+    /** Habitat em edição (área marcada com o pincel), ou null. */
+    area: { id: number | null; kind: HabitatKind; check: HabitatCheck } | null
+    onNewHabitat: (kind: HabitatKind) => void
+    onEditHabitat: (id: number) => void
+    onAreaKind: (kind: HabitatKind) => void
+    onAreaSave: () => void
+    onAreaDelete: () => void
+    onAreaCancel: () => void
     onPaint: (tool: PaintTool | null) => void
     onPick: (piece: PieceKey) => void
     /** Cartão de uma peça que já está no jardim: seleciona ela lá. */
@@ -150,8 +167,11 @@
     return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`
   }
 
-  let tab = $state<BuildCategory | 'all' | 'chao'>('all')
-  function openTab(next: BuildCategory | 'all' | 'chao') {
+  let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
+  /** Escolhendo o tipo do habitat novo. */
+  let choosingKind = $state(false)
+  function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat') {
+    choosingKind = false
     tab = next
     // Sair da aba Chão larga o pincel (o toque volta a escolher peças).
     if (next !== 'chao') onPaint(null)
@@ -163,7 +183,7 @@
     })).filter((category) => cards.some((card) => category.pieces.includes(card.piece))),
   )
   const shown = $derived(
-    tab === 'all' || tab === 'chao' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
+    tab === 'all' || tab === 'chao' || tab === 'habitat' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
   )
   const waitingAll = $derived(cards.filter((card) => card.ready).length)
 
@@ -191,12 +211,16 @@
   ></span>
 {/snippet}
 
-{#snippet tabIcon(key: BuildCategory | 'all' | 'chao')}
+{#snippet tabIcon(key: BuildCategory | 'all' | 'chao' | 'habitat')}
   <!-- Ícones em pixels (grade 12×12), como os do jardim. -->
   <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
     {#if key === 'all'}
       <rect x="1" y="1" width="4" height="4" /><rect x="7" y="1" width="4" height="4" />
       <rect x="1" y="7" width="4" height="4" /><rect x="7" y="7" width="4" height="4" />
+    {:else if key === 'habitat'}
+      <!-- Casinha. -->
+      <rect x="5" y="1" width="2" height="1" /><rect x="3" y="2" width="6" height="2" /><rect x="1" y="4" width="10" height="1" />
+      <rect x="2" y="5" width="8" height="6" /><rect x="5" y="8" width="2" height="3" fill="var(--panel-face)" />
     {:else if key === 'chao'}
       <!-- Losango de chão com um pincel. -->
       <rect x="5" y="5" width="2" height="1" /><rect x="3" y="6" width="6" height="1" /><rect x="1" y="7" width="10" height="1" />
@@ -256,6 +280,17 @@
     >
       {@render tabIcon('chao')}
     </button>
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'habitat'}
+      aria-label="Habitats"
+      title="Habitats"
+      onclick={() => openTab('habitat')}
+    >
+      {@render tabIcon('habitat')}
+    </button>
   </div>
 {/snippet}
 
@@ -269,7 +304,37 @@
     <button type="button" class="btn" onclick={onClose}>Pronto</button>
   </div>
 
-  {#if pick?.kind === 'selected'}
+  {#if area}
+    <!-- Habitat em edição: tipo, área (pincel) e o requisito ao vivo. -->
+    <div class="catalog">
+      <div class="kinds" role="group" aria-label="Tipo do habitat">
+        {#each layout.habitatKinds as row (row.kind)}
+          <button
+            type="button"
+            class="btn kind"
+            class:btn-primary={area.kind === row.kind}
+            aria-pressed={area.kind === row.kind}
+            disabled={pending || row.unlockAt !== null}
+            title={row.unlockAt ? `Abre no ${row.unlockAt.name}` : undefined}
+            onclick={() => onAreaKind(row.kind)}
+          >
+            {habitatKind(row.kind).name}
+          </button>
+        {/each}
+      </div>
+      <p class="hint habitat">
+        {area.check.size === 0 ? 'Marque a área: toque ou arraste nas casas.' : `${area.check.size} casas · ${habitatStatus(area.kind, area.check)}`}
+      </p>
+      <p class="hint">{needText(area.kind, area.check)} Começar numa casa marcada desmarca.</p>
+      <div class="row">
+        <button type="button" class="btn btn-primary" disabled={pending || area.check.size === 0} onclick={onAreaSave}>Salvar</button>
+        {#if area.id !== null}
+          <button type="button" class="btn" disabled={pending} onclick={onAreaDelete}>Excluir</button>
+        {/if}
+        <button type="button" class="btn" disabled={pending} onclick={onAreaCancel}>Cancelar</button>
+      </div>
+    </div>
+  {:else if pick?.kind === 'selected'}
     <div class="picked">
       <span class="thumb small">{@render icon(pick.piece, 1)}</span>
       <p class="hint"><strong>{name(pick.piece)}</strong></p>
@@ -303,6 +368,47 @@
         <button type="button" class="btn" disabled={pending} onclick={onTurn}>Girar{mouse ? ' (R)' : ''}</button>
       {/if}
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Cancelar</button>
+    </div>
+  {:else if tab === 'habitat'}
+    <!-- Habitats (5.22): área e tipo escolhidos; a fronteira é a área de cada um. -->
+    <div class="catalog">
+      {#if choosingKind}
+        <p class="hint">Que tipo de habitat?</p>
+        <div class="kinds" role="group" aria-label="Tipo do habitat">
+          {#each layout.habitatKinds as row (row.kind)}
+            <button
+              type="button"
+              class="btn kind"
+              disabled={pending || row.unlockAt !== null}
+              onclick={() => {
+                choosingKind = false
+                onNewHabitat(row.kind)
+              }}
+            >
+              {habitatKind(row.kind).name}{#if row.unlockAt}<small> · {town(row.unlockAt.name)}</small>{/if}
+            </button>
+          {/each}
+        </div>
+        <div class="row"><button type="button" class="btn" onclick={() => (choosingKind = false)}>Voltar</button></div>
+      {:else}
+        {#if habitats.length === 0}
+          <p class="hint">Nenhum habitat. Crie um, marque a área e pinte o chão do tipo na aba Chão.</p>
+        {:else}
+          <ul class="habitat-list">
+            {#each habitats as row (row.id)}
+              <li>
+                <button type="button" class="btn habitat-row" disabled={pending} onclick={() => onEditHabitat(row.id)}>
+                  <strong>{habitatKind(row.kind).name}</strong>
+                  <span class:ready={row.check.ready}>{habitatStatus(row.kind, row.check)}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <div class="row">
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (choosingKind = true)}>Novo habitat</button>
+        </div>
+      {/if}
     </div>
   {:else if tab === 'chao'}
     <!-- Chão dos habitats (5.22): sem custo nem limite; o espaço é o freio. -->
@@ -347,7 +453,6 @@
           ? `${mouse ? 'Clique ou arraste' : 'Toque ou arraste'} nas casas para ${paint === 'erase' ? 'apagar' : 'pintar'}.`
           : 'Escolha um chão. Juntos, 6 ou mais viram um habitat.'}
       </p>
-      {#if habitatHint}<p class="hint habitat">{habitatHint}</p>{/if}
     </div>
   {:else}
     <div class="catalog">
@@ -704,6 +809,36 @@
 
   .habitat {
     font-weight: 600;
+  }
+
+  .kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .kind {
+    min-height: 44px;
+  }
+
+  .habitat-list {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .habitat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .habitat-row .ready {
+    color: #2f8f4e;
   }
 
   .thumb {
