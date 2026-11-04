@@ -7,6 +7,7 @@ import {
   isFlippable,
   type PieceKey,
 } from '../../../server/src/game/garden/layout'
+import type { PaintFloor } from '../../../server/src/game/habitat/config'
 import type { GardenLayout } from './api'
 
 // Modo Construir do jardim (PROGRESSAO.md 4.3): o que está escolhido e onde dá
@@ -15,6 +16,9 @@ import type { GardenLayout } from './api'
 // lá no lugar da de verdade até o jogador confirmar.
 
 export type BuildGhost = { col: number; row: number; flipped: boolean }
+
+/** Pincel do chão (habitats, 5.22): um chão da paleta ou a borracha (volta ao gramado). */
+export type PaintTool = PaintFloor | 'erase'
 
 export type BuildPick =
   /** Peça nova: um canteiro ou uma estrutura guardada (`structureId`). */

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
   import { giftIconSrc, type GardenLayout } from './api'
-  import type { BuildPick } from './build'
+  import type { BuildPick, PaintTool } from './build'
   import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
   import { formatCountdown } from './time'
+  import { FLOOR_NAMES, type PaintFloor } from '@habitat/config'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
   // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
@@ -19,6 +20,10 @@
     mouse,
     now,
     itemName,
+    paint,
+    floorSrc,
+    habitatHint,
+    onPaint,
     onPick,
     onSelectPlaced,
     onCraft,
@@ -41,6 +46,13 @@
     now: number
     /** Nome do material, para o custo da receita. */
     itemName: (itemKey: string) => string
+    /** Pincel escolhido na aba Chão (null = nenhum). */
+    paint: PaintTool | null
+    /** Amostra do chão (o tile). */
+    floorSrc: (floor: PaintFloor) => string | null
+    /** Resumo dos habitats ao vivo (ex.: "Pradaria · 2 vagas"). */
+    habitatHint: string
+    onPaint: (tool: PaintTool | null) => void
     onPick: (piece: PieceKey) => void
     /** Cartão de uma peça que já está no jardim: seleciona ela lá. */
     onSelectPlaced: (id: number) => void
@@ -138,7 +150,12 @@
     return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`
   }
 
-  let tab = $state<BuildCategory | 'all'>('all')
+  let tab = $state<BuildCategory | 'all' | 'chao'>('all')
+  function openTab(next: BuildCategory | 'all' | 'chao') {
+    tab = next
+    // Sair da aba Chão larga o pincel (o toque volta a escolher peças).
+    if (next !== 'chao') onPaint(null)
+  }
   const tabs = $derived(
     BUILD_CATEGORIES.map((category) => ({
       ...category,
@@ -146,7 +163,7 @@
     })).filter((category) => cards.some((card) => category.pieces.includes(card.piece))),
   )
   const shown = $derived(
-    tab === 'all' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
+    tab === 'all' || tab === 'chao' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
   )
   const waitingAll = $derived(cards.filter((card) => card.ready).length)
 
@@ -174,12 +191,17 @@
   ></span>
 {/snippet}
 
-{#snippet tabIcon(key: BuildCategory | 'all')}
+{#snippet tabIcon(key: BuildCategory | 'all' | 'chao')}
   <!-- Ícones em pixels (grade 12×12), como os do jardim. -->
   <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
     {#if key === 'all'}
       <rect x="1" y="1" width="4" height="4" /><rect x="7" y="1" width="4" height="4" />
       <rect x="1" y="7" width="4" height="4" /><rect x="7" y="7" width="4" height="4" />
+    {:else if key === 'chao'}
+      <!-- Losango de chão com um pincel. -->
+      <rect x="5" y="5" width="2" height="1" /><rect x="3" y="6" width="6" height="1" /><rect x="1" y="7" width="10" height="1" />
+      <rect x="3" y="8" width="6" height="1" /><rect x="5" y="9" width="2" height="1" />
+      <rect x="8" y="1" width="2" height="2" /><rect x="7" y="3" width="2" height="2" />
     {:else if key === 'horta'}
       <!-- Broto saindo da terra. -->
       <rect x="5" y="3" width="2" height="6" /><rect x="2" y="2" width="3" height="2" /><rect x="7" y="4" width="3" height="2" />
@@ -204,7 +226,7 @@
       aria-selected={tab === 'all'}
       aria-label="Tudo"
       title="Tudo"
-      onclick={() => (tab = 'all')}
+      onclick={() => openTab('all')}
     >
       {@render tabIcon('all')}
       {#if waitingAll > 0}<span class="dot" aria-hidden="true"></span>{/if}
@@ -217,12 +239,23 @@
         aria-selected={tab === category.key}
         aria-label={category.name}
         title={category.name}
-        onclick={() => (tab = category.key)}
+        onclick={() => openTab(category.key)}
       >
         {@render tabIcon(category.key)}
         {#if category.waiting > 0}<span class="dot" aria-hidden="true"></span>{/if}
       </button>
     {/each}
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'chao'}
+      aria-label="Chão"
+      title="Chão"
+      onclick={() => openTab('chao')}
+    >
+      {@render tabIcon('chao')}
+    </button>
   </div>
 {/snippet}
 
@@ -270,6 +303,51 @@
         <button type="button" class="btn" disabled={pending} onclick={onTurn}>Girar{mouse ? ' (R)' : ''}</button>
       {/if}
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Cancelar</button>
+    </div>
+  {:else if tab === 'chao'}
+    <!-- Chão dos habitats (5.22): sem custo nem limite; o espaço é o freio. -->
+    <div class="catalog">
+      <div class="cards floors" role="tabpanel">
+        {#each layout.floors as row (row.floor)}
+          {@const src = floorSrc(row.floor)}
+          <button
+            type="button"
+            class="card"
+            class:focused={paint === row.floor}
+            class:locked={row.unlockAt !== null}
+            aria-pressed={paint === row.floor}
+            disabled={pending || row.unlockAt !== null}
+            aria-label={row.unlockAt ? `${FLOOR_NAMES[row.floor]}: abre no ${row.unlockAt.name}` : FLOOR_NAMES[row.floor]}
+            onclick={() => onPaint(paint === row.floor ? null : row.floor)}
+          >
+            <span class="thumb">
+              {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
+            </span>
+            <span class="card-name">{FLOOR_NAMES[row.floor]}</span>
+            {#if row.unlockAt}<small>{town(row.unlockAt.name)}</small>{/if}
+          </button>
+        {/each}
+        <button
+          type="button"
+          class="card"
+          class:focused={paint === 'erase'}
+          aria-pressed={paint === 'erase'}
+          disabled={pending}
+          onclick={() => onPaint(paint === 'erase' ? null : 'erase')}
+        >
+          <span class="thumb">
+            {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
+          </span>
+          <span class="card-name">Apagar</span>
+          <small>gramado</small>
+        </button>
+      </div>
+      <p class="hint">
+        {paint
+          ? `${mouse ? 'Clique ou arraste' : 'Toque ou arraste'} nas casas para ${paint === 'erase' ? 'apagar' : 'pintar'}.`
+          : 'Escolha um chão. Juntos, 6 ou mais viram um habitat.'}
+      </p>
+      {#if habitatHint}<p class="hint habitat">{habitatHint}</p>{/if}
     </div>
   {:else}
     <div class="catalog">
@@ -616,6 +694,18 @@
   }
 
   /* O ícone em cima de um pedacinho de gramado. */
+  .swatch {
+    image-rendering: pixelated;
+  }
+
+  .swatch.erase {
+    filter: grayscale(1) opacity(0.5);
+  }
+
+  .habitat {
+    font-weight: 600;
+  }
+
   .thumb {
     position: relative;
     display: grid;

@@ -20,7 +20,8 @@
     type TreeView,
   } from './api'
   import { benchOperatorIds } from './structures'
-  import { cellKey, isFlippable, occupied, type PieceKey } from '@garden/layout'
+  import { cellKey, inBounds, isFlippable, occupied, type PieceKey } from '@garden/layout'
+  import { biomeName, habitatConfig, recognizeHabitats, type GardenCell, type PaintFloor, type Zone } from '@habitat'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
   import { BUBBLES, type BubbleKind } from './bubbles'
@@ -48,6 +49,7 @@
     validAnchors,
     viewPieces,
     type BuildPick,
+    type PaintTool,
     type PlacedView,
   } from './build'
   import HealMachinePanel from './HealMachinePanel.svelte'
@@ -512,6 +514,7 @@
   function setBuilding(on: boolean) {
     building = on
     buildPick = null
+    paint = null
     buildMessage = ''
     onBuildMode?.(on)
   }
@@ -531,6 +534,98 @@
       buildMessage = 'Sem conexão com o servidor.'
       return false
     } finally {
+      buildPending = false
+    }
+  }
+
+  // Chão dos habitats (5.22): o pincel da aba Chão pinta casas sem custo. As
+  // pinceladas ficam num rascunho (por cima do layout) e vão juntas ao soltar.
+  let paint = $state<PaintTool | null>(null)
+  let paintDraft = $state<Record<string, PaintFloor | null>>({})
+  let painting: number | null = null
+  /** Chão de cada casa jogável agora: o layout com o rascunho por cima. */
+  const floorMap = $derived.by(() => {
+    const out = new Map<string, string>(layout.floor.map((tile) => [cellKey(tile.col, tile.row), tile.floor]))
+    for (const [key, floor] of Object.entries(paintDraft)) {
+      if (floor === null) out.delete(key)
+      else out.set(key, floor)
+    }
+    return out
+  })
+  /** Zonas ao vivo pelo motor (as casas de canteiro ficam de fora, como no servidor). */
+  const zones = $derived.by((): Zone[] => {
+    const cells: GardenCell[] = []
+    for (const [key, floor] of floorMap) {
+      const [col, row] = key.split(',').map(Number) as [number, number]
+      if (!isPlotCell(playCol0 + col, playRow0 + row)) cells.push({ col, row, floor, object: null })
+    }
+    return recognizeHabitats(cells)
+  })
+
+  /** Zona de cada casa (para pintar a grade do Construir). */
+  const zoneByCell = $derived(
+    new Map(zones.flatMap((zone) => zone.tiles.map((tile) => [cellKey(tile.col, tile.row), zone] as const))),
+  )
+
+  /** Amostra da paleta: a primeira variação do tile do chão. */
+  function floorSrc(floor: PaintFloor): string | null {
+    return Object.entries(tileFiles).find(([file]) => file.endsWith(`/${floor}-1.png`))?.[1] ?? null
+  }
+
+  function zoneLabel(zone: Zone): string {
+    if (zone.tooSmall) return `${zone.tiles.length}/${habitatConfig.minTiles} casas`
+    const slots = `${zone.capacity} vagas`
+    return zone.biome ? `${biomeName(zone.biome)} · ${slots}` : slots
+  }
+
+  /** Resumo para a bandeja: os habitats e o que falta no primeiro básico. */
+  const habitatHint = $derived.by(() => {
+    const homes = zones.filter((zone) => zone.biome)
+    if (homes.length === 0) return ''
+    const basic = homes.find((zone) => zone.biome === 'basico' && zone.nearest)
+    const near = basic?.nearest
+    const tip =
+      near && near.gaps.length > 0
+        ? ` Para ${biomeName(near.biome)}: falta ${near.gaps.map((gap) => `${gap.materials.join('/')} (${gap.have} de ${gap.need})`).join(', ')}.`
+        : ''
+    return homes.map(zoneLabel).join(' · ') + tip
+  })
+
+  function paintAt(cell: { col: number; row: number }) {
+    if (!paint || !inBounds(cell) || isPlotCell(playCol0 + cell.col, playRow0 + cell.row)) return
+    const floor = paint === 'erase' ? null : paint
+    const key = cellKey(cell.col, cell.row)
+    if ((floorMap.get(key) ?? null) === floor) return
+    paintDraft = { ...paintDraft, [key]: floor }
+  }
+
+  async function flushPaint() {
+    const entries = Object.entries(paintDraft)
+    if (entries.length === 0) return
+    const cells = entries.map(([key, floor]) => {
+      const [col, row] = key.split(',').map(Number) as [number, number]
+      return { col, row, floor }
+    })
+    buildPending = true
+    buildMessage = ''
+    try {
+      const response = await api('/api/build/floor', { cells })
+      const body = (await response.json().catch(() => ({ error: 'internal' }))) as ApiError & { evicted?: number[] }
+      if (!response.ok) {
+        buildMessage = errorText(body)
+      } else {
+        await onState()
+        const names = (body.evicted ?? [])
+          .map((id) => game.pokemon.find((mon) => mon.id === id))
+          .map((mon) => (mon ? (mon.nickname ?? mon.displayName) : null))
+          .filter(Boolean)
+        if (names.length > 0) buildMessage = `${names.join(', ')} ficou sem casa: o habitat mudou.`
+      }
+    } catch {
+      buildMessage = 'Sem conexão com o servidor.'
+    } finally {
+      // O layout novo já tem o que foi salvo (ou volta ao de antes, se falhou).
+      paintDraft = {}
       buildPending = false
     }
   }
@@ -681,6 +776,18 @@
     // Um arrasto anterior que soltou fora não deixa o próximo clique preso.
     buildSkipClick = false
     if (buildPending || (buildMouse && event.button !== 0)) return
+    // Pincel do chão: tocar pinta a casa e arrastar pinta o caminho (sem pan).
+    if (paint && !buildPick) {
+      event.stopPropagation()
+      painting = event.pointerId
+      try {
+        ;(event.currentTarget as Element).setPointerCapture(event.pointerId)
+      } catch {
+        // Sem capture, pinta enquanto o dedo estiver na camada.
+      }
+      paintAt(gridCellAt(event.clientX, event.clientY))
+      return
+    }
     const cell = gridCellAt(event.clientX, event.clientY)
     const pick = buildPick
     let piece: PlacedView | null = null
@@ -706,6 +813,10 @@
   }
 
   function onBuildMove(event: PointerEvent) {
+    if (painting !== null) {
+      if (event.pointerId === painting) paintAt(gridCellAt(event.clientX, event.clientY))
+      return
+    }
     const drag = buildDrag
     if (!drag) {
       // Mouse sem botão: a prévia segue o ponteiro.
@@ -742,6 +853,12 @@
   }
 
   function onBuildUp(event: PointerEvent) {
+    if (painting !== null && event.pointerId === painting) {
+      painting = null
+      buildSkipClick = true
+      void flushPaint()
+      return
+    }
     const drag = buildDrag
     if (!drag || drag.pointerId !== event.pointerId) return
     buildDrag = null
@@ -1190,7 +1307,7 @@
     const cells: (string | null)[] = []
     for (let row = 0; row < playRows; row += 1) {
       for (let col = 0; col < playCols; col += 1) {
-        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'canteiro' : 'grama')
+        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'canteiro' : (floorMap.get(cellKey(col, row)) ?? 'grama'))
       }
     }
     const grid: TerrainGrid = { cols: playCols, rows: playRows, cells }
@@ -2174,7 +2291,9 @@
           {#each playCells as cell (`${cell.col}-${cell.row}`)}
             {@const at = place(cell.col, cell.row)}
             {@const key = worldKey(cell.col, cell.row)}
+            {@const zone = zoneByCell.get(cellKey(cell.col - playCol0, cell.row - playRow0))}
             <polygon
+              data-biome={zone ? (zone.biome ?? 'small') : undefined}
               class:busy={buildBusy.has(key)}
               class:ok={buildValid.has(key)}
               class:picked={buildPicked.has(key)}
@@ -2183,6 +2302,18 @@
             />
           {/each}
         </svg>
+        <!-- Etiqueta de cada zona de chão na casa de cima (a âncora). -->
+        {#each zones as zone (cellKey(zone.tiles[0]!.col, zone.tiles[0]!.row))}
+          {@const at = place(zone.tiles[0]!.col + playCol0, zone.tiles[0]!.row + playRow0)}
+          <span
+            class="zone-label"
+            class:small={zone.tooSmall}
+            style:left="{at.x}px"
+            style:top="{at.y}px"
+            style:z-index={depthSpan * 5 + 2}
+            aria-hidden="true">{zoneLabel(zone)}</span
+          >
+        {/each}
         <!-- Camada transparente por cima de tudo: os toques do Construir caem
              na casa pela posição (gridCellAt), não no sprite. -->
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -2442,7 +2573,19 @@
         mouse={buildMouse}
         now={clock.now()}
         itemName={(itemKey) => itemLabel(itemKey, game.berries)}
-        onPick={pickNew}
+        {paint}
+        {floorSrc}
+        {habitatHint}
+        onPaint={(tool) => {
+          paint = tool
+          buildPick = null
+          buildMessage = ''
+          if (tool) play('tap')
+        }}
+        onPick={(piece) => {
+          paint = null
+          pickNew(piece)
+        }}
         onCraft={(piece) => {
           void buildCall('/api/build/craft', { piece }).then((ok) => {
             if (ok) {
@@ -3391,6 +3534,50 @@
     fill: #ffffff10;
     stroke: #ffffff70;
     stroke-width: 1;
+  }
+
+  /* Zonas de chão (habitats): a cor diz o bioma; pequena demais fica tracejada. */
+  .build-grid polygon[data-biome] {
+    fill: #ffffff26;
+    stroke: #ffffffc0;
+  }
+
+  .build-grid polygon[data-biome='small'] {
+    fill: #00000018;
+    stroke-dasharray: 3 3;
+  }
+
+  .build-grid polygon[data-biome='pradaria'] {
+    fill: #8ee06a40;
+  }
+
+  .build-grid polygon[data-biome='rochedo'] {
+    fill: #c8a07040;
+  }
+
+  .build-grid polygon[data-biome='lago'] {
+    fill: #5ab0f048;
+  }
+
+  .build-grid polygon[data-biome='basico'] {
+    fill: #f0e6c838;
+  }
+
+  .zone-label {
+    position: absolute;
+    transform: translate(-50%, -110%);
+    padding: 1px 6px;
+    background: var(--panel-face, #fff8e8);
+    color: var(--ink, #2b2b2b);
+    box-shadow: 0 0 0 2px var(--ink, #2b2b2b);
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .zone-label.small {
+    opacity: 0.75;
   }
 
   .build-grid polygon.busy {

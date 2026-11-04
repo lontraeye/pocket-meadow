@@ -1,4 +1,5 @@
 import type { PieceKey, StructurePiece } from '@garden/layout'
+import type { PaintFloor } from '@habitat/config'
 import type { BattleSetup } from '@sim'
 import { busyFromLastPress } from './busy'
 import { markOffline, markOnline } from './connection.svelte'
@@ -298,6 +299,8 @@ export type OwnedPokemon = {
   hpRatio: number
   /** HP máximo de luta (o atual = hpRatio × maxHp). */
   maxHp: number
+  /** Casa no habitat (5.22): a âncora da zona; null = sem casa. */
+  home: { col: number; row: number } | null
 }
 
 /** Quadro de missões diárias (5.20). */
@@ -452,6 +455,10 @@ export type GardenLayout = {
   }[]
   /** A obra em andamento (uma por vez), ou null. */
   building: { id: number; piece: StructurePiece; startedAt: number; readyAt: number } | null
+  /** Chão pintado (habitats, 5.22): uma casa por linha, sem as casas de canteiro. */
+  floor: { col: number; row: number; floor: string }[]
+  /** Paleta do chão, na ordem, com o marco que abre os fechados (null = aberto). */
+  floors: { floor: PaintFloor; unlockAt: UnlockAt | null }[]
 }
 
 /** O marco (líder vencido) que abre algo no jardim. */

@@ -60,10 +60,15 @@ gardenRoutes.post('/pets/:id/home', requireUser, async (c) => {
   if (id === null || cell === undefined) return c.json({ error: 'invalid_body' }, 400)
   const result = immediate(() => setHome(c.get('userId'), id, cell, Date.now()))
   if (!result.ok) return c.json(errorBody(result), result.status)
-  return c.json({ home: cell })
+  return c.json({ home: result.home })
 })
 
-function setHome(userId: number, pokemonId: number, cell: { col: number; row: number } | null, now: number): { ok: true } | Failure {
+function setHome(
+  userId: number,
+  pokemonId: number,
+  cell: { col: number; row: number } | null,
+  now: number,
+): { ok: true; home: { col: number; row: number } | null } | Failure {
   persistCatchUp(userId, now)
   const found = gardenPet(userId, pokemonId)
   if (!found.ok) return found
@@ -86,7 +91,7 @@ function setHome(userId: number, pokemonId: number, cell: { col: number; row: nu
     .set({ homeCol: cell?.col ?? null, homeRow: cell?.row ?? null })
     .where(eq(pokemon.id, pokemonId))
     .run()
-  return { ok: true }
+  return { ok: true, home: cell }
 }
 
 // Alimentar todos (PROGRESSAO.md, 4.2): 1 berry por Pokémon com fome, do mais
