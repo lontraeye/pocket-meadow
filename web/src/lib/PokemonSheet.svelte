@@ -1,5 +1,6 @@
 <script lang="ts">
   import { snapIconSize } from './pixelSnap.svelte'
+  import { habitatKind, kindBonus } from '@habitat'
   import { spriteLoading } from './spriteLoading'
   import {
     api,
@@ -269,6 +270,13 @@
   )
   const petWaitMs = $derived(mon.pet.petReadyAt === null ? 0 : Math.max(0, mon.pet.petReadyAt - careClock.now()))
   const full = $derived(mon.pet.hunger >= game.garden.fullAt)
+  /** Onde mora (habitat, 5.22) e se ganha o bônus do tipo; null = sem casa. */
+  const home = $derived.by(() => {
+    const row = game.garden.layout.habitats.find((habitat) => habitat.id === mon.habitatId)
+    if (!row) return null
+    const types = mon.type2 ? [mon.type1, mon.type2] : [mon.type1]
+    return { name: habitatKind(row.kind).name, bonus: kindBonus(types, row.kind, true) }
+  })
   // HP de luta agora: o mesmo arredondamento da luta (vivo tem pelo menos 1).
   const hpRatio = $derived(liveHpRatio(mon, game, careClock.now()))
   const hpFullIn = $derived(hpFullInMs(mon, game, careClock.now()))
@@ -783,6 +791,9 @@
         {#key hearts}
           {#if hearts > 0}<span class="hearts" aria-hidden="true"><i></i><i></i><i></i></span>{/if}
         {/key}
+        <p class="care-hint">
+          {home ? `Casa: ${home.name}${home.bonus ? ' ★ (bônus do tipo)' : ''}` : 'Sem casa: monte um habitat no Construir.'}
+        </p>
         <dl class="needs">
           <dt>Felicidade</dt>
           <dd><span class="meter happy" style:--fill="{mon.pet.happiness}%"></span></dd>

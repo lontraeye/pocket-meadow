@@ -8,7 +8,9 @@ import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { xpUntilCap } from '../game/progression.js'
 import { unitRoll } from '../game/rng.js'
 import { grantXp } from '../game/xp.js'
+import { habitatConfig } from '../game/habitat/index.js'
 import { getDb } from './client.js'
+import { habitatBonusIds } from './habitat.js'
 import { gardenGifts, pokemon } from './schema.js'
 
 /**
@@ -47,6 +49,10 @@ export function settleGarden(userId: number, now: number): void {
     .where(eq(gardenGifts.userId, userId))
     .get()?.count ?? 0
 
+  // Habitat do próprio tipo (5.22): felicidade sobe mais rápido e o presente sai antes.
+  const bonusIds = habitatBonusIds(userId)
+  const bonusPet = { ...petConfig, happinessUpPerHour: petConfig.happinessUpPerHour * habitatConfig.bonus.happinessUpMult }
+
   // Os mais felizes deixam presente primeiro quando o chão está quase cheio.
   rows.sort((a, b) => b.happiness - a.happiness)
   for (const row of rows) {
@@ -67,7 +73,8 @@ export function settleGarden(userId: number, now: number): void {
     }
     if (inGarden && now - row.petAt < petConfig.settleMinMs) continue
 
-    const settled = settlePet(row, row.petAt, now)
+    const bonus = bonusIds.has(row.id)
+    const settled = settlePet(row, row.petAt, now, bonus ? bonusPet : petConfig)
     const gain = Math.min(
       gardenXp(row.level, settled.averageHappiness, settled.hours),
       xpUntilCap(row.level, row.xp, progressConfig.levelCap),
@@ -90,7 +97,7 @@ export function settleGarden(userId: number, now: number): void {
     if (
       inGarden &&
       settled.happiness >= petConfig.gifts.minHappiness &&
-      now - lastGiftAt >= petConfig.gifts.intervalMs &&
+      now - lastGiftAt >= petConfig.gifts.intervalMs * (bonus ? habitatConfig.bonus.giftIntervalMult : 1) &&
       onGround < petConfig.gifts.maxOnGround
     ) {
       const gift = pickGift(petConfig.gifts.table, unitRoll())

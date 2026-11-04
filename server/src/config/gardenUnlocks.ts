@@ -2,12 +2,16 @@
 // vencidos), não o nível de treinador. Cada marco pode dar peças (a primeira
 // unidade), receitas para construir mais, subir quantas de cada tipo dá para
 // ter (o teto), o limite de canteiros, as vagas do daycare e o nível máximo da
-// bancada. Módulo puro: recebe os marcos conquistados.
+// bancada, e os chãos dos habitats (PLANNING 5.22). Módulo puro: recebe os
+// marcos conquistados.
 
 import type { StructurePiece } from '../game/garden/layout.js'
+import type { PaintFloor } from '../game/habitat/config.js'
 import { milestoneConfigs } from './milestones.js'
 
 export type GardenGrant = {
+  /** Chãos de habitat que passam a dar para pintar (sem custo nem limite). */
+  floors?: readonly PaintFloor[]
   /** Peças que o marco dá (uma unidade de cada). */
   pieces?: readonly StructurePiece[]
   /** Canteiros no jardim, no máximo (o limite passa a ser este). */
@@ -31,19 +35,22 @@ export const GARDEN_START = {
   recipes: [],
   /** Uma de cada; quem não tem entrada nos marcos fica em 1. */
   caps: {},
+  // Pradaria desde o começo; o gramado (grama) é o chão neutro.
+  floors: ['grama-alta', 'flores'],
 } as const satisfies Required<GardenGrant>
 
 /** Por marco (chave de `milestoneConfigs`); marco sem entrada não muda o jardim. */
 export const GARDEN_GRANTS: Readonly<Record<string, GardenGrant>> = {
-  azalea: { plots: 6, daycareSlots: 2, recipes: ['apricorn_tree'], caps: { apricorn_tree: 2 } },
+  azalea: { floors: ['areia', 'terra', 'pedra'], plots: 6, daycareSlots: 2, recipes: ['apricorn_tree'], caps: { apricorn_tree: 2 } },
   goldenrod: { pieces: ['apricorn_tree_blue'], benchMaxLevel: 2 },
-  ecruteak: { plots: 8, caps: { apricorn_tree: 3 } },
+  ecruteak: { floors: ['agua', 'agua-funda'], plots: 8, caps: { apricorn_tree: 3 } },
   cianwood: { daycareSlots: 3, recipes: ['heal_machine'], caps: { heal_machine: 2 } },
   olivine: { pieces: ['apricorn_tree_yellow'], plots: 10, benchMaxLevel: 3 },
   blackthorn: { plots: 12, daycareSlots: 4, recipes: ['ball_bench'], caps: { ball_bench: 2 } },
 }
 
 export type GardenUnlocks = {
+  floors: ReadonlySet<PaintFloor>
   pieces: ReadonlySet<StructurePiece>
   plotLimit: number
   daycareSlots: number
@@ -56,6 +63,7 @@ export type GardenUnlocks = {
 /** Somando o começo e os marcos conquistados (o maior valor de cada um vale). */
 export function gardenUnlocks(cleared: ReadonlySet<string>): GardenUnlocks {
   const pieces = new Set<StructurePiece>(GARDEN_START.pieces)
+  const floors = new Set<PaintFloor>(GARDEN_START.floors)
   let plotLimit: number = GARDEN_START.plots
   let daycareSlots: number = GARDEN_START.daycareSlots
   let benchMaxLevel: number = GARDEN_START.benchMaxLevel
@@ -64,6 +72,7 @@ export function gardenUnlocks(cleared: ReadonlySet<string>): GardenUnlocks {
   for (const [key, grant] of Object.entries(GARDEN_GRANTS)) {
     if (!cleared.has(key)) continue
     for (const piece of grant.pieces ?? []) pieces.add(piece)
+    for (const floor of grant.floors ?? []) floors.add(floor)
     for (const piece of grant.recipes ?? []) recipes.add(piece)
     for (const [piece, cap] of Object.entries(grant.caps ?? {}) as [StructurePiece, number][]) {
       caps.set(piece, Math.max(caps.get(piece) ?? 1, cap))
@@ -72,7 +81,7 @@ export function gardenUnlocks(cleared: ReadonlySet<string>): GardenUnlocks {
     daycareSlots = Math.max(daycareSlots, grant.daycareSlots ?? 0)
     benchMaxLevel = Math.max(benchMaxLevel, grant.benchMaxLevel ?? 0)
   }
-  return { pieces, plotLimit, daycareSlots, benchMaxLevel, recipes, capOf: (piece) => caps.get(piece) ?? 1 }
+  return { floors, pieces, plotLimit, daycareSlots, benchMaxLevel, recipes, capOf: (piece) => caps.get(piece) ?? 1 }
 }
 
 /** O marco que abre algo, para o texto do cadeado ("abre no Marco de Azalea"). */
@@ -127,4 +136,10 @@ export function nextCapAt(cleared: ReadonlySet<string>, piece: StructurePiece): 
   const now = gardenUnlocks(cleared).capOf(piece)
   const at = nextGrant(cleared, (grant) => (grant.caps?.[piece] ?? 0) > now)
   return at ? { ...at, cap: GARDEN_GRANTS[at.milestone]!.caps![piece]! } : null
+}
+
+/** O marco que abre o chão (null = já aberto). */
+export function floorUnlockAt(cleared: ReadonlySet<string>, floor: PaintFloor): UnlockAt | null {
+  if (gardenUnlocks(cleared).floors.has(floor)) return null
+  return nextGrant(cleared, (grant) => grant.floors?.includes(floor) ?? false)
 }

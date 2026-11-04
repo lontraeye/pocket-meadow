@@ -246,6 +246,20 @@
       "when": 1793850000000,
       "tag": "0034_structure_builds",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1793900000000,
+      "tag": "0035_garden_tiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1793950000000,
+      "tag": "0036_habitats",
+      "breakpoints": true
     }
   ]
 }

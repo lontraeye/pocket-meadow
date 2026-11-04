@@ -265,6 +265,8 @@ export const pokemon = sqliteTable(
     hpRatio: real('hp_ratio').notNull().default(1),
     /** Até quando o HP de descanso foi liquidado; null = fora do jardim (congelado). */
     hpUpdatedAt: integer('hp_updated_at'),
+    /** Habitat onde mora (PLANNING 5.22); null = sem casa (anda pelo jardim). */
+    habitatId: integer('habitat_id').references((): AnySQLiteColumn => habitats.id, { onDelete: 'set null' }),
   },
   (table) => [
     index('idx_pokemon_user').on(table.userId),
@@ -590,6 +592,53 @@ export const pokedexClaims = sqliteTable(
     claimedAt: integer('claimed_at').notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.blockKey] })],
+)
+
+/**
+ * Chão pintado do jardim (habitats, PLANNING 5.22): uma linha por casa que não
+ * é gramado. Sem custo nem limite; o motor (game/habitat) lê daqui as zonas.
+ */
+export const gardenTiles = sqliteTable(
+  'garden_tiles',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    col: integer('col').notNull(),
+    row: integer('row').notNull(),
+    floor: text('floor').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.col, table.row] })],
+)
+
+/** Habitats do jardim (5.22, área e tipo escolhidos pelo jogador). */
+export const habitats = sqliteTable(
+  'habitats',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_habitats_user').on(table.userId)],
+)
+
+/** As casas de cada habitat: uma casa é de um habitat só (a fronteira). */
+export const habitatTiles = sqliteTable(
+  'habitat_tiles',
+  {
+    habitatId: integer('habitat_id')
+      .notNull()
+      .references(() => habitats.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    col: integer('col').notNull(),
+    row: integer('row').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.col, table.row] }), index('idx_habitat_tiles_habitat').on(table.habitatId)],
 )
 
 export const berryPlots = sqliteTable(

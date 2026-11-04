@@ -111,6 +111,7 @@ function readState(userId: number, now: number) {
       happiness: pokemon.happiness,
       lastPetAt: pokemon.lastPetAt,
       hpRatio: pokemon.hpRatio,
+      habitatId: pokemon.habitatId,
     })
     .from(pokemon)
     .innerJoin(species, eq(pokemon.speciesId, species.id))
@@ -387,6 +388,8 @@ function readState(userId: number, now: number) {
         hpRatio: mon.hpRatio,
         /** HP máximo de luta (o atual sai do hpRatio). */
         maxHp: battleMaxHp(view.stats.hp),
+        /** Habitat onde mora (5.22); null = sem casa. */
+        habitatId: mon.habitatId,
       }
     }),
     candies: db.select().from(candies).where(eq(candies.userId, userId)).all(),

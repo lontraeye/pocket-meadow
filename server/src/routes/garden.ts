@@ -11,7 +11,9 @@ import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { recordEvent } from '../db/events.js'
 import { creditItems, debitItem } from '../db/inventory.js'
-import { gardenGifts, pokemon, trainers } from '../db/schema.js'
+import { gardenGifts, pokemon, species, trainers } from '../db/schema.js'
+import { checkedHabitats, residentsOf } from '../db/habitat.js'
+import { canLiveInKind } from '../game/habitat/index.js'
 import { petReadyAt } from '../game/pets.js'
 import { type Failure, fail, parseId, readObject } from './http.js'
 
@@ -40,6 +42,40 @@ gardenRoutes.post('/pets/:id/snack', requireUser, async (c) => {
   if (!result.ok) return c.json(errorBody(result), result.status)
   return c.json(result.pet)
 })
+
+// Casa no habitat (PLANNING 5.22): `habitatId` do habitat, ou null para sair.
+// O habitat precisa estar pronto, ser de um dos tipos dele (ou básico) e ter vaga.
+gardenRoutes.post('/pets/:id/home', requireUser, async (c) => {
+  const id = parseId(c.req.param('id'))
+  const habitatId = (await readObject(c))?.habitatId
+  const valid = habitatId === null || (typeof habitatId === 'number' && Number.isInteger(habitatId))
+  if (id === null || !valid) return c.json({ error: 'invalid_body' }, 400)
+  const result = immediate(() => setHome(c.get('userId'), id, habitatId as number | null, Date.now()))
+  if (!result.ok) return c.json(errorBody(result), result.status)
+  return c.json({ habitatId })
+})
+
+function setHome(userId: number, pokemonId: number, habitatId: number | null, now: number): { ok: true } | Failure {
+  persistCatchUp(userId, now)
+  const found = gardenPet(userId, pokemonId)
+  if (!found.ok) return found
+  const db = getDb()
+  if (habitatId !== null) {
+    const home = checkedHabitats(userId).find((row) => row.id === habitatId)
+    if (!home) return fail('habitat_not_found', 404)
+    if (!home.check.ready) return fail('habitat_not_ready', 400)
+    const kinds = db
+      .select({ type1: species.type1, type2: species.type2 })
+      .from(pokemon)
+      .innerJoin(species, eq(species.id, pokemon.speciesId))
+      .where(eq(pokemon.id, pokemonId))
+      .get()!
+    if (!canLiveInKind(kinds.type2 ? [kinds.type1, kinds.type2] : [kinds.type1], home.kind)) return fail('wrong_habitat', 400)
+    if (residentsOf(userId, habitatId, pokemonId) >= home.check.capacity) return fail('habitat_full', 400)
+  }
+  db.update(pokemon).set({ habitatId }).where(eq(pokemon.id, pokemonId)).run()
+  return { ok: true }
+}
 
 // Alimentar todos (PROGRESSAO.md, 4.2): 1 berry por Pokémon com fome, do mais
 // faminto ao menos, até a berry acabar. `ids` limita (ex.: só o time).

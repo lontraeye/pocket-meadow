@@ -1,9 +1,12 @@
 <script lang="ts">
   import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
   import { giftIconSrc, type GardenLayout } from './api'
-  import type { BuildPick } from './build'
+  import type { BuildPick, PaintTool } from './build'
   import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
   import { formatCountdown } from './time'
+  import { FLOOR_NAMES, type PaintFloor } from '@habitat/config'
+  import { habitatKind, type HabitatCheck, type HabitatKind } from '@habitat'
+  import { habitatStatus, kindFloors, needText } from './habitatView'
 
   // Construção do jardim (PROGRESSAO.md 4.3): a barra de baixo do modo
   // Construir. O jardim cuida dos toques na grade; aqui ficam o catálogo (abas
@@ -19,6 +22,21 @@
     mouse,
     now,
     itemName,
+    paint,
+    floorSrc,
+    habitats,
+    area,
+    onNewHabitat,
+    onEditHabitat,
+    onDeleteHabitat,
+    residents,
+    candidates,
+    onHome,
+    onAreaKind,
+    onAreaSave,
+    onAreaDelete,
+    onAreaCancel,
+    onPaint,
     onPick,
     onSelectPlaced,
     onCraft,
@@ -41,6 +59,29 @@
     now: number
     /** Nome do material, para o custo da receita. */
     itemName: (itemKey: string) => string
+    /** Pincel escolhido na aba Chão (null = nenhum). */
+    paint: PaintTool | null
+    /** Amostra do chão (o tile). */
+    floorSrc: (floor: PaintFloor) => string | null
+    /** Habitats com a conta ao vivo. */
+    habitats: { id: number; kind: HabitatKind; check: HabitatCheck }[]
+    /** Habitat em edição (área marcada com o pincel), ou null. */
+    area: { id: number | null; kind: HabitatKind; check: HabitatCheck; dirty: boolean } | null
+    onNewHabitat: (kind: HabitatKind) => void
+    onEditHabitat: (id: number) => void
+    /** Apaga o habitat (o chão pintado fica; os moradores ficam sem casa). */
+    onDeleteHabitat: (id: number) => void
+    /** Quem mora no habitat em edição. */
+    residents: { id: number; name: string }[]
+    /** Quem pode morar nele (do tipo, ou qualquer um no básico); `elsewhere` = onde mora agora. */
+    candidates: { id: number; name: string; bonus: boolean; elsewhere: string | null }[]
+    /** Põe (habitatId) ou tira (null) o Pokémon da casa. */
+    onHome: (pokemonId: number, habitatId: number | null) => void
+    onAreaKind: (kind: HabitatKind) => void
+    onAreaSave: () => void
+    onAreaDelete: () => void
+    onAreaCancel: () => void
+    onPaint: (tool: PaintTool | null) => void
     onPick: (piece: PieceKey) => void
     /** Cartão de uma peça que já está no jardim: seleciona ela lá. */
     onSelectPlaced: (id: number) => void
@@ -53,6 +94,16 @@
     onCancel: () => void
     onClose: () => void
   } = $props()
+
+  /** Menu do habitat: chãos que valem ponto para o tipo e os outros (enfeite). */
+  const areaFloors = $derived.by(() => {
+    if (!area) return { scoring: [], others: [] }
+    const scoring = new Set(kindFloors(area.kind))
+    return {
+      scoring: layout.floors.filter((row) => scoring.has(row.floor)),
+      others: layout.floors.filter((row) => !scoring.has(row.floor)),
+    }
+  })
 
   const plotsFree = $derived(Math.max(0, layout.plotLimit - layout.plotsPlaced))
   const name = (piece: PieceKey) => PIECES[piece].name
@@ -138,7 +189,29 @@
     return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`
   }
 
-  let tab = $state<BuildCategory | 'all'>('all')
+  let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
+  /** Habitat com a lixeira armada: o segundo toque apaga. */
+  let confirmDelete = $state<number | null>(null)
+  /** Bandeja recolhida: só a linha de cima, para ver o jardim enquanto constrói. */
+  let collapsed = $state(false)
+  /**
+   * Escolher um pincel (chão, borracha ou a Área do habitat) recolhe a
+   * bandeja sozinho, para pintar vendo o jardim; a seta abre de novo.
+   */
+  // No menu do habitat, tocar no pincel já escolhido não desliga (desligar
+  // virava "marcar área" sem querer); a Área tem botão próprio.
+  function choose(tool: PaintTool | null) {
+    onPaint(tool)
+    if (tool !== null || area) collapsed = true
+  }
+  /** Escolhendo o tipo do habitat novo. */
+  let choosingKind = $state(false)
+  function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat') {
+    choosingKind = false
+    tab = next
+    // Sair da aba Chão larga o pincel (o toque volta a escolher peças).
+    if (next !== 'chao') onPaint(null)
+  }
   const tabs = $derived(
     BUILD_CATEGORIES.map((category) => ({
       ...category,
@@ -146,7 +219,7 @@
     })).filter((category) => cards.some((card) => category.pieces.includes(card.piece))),
   )
   const shown = $derived(
-    tab === 'all' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
+    tab === 'all' || tab === 'chao' || tab === 'habitat' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
   )
   const waitingAll = $derived(cards.filter((card) => card.ready).length)
 
@@ -174,12 +247,21 @@
   ></span>
 {/snippet}
 
-{#snippet tabIcon(key: BuildCategory | 'all')}
+{#snippet tabIcon(key: BuildCategory | 'all' | 'chao' | 'habitat')}
   <!-- Ícones em pixels (grade 12×12), como os do jardim. -->
   <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
     {#if key === 'all'}
       <rect x="1" y="1" width="4" height="4" /><rect x="7" y="1" width="4" height="4" />
       <rect x="1" y="7" width="4" height="4" /><rect x="7" y="7" width="4" height="4" />
+    {:else if key === 'habitat'}
+      <!-- Casinha. -->
+      <rect x="5" y="1" width="2" height="1" /><rect x="3" y="2" width="6" height="2" /><rect x="1" y="4" width="10" height="1" />
+      <rect x="2" y="5" width="8" height="6" /><rect x="5" y="8" width="2" height="3" fill="var(--panel-face)" />
+    {:else if key === 'chao'}
+      <!-- Losango de chão com um pincel. -->
+      <rect x="5" y="5" width="2" height="1" /><rect x="3" y="6" width="6" height="1" /><rect x="1" y="7" width="10" height="1" />
+      <rect x="3" y="8" width="6" height="1" /><rect x="5" y="9" width="2" height="1" />
+      <rect x="8" y="1" width="2" height="2" /><rect x="7" y="3" width="2" height="2" />
     {:else if key === 'horta'}
       <!-- Broto saindo da terra. -->
       <rect x="5" y="3" width="2" height="6" /><rect x="2" y="2" width="3" height="2" /><rect x="7" y="4" width="3" height="2" />
@@ -195,6 +277,26 @@
   </svg>
 {/snippet}
 
+{#snippet floorCard(floor: PaintFloor, unlockAt: { name: string } | null, scoring: boolean)}
+  {@const src = floorSrc(floor)}
+  <button
+    type="button"
+    class="card"
+    class:focused={paint === floor}
+    class:locked={unlockAt !== null}
+    aria-pressed={paint === floor}
+    disabled={unlockAt !== null}
+    aria-label={unlockAt ? `${FLOOR_NAMES[floor]}: abre no ${unlockAt.name}` : FLOOR_NAMES[floor]}
+    onclick={() => choose(floor)}
+  >
+    <span class="thumb">
+      {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
+    </span>
+    <span class="card-name">{FLOOR_NAMES[floor]}</span>
+    {#if unlockAt}<small>{town(unlockAt.name)}</small>{:else if scoring}<small class="more">vale ponto</small>{/if}
+  </button>
+{/snippet}
+
 {#snippet catalogTabs()}
   <div class="tabs" role="tablist" aria-label="Categorias">
     <button
@@ -204,7 +306,7 @@
       aria-selected={tab === 'all'}
       aria-label="Tudo"
       title="Tudo"
-      onclick={() => (tab = 'all')}
+      onclick={() => openTab('all')}
     >
       {@render tabIcon('all')}
       {#if waitingAll > 0}<span class="dot" aria-hidden="true"></span>{/if}
@@ -217,26 +319,194 @@
         aria-selected={tab === category.key}
         aria-label={category.name}
         title={category.name}
-        onclick={() => (tab = category.key)}
+        onclick={() => openTab(category.key)}
       >
         {@render tabIcon(category.key)}
         {#if category.waiting > 0}<span class="dot" aria-hidden="true"></span>{/if}
       </button>
     {/each}
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'chao'}
+      aria-label="Chão"
+      title="Chão"
+      onclick={() => openTab('chao')}
+    >
+      {@render tabIcon('chao')}
+    </button>
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'habitat'}
+      aria-label="Habitats"
+      title="Habitats"
+      onclick={() => openTab('habitat')}
+    >
+      {@render tabIcon('habitat')}
+    </button>
   </div>
 {/snippet}
 
-<div class="build-tray panel" role="region" aria-label="Construir">
+<!-- Catálogo e menu do habitat: altura fixa (não muda de tamanho entre as abas);
+     movendo peça ou recolhida, fica só o que precisa. -->
+<div class="build-tray panel" class:fixed={!collapsed && (area !== null || !pick)} role="region" aria-label="Construir">
   <div class="head">
-    {#if pick}
-      <strong>Construir</strong>
+    {#if area}
+      <!-- No menu do habitat, a linha de cima diz qual é e como está. -->
+      <p class="title">
+        <strong>{habitatKind(area.kind).name}</strong>
+        <span>{area.check.size === 0 ? 'marque a área' : `${area.check.size} casas · ${habitatStatus(area.kind, area.check)}`}</span>
+      </p>
+    {:else if pick || collapsed}
+      <strong class="title">Construir</strong>
     {:else}
       {@render catalogTabs()}
     {/if}
-    <button type="button" class="btn" onclick={onClose}>Pronto</button>
+    <button
+      type="button"
+      class="btn fold"
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? 'Abrir menu' : 'Recolher menu'}
+      title={collapsed ? 'Abrir menu' : 'Recolher menu'}
+      onclick={() => (collapsed = !collapsed)}
+    >
+      <!-- Seta em pixels: para baixo recolhe, para cima abre. -->
+      <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true">
+        {#if collapsed}
+          <rect x="5" y="3" width="2" height="1" /><rect x="4" y="4" width="4" height="1" /><rect x="3" y="5" width="6" height="1" />
+          <rect x="2" y="6" width="8" height="1" /><rect x="1" y="7" width="10" height="1" />
+        {:else}
+          <rect x="1" y="4" width="10" height="1" /><rect x="2" y="5" width="8" height="1" /><rect x="3" y="6" width="6" height="1" />
+          <rect x="4" y="7" width="4" height="1" /><rect x="5" y="8" width="2" height="1" />
+        {/if}
+      </svg>
+    </button>
+    <button type="button" class="btn done" onclick={onClose}>{area ? 'Sair' : 'Pronto'}</button>
   </div>
 
-  {#if pick?.kind === 'selected'}
+  {#if collapsed}
+    <!-- Recolhida: nada além da linha de cima (o pincel continua valendo). -->
+  {:else if area}
+    <!-- Menu de construção do habitat: tipo, área e os chãos do tipo separados
+         dos outros. O pincel de chão só pinta dentro da área. -->
+    <div class="catalog habitat-menu">
+      <div class="kinds" role="group" aria-label="Tipo do habitat">
+        {#each layout.habitatKinds as row (row.kind)}
+          <button
+            type="button"
+            class="btn kind"
+            class:btn-primary={area.kind === row.kind}
+            aria-pressed={area.kind === row.kind}
+            disabled={pending || row.unlockAt !== null}
+            title={row.unlockAt ? `Abre no ${row.unlockAt.name}` : undefined}
+            onclick={() => onAreaKind(row.kind)}
+          >
+            {habitatKind(row.kind).name}
+          </button>
+        {/each}
+      </div>
+      <p class="hint">{needText(area.kind, area.check)}</p>
+
+      {#if area.id !== null}
+        <!-- Moradores: quem mora aqui e quem pode vir (5.22). -->
+        <p class="hint section">Moradores {residents.length}/{area.check.capacity}</p>
+        {#if residents.length > 0}
+          <ul class="residents">
+            {#each residents as mon (mon.id)}
+              <li>
+                <span>{mon.name}</span>
+                <button type="button" class="btn" disabled={pending} onclick={() => onHome(mon.id, null)}>Tirar</button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if !area.check.ready}
+          <p class="hint">Termine o habitat (tamanho e pontos) para receber moradores.</p>
+        {:else if residents.length >= area.check.capacity}
+          <p class="hint">Sem vaga. Tire alguém para trocar.</p>
+        {:else if candidates.length === 0}
+          <p class="hint">Ninguém do jardim é desse tipo.</p>
+        {:else}
+          <div class="kinds" role="group" aria-label="Quem pode morar">
+            {#each candidates as mon (mon.id)}
+              <button
+                type="button"
+                class="btn kind"
+                disabled={pending}
+                title={mon.elsewhere ? `Mora no ${mon.elsewhere}: muda para cá` : undefined}
+                onclick={() => onHome(mon.id, area.id)}
+              >
+                + {mon.name}{#if mon.bonus}<small> ★</small>{/if}{#if mon.elsewhere}<small> · {mon.elsewhere}</small>{/if}
+              </button>
+            {/each}
+          </div>
+          <p class="hint">★ do tipo: ganha o bônus (felicidade e presentes).</p>
+        {/if}
+      {/if}
+
+      <div class="cards floors" role="group" aria-label="Ferramentas do habitat">
+        <button
+          type="button"
+          class="card"
+          class:focused={paint === null}
+          aria-pressed={paint === null}
+          disabled={pending}
+          onclick={() => choose(null)}
+        >
+          <span class="thumb">{@render tabIcon('habitat')}</span>
+          <span class="card-name">Área</span>
+          <small>marcar</small>
+        </button>
+        {#each areaFloors.scoring as row (row.floor)}
+          {@render floorCard(row.floor, row.unlockAt, true)}
+        {/each}
+      </div>
+      {#if areaFloors.others.length > 0}
+        <p class="hint section">Outros chãos (enfeite, sem ponto)</p>
+        <div class="cards floors" role="group" aria-label="Outros chãos">
+          {#each areaFloors.others as row (row.floor)}
+            {@render floorCard(row.floor, row.unlockAt, false)}
+          {/each}
+          <button
+            type="button"
+            class="card"
+            class:focused={paint === 'erase'}
+            aria-pressed={paint === 'erase'}
+            onclick={() => choose('erase')}
+          >
+            <span class="thumb">
+              {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
+            </span>
+            <span class="card-name">Apagar</span>
+            <small>gramado</small>
+          </button>
+        </div>
+      {/if}
+      <p class="hint">
+        {#if paint === null}
+          {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} para marcar a área; começar numa casa marcada desmarca.
+        {:else}
+          {mouse ? 'Clique ou arraste' : 'Toque ou arraste'} dentro da área para {paint === 'erase' ? 'apagar' : 'pintar'}.
+        {/if}
+        {mouse ? 'Botão do meio ou direito move a câmera.' : 'Dois dedos movem a câmera.'} A seta recolhe o menu.
+      </p>
+      <div class="row">
+        {#if area.dirty && area.check.size > 0}
+          <!-- Só aparece quando o salvar sozinho não deu (área em pedaços). -->
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={onAreaSave}>Salvar área</button>
+        {/if}
+        {#if area.id !== null}
+          <button type="button" class="btn" disabled={pending} onclick={onAreaDelete}>Excluir</button>
+        {/if}
+        <button type="button" class="btn" disabled={pending} onclick={onAreaCancel}>
+          Pronto
+        </button>
+      </div>
+    </div>
+  {:else if pick?.kind === 'selected'}
     <div class="picked">
       <span class="thumb small">{@render icon(pick.piece, 1)}</span>
       <p class="hint"><strong>{name(pick.piece)}</strong></p>
@@ -270,6 +540,125 @@
         <button type="button" class="btn" disabled={pending} onclick={onTurn}>Girar{mouse ? ' (R)' : ''}</button>
       {/if}
       <button type="button" class="btn" disabled={pending} onclick={onCancel}>Cancelar</button>
+    </div>
+  {:else if tab === 'habitat'}
+    <!-- Habitats (5.22): área e tipo escolhidos; a fronteira é a área de cada um. -->
+    <div class="catalog">
+      {#if choosingKind}
+        <p class="hint">Que tipo de habitat?</p>
+        <div class="kinds" role="group" aria-label="Tipo do habitat">
+          {#each layout.habitatKinds as row (row.kind)}
+            <button
+              type="button"
+              class="btn kind"
+              disabled={pending || row.unlockAt !== null}
+              onclick={() => {
+                choosingKind = false
+                onNewHabitat(row.kind)
+              }}
+            >
+              {habitatKind(row.kind).name}{#if row.unlockAt}<small> · {town(row.unlockAt.name)}</small>{/if}
+            </button>
+          {/each}
+        </div>
+        <div class="row"><button type="button" class="btn" onclick={() => (choosingKind = false)}>Voltar</button></div>
+      {:else}
+        {#if habitats.length === 0}
+          <p class="hint">Nenhum habitat. Crie um, marque a área e pinte o chão do tipo na aba Chão.</p>
+        {:else}
+          <ul class="habitat-list">
+            {#each habitats as row (row.id)}
+              <li>
+                <button
+                  type="button"
+                  class="btn habitat-row"
+                  disabled={pending}
+                  onclick={() => {
+                    confirmDelete = null
+                    onEditHabitat(row.id)
+                  }}
+                >
+                  <strong>{habitatKind(row.kind).name}</strong>
+                  <span class:ready={row.check.ready}>{habitatStatus(row.kind, row.check)}</span>
+                </button>
+                <!-- Lixeira: o primeiro toque pergunta, o segundo apaga. -->
+                <button
+                  type="button"
+                  class="btn trash"
+                  class:armed={confirmDelete === row.id}
+                  disabled={pending}
+                  aria-label={confirmDelete === row.id ? `Apagar ${habitatKind(row.kind).name}: toque de novo` : `Apagar ${habitatKind(row.kind).name}`}
+                  title="Apagar habitat"
+                  onclick={() => {
+                    if (confirmDelete === row.id) {
+                      confirmDelete = null
+                      onDeleteHabitat(row.id)
+                    } else confirmDelete = row.id
+                  }}
+                >
+                  {#if confirmDelete === row.id}
+                    Apagar?
+                  {:else}
+                    <!-- Lixeira em pixels (grade 12×12). -->
+                    <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
+                      <rect x="4" y="0" width="4" height="1" /><rect x="1" y="1" width="10" height="2" />
+                      <rect x="2" y="4" width="8" height="1" /><rect x="2" y="5" width="1" height="6" /><rect x="9" y="5" width="1" height="6" />
+                      <rect x="2" y="11" width="8" height="1" /><rect x="4" y="5" width="1" height="5" /><rect x="7" y="5" width="1" height="5" />
+                    </svg>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <div class="row new-habitat">
+          <button type="button" class="btn btn-primary" disabled={pending} onclick={() => (choosingKind = true)}>Novo habitat</button>
+        </div>
+      {/if}
+    </div>
+  {:else if tab === 'chao'}
+    <!-- Chão dos habitats (5.22): sem custo nem limite; o espaço é o freio. -->
+    <div class="catalog">
+      <div class="cards floors" role="tabpanel">
+        {#each layout.floors as row (row.floor)}
+          {@const src = floorSrc(row.floor)}
+          <button
+            type="button"
+            class="card"
+            class:focused={paint === row.floor}
+            class:locked={row.unlockAt !== null}
+            aria-pressed={paint === row.floor}
+            disabled={pending || row.unlockAt !== null}
+            aria-label={row.unlockAt ? `${FLOOR_NAMES[row.floor]}: abre no ${row.unlockAt.name}` : FLOOR_NAMES[row.floor]}
+            onclick={() => choose(paint === row.floor ? null : row.floor)}
+          >
+            <span class="thumb">
+              {#if src}<img class="swatch" src={src} alt="" width="48" height="24" />{/if}
+            </span>
+            <span class="card-name">{FLOOR_NAMES[row.floor]}</span>
+            {#if row.unlockAt}<small>{town(row.unlockAt.name)}</small>{/if}
+          </button>
+        {/each}
+        <button
+          type="button"
+          class="card"
+          class:focused={paint === 'erase'}
+          aria-pressed={paint === 'erase'}
+          disabled={pending}
+          onclick={() => choose(paint === 'erase' ? null : 'erase')}
+        >
+          <span class="thumb">
+            {#if floorSrc('grama-alta')}<img class="swatch erase" src={floorSrc('grama-alta')} alt="" width="48" height="24" />{/if}
+          </span>
+          <span class="card-name">Apagar</span>
+          <small>gramado</small>
+        </button>
+      </div>
+      <p class="hint">
+        {paint
+          ? `${mouse ? 'Clique ou arraste' : 'Toque ou arraste'} nas casas para ${paint === 'erase' ? 'apagar' : 'pintar'}.`
+          : 'Escolha um chão. Juntos, 6 ou mais viram um habitat.'}
+      </p>
     </div>
   {:else}
     <div class="catalog">
@@ -369,16 +758,60 @@
     width: min(30rem, calc(100% - 1rem));
     box-sizing: border-box;
     display: grid;
+    /* Sem isso, a fileira de cartões (que rola para o lado) estica a bandeja. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.4rem;
+    align-content: start;
+    max-height: 60vh;
+    overflow-y: auto;
     color: var(--ink);
     pointer-events: auto;
+  }
+
+  .build-tray.fixed {
+    height: min(21rem, 60vh);
+  }
+
+  /* Filas que rolam para o lado: a barra fica embaixo dos botões, não por cima. */
+  .tabs,
+  .kinds,
+  .cards {
+    scrollbar-width: thin;
+    padding-bottom: 8px;
   }
 
   .head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .head .title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .head .title span {
+    margin-left: 0.4rem;
+    font-size: 0.9rem;
+  }
+
+  .head .fold,
+  .head .done {
+    flex: none;
+  }
+
+  .head .fold {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    fill: currentColor;
   }
 
   .hint,
@@ -420,7 +853,15 @@
 
   .tabs {
     display: flex;
+    flex: 1 1 auto;
     gap: 0.25rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .tabs .tab {
+    flex: none;
   }
 
   .tab {
@@ -463,7 +904,7 @@
     overflow-x: auto;
     overscroll-behavior-x: contain;
     /* Folga para o selo do cartão, que passa um pouco da borda. */
-    padding: 6px 6px 2px 0;
+    padding: 6px 6px 8px 0;
   }
 
   .card {
@@ -616,6 +1057,107 @@
   }
 
   /* O ícone em cima de um pedacinho de gramado. */
+  .swatch {
+    image-rendering: pixelated;
+  }
+
+  .swatch.erase {
+    filter: grayscale(1) opacity(0.5);
+  }
+
+  .habitat {
+    font-weight: 600;
+  }
+
+  .habitat-menu {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .section {
+    margin-top: 0.2rem;
+    font-weight: 600;
+  }
+
+  .kinds {
+    display: flex;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .kinds .kind {
+    flex: none;
+  }
+
+  .kind {
+    min-height: 44px;
+  }
+
+  .habitat-list {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .residents {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .residents li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .residents .btn {
+    min-height: 44px;
+  }
+
+  .habitat-list li {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .new-habitat {
+    margin-top: 0.6rem;
+  }
+
+  .trash {
+    flex: none;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 0.4rem;
+    fill: currentColor;
+    font-size: 14px;
+  }
+
+  .trash.armed {
+    background: #e04030;
+    color: #fff;
+  }
+
+  .habitat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .habitat-row .ready {
+    color: #2f8f4e;
+  }
+
   .thumb {
     position: relative;
     display: grid;

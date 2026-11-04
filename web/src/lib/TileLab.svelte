@@ -1,5 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import {
+    biomeName,
+    FLOORS,
+    MATERIAL_NAMES,
+    OBJECTS,
+    recognizeHabitats,
+    type GardenCell,
+    type Zone,
+  } from '@habitat'
   import { drawFloor, type FloorAssets } from './floor'
   import {
     MASK_KEYS,
@@ -38,6 +47,137 @@
   let cells = $state<(string | null)[]>([])
   let canvas = $state<HTMLCanvasElement | null>(null)
   let lastStamp = ''
+
+  // Modo habitats (5.22): pinta chão e objetos e vê o que o motor reconhece.
+  // No modo habitats, casa sem chão (null) é o gramado neutro, desenhado como grama.
+  let habitatMode = $state(false)
+  let objects = $state<(string | null)[]>([])
+  /** O que pintar no modo habitats: um chão, um objeto, o gramado ou a borracha de objeto. */
+  let brush = $state<{ kind: 'floor' | 'object'; key: string | null }>({ kind: 'floor', key: 'areia' })
+
+  const BIOME_COLORS: Record<string, string> = {
+    lago: '#3d7fd6',
+    cratera: '#e0602c',
+    usina: '#f2c230',
+    'bosque-sombrio': '#7a4fa8',
+    rochedo: '#a07850',
+    'campo-gelado': '#9ad8f0',
+    pradaria: '#4caa3c',
+    basico: '#d8d0b8',
+  }
+  /** Chão sem tile ainda: losango em cor sólida. */
+  const FLOOR_COLORS: Record<string, string> = {
+    neve: '#eef4f8',
+    lava: '#d8441c',
+    'chao-escuro': '#3c3448',
+    caminho: '#c8b48c',
+  }
+  const OBJECT_COLORS: Record<string, string> = {
+    rocha: '#8a8a8a',
+    arvore: '#2f7a2c',
+    'arvore-escura': '#3a2850',
+    tronco: '#8a5a2c',
+    cogumelo: '#d04848',
+    cristal: '#9ad8f0',
+    gerador: '#f2c230',
+    cerca: '#c89a5a',
+  }
+  const floorKeys = Object.keys(FLOORS)
+  const objectKeys = Object.keys(OBJECTS)
+
+  const zones = $derived.by((): Zone[] => {
+    if (!habitatMode) return []
+    const list: GardenCell[] = []
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS; col += 1) {
+        const floor = cells[row * COLS + col] ?? null
+        const object = objects[row * COLS + col] ?? null
+        if (floor || object) list.push({ col, row, floor, object })
+      }
+    }
+    return recognizeHabitats(list)
+  })
+
+  function startHabitats() {
+    habitatMode = true
+    cells = Array.from({ length: COLS * ROWS }, () => null)
+    objects = Array.from({ length: COLS * ROWS }, () => null)
+  }
+
+  function stopHabitats() {
+    habitatMode = false
+    objects = []
+    preset('clareira')
+  }
+
+  function zoneText(zone: Zone): string {
+    const size = `${zone.tiles.length} ${zone.tiles.length === 1 ? 'casa' : 'casas'}`
+    if (zone.tooSmall) return `Pequena demais · ${size} (precisa de 6)`
+    const head = zone.biome ? `${biomeName(zone.biome)} · ${size} · ${zone.capacity} vagas` : size
+    if (!zone.nearest) return head
+    const gaps = zone.nearest.gaps
+      .map((gap) => `${gap.materials.map((m) => MATERIAL_NAMES[m]).join(' + ')} ${gap.have} de ${gap.need}`)
+      .join(', ')
+    return `${head} · para ${biomeName(zone.nearest.biome)} falta ${gaps}`
+  }
+
+  function fillDiamond(ctx: CanvasRenderingContext2D, col: number, row: number, color: string) {
+    const o = tileOrigin(col, row)
+    ctx.fillStyle = color
+    for (let y = 0; y < TILE_H; y += 1) {
+      const half = y < TILE_H / 2 ? 1 + 2 * y : 1 + 2 * (TILE_H - 1 - y)
+      ctx.fillRect(originX + o.x + TILE_W / 2 - half, o.y + y, half * 2, 1)
+    }
+  }
+
+  function drawHabitats(ctx: CanvasRenderingContext2D) {
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS; col += 1) {
+        const floor = cells[row * COLS + col]
+        if (floor && !terrainByKey.has(floor)) fillDiamond(ctx, col, row, FLOOR_COLORS[floor] ?? '#ff00ff')
+      }
+    }
+    ctx.globalAlpha = 0.35
+    for (const zone of zones) {
+      const color = zone.biome ? (BIOME_COLORS[zone.biome] ?? '#fff') : '#000'
+      for (const tile of zone.tiles) fillDiamond(ctx, tile.col, tile.row, color)
+    }
+    ctx.globalAlpha = 1
+    // Objeto: um bloquinho com contorno, no meio do losango.
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS; col += 1) {
+        const object = objects[row * COLS + col]
+        if (!object) continue
+        const o = tileOrigin(col, row)
+        const x = originX + o.x + TILE_W / 2 - 3
+        const y = o.y + TILE_H / 2 - 6
+        ctx.fillStyle = '#1b1b1b'
+        ctx.fillRect(x - 1, y - 1, 8, 8)
+        ctx.fillStyle = OBJECT_COLORS[object] ?? '#ff00ff'
+        ctx.fillRect(x, y, 6, 6)
+      }
+    }
+    // Número da zona na casa-âncora, em pixels (3×5).
+    zones.forEach((zone, index) => {
+      const anchor = zone.tiles[0]
+      if (!anchor) return
+      const o = tileOrigin(anchor.col, anchor.row)
+      drawDigit(ctx, index + 1, originX + o.x + TILE_W / 2 - 2, o.y + 2)
+    })
+  }
+
+  const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001', '111100111001111', '111100111101111', '111001001001001', '111101111101111', '111101111001111']
+  function drawDigit(ctx: CanvasRenderingContext2D, value: number, x: number, y: number) {
+    const text = String(value)
+    const w = text.length * 4 + 1
+    ctx.fillStyle = '#1b1b1b'
+    ctx.fillRect(x - 1, y - 1, w, 7)
+    ctx.fillStyle = '#ffffff'
+    ;[...text].forEach((char, i) => {
+      const bits = DIGITS[Number(char)] ?? ''
+      for (let p = 0; p < 15; p += 1) if (bits[p] === '1') ctx.fillRect(x + i * 4 + (p % 3), y + Math.floor(p / 3), 1, 1)
+    })
+  }
 
   const terrainByKey = $derived(new Map(terrains.map((terrain) => [terrain.key, terrain])))
   const width = (COLS + ROWS) * (TILE_W / 2)
@@ -147,7 +287,11 @@
       terrains: new Map(terrains.map((terrain) => [terrain.key, terrain.variants])),
       masks: new Map(Object.entries(masks).map(([key, mask]) => [key as MaskKey, mask.data])),
     }
-    drawFloor(ctx, { cols: COLS, rows: ROWS, cells }, assets, { offsetX: originX, variants: useVariants, debugMasks })
+    const floorCells = habitatMode
+      ? cells.map((cell) => (cell && terrainByKey.has(cell) ? cell : cell === null ? 'grama' : null))
+      : cells
+    drawFloor(ctx, { cols: COLS, rows: ROWS, cells: floorCells }, assets, { offsetX: originX, variants: useVariants, debugMasks })
+    if (habitatMode) drawHabitats(ctx)
     if (showGrid) drawGrid(ctx)
   }
 
@@ -168,19 +312,24 @@
 
   $effect(() => {
     // Redesenha quando qualquer coisa que entra no desenho muda.
-    void [cells, terrains, masks, showGrid, debugMasks, useVariants, canvas]
+    void [cells, terrains, masks, showGrid, debugMasks, useVariants, canvas, objects, zones, habitatMode]
     draw()
   })
 
   let painting = false
   function paintAt(event: PointerEvent) {
-    if (!canvas || !selected) return
+    if (!canvas || (!habitatMode && !selected)) return
     const rect = canvas.getBoundingClientRect()
     const px = ((event.clientX - rect.left) / rect.width) * width - originX
     const py = ((event.clientY - rect.top) / rect.height) * height
     const { col, row } = cellAt(px, py)
     if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return
     const index = row * COLS + col
+    if (habitatMode) {
+      if (brush.kind === 'object') objects[index] = brush.key
+      else cells[index] = brush.key
+      return
+    }
     if (cells[index] === selected) return
     cells[index] = selected
   }
@@ -233,6 +382,47 @@
   </div>
 
   <section class="controls">
+    <h2>Habitats</h2>
+    {#if habitatMode}
+      <p class="hint">Pinte chão e objetos; o motor reconhece as zonas na hora (seção 5.22). Gramado e caminho separam habitats; a cerca também.</p>
+      <div class="palette">
+        <button type="button" class="swatch" class:on={brush.kind === 'floor' && brush.key === null} onclick={() => (brush = { kind: 'floor', key: null })}>
+          <span>gramado</span><small>neutro</small>
+        </button>
+        {#each floorKeys as key (key)}
+          <button type="button" class="swatch" class:on={brush.kind === 'floor' && brush.key === key} onclick={() => (brush = { kind: 'floor', key })}>
+            {#if terrainByKey.get(key)?.variants[0]}<img src={terrainByKey.get(key)?.variants[0]?.src} alt="" />{:else}<i class="dot" style:background={FLOOR_COLORS[key]}></i>{/if}
+            <span>{key}</span><small>chão</small>
+          </button>
+        {/each}
+        {#each objectKeys as key (key)}
+          <button type="button" class="swatch" class:on={brush.kind === 'object' && brush.key === key} onclick={() => (brush = { kind: 'object', key })}>
+            <i class="dot" style:background={OBJECT_COLORS[key]}></i>
+            <span>{key}</span><small>objeto</small>
+          </button>
+        {/each}
+        <button type="button" class="swatch" class:on={brush.kind === 'object' && brush.key === null} onclick={() => (brush = { kind: 'object', key: null })}>
+          <span>tirar objeto</span><small>borracha</small>
+        </button>
+      </div>
+      <ol class="zones">
+        {#each zones as zone, index (index)}
+          <li><i class="dot" style:background={zone.biome ? BIOME_COLORS[zone.biome] : '#000'}></i>{index + 1}. {zoneText(zone)}</li>
+        {:else}
+          <li>Nenhuma zona ainda: pinte algum chão.</li>
+        {/each}
+      </ol>
+      <div class="row">
+        <button type="button" class="btn" onclick={startHabitats}>Limpar</button>
+        <button type="button" class="btn" onclick={stopHabitats}>Voltar aos tiles</button>
+      </div>
+    {:else}
+      <div class="row">
+        <button type="button" class="btn" onclick={startHabitats}>Testar habitats</button>
+      </div>
+    {/if}
+
+    {#if !habitatMode}
     <h2>Pintar com</h2>
     <div class="palette">
       {#each terrains as terrain (terrain.key)}
@@ -254,6 +444,8 @@
       <button type="button" class="btn" onclick={() => preset('xadrez')}>Xadrez</button>
       <button type="button" class="btn" onclick={() => preset('cheio')}>Tudo com o escolhido</button>
     </div>
+
+    {/if}
 
     <h2>Ver</h2>
     <div class="row">
@@ -379,6 +571,26 @@
     border: 2px solid #4a555c;
     border-radius: 6px;
     font: inherit;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 1px solid #1b1b1b;
+    vertical-align: middle;
+  }
+
+  .zones {
+    margin: 0.6rem 0;
+    padding-left: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .zones .dot {
+    margin-right: 0.4rem;
   }
 
   .swatch.on {

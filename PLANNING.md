@@ -1285,6 +1285,16 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 **Pontos a decidir:** as taxas (quantas horas a fome leva para zerar, quanto a felicidade sobe por dia); se cada espécie prefere uma berry (sabor, como nos jogos); e se felicidade alta dá algum bônus pequeno na luta (sugestão: não, para o combate continuar igual).
 
 ### 5.22 Habitats construídos em blocos (especificado em 2026-10-31, ainda sem fase)
+
+**Redesenho de 2026-11-04 (vale por cima do que vem abaixo; branch `feat/habitats-jardim`):**
+- **Habitat é bônus, sem limite do jardim** por enquanto: quem não tem casa segue andando pelo jardim; ninguém vai para o PC por falta de vaga.
+- **Chão sem custo nem limite** (aba Chão do Construir); o freio é o espaço (12×12), e no futuro expandir o jardim custa. Chãos abrem por marco: grama alta e flores desde o começo, areia/terra/pedra em Azalea, água em Ecruteak (`config/gardenUnlocks`).
+- **Área e tipo escolhidos pelo jogador**, no lugar do reconhecimento automático por zonas (que ficou só no laboratório de tiles): "Novo habitat" → tipo (Pradaria, Rochedo, Lago, Básico) → marca a área pintando casas que se tocam. Cada casa é de um habitat só, então dois encostados não se juntam (`habitats`, `habitat_tiles`, migração 0036).
+- **Requisito em pontos, metade da área:** o tipo pede pontos do material dele (Lago de 8 casas pede 4 de água); cada chão do material vale 1 e cada móvel do material, +1. O Básico não pede ponto, aceita qualquer tipo e não dá bônus. Pronto: 2 vagas (3 a partir de 10 casas). Motor em `game/habitat/area.ts`.
+- **Bônus de quem mora no tipo certo:** felicidade sobe ×1,5 e presentes em 75% do intervalo (`habitatConfig.bonus`). Quem deixa de caber (habitat mudou, tipo trocado) perde a casa e a tela avisa.
+- **Cada coisa sabe em que chão fica** (`OBJECT_GROUND`): quase tudo só em terra; a boia, só na água. Peças do Construir (canteiro, árvores, bancada, máquina) não vão na água, e a água não vai embaixo delas.
+- **Menu do habitat** no Construir: Área, chãos que valem ponto, outros chãos (enfeite) e Moradores (pôr e tirar); a área salva sozinha a cada pincelada. Morador passeia só dentro da área; quem não tem casa não entra na água.
+- **Depois:** móveis e decorativos (arbusto, pedra, boia) com arte, os outros biomas (Cratera, Usina, Bosque sombrio, Campo gelado) quando tiverem chão desenhado, e talvez o limite do jardim.
 O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.
 
 **Peças:**
@@ -1309,14 +1319,14 @@ O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constr
    | Campo gelado | gelo ≥ 50% | Gelo |
    | Pradaria | planta ≥ 60% | Normal, Planta, Inseto, Voador, Fada |
 
-   A zona que não bate nenhuma receita é "terreno sem bioma": decoração, sem moradores. A tela diz o que falta ("falta água: 3 de 6").
+   **Habitat básico (decidido em 2026-10-31):** a zona com tamanho que não bate nenhuma receita vira um habitat básico, que **aceita qualquer tipo** e **não dá bônus**. É o que impede a parede do começo (capturou um Geodude e não tem pedra para um Rochedo: ele mora no básico). O bioma certo é o que dá bônus (pureza, felicidade, presentes). A tela diz o que falta para virar bioma ("para Rochedo falta pedra: 0 de 2").
 5. **Capacidade:** 2 vagas a partir de `minTiles` e 3 a partir de `bigTiles` (inicial: 10). Mais de 3 não, para o cuidado continuar em grupos pequenos. Habitat maior que isso só dá mais espaço para andar.
 6. **Pureza** (depois): quanto mais a zona passa da receita, mais rápido a felicidade dos moradores sobe (seção 5.21).
 
 O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A tela roda enquanto o jogador constrói, com o aviso ao vivo: "Isso vai virar um Rochedo · 3 vagas".
 
 **Moradores:**
-- Um Pokémon mora num habitat de um dos tipos dele (dois tipos: escolhe um dos dois). Ele anda só dentro da zona do habitat.
+- Um Pokémon mora num habitat de um dos tipos dele (dois tipos: escolhe um dos dois) ou num habitat básico. Ele anda só dentro da zona do habitat.
 - **O jardim tem o limite que os habitats dão.** Quem não tem casa vai para o PC (5.19). O time também mora nos habitats: quem está no time precisa de vaga.
 - **Começo:** o jardim novo vem com 2 habitats prontos (uma Pradaria e um habitat do tipo do inicial), 6 vagas, o tamanho do time.
 - **Carinho no habitat:** um toque faz carinho em todos os moradores de uma vez (o mesmo intervalo da 5.21).
@@ -1343,13 +1353,13 @@ O servidor roda o mesmo motor ao salvar uma construção e guarda o resultado. A
 **Laboratório de tiles:** `http://<ip>:5173/tiles.html`, só no `npm run dev`. Lê `art/tiles/` pelo plugin `/__tiles` do Vite e recarrega em ~1 s quando um PNG é salvo no Aseprite. Pintar tocando, mapas de teste (clareira, caminho, ilhas, xadrez), grade, bordas em rosa, variações e zoom; avisa tile com tamanho errado e terreno fora da prioridade.
 
 **Ordem sugerida:**
-1. O motor puro com testes (zonas, receitas, capacidade), sem tela.
+1. O motor puro com testes (zonas, receitas, capacidade), sem tela. **Feito em 2026-10-31:** `server/src/game/habitat/` (config com peças, materiais e receitas; `recognizeHabitats`, `canLiveIn`), importado na tela por `@habitat`. Cada zona sem bioma traz a receita mais perto e o que falta (`nearest.gaps`, em pontos: chão 1, objeto 3).
 2. `garden_tiles`, `habitats`, os 2 habitats iniciais e o limite do jardim, com os moradores andando dentro da zona.
 3. O modo de construção com poucas peças (grama, flores, areia, pedra, água, rocha, árvore) e os materiais saindo das manchas do campo (árvore e pedra já soltam item).
 4. Os outros biomas, objetos e a pureza.
 
 **Pontos a decidir:**
-- O tamanho do jardim (hoje 12×12 casas) e se ele cresce com o nível ou comprando terreno.
+- ~~O tamanho do jardim~~ **Decidido (2026-10-31):** fica fixo em 12×12 por enquanto; mais tarde cresce pagando com recursos.
 - Se o reconhecimento olha só a composição ou também a forma (ex.: Lago precisa de água cercada de margem).
 - Os pesos de cada peça e as frações das receitas, depois de montar os primeiros habitats na prática.
 
