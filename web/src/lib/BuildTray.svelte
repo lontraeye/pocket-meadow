@@ -29,6 +29,9 @@
     onNewHabitat,
     onEditHabitat,
     onDeleteHabitat,
+    residents,
+    candidates,
+    onHome,
     onAreaKind,
     onAreaSave,
     onAreaDelete,
@@ -68,6 +71,12 @@
     onEditHabitat: (id: number) => void
     /** Apaga o habitat (o chão pintado fica; os moradores ficam sem casa). */
     onDeleteHabitat: (id: number) => void
+    /** Quem mora no habitat em edição. */
+    residents: { id: number; name: string }[]
+    /** Quem pode morar nele (do tipo, ou qualquer um no básico); `elsewhere` = onde mora agora. */
+    candidates: { id: number; name: string; bonus: boolean; elsewhere: string | null }[]
+    /** Põe (habitatId) ou tira (null) o Pokémon da casa. */
+    onHome: (pokemonId: number, habitatId: number | null) => void
     onAreaKind: (kind: HabitatKind) => void
     onAreaSave: () => void
     onAreaDelete: () => void
@@ -400,6 +409,43 @@
         {/each}
       </div>
       <p class="hint">{needText(area.kind, area.check)}</p>
+
+      {#if area.id !== null}
+        <!-- Moradores: quem mora aqui e quem pode vir (5.22). -->
+        <p class="hint section">Moradores {residents.length}/{area.check.capacity}</p>
+        {#if residents.length > 0}
+          <ul class="residents">
+            {#each residents as mon (mon.id)}
+              <li>
+                <span>{mon.name}</span>
+                <button type="button" class="btn" disabled={pending} onclick={() => onHome(mon.id, null)}>Tirar</button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if !area.check.ready}
+          <p class="hint">Termine o habitat (tamanho e pontos) para receber moradores.</p>
+        {:else if residents.length >= area.check.capacity}
+          <p class="hint">Sem vaga. Tire alguém para trocar.</p>
+        {:else if candidates.length === 0}
+          <p class="hint">Ninguém do jardim é desse tipo.</p>
+        {:else}
+          <div class="kinds" role="group" aria-label="Quem pode morar">
+            {#each candidates as mon (mon.id)}
+              <button
+                type="button"
+                class="btn kind"
+                disabled={pending}
+                title={mon.elsewhere ? `Mora no ${mon.elsewhere}: muda para cá` : undefined}
+                onclick={() => onHome(mon.id, area.id)}
+              >
+                + {mon.name}{#if mon.bonus}<small> ★</small>{/if}{#if mon.elsewhere}<small> · {mon.elsewhere}</small>{/if}
+              </button>
+            {/each}
+          </div>
+          <p class="hint">★ do tipo: ganha o bônus (felicidade e presentes).</p>
+        {/if}
+      {/if}
 
       <div class="cards floors" role="group" aria-label="Ferramentas do habitat">
         <button
@@ -1055,6 +1101,25 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  .residents {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .residents li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .residents .btn {
+    min-height: 44px;
   }
 
   .habitat-list li {

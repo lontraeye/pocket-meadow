@@ -1285,6 +1285,16 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 **Pontos a decidir:** as taxas (quantas horas a fome leva para zerar, quanto a felicidade sobe por dia); se cada espécie prefere uma berry (sabor, como nos jogos); e se felicidade alta dá algum bônus pequeno na luta (sugestão: não, para o combate continuar igual).
 
 ### 5.22 Habitats construídos em blocos (especificado em 2026-10-31, ainda sem fase)
+
+**Redesenho de 2026-11-04 (vale por cima do que vem abaixo; branch `feat/habitats-jardim`):**
+- **Habitat é bônus, sem limite do jardim** por enquanto: quem não tem casa segue andando pelo jardim; ninguém vai para o PC por falta de vaga.
+- **Chão sem custo nem limite** (aba Chão do Construir); o freio é o espaço (12×12), e no futuro expandir o jardim custa. Chãos abrem por marco: grama alta e flores desde o começo, areia/terra/pedra em Azalea, água em Ecruteak (`config/gardenUnlocks`).
+- **Área e tipo escolhidos pelo jogador**, no lugar do reconhecimento automático por zonas (que ficou só no laboratório de tiles): "Novo habitat" → tipo (Pradaria, Rochedo, Lago, Básico) → marca a área pintando casas que se tocam. Cada casa é de um habitat só, então dois encostados não se juntam (`habitats`, `habitat_tiles`, migração 0036).
+- **Requisito em pontos, metade da área:** o tipo pede pontos do material dele (Lago de 8 casas pede 4 de água); cada chão do material vale 1 e cada móvel do material, +1. O Básico não pede ponto, aceita qualquer tipo e não dá bônus. Pronto: 2 vagas (3 a partir de 10 casas). Motor em `game/habitat/area.ts`.
+- **Bônus de quem mora no tipo certo:** felicidade sobe ×1,5 e presentes em 75% do intervalo (`habitatConfig.bonus`). Quem deixa de caber (habitat mudou, tipo trocado) perde a casa e a tela avisa.
+- **Cada coisa sabe em que chão fica** (`OBJECT_GROUND`): quase tudo só em terra; a boia, só na água. Peças do Construir (canteiro, árvores, bancada, máquina) não vão na água, e a água não vai embaixo delas.
+- **Menu do habitat** no Construir: Área, chãos que valem ponto, outros chãos (enfeite) e Moradores (pôr e tirar); a área salva sozinha a cada pincelada. Morador passeia só dentro da área; quem não tem casa não entra na água.
+- **Depois:** móveis e decorativos (arbusto, pedra, boia) com arte, os outros biomas (Cratera, Usina, Bosque sombrio, Campo gelado) quando tiverem chão desenhado, e talvez o limite do jardim.
 O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.
 
 **Peças:**

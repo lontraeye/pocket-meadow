@@ -21,7 +21,7 @@
   } from './api'
   import { benchOperatorIds } from './structures'
   import { cellKey, inBounds, isFlippable, occupied, type PieceKey } from '@garden/layout'
-  import { checkHabitat, isConnected, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
+  import { canLiveInKind, checkHabitat, habitatKind, isConnected, kindBonus, WATER_FLOORS, type HabitatCheck, type HabitatKind, type PaintFloor } from '@habitat'
   import { habitatLabel, kindFloors } from './habitatView'
   import PmdSprite from './PmdSprite.svelte'
   import { buildFloorAssets, drawFloor, floorPattern, type FloorAssets } from './floor'
@@ -500,6 +500,46 @@
     return inPlay(col, row) && !blockedCells.has(worldKey(col, row))
   }
 
+  // Moradores (5.22): quem tem casa passeia só na área do habitat dele; quem
+  // não tem anda pelo jardim, menos na água (a água é de quem mora no Lago).
+  /** Casas de cada habitat (chave da grade jogável). */
+  const habitatCells = $derived(
+    new Map(layout.habitats.map((row) => [row.id, new Set(row.tiles.map((tile) => cellKey(tile.col, tile.row)))])),
+  )
+  /** A área da casa de cada morador. */
+  const homeCells = $derived(
+    new Map(
+      game.pokemon
+        .filter((mon) => mon.habitatId !== null && habitatCells.has(mon.habitatId))
+        .map((mon) => [mon.id, habitatCells.get(mon.habitatId!)!] as const),
+    ),
+  )
+  const waterCells = $derived(
+    new Set([...floorMap].filter(([, floor]) => WATER_FLOORS.includes(floor)).map(([key]) => key)),
+  )
+
+  /**
+   * Onde o Pokémon pode pisar agora. Dentro de casa, só na casa; fora dela
+   * (acabou de ganhar uma), anda até lá desviando da água dos outros.
+   */
+  function canStep(id: number, hereCol: number, hereRow: number): (col: number, row: number) => boolean {
+    const home = homeCells.get(id)
+    if (home && home.has(worldKey(hereCol, hereRow))) return (col, row) => isWalkable(col, row) && home.has(worldKey(col, row))
+    return (col, row) => {
+      const key = worldKey(col, row)
+      return isWalkable(col, row) && (!waterCells.has(key) || (home?.has(key) ?? false))
+    }
+  }
+
+  /** Para onde ele sorteia ir: dentro de casa, se tem casa; senão, terra firme. */
+  function walkTargets(id: number): { col: number; row: number }[] {
+    const home = homeCells.get(id)
+    return walkableSpots().filter((spot) => {
+      const key = worldKey(spot.col, spot.row)
+      return home ? home.has(key) : !waterCells.has(key)
+    })
+  }
+
   // Sem nada escolhido, tocar numa peça a seleciona (mover, girar, guardar).
   const buildValid = $derived(building ? validAnchors(layout, buildPick) : new Set<string>())
   const buildPicked = $derived(building ? pickedCells(layout, buildPick) : new Set<string>())
@@ -703,6 +743,35 @@
       buildPending = false
     }
   }
+
+  /** Quem mora no habitat em edição. */
+  const areaResidents = $derived(
+    areaEdit && areaEdit.id !== null
+      ? game.pokemon
+          .filter((mon) => mon.habitatId === areaEdit!.id)
+          .map((mon) => ({ id: mon.id, name: mon.nickname ?? mon.displayName }))
+      : [],
+  )
+  /** Quem do jardim pode morar nele: os do tipo (com bônus) primeiro. */
+  const areaCandidates = $derived.by(() => {
+    const edit = areaEdit
+    if (!edit || edit.id === null) return []
+    const names = new Map(layout.habitats.map((row) => [row.id, habitatKind(row.kind).name]))
+    return game.pokemon
+      .filter((mon) => mon.location === 'garden' && mon.habitatId !== edit.id)
+      .map((mon) => {
+        const types = mon.type2 ? [mon.type1, mon.type2] : [mon.type1]
+        return { mon, types }
+      })
+      .filter(({ types }) => canLiveInKind(types, edit.kind))
+      .map(({ mon, types }) => ({
+        id: mon.id,
+        name: mon.nickname ?? mon.displayName,
+        bonus: kindBonus(types, edit.kind, true),
+        elsewhere: mon.habitatId !== null ? (names.get(mon.habitatId) ?? null) : null,
+      }))
+      .sort((a, b) => Number(b.bonus) - Number(a.bonus) || a.name.localeCompare(b.name))
+  })
 
   function evictedMessage(ids: readonly number[]) {
     const names = ids
@@ -1901,11 +1970,25 @@
       taken.add(`${col},${row}`)
       kept.set(mon.id, { col, row, dir: before.dir })
     }
-    const spots = shuffled(walkableSpots()).filter((spot) => !taken.has(`${spot.col},${spot.row}`))
-    let nextSpot = 0
+    const spots = shuffled(walkableSpots())
+    /** A próxima casa livre que serve (e já fica tomada). */
+    const freeSpot = (fits: (key: string) => boolean) => {
+      const spot = spots.find((candidate) => {
+        const key = `${candidate.col},${candidate.row}`
+        return !taken.has(key) && fits(worldKey(candidate.col, candidate.row))
+      })
+      if (spot) taken.add(`${spot.col},${spot.row}`)
+      return spot ?? null
+    }
+    const water = untrack(() => waterCells)
     const created = mons.map((mon) => {
+      // Morador nasce numa casa livre do habitat dele; os outros, em terra firme.
+      const home = untrack(() => homeCells.get(mon.id))
       const spot =
-        kept.get(mon.id) ?? spots[nextSpot++ % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 }
+        kept.get(mon.id) ??
+        (home ? freeSpot((key) => home.has(key)) : null) ??
+        freeSpot((key) => !water.has(key)) ??
+        spots[0] ?? { col: playCol0, row: playRow0 }
       return {
         id: mon.id,
         speciesId: mon.speciesId,
@@ -1980,14 +2063,14 @@
       }
       const hereCol = Math.round(walker.col)
       const hereRow = Math.round(walker.row)
-      const target = pickWalkTarget(hereCol, hereRow, takenByOther(walker))
+      const target = pickWalkTarget(walker.id, hereCol, hereRow, takenByOther(walker))
       if (!target) {
         waits.push(
           window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
         )
         return
       }
-      walkSteps(walker, plan, route(hereCol, hereRow, target.col, target.row), () => {
+      walkSteps(walker, plan, route(hereCol, hereRow, target.col, target.row, canStep(walker.id, hereCol, hereRow)), () => {
         walker.anim = 'Idle'
         waits.push(
           window.setTimeout(() => wander(walker, plan), idleMinMs + Math.random() * (idleMaxMs - idleMinMs)),
@@ -2148,11 +2231,12 @@
   }
 
   function pickWalkTarget(
+    id: number,
     hereCol: number,
     hereRow: number,
     taken: (col: number, row: number) => boolean,
   ): { col: number; row: number } | null {
-    const spots = walkableSpots().filter(
+    const spots = walkTargets(id).filter(
       (spot) => (spot.col !== hereCol || spot.row !== hereRow) && !taken(spot.col, spot.row),
     )
     if (spots.length === 0) return null
@@ -2164,7 +2248,13 @@
    * partida pode estar ocupada (uma peça colocada em cima de quem estava ali).
    * Sem caminho, fica parado.
    */
-  function route(fromCol: number, fromRow: number, toCol: number, toRow: number): Step[] {
+  function route(
+    fromCol: number,
+    fromRow: number,
+    toCol: number,
+    toRow: number,
+    allowed: (col: number, row: number) => boolean = isWalkable,
+  ): Step[] {
     const moves = [
       { dc: 1, dr: 0, dir: 1 },
       { dc: -1, dr: 0, dir: 5 },
@@ -2189,7 +2279,7 @@
       for (const move of moves) {
         const col = here.col + move.dc
         const row = here.row + move.dr
-        if (cameFrom.has(key(col, row)) || !isWalkable(col, row)) continue
+        if (cameFrom.has(key(col, row)) || !allowed(col, row)) continue
         cameFrom.set(key(col, row), { col, row, dir: move.dir })
         queue.push({ col, row })
       }
@@ -2758,6 +2848,9 @@
         onNewHabitat={(kind) => startArea(null, kind)}
         onEditHabitat={(id) => startArea(id, 'basico')}
         onDeleteHabitat={(id) => void habitatCall(`/api/build/habitat/${id}/delete`, {})}
+        residents={areaResidents}
+        candidates={areaCandidates}
+        onHome={(pokemonId, habitatId) => void habitatCall(`/api/garden/pets/${pokemonId}/home`, { habitatId })}
         onAreaKind={(kind) => {
           if (!areaEdit) return
           areaEdit = { ...areaEdit, kind, dirty: true }
