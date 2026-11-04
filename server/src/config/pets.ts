@@ -15,8 +15,11 @@ export type GiftDef =
 export const petConfig = {
   /** Valores de quem nunca passou pelo jardim (captura, migração). */
   start: { hunger: 80, affection: 60, happiness: 20 },
-  /** Pontos por hora (de 0 a 100): a fome zera em ~12 h, o carinho em ~24 h. */
-  hungerDrainPerHour: 100 / 12,
+  /**
+   * Pontos por hora (de 0 a 100): a fome zera em ~16 h, o carinho em ~24 h.
+   * Com 16 h, a noite (8 h) deixa a barriga pela metade; o gasto maior é a luta.
+   */
+  hungerDrainPerHour: 100 / 16,
   affectionDrainPerHour: 100 / 24,
   /** Acima disso (nos dois) a felicidade sobe; abaixo, cai. */
   needThreshold: 40,
@@ -34,7 +37,7 @@ export const petConfig = {
    * fora do time da luta); cada luta tira `battleHungerCost` de quem entrou.
    */
   fightMinHunger: 20,
-  battleHungerCost: 8,
+  battleHungerCost: 6,
   /**
    * XP do jardim: `xpPerLevelHour × nível × felicidade/100` por hora. Bem
    * abaixo do daycare (3 × nível), que é o treino focado (5.21).

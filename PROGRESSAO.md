@@ -147,7 +147,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
       - 2b: cada estrutura é uma peça com estado próprio (`garden_structures.id`): duas bancadas têm operador, lote e nível separados (o mesmo Pokémon não opera duas); duas máquinas têm cargas separadas (a cura antes da luta usa a de mais cargas).
       - 2c: materiais novos (madeira do Headbutt e pedra do Rock Smash, 2 a 4 por vez) e receitas (`config/buildRecipes`): árvore vermelha (Azalea; 10 madeiras, 5 Apricorns, 3 Oran; 1 h), máquina de cura (Cianwood; 10 pedras, 5 madeiras, 5 Oran; 2 h), bancada (Blackthorn; 15 madeiras, 10 pedras, 10 Apricorns; 4 h). Construir leva tempo, uma obra por vez, e para no teto do tipo: árvore vermelha 1 → 2 (Azalea) → 3 (Ecruteak), máquina 1 → 2 (Cianwood), bancada 1 → 2 (Blackthorn). Números de partida; o balanço é do item 7.
    3. Peças de habitat por cima disso, com o motor que já está na branch `feat/habitats`.
-7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script.
+7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); falta conferir jogando e, depois, o tempo da campanha (XP do time contra o ás de cada líder).
 8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
 9. **Liga, rival e pós-jogo.**
 
@@ -156,6 +156,51 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
 ## 6. Pontos a decidir
 
 - ~~Teto por estrutura de produção~~: decidido em 2026-11-04: o marco sobe quantas de cada dá para ter (passo 2c).
-- Quanto material cai no campo e quanto as receitas custam (sai do balanço do item 7, junto com o ritmo do jardim).
-- Quanto mais lento o jardim fica e quantas berries a colheita passa a dar (sai do balanço do item 7).
+- ~~Quanto material cai no campo e quanto as receitas custam~~: tabela base em 2026-11-04 (seção 7), a ajustar jogando.
+- ~~Quanto mais lento o jardim fica e quantas berries a colheita passa a dar~~: tabela base em 2026-11-04 (seção 7), a ajustar jogando.
 - ~~A máquina de cura~~: decidido em 2026-11-03: cura na hora, com usos limitados que recarregam com o tempo.
+
+## 7. Ritmo base (item 7, 2026-11-04)
+
+Valores de partida, para ajustar jogando. A conta sai de `npm run economia` (server/scripts/economia.ts), que lê os configs: quando um número mudar, rodar de novo e atualizar a tabela de baixo.
+
+**Jogador de referência:** 4 sessões por dia, uma a cada ~4 h, e a noite de 8 h; Johto em ~21 dias (9 capítulos, ~2,3 dias cada). Da energia, 70% vai para revelar campo e 30% para as manchas (árvore e pedra, quando abrem); tenta capturar 1 de cada 3 Pokémon; o time cresce de 2 (cap. 1) a 6 (cap. 5); metade dos canteiros com Oran.
+
+**O que mudou:**
+
+| Número | Antes | Agora | Por quê |
+|---|---|---|---|
+| Chance de item na mancha (árvore, pedra) | 30% | 50% | o material saía lento demais (~30 Headbutts para 10 madeiras) |
+| Madeira no Headbutt | peso 75, 2 a 4 | peso 125, 3 a 5 | ~0,9 madeira por uso |
+| Pedra no Rock Smash | peso 100, 2 a 4 | peso 150, 3 a 5 | ~1,2 pedra por uso |
+| Receita da árvore vermelha | 10 madeiras, 5 Apricorns, 3 Oran | 8, 4, 3 | ~9 usos de Headbutt, meio dia de energia |
+| Receita da máquina de cura | 10 pedras, 5 madeiras, 5 Oran | 8, 4, 5 | ~11 usos |
+| Receita da bancada | 15 madeiras, 10 pedras, 10 Apricorns | 12, 10, 10 | ~22 usos, a peça mais cara |
+| Fome do pet | zera em 12 h | zera em 16 h | a noite deixa a barriga pela metade; o gasto principal passa a ser a luta |
+| Fome por luta | 8 | 6 | com o time pequeno do começo, a horta empata com a fome |
+| Oran | 30 min | 1 h | jardim um pouco mais lento; com sessões a cada 4 h, quase não muda para quem joga pouco |
+| Árvore vermelha | 1 a cada 3 h | 1 a cada 2h30 | bolas do começo quase empatam com a vontade de capturar |
+| Descanso (HP 0 → cheio) | 2 h | 4 h | o HP vale alguma coisa entre sessões |
+| Recarga da máquina de cura | 3 h por carga | 6 h por carga | 4 curas da equipe por dia por máquina (eram 8) |
+
+**Conta por dia** (entra / sai):
+
+| Cap. | Energia | Lutas | Manchas | Madeira | Pedra | Berries | Bolas | Curas |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 22 | 88 | 0 | 0 | 0 | 30 / 27 | 37 / 39 | 4 |
+| 2 | 22 | 88 | 0 | 0 | 0 | 30 / 31 | 37 / 41 | 4 |
+| 3 | 22 | 62 | 7 | 6 | 0 | 45 / 29 | 40 / 30 | 4 |
+| 4 | 22 | 62 | 7 | 6 | 0 | 45 / 33 | 58 / 32 | 4 |
+| 5 | 22 | 62 | 7 | 3 | 4 | 59 / 36 | 76 / 34 | 4 |
+| 6 | 22 | 62 | 7 | 3 | 4 | 59 / 36 | 76 / 37 | 8 |
+| 7 | 22 | 62 | 7 | 3 | 4 | 74 / 36 | 76 / 39 | 8 |
+| 8 | 22 | 62 | 7 | 3 | 4 | 74 / 36 | 76 / 42 | 8 |
+| 9 | 22 | 62 | 7 | 3 | 4 | 89 / 36 | 76 / 46 | 8 |
+
+Berries: Oran dos canteiros contra a fome do time (o dia e as lutas). Bolas: Poké Balls das árvores vermelhas (todas as que o teto deixa), do Headbutt e das missões, limitadas pela bancada, contra as tentativas de captura. Curas: cargas da máquina por dia.
+
+**Leitura:**
+- Capítulos 1 e 2 são os mais apertados: berries e bolas quase empatam com o uso, e o jogador escolhe o que capturar.
+- Do capítulo 3 em diante sobram berries (vão para energia, +2 por Oran, e receitas) e, do 4 em diante, Apricorns (vão para as receitas e as melhorias da bancada, 15 e 30). A conta não desconta esses gastos nem as Great e Ultra, que dividem o tempo da bancada.
+- Madeira e pedra: uma receita a cada 1 a 3 dias, o que fecha com o teto de peças subindo por marco.
+- Não entra na conta: presentes do chão, nível de treinador, sementes e as berries de captura.

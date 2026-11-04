@@ -337,8 +337,9 @@ test('receitas: marco libera, gasta materiais, leva tempo, uma por vez e para no
   assert.deepEqual([tree(await layoutOf()).count, tree(await layoutOf()).cap], [1, 2])
   assert.equal(await errorOf(await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })), 'missing_items')
 
-  give('mat:wood', 10)
-  give('mat:apricorn', 5)
+  // O custo exato da receita (config/buildRecipes): a madeira zera.
+  give('mat:wood', 8)
+  give('mat:apricorn', 4)
   give('berry:oran', 3)
   const crafted = await post(p.cookie, '/build/craft', { piece: 'apricorn_tree' })
   assert.equal(crafted.status, 200)

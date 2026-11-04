@@ -13,20 +13,22 @@ import type { FieldMethod } from './regions.js'
  * passo 2c) e caem de 2 a 4 por vez (`min`/`max`; sem eles, 1).
  */
 export const spotDropsConfig = {
-  chance: 0.3,
+  // Ritmo (PROGRESSAO.md, item 7): metade dos usos dá item; ~0,9 madeira por
+  // Headbutt e ~1,2 pedra por Rock Smash (uma receita em ~9 usos).
+  chance: 0.5,
   tables: {
     headbutt: [
       ...SEED_DROP_WEIGHTS.map((row) => ({ itemKey: berryItemKey(row.berryKey), weight: row.weight })),
-      // As berries somam 100: com o Apricorn (50) e a madeira (75), cada um sai em ~1/5 e ~1/3 dos itens.
+      // As berries somam 100: com o Apricorn (50) e a madeira (125), cada um sai em ~1/5 e ~45% dos itens.
       { itemKey: APRICORN_ITEM, weight: 50 },
-      { itemKey: WOOD_ITEM, weight: 75, min: 2, max: 4 },
+      { itemKey: WOOD_ITEM, weight: 125, min: 3, max: 5 },
     ],
     rockSmash: [
       { itemKey: ballItemKey('poke'), weight: 75 },
       { itemKey: ballItemKey('great'), weight: 20 },
       { itemKey: ballItemKey('ultra'), weight: 5 },
-      // Metade dos itens da pedra é pedra.
-      { itemKey: STONE_ITEM, weight: 100, min: 2, max: 4 },
+      // 60% dos itens da pedra é pedra.
+      { itemKey: STONE_ITEM, weight: 150, min: 3, max: 5 },
     ],
   } satisfies Partial<Record<FieldMethod, { itemKey: string; weight: number; min?: number; max?: number }[]>>,
 }

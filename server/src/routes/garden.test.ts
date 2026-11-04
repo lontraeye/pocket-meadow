@@ -53,15 +53,17 @@ const post = (cookie: string, url: string, body: unknown = {}) =>
 
 test('settlePet: necessidades caem; a felicidade sobe até cruzar o limite e cai depois', () => {
   const cared = settlePet({ hunger: 100, affection: 100, happiness: 0 }, 0, 6 * hourMs)
-  assert.equal(Math.round(cared.hunger), 50)
+  assert.ok(Math.abs(cared.hunger - (100 - petConfig.hungerDrainPerHour * 6)) < 1e-9)
   assert.equal(Math.round(cared.affection), 75)
   assert.ok(cared.happiness > 12 && cared.happiness < 13)
 
-  // Fome cruza 40 em 7,2 h: sobe até lá e cai nas 4,8 h seguintes.
+  // A fome cruza 40 antes das 12 h: a felicidade sobe até lá e cai no resto.
+  const crossAt = (100 - petConfig.needThreshold) / petConfig.hungerDrainPerHour
+  assert.ok(crossAt < 12)
   const day = settlePet({ hunger: 100, affection: 100, happiness: 50 }, 0, 12 * hourMs)
-  const top = 50 + petConfig.happinessUpPerHour * 7.2
-  assert.ok(Math.abs(day.happiness - (top - petConfig.happinessDownPerHour * 4.8)) < 1e-9)
-  assert.equal(day.hunger, 0)
+  const top = 50 + petConfig.happinessUpPerHour * crossAt
+  assert.ok(Math.abs(day.happiness - (top - petConfig.happinessDownPerHour * (12 - crossAt))) < 1e-9)
+  assert.ok(Math.abs(day.hunger - Math.max(0, 100 - petConfig.hungerDrainPerHour * 12)) < 1e-9)
 
   const neglected = settlePet({ hunger: 10, affection: 10, happiness: 30 }, 0, 24 * hourMs)
   assert.ok(neglected.happiness < 30)
@@ -91,7 +93,7 @@ test('jardim: começa a contar ao entrar, liquida o tempo e dá XP ao pet feliz'
   immediate(() => settleGarden(userId, t0 + 3 * hourMs))
   const row = petRow(starterId)
   assert.equal(row.pet_at, t0 + 3 * hourMs)
-  assert.equal(Math.round(row.hunger), 75)
+  assert.ok(Math.abs(row.hunger - (100 - petConfig.hungerDrainPerHour * 3)) < 1e-9)
   assert.equal(row.xp, 30, 'Nv 10 feliz: 1 × 10 × 1 × 3 h')
 })
 

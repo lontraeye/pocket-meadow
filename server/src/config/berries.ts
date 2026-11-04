@@ -78,7 +78,7 @@ export const berries = {
   oran: {
     key: 'oran',
     name: 'Oran',
-    growMs: 30 * 60 * 1000,
+    growMs: 60 * 60 * 1000,
     favoriteWeather: 'rain',
     yield: [4, 5],
     effect: { kind: 'energy', amount: 2 },

@@ -110,10 +110,10 @@ test('descanso no jardim recupera HP pelo tempo', () => {
   sql()
     .prepare('update pokemon set hp_ratio = 0, hp_updated_at = ?, pet_at = ?, location = ?, in_pc = 0 where id = ?')
     .run(t0, t0, 'garden', p.starterId)
-  immediate(() => settleGarden(p.userId, t0 + hourMs))
+  immediate(() => settleGarden(p.userId, t0 + healConfig.restFullMs / 2))
   const mid = hpOf(p.starterId)
   assert.ok(Math.abs(mid.hpRatio - 0.5) < 1e-9)
-  // Mais 1 h a partir do pet_at atualizado: chega a 1.
+  // A outra metade a partir do pet_at atualizado: chega a 1.
   immediate(() => settleGarden(p.userId, t0 + healConfig.restFullMs))
   const full = hpOf(p.starterId)
   assert.equal(full.hpRatio, 1)

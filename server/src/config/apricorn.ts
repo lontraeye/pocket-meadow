@@ -30,7 +30,7 @@ export type TreeDef = {
 const treeBase = { cap: 5, rainMult: 0.6, startWith: 1 }
 
 export const TREES: TreeDef[] = [
-  { key: 'apricorn_tree', color: 'red', itemKey: APRICORN_ITEM, intervalMs: 3 * hourMs, ...treeBase },
+  { key: 'apricorn_tree', color: 'red', itemKey: APRICORN_ITEM, intervalMs: 2.5 * hourMs, ...treeBase },
   { key: 'apricorn_tree_blue', color: 'blue', itemKey: APRICORN_BLUE, intervalMs: 4 * hourMs, ...treeBase },
   { key: 'apricorn_tree_yellow', color: 'yellow', itemKey: APRICORN_YELLOW, intervalMs: 6 * hourMs, ...treeBase },
 ]

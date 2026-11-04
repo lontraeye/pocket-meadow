@@ -14,6 +14,7 @@
     "sprites:portraits": "tsx scripts/pmd-portraits.ts",
     "sounds:cries": "tsx scripts/download-cries.ts",
     "db:seed-moves": "tsx scripts/seed-moves.ts",
+    "economia": "tsx scripts/economia.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "sounds:sfx": "tsx scripts/build-sfx.ts"

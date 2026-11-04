@@ -1,22 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { healConfig } from '../config/heal.js'
 import { clampRatio, nextHealChargeAt, restHpRatio, settleHealCharges } from './heal.js'
 
 const hourMs = 60 * 60 * 1000
 
 test('descanso: do 0 ao cheio em restFullMs', () => {
   assert.equal(restHpRatio(0, 0), 0)
-  assert.equal(restHpRatio(0, 2 * hourMs), 1)
-  assert.equal(restHpRatio(0, hourMs), 0.5)
-  assert.equal(restHpRatio(0.25, hourMs), 0.75)
-  assert.equal(restHpRatio(0.9, 2 * hourMs), 1)
+  const full = healConfig.restFullMs
+  assert.equal(restHpRatio(0, full), 1)
+  assert.equal(restHpRatio(0, full / 2), 0.5)
+  assert.equal(restHpRatio(0.25, full / 2), 0.75)
+  assert.equal(restHpRatio(0.9, full), 1)
 })
 
 test('cargas da máquina: uma de cada vez pelo timestamp', () => {
   const t0 = 1_000_000
   assert.equal(settleHealCharges(0, t0, t0), 0)
-  assert.equal(settleHealCharges(0, t0, t0 + 3 * hourMs), 1)
-  assert.equal(settleHealCharges(0, t0, t0 + 6 * hourMs), 2)
+  const recharge = healConfig.machine.rechargeMs
+  assert.equal(settleHealCharges(0, t0, t0 + recharge), 1)
+  assert.equal(settleHealCharges(0, t0, t0 + 2 * recharge), 2)
   assert.equal(settleHealCharges(3.5, t0, t0 + 3 * hourMs, 4, 3 * hourMs), 4)
   assert.equal(settleHealCharges(4, t0, t0 + 100 * hourMs), 4)
 })

@@ -1,7 +1,7 @@
 // Receitas de construção (PROGRESSAO.md 4.3, passo 2c): o marco dá a primeira
 // unidade e a receita; as próximas se constroem com materiais, levam tempo e
 // param no teto do tipo (config/gardenUnlocks). Uma construção por vez.
-// Números de partida; o balanço fica para o item 7.
+// Custos da tabela base do item 7 (PROGRESSAO.md, seção 7).
 
 import type { StructurePiece } from '../game/garden/layout.js'
 import { APRICORN_ITEM } from './apricorn.js'
@@ -23,8 +23,8 @@ export const BUILD_RECIPES: readonly BuildRecipe[] = [
   {
     piece: 'apricorn_tree',
     cost: [
-      { itemKey: WOOD_ITEM, quantity: 10 },
-      { itemKey: APRICORN_ITEM, quantity: 5 },
+      { itemKey: WOOD_ITEM, quantity: 8 },
+      { itemKey: APRICORN_ITEM, quantity: 4 },
       { itemKey: 'berry:oran', quantity: 3 },
     ],
     ms: 1 * hourMs,
@@ -32,8 +32,8 @@ export const BUILD_RECIPES: readonly BuildRecipe[] = [
   {
     piece: 'heal_machine',
     cost: [
-      { itemKey: STONE_ITEM, quantity: 10 },
-      { itemKey: WOOD_ITEM, quantity: 5 },
+      { itemKey: STONE_ITEM, quantity: 8 },
+      { itemKey: WOOD_ITEM, quantity: 4 },
       { itemKey: 'berry:oran', quantity: 5 },
     ],
     ms: 2 * hourMs,
@@ -41,7 +41,7 @@ export const BUILD_RECIPES: readonly BuildRecipe[] = [
   {
     piece: 'ball_bench',
     cost: [
-      { itemKey: WOOD_ITEM, quantity: 15 },
+      { itemKey: WOOD_ITEM, quantity: 12 },
       { itemKey: STONE_ITEM, quantity: 10 },
       { itemKey: APRICORN_ITEM, quantity: 10 },
     ],
