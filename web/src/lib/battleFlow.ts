@@ -38,6 +38,7 @@ export function prizeLines(battle: BattleOutcome): string[] {
   if (!battle.won || opponent.kind !== 'trainer') return []
   if (opponent.league?.status === 'won' && opponent.league.rewards.length > 0) return opponent.league.rewards
   if (opponent.league?.status === 'active' && opponent.league.nextName) return [`Próxima: ${opponent.league.nextName}`]
+  if (opponent.rival && opponent.rival.rewards.length > 0) return [`Prêmio: ${opponent.rival.rewards.join(', ')}.`]
   if (opponent.trainerKind !== 'leader' || !opponent.cleared) return []
   const lines = [`Conquistou o ${opponent.cleared.name}!`]
   if (opponent.cleared.grants.length > 0) lines.push(`Agora você tem: ${opponent.cleared.grants.join(', ')}.`)
@@ -52,8 +53,8 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
       return { id: 'lost', title: 'Derrota', detail: 'A tentativa acabou. A Liga recomeça da primeira luta.', tone: 'bad' }
     }
     return opponent.kind === 'wild'
-      ? { id: 'lost', title: 'Derrota', detail: 'Seus Pokémon não se machucaram.', tone: 'bad' }
-      : { id: 'lost', title: 'Derrota', detail: `Treine o time e desafie o ${opponent.name} de novo.`, tone: 'bad' }
+      ? { id: 'lost', title: 'Derrota', detail: 'Cure o time no jardim antes de tentar de novo.', tone: 'bad' }
+      : { id: 'lost', title: 'Derrota', detail: `Treine o time e desafie ${trainerTitle(opponent)} de novo.`, tone: 'bad' }
   }
   if (opponent.kind === 'trainer' && opponent.league?.champion) {
     const rewards = opponent.league.rewards.length > 0 ? ` · ${opponent.league.rewards.join(', ')}` : ''
@@ -85,7 +86,8 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
     }
   }
   if (opponent.kind === 'trainer') {
-    return { id: 'defeated', title: `Venceu ${trainerTitle(opponent)}`, tone: 'good' }
+    const prize = opponent.rival && opponent.rival.rewards.length > 0 ? opponent.rival.rewards.join(', ') : undefined
+    return { id: 'defeated', title: `Venceu ${trainerTitle(opponent)}`, detail: prize, tone: 'good' }
   }
   if (battle.caught) return { id: 'caught', title: 'Capturado!', detail: 'Entrou no jardim.', tone: 'good' }
   if (battle.status === 'escaped') return { id: 'escaped', title: 'Escapou', detail: 'Você venceu, mas ele fugiu.', tone: 'neutral' }

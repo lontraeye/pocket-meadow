@@ -14,6 +14,8 @@ import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '..
 import { petConfig } from '../config/pets.js'
 import { clampRatio } from '../game/heal.js'
 import { activeLeagueRun, loseLeagueRun, parseLeagueTeam, settleLeagueFight, type LeagueFightResult } from '../db/league.js'
+import { clearRival } from '../db/rival.js'
+import { rivalFightOfKey } from '../config/rival.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
@@ -684,7 +686,7 @@ function applyBattleOutcome(input: {
             name: trainer.name,
             cleared: trainerOutcome?.cleared ?? null,
             league: trainerOutcome?.league ?? null,
-            rival: null,
+            rival: trainerOutcome?.rival ?? null,
           }
         : { kind: 'wild' as const },
     },
@@ -694,9 +696,11 @@ function applyBattleOutcome(input: {
 type TrainerWin = {
   cleared: ReturnType<typeof clearLeader>['cleared'] | null
   league: LeagueFightResult | null
+  /** Rival vencido: o prêmio (vazio se a luta já tinha sido vencida). */
+  rival: { rewards: string[] } | null
 }
 
-/** Vitória contra treinador: líder dá o marco; a Liga avança; o rival entra na parte 3. */
+/** Fim da luta contra treinador: líder dá o marco; a Liga avança ou acaba; o rival dá o prêmio. */
 function finishTrainerWin(
   userId: number,
   trainer: TrainerConfig,
@@ -706,20 +710,24 @@ function finishTrainerWin(
 ): TrainerWin {
   switch (trainer.kind) {
     case 'leader': {
-      if (!won) return { cleared: null, league: null }
+      if (!won) return { cleared: null, league: null, rival: null }
       const leader = leaderByMilestone(trainer.key)
       if (!leader) throw new Error(`leader ${trainer.key} is missing`)
-      return { cleared: clearLeader(userId, leader, now).cleared, league: null }
+      return { cleared: clearLeader(userId, leader, now).cleared, league: null, rival: null }
     }
     case 'elite':
     case 'champion':
       return {
         cleared: null,
         league: settleLeagueFight({ userId, trainer, won, hpByPokemonId, now }),
+        rival: null,
       }
-    case 'rival':
-      if (!won) return { cleared: null, league: null }
-      throw new Error(`rival win for ${trainer.key} is part 3`)
+    case 'rival': {
+      if (!won) return { cleared: null, league: null, rival: null }
+      const fight = rivalFightOfKey(trainer.key)
+      if (!fight) throw new Error(`rival ${trainer.key} is missing`)
+      return { cleared: null, league: null, rival: clearRival(userId, fight, now) }
+    }
     default: {
       const kind: never = trainer.kind
       throw new Error(`unknown trainer kind ${kind}`)

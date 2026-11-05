@@ -169,6 +169,13 @@ export type PlacesResponse = {
       /** Onde aparece aqui, na ordem mato → surf → pesca → árvore → pedra. */
       where: SpeciesWhere[]
     }[]
+    /** A luta do rival neste lugar (capítulo aberto, ainda não vencida). */
+    rival: {
+      key: string
+      name: string
+      foes: { speciesId: number; level: number; ace: boolean }[]
+      rewards: string[]
+    } | null
   }
 }
 
@@ -213,7 +220,7 @@ export type BattleOutcome = {
         kind: 'trainer'
         trainerKind: 'leader' | 'elite' | 'champion' | 'rival'
         name: string
-        /** Líder: o marco, se a vitória o deu. Liga e rival preenchem os seus nas partes seguintes. */
+        /** Líder: o marco, se a vitória o deu. */
         cleared: { key: string; name: string; opens: number; grants: string[] } | null
         league: {
           status: 'active' | 'won' | 'lost'
@@ -222,7 +229,8 @@ export type BattleOutcome = {
           opens: number | null
           rewards: string[]
         } | null
-        rival: null
+        /** Rival vencido: o prêmio (vazio se já tinha vencido essa luta). */
+        rival: { rewards: string[] } | null
       }
 }
 

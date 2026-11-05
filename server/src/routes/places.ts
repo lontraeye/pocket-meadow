@@ -17,6 +17,8 @@ import { regionBySlug, regionSpecies, regionSpeciesWhere, type SpeciesWhere } fr
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
+import { rivalHere, rivalTrainerFor } from '../db/rival.js'
+import { rewardLabel } from '../config/rewardNames.js'
 import { encounters, pokedexEntries, species, trainerMilestones, trainerPlaces, trainers } from '../db/schema.js'
 import { type Failure, fail, readObject } from './http.js'
 
@@ -253,7 +255,20 @@ function placesView(userId: number, now: number) {
     flyReason: toolOpen('fly', progress) ? flyBlock : null,
     goal: goalView(progress, here, statusOf),
     places,
-    here: { species: hereSpecies },
+    here: { species: hereSpecies, rival: rivalView(userId, progress, here) },
+  }
+}
+
+/** A luta do rival neste lugar (capítulo aberto, ainda não vencida), com o time e o prêmio. */
+function rivalView(userId: number, progress: Progress, here: string) {
+  const fight = rivalHere(userId, progress, here)
+  if (!fight) return null
+  const trainer = rivalTrainerFor(userId, fight)
+  return {
+    key: fight.key,
+    name: trainer.name,
+    foes: trainer.foes.map((foe) => ({ speciesId: foe.speciesId, level: foe.level, ace: foe.ace ?? false })),
+    rewards: fight.rewards.map(rewardLabel),
   }
 }
 

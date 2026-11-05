@@ -26,6 +26,7 @@
     onUseSpot,
     onChallenge,
     onLeagueNext,
+    onRivalChallenge,
     onGarden,
     onOpenPc,
     extras,
@@ -50,6 +51,8 @@
     onChallenge: (milestoneKey: string) => void
     /** Abre a próxima luta da tentativa da Liga. */
     onLeagueNext: () => void
+    /** Desafia o rival que está no lugar atual. */
+    onRivalChallenge: (key: string) => void
     onGarden: () => void
     /** Abre o PC (nas cidades, como um Centro Pokémon). */
     onOpenPc: () => void
@@ -655,6 +658,24 @@
 
         {#if isHere}
           <p class="blurb">{selected.blurb}</p>
+          {#if data.here.rival}
+            {@const rival = data.here.rival}
+            <!-- O rival não trava o marco: é uma luta a mais, com prêmio, uma vez. -->
+            <div class="rival">
+              <p class="rival-title"><strong>{rival.name}</strong> está aqui · prêmio: {rival.rewards.join(', ')}</p>
+              <ul class="leader-team" aria-label="Time do {rival.name}">
+                {#each rival.foes as foe, index (index)}
+                  <li class:ace={foe.ace} title="Nv {foe.level}{foe.ace ? ' · ás' : ''}">
+                    <img src={showdownSrc(foe.speciesId, false)} alt="" loading="lazy" />
+                    <small>Nv {foe.level}</small>
+                  </li>
+                {/each}
+              </ul>
+              <button type="button" class="btn" disabled={pending || hasEncounter} onclick={() => onRivalChallenge(rival.key)}>
+                Lutar com o rival
+              </button>
+            </div>
+          {/if}
           {#if selected.kind !== 'town'}
             <div class="species-row">
               <span class="count">{caughtHere}/{data.here.species.length}</span>
@@ -1274,6 +1295,29 @@
 
   .field-wait {
     margin: auto;
+  }
+
+  .rival {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+    padding: 0.4rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+  }
+
+  .rival-title {
+    margin: 0;
+    font-size: 0.78rem;
+  }
+
+  .rival .leader-team {
+    flex-wrap: wrap;
+  }
+
+  .rival .btn {
+    min-height: 44px;
   }
 
   .leader-team {

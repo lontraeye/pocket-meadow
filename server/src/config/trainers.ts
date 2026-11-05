@@ -3,6 +3,7 @@
 
 import { leagueTrainers } from './league.js'
 import { leaderConfigs, type LeaderFoe } from './leaders.js'
+import { rivalTrainers } from './rival.js'
 import { traitsConfig } from './traits.js'
 import { readSpeciesSnapshot } from '../seed/apply.js'
 import { movesByName } from '../seed/traitsData.js'
@@ -16,7 +17,7 @@ export type TrainerConfig = {
   foes: readonly LeaderFoe[]
 }
 
-/** Líderes e a Liga; o rival (parte 3) entra nesta lista. */
+/** Líderes, Liga e rival (cada luta do rival em três variações, uma por inicial). */
 export function allTrainers(): readonly TrainerConfig[] {
   return [
     ...leaderConfigs.map((leader) => ({
@@ -26,6 +27,7 @@ export function allTrainers(): readonly TrainerConfig[] {
       foes: leader.foes,
     })),
     ...leagueTrainers,
+    ...rivalTrainers,
   ]
 }
 

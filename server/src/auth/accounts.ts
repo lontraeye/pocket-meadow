@@ -60,6 +60,7 @@ export function createPlayer(input: {
       energy: trainerConfig.energyMax,
       energyUpdatedAt: now,
       weatherSeed: randomSeed(),
+      starterSpeciesId: starterSpecies.id,
       updatedAt: now,
     })
     .run()

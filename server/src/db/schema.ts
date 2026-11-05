@@ -138,6 +138,8 @@ export const trainers = sqliteTable('trainers', {
   currentPlace: text('current_place').notNull().default('new-bark'),
   /** Quando o jardim ganhou as peças colocadas (construção, PROGRESSAO 4.3); null = ainda não. */
   gardenLayoutAt: integer('garden_layout_at'),
+  /** Inicial escolhido no cadastro (decide o time do rival, 5.24); null = conta antiga. */
+  starterSpeciesId: integer('starter_species_id'),
   updatedAt: integer('updated_at').notNull(),
 })
 
@@ -208,6 +210,20 @@ export const leagueRuns = sqliteTable(
       sql`${table.status} in ('active', 'won', 'lost', 'abandoned')`,
     ),
   ],
+)
+
+/** Lutas do rival já vencidas (5.24, parte 3): cada uma dá o prêmio uma vez. */
+export const trainerRivals = sqliteTable(
+  'trainer_rivals',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** A luta, sem a linha do inicial ("rival-2"). */
+    rivalKey: text('rival_key').notNull(),
+    clearedAt: integer('cleared_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.rivalKey] })],
 )
 
 /** Lugares já visitados: Voo, selo "novo" e aviso de chegada. */

@@ -4,6 +4,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { leagueConfig, leagueTrainerAt, leagueTrainers } from '../config/league.js'
 import { milestoneByKey } from '../config/milestones.js'
+import { rewardLabel } from '../config/rewardNames.js'
 import type { TrainerConfig } from '../config/trainers.js'
 import { creditItems } from './inventory.js'
 import { getDb } from './client.js'
@@ -17,11 +18,6 @@ export type LeagueFightResult = {
   champion: boolean
   opens: number | null
   rewards: string[]
-}
-
-const REWARD_NAMES: Record<string, { one: string; many: string }> = {
-  'ball:ultra': { one: 'Ultra Ball', many: 'Ultra Balls' },
-  'mat:apricorn-yellow': { one: 'Apricorn amarelo', many: 'Apricorns amarelos' },
 }
 
 export function parseLeagueTeam(raw: string): LeagueMember[] {
@@ -144,11 +140,7 @@ export function settleLeagueFight(input: {
       })
       .where(eq(trainers.userId, input.userId))
       .run()
-    for (const item of leagueConfig.championRewards.items) {
-      const name = REWARD_NAMES[item.itemKey]
-      const label = name ? (item.quantity === 1 ? name.one : name.many) : item.itemKey
-      rewards.push(`${item.quantity} ${label}`)
-    }
+    for (const item of leagueConfig.championRewards.items) rewards.push(rewardLabel(item))
     rewards.push(`${leagueConfig.championRewards.genericCandies} doces`)
   }
   getDb()

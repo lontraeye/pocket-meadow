@@ -1443,7 +1443,7 @@ Este item tira a Liga e o rival do congelamento do item 7 da seção 1 (decisão
 
 **Ordem de implementação:** parte 1 (lutas de treinador genéricas), parte 2 (a Liga), parte 3 (o rival), parte 4 (pós-jogo). Cada parte vai para a main sozinha, com testes. Nada de deploy (só quando o usuário pedir).
 
-**Andamento (2026-11-05):** partes 1 e 2 feitas na main (ab98a49, 6707eb8), sem deploy. Depois delas, a tela antes da luta da Liga passou a mostrar o time e o HP da tentativa, sem a máquina de cura e sem escolher quem abre (o encontro manda `leader.kind`). Faltam as partes 3 e 4.
+**Andamento (2026-11-05):** partes 1 e 2 feitas na main (ab98a49, 6707eb8), sem deploy. Depois delas, a tela antes da luta da Liga passou a mostrar o time e o HP da tentativa, sem a máquina de cura e sem escolher quem abre (o encontro manda `leader.kind`). Parte 3 (rival) feita no mesmo dia: `config/rival.ts` (cada luta em três variações, chave `rival-N/linha`), `db/rival.ts`, `POST /rival/:key/challenge`, `here.rival` no `GET /places` e o cartão no lugar; migração 0040 (`trainers.starter_species_id`, `trainer_rivals`). Falta a parte 4.
 
 #### Parte 1: luta de treinador genérica (refatoração, sem mudar o jogo)
 

@@ -1130,6 +1130,10 @@
         fromField = false
         void search('league', () => api('/api/league/next', {}))
       }}
+      onRivalChallenge={(key) => {
+        fromField = false
+        void search(key, () => api(`/api/rival/${key}/challenge`, {}))
+      }}
       onGarden={onClose}
       {onOpenPc}
       onMapView={onMapOpen}
@@ -1212,7 +1216,7 @@
         <!-- Desafio do líder: o time dele inteiro, em ordem; uma luta só. -->
         <section class="panel sheet versus">
           <p class="kicker">
-            {#if leagueFight}Liga{#if leagueRun} · luta {leagueRun.stage + 1} de 5{/if}{:else}Desafio de ginásio{/if} · {encounter.regionName}
+            {#if leagueFight}Liga{#if leagueRun} · luta {leagueRun.stage + 1} de 5{/if}{:else if encounter.leader.kind === 'rival'}Rival{:else}Desafio de ginásio{/if} · {encounter.regionName}
           </p>
           <h2>{encounter.leader.name}</h2>
           <ul class="foe-team" aria-label="Time do {encounter.leader.name}">
