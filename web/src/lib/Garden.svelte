@@ -553,9 +553,6 @@
         .map((mon) => [mon.id, habitatCells.get(mon.habitatId!)!] as const),
     ),
   )
-  const waterCells = $derived(
-    new Set([...floorMap].filter(([, floor]) => WATER_FLOORS.includes(floor)).map(([key]) => key)),
-  )
 
   /**
    * Onde o Pokémon pode pisar agora. Dentro de casa, só na casa; fora dela
@@ -626,8 +623,6 @@
   let painting: number | null = null
   /** Como estava no começo da pincelada (para desfazer quando entra o segundo dedo). */
   let strokeStart: { draft: Record<string, PaintFloor | null>; cells: Record<string, true> | null } | null = null
-  /** Pincel ligado: um dedo pinta em vez de fazer pan. */
-  const brushing = $derived(building && (paint !== null || areaEdit !== null) && buildPick === null)
 
   function cancelStroke() {
     const start = strokeStart
@@ -648,6 +643,9 @@
   })
   /** Casas com peça (canteiro, árvore, bancada, máquina): não aceitam água. */
   const occupiedCells = $derived(occupied(layout.pieces))
+  const waterCells = $derived(
+    new Set([...floorMap].filter(([, floor]) => WATER_FLOORS.includes(floor)).map(([key]) => key)),
+  )
 
   /** O que tem em cada casa para o motor (canteiro não conta: tem chão próprio). */
   function lookAt(col: number, row: number) {
@@ -661,6 +659,8 @@
   /** `dirty`: área ou tipo mudaram e ainda não foram salvos (o chão só pinta depois de salvar). */
   type AreaEdit = { id: number | null; kind: HabitatKind; cells: Record<string, true>; dirty: boolean }
   let areaEdit = $state<AreaEdit | null>(null)
+  /** Pincel ligado: um dedo pinta em vez de fazer pan. */
+  const brushing = $derived(building && (paint !== null || areaEdit !== null) && buildPick === null)
   /** Ao arrastar, o primeiro toque decide se marca ou desmarca. */
   let areaAdding = true
 

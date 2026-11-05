@@ -1298,7 +1298,7 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 - **Depois:** móveis e decorativos (arbusto, pedra, boia) com arte, os outros biomas (Cratera, Usina, Bosque sombrio, Campo gelado) quando tiverem chão desenhado, e talvez o limite do jardim.
 - **Em produção desde 2026-11-04** (bc9e906): habitats, moradores e visitantes. Desenvolvimento pausado aqui.
 - **Pontos em aberto, para quando voltar:**
-  - A Pradaria aceita quem tem Voador em qualquer um dos dois tipos, então o Zubat (Veneno/Voador) aparece lá como visitante e pode morar lá. Decidir se o tipo principal tem de ser da Pradaria.
+  - ~~A Pradaria aceita quem tem Voador em qualquer um dos dois tipos~~ (decidido em 2026-11-05: fica assim; qualquer um dos dois tipos vale para morar, visitar e para o bônus, em todos os habitats, e o Zubat segue na Pradaria).
   - Móveis e decorativos (arbusto, pedra, boia) dependem da arte; a regra de chão de cada um (`OBJECT_GROUND`) já existe.
   - O próximo item da lista é a Liga, o rival e o pós-jogo (PROGRESSAO.md, item 9), especificado na 5.24.
 O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.

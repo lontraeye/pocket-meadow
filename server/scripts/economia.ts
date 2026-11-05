@@ -19,6 +19,7 @@ import { spotDropsConfig } from '../src/config/spotDrops.js'
 import { trainerConfig } from '../src/config/trainer.js'
 import { catchUpMult, daycareConfig, daycareXpPerHour } from '../src/config/daycare.js'
 import { leaderConfigs } from '../src/config/leaders.js'
+import { leagueTrainers } from '../src/config/league.js'
 import { loadRegions } from '../src/config/regions.js'
 import { battleXp } from '../src/game/battle.js'
 import { gardenXp } from '../src/game/pets.js'
@@ -236,15 +237,31 @@ const campaignHeader = ['Cap.', 'Líder (ás)', 'Alvo', 'Selvagem', 'Time no in�
 console.log(`| ${campaignHeader.join(' | ')} |`)
 console.log(`|${campaignHeader.map(() => '---').join('|')}|`)
 
+// Os 8 líderes e, no capítulo 9, a Liga: time cheio, alvo no ás do campeão. A
+// conta não modela as cinco lutas seguidas sem cura: o tempo da Liga é o mínimo.
+const gates = [
+  ...leaderConfigs.map((leader) => ({
+    label: leader.name.replace('Líder de ', ''),
+    ace: Math.max(...leader.foes.map((foe) => foe.level)),
+    needed: leader.foes.length,
+  })),
+  {
+    label: 'Liga',
+    ace: Math.max(...leagueTrainers.flatMap((trainer) => trainer.foes.map((foe) => foe.level))),
+    needed: trainerConfig.teamMax,
+  },
+]
+
 const team: Member[] = [{ level: trainerConfig.starterLevel, xp: 0 }]
 let totalDays = 0
-for (const [index, leader] of leaderConfigs.entries()) {
+let leaderDays = 0
+for (const [index, gate] of gates.entries()) {
   const chapter = index + 1
   const cleared = new Set(milestoneConfigs.slice(0, chapter - 1).map((milestone) => milestone.key))
   const daycareSlots = gardenUnlocks(cleared).daycareSlots
-  const ace = Math.max(...leader.foes.map((foe) => foe.level))
+  const ace = gate.ace
   const target = ace - PLAYER.leaderMargin
-  const needed = leader.foes.length
+  const needed = gate.needed
   // Quem falta no time entra capturado no nível médio do mato do capítulo.
   while (team.length < needed) team.push({ level: Math.round(wildAverage(chapter)), xp: 0 })
   team.sort((a, b) => b.level - a.level)
@@ -282,12 +299,13 @@ for (const [index, leader] of leaderConfigs.entries()) {
   }
   const days = hours / dayHours
   totalDays += days
+  if (index < leaderConfigs.length) leaderDays += days
   const all = got.fight + got.daycare + got.garden || 1
   const pct = (value: number) => `${fmt((value / all) * 100)}%`
   console.log(
     `| ${[
       chapter,
-      `${leader.name.replace('Líder de ', '')} (${ace})`,
+      `${gate.label} (${ace})`,
       `${needed} × ${target}`,
       fmt(wildAverage(chapter)),
       startLevels,
@@ -300,4 +318,4 @@ for (const [index, leader] of leaderConfigs.entries()) {
   )
 }
 console.log('')
-console.log(`Total até a Blackthorn: ${fmt(totalDays, 1)} dias (alvo: ~${fmt(PLAYER.daysPerChapter * leaderConfigs.length, 1)}). Daycare: ${fmt(daycareConfig.levelsPerHour * 24, 1)} níveis por dia no ritmo normal.`)
+console.log(`Total até a Blackthorn: ${fmt(leaderDays, 1)} dias (alvo: ~${fmt(PLAYER.daysPerChapter * leaderConfigs.length, 1)}). Até o campeão: ${fmt(totalDays, 1)} dias (alvo: ~${fmt(PLAYER.daysPerChapter * gates.length, 1)}). Daycare: ${fmt(daycareConfig.levelsPerHour * 24, 1)} níveis por dia no ritmo normal.`)

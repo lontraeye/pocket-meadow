@@ -149,7 +149,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
    3. ~~Peças de habitat~~ (feito em 2026-11-04, com o redesenho da 5.22: área e tipo escolhidos pelo jogador).
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); tempo da campanha medido no mesmo script (seção 7.1: ~12 dias de treino até a Blackthorn); falta conferir jogando.
 8. ~~**Habitats (5.22)** e **visitantes**~~ (feito em 2026-11-04, em produção; abrem cedo, por partes, não no capítulo 7).
-9. ~~**Liga, rival e pós-jogo**~~ (feito em 2026-11-05, PLANNING.md 5.24): a Liga (5 lutas seguidas sem curar), o rival (5 lutas com prêmio, sem travar o marco) e a revanche semanal da Liga para o campeão. Falta pôr a Liga no `npm run economia`.
+9. ~~**Liga, rival e pós-jogo**~~ (feito em 2026-11-05, PLANNING.md 5.24): a Liga (5 lutas seguidas sem curar), o rival (5 lutas com prêmio, sem travar o marco) e a revanche semanal da Liga para o campeão. Tempo medido no `npm run economia` (seção 7.1).
 
 **Para depois (anotado):** breed, com sorteio de sexo (macho/fêmea; alguns sprites mudam com o sexo, então o sprite tem de respeitar isso) e ovos personalizados (muda só a cor do ovo), com ninho e incubadora no jardim.
 
@@ -221,11 +221,13 @@ O mesmo script anda hora a hora com o time: XP das lutas no mato do capítulo (f
 | 6 | Olivine (35) | 3 × 33 | 14 | 29, 28, 23 | 2,4 | 76 | 25% | 70% | 5% |
 | 7 | Mahogany (31) | 3 × 29 | 23 | 33, 33, 33 | 0 | 0 | — | — | — |
 | 8 | Blackthorn (40) | 4 × 38 | 23 | 33, 33, 33, 23 | 1,8 | 57 | 22% | 76% | 2% |
+| 9 | Liga (50) | 6 × 48 | 26 | 41, 40, 40, 38, 26, 26 | 4,2 | 133 | 22% | 74% | 4% |
 
-**Total até a Blackthorn: ~12 dias** de treino, contra ~19 do alvo (8 × 2,3). A Liga ainda não tem time no config e fica fora.
+**Total até a Blackthorn: ~12 dias** de treino, contra ~19 do alvo (8 × 2,3). **Até o campeão: ~16,5 dias**, contra ~21 (9 × 2,3). A Liga entra com o time cheio (6, `teamMax`) e o alvo no ás do campeão (50 − 2); a conta não modela as cinco lutas seguidas sem cura, então os 4,2 dias dela são o mínimo (medido em 2026-11-05).
 
 **Leitura:**
 - O treino sozinho fecha em ~2/3 do alvo. O resto do tempo é o que a conta não vê: abrir as áreas do capítulo, capturar as espécies, pegar o tipo certo para as ferramentas, perder para o líder e tentar de novo. Por isso **não mexer no XP ainda**: primeiro ver jogando quanto tempo isso leva.
 - Os capítulos alternam: 2, 4 e 6 levam ~2,5 dias (o líder tem 3 ou 4 Pokémon, ou o salto de nível é grande); 1, 3 e 5 levam ~1 dia (2 Pokémon). O 7 sai de graça: o ás de Mahogany (31) é mais baixo que o de Olivine (35), como no Crystal.
 - O daycare carrega a segunda metade: de 60% a 76% do XP do capítulo 4 em diante. Combina com o jardim no centro; se pesar demais, a alavanca é `levelsPerHour` (hoje 4 níveis por dia).
+- A Liga leva quase dois capítulos (4,2 dias): o salto é de 4 para 6 Pokémon e de 40 para 48, e quem entra capturado no mato do capítulo 9 (Nv 26) precisa de mais de 20 níveis. O daycare carrega 74% disso.
 - Se depois de jogar faltar tempo: subir o ás dos capítulos rápidos (1, 3, 5, 7) ou cortar o daycare. Se sobrar: o contrário. O XP da luta fica por último, porque mexe em tudo.
