@@ -19,11 +19,17 @@ export function isTrainerBattle(battle: Pick<BattleOutcome, 'opponent'>): boolea
   return opponentOf(battle).kind !== 'wild'
 }
 
+/** "o Líder de Violet", "a Elite da Liga (Psíquico)": a Elite pede o artigo feminino. */
+export function trainerTitle(opponent: Opponent): string {
+  if (opponent.kind === 'wild') return ''
+  return `${opponent.trainerKind === 'elite' ? 'a' : 'o'} ${opponent.name}`
+}
+
 /** Primeira linha do resumo na tela de luta. */
 export function recapIntro(battle: BattleOutcome, encounter: Pick<PendingEncounter, 'displayName'>): string {
   const opponent = opponentOf(battle)
-  if (!battle.won) return opponent.kind === 'wild' ? 'Seu time foi derrotado…' : `O ${opponent.name} venceu…`
-  return opponent.kind === 'wild' ? `${encounter.displayName} desmaiou!` : `Você venceu o ${opponent.name}!`
+  if (!battle.won) return opponent.kind === 'wild' ? 'Seu time foi derrotado…' : `${capitalize(trainerTitle(opponent))} venceu…`
+  return opponent.kind === 'wild' ? `${encounter.displayName} desmaiou!` : `Você venceu ${trainerTitle(opponent)}!`
 }
 
 /** Linhas do resumo depois do XP: o prêmio do treinador vencido (marco, ferramentas). */
@@ -62,13 +68,13 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
   if (opponent.kind === 'trainer' && opponent.league?.status === 'active') {
     return {
       id: 'defeated',
-      title: `Venceu o ${opponent.name}`,
+      title: `Venceu ${trainerTitle(opponent)}`,
       detail: opponent.league.nextName ? `Próxima: ${opponent.league.nextName}` : undefined,
       tone: 'good',
     }
   }
   if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
-    if (!opponent.cleared) return { id: 'defeated', title: `Venceu o ${opponent.name}`, tone: 'good' }
+    if (!opponent.cleared) return { id: 'defeated', title: `Venceu ${trainerTitle(opponent)}`, tone: 'good' }
     const grants = opponent.cleared.grants.length > 0 ? ` · Ganhou: ${opponent.cleared.grants.join(', ')}` : ''
     return {
       id: 'defeated',
@@ -79,7 +85,7 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
     }
   }
   if (opponent.kind === 'trainer') {
-    return { id: 'defeated', title: `Venceu o ${opponent.name}`, tone: 'good' }
+    return { id: 'defeated', title: `Venceu ${trainerTitle(opponent)}`, tone: 'good' }
   }
   if (battle.caught) return { id: 'caught', title: 'Capturado!', detail: 'Entrou no jardim.', tone: 'good' }
   if (battle.status === 'escaped') return { id: 'escaped', title: 'Escapou', detail: 'Você venceu, mas ele fugiu.', tone: 'neutral' }
@@ -97,23 +103,27 @@ export function resultLine(
     }
     if (opponent.league.champion) return { text: `Campeão de Johto! Capítulo ${opponent.league.opens ?? ''} aberto.`, tone: 'good' }
     return {
-      text: opponent.league.nextName ? `Você venceu! Próxima: ${opponent.league.nextName}.` : `Você venceu o ${opponent.name}!`,
+      text: opponent.league.nextName ? `Você venceu! Próxima: ${opponent.league.nextName}.` : `Você venceu ${trainerTitle(opponent)}!`,
       tone: 'good',
     }
   }
   if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
     if (!battle.won) return { text: 'Derrota. Treine o time e desafie de novo.', tone: 'bad' }
     return {
-      text: opponent.cleared ? `Você venceu o ${opponent.name}! ${opponent.cleared.name} conquistado.` : `Você venceu o ${opponent.name}!`,
+      text: opponent.cleared ? `Você venceu ${trainerTitle(opponent)}! ${opponent.cleared.name} conquistado.` : `Você venceu ${trainerTitle(opponent)}!`,
       tone: 'good',
     }
   }
   if (opponent.kind === 'trainer') {
     if (!battle.won) return { text: 'Derrota. Treine o time e desafie de novo.', tone: 'bad' }
-    return { text: `Você venceu o ${opponent.name}!`, tone: 'good' }
+    return { text: `Você venceu ${trainerTitle(opponent)}!`, tone: 'good' }
   }
   if (battle.caught) return { text: 'Capturado! Entrou no jardim.', tone: 'good' }
   if (battle.left) return { text: 'Você venceu e deixou ele ir.', tone: 'neutral' }
   if (battle.won) return { text: 'Você venceu, mas ele fugiu.', tone: 'neutral' }
-  return { text: 'Derrota. Seus Pokémon não se machucaram.', tone: 'bad' }
+  return { text: 'Derrota. Cure o time no jardim antes de tentar de novo.', tone: 'bad' }
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }

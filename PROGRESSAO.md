@@ -146,10 +146,10 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
       - 2a: o jardim abre pelos marcos (`config/gardenUnlocks`), não pelo nível de treinador; a tabela do 4.3 vale para peças, canteiros, vagas do daycare e nível máximo da bancada. A bancada vem desde o começo (sem ela, faltaria bola e o jogo travaria).
       - 2b: cada estrutura é uma peça com estado próprio (`garden_structures.id`): duas bancadas têm operador, lote e nível separados (o mesmo Pokémon não opera duas); duas máquinas têm cargas separadas (a cura antes da luta usa a de mais cargas).
       - 2c: materiais novos (madeira do Headbutt e pedra do Rock Smash, 2 a 4 por vez) e receitas (`config/buildRecipes`): árvore vermelha (Azalea; 10 madeiras, 5 Apricorns, 3 Oran; 1 h), máquina de cura (Cianwood; 10 pedras, 5 madeiras, 5 Oran; 2 h), bancada (Blackthorn; 15 madeiras, 10 pedras, 10 Apricorns; 4 h). Construir leva tempo, uma obra por vez, e para no teto do tipo: árvore vermelha 1 → 2 (Azalea) → 3 (Ecruteak), máquina 1 → 2 (Cianwood), bancada 1 → 2 (Blackthorn). Números de partida; o balanço é do item 7.
-   3. Peças de habitat por cima disso, com o motor que já está na branch `feat/habitats`.
+   3. ~~Peças de habitat~~ (feito em 2026-11-04, com o redesenho da 5.22: área e tipo escolhidos pelo jogador).
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); tempo da campanha medido no mesmo script (seção 7.1: ~12 dias de treino até a Blackthorn); falta conferir jogando.
-8. **Habitats (5.22)** e **visitantes**, do capítulo 7 em diante.
-9. **Liga, rival e pós-jogo.**
+8. ~~**Habitats (5.22)** e **visitantes**~~ (feito em 2026-11-04, em produção; abrem cedo, por partes, não no capítulo 7).
+9. **Liga, rival e pós-jogo:** especificado em 2026-11-05 no PLANNING.md, seção 5.24 (4 partes: luta de treinador genérica, Liga, rival, revanche). Partes 1 e 2 (a Liga) feitas em 2026-11-05; faltam o rival e a revanche.
 
 **Para depois (anotado):** breed, com sorteio de sexo (macho/fêmea; alguns sprites mudam com o sexo, então o sprite tem de respeitar isso) e ovos personalizados (muda só a cor do ovo), com ninho e incubadora no jardim.
 

@@ -149,15 +149,20 @@ test('a quinta vitória dá o marco, abre o capítulo 10 e o prêmio só na prim
     .run(p.starterId)
   assert.equal((await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).status, 201)
 
-  let last: { won: boolean; opponent: { league: { status: string; champion: boolean; rewards: string[]; nextName: string | null } } } | null =
-    null
+  type LeagueBattle = {
+    won: boolean
+    opponent: { league: { status: string; champion: boolean; rewards: string[]; nextName: string | null } }
+  }
+  let last: LeagueBattle | null = null
   for (let fight = 0; fight < 5; fight += 1) {
     const next = await post('/league/next', p.cookie)
     assert.equal(next.status, 201, `luta ${fight + 1}`)
-    const encounter = (await next.json()) as { id: number }
+    const encounter = (await next.json()) as { id: number; leader: { kind: string } | null }
+    // A tela da Liga se guia pelo tipo do treinador no encontro.
+    assert.equal(encounter.leader?.kind, fight < 4 ? 'elite' : 'champion')
     const response = await post(`/encounters/${encounter.id}/battle`, p.cookie, { pokemonIds: [p.starterId] })
     assert.equal(response.status, 200, `luta ${fight + 1}`)
-    last = (await response.json()) as NonNullable<typeof last>
+    last = (await response.json()) as LeagueBattle
     assert.equal(last.won, true, `luta ${fight + 1}`)
     sql().prepare('update pokemon set hp_ratio = 1, fainted_at = null, hunger = 100 where id = ?').run(p.starterId)
     if (fight < 4) {

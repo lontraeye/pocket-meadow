@@ -19,6 +19,7 @@
     type BattleStart,
     type CaptureBerryInfo,
     type GameState,
+    type LeagueState,
     type OwnedPokemon,
     type PendingEncounter,
     type RegionInfo,
@@ -362,11 +363,39 @@
   const leadId = $derived(
     roster.some((mon) => mon.id === lead && canFight(mon)) ? lead : ((roster.find(canFight) ?? roster[0])?.id ?? null),
   )
+  /**
+   * Luta da Liga: o servidor usa o time e o HP da tentativa (league_runs), não
+   * o do jardim, e ignora a escolha de quem abre. A tela mostra o mesmo.
+   */
+  const leagueFight = $derived(encounter?.leader?.kind === 'elite' || encounter?.leader?.kind === 'champion')
+  let leagueRun = $state<LeagueState['run']>(null)
+  let leagueRunFor = $state<number | null>(null)
+  $effect(() => {
+    const id = encounter?.id ?? null
+    if (!leagueFight || id === null || leagueRunFor === id) return
+    leagueRunFor = id
+    leagueRun = null
+    void api('/api/league')
+      .then(async (response) => {
+        if (!response.ok) return
+        const data = (await response.json()) as LeagueState
+        if (encounter?.id === id) leagueRun = data.run
+      })
+      .catch(() => undefined)
+  })
+  /** Quem da tentativa ainda luta, na ordem dela (a mesma do servidor). */
+  const leagueMembers = $derived(
+    (leagueRun?.team ?? []).flatMap((member) => {
+      const mon = game.pokemon.find((entry) => entry.id === member.pokemonId)
+      return mon ? [{ mon, hpRatio: member.hpRatio }] : []
+    }),
+  )
   /** Quem abre primeiro; o resto segue a ordem do time. */
-  const chosen = $derived([
-    ...roster.filter((mon) => mon.id === leadId),
-    ...roster.filter((mon) => mon.id !== leadId),
-  ])
+  const chosen = $derived(
+    leagueFight
+      ? leagueMembers.filter((member) => member.hpRatio > 0).map((member) => member.mon)
+      : [...roster.filter((mon) => mon.id === leadId), ...roster.filter((mon) => mon.id !== leadId)],
+  )
 
   onMount(() => {
     void loadRegions()
@@ -1182,7 +1211,9 @@
       {#if encounter.leader}
         <!-- Desafio do líder: o time dele inteiro, em ordem; uma luta só. -->
         <section class="panel sheet versus">
-          <p class="kicker">Desafio de ginásio · {encounter.regionName}</p>
+          <p class="kicker">
+            {#if leagueFight}Liga{#if leagueRun} · luta {leagueRun.stage + 1} de 5{/if}{:else}Desafio de ginásio{/if} · {encounter.regionName}
+          </p>
           <h2>{encounter.leader.name}</h2>
           <ul class="foe-team" aria-label="Time do {encounter.leader.name}">
             {#each encounter.leader.foes as foe, index (index)}
@@ -1201,6 +1232,32 @@
         </section>
       {/if}
       <section class="panel sheet">
+        {#if leagueFight}
+          <!-- Liga: o time e o HP da tentativa; sem máquina, sem escolher quem abre. -->
+          <h2>Time da Liga</h2>
+          {#if !leagueRun}
+            <p class="hint">Carregando a tentativa…</p>
+          {:else}
+            <div class="roster">
+              {#each leagueMembers as member (member.mon.id)}
+                {@const mon = member.mon}
+                <div class="member" class:out={member.hpRatio <= 0}>
+                  <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
+                  <small>Nv {mon.level}</small>
+                  {#if member.hpRatio <= 0}<small class="starving">desmaiado · fora até o fim da Liga</small>
+                  {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>
+                  {:else if member.hpRatio < 1}<small class="hurt">ferido · {Math.round(member.hpRatio * 100)}% HP</small>{/if}
+                </div>
+              {/each}
+            </div>
+            <p class="hint">Sem curar entre as lutas: a máquina e o descanso do jardim não valem na Liga.</p>
+            {#if leagueMembers.some((member) => member.mon.pet.hunger < game.garden.fullAt)}
+              <button type="button" class="btn feed-team" disabled={pending} onclick={() => (feedOpen = true)}>
+                Alimentar o time
+              </button>
+            {/if}
+          {/if}
+        {:else}
         <h2>Time {roster.length}/{game.trainer.teamMax} <small class="pick">toque em quem abre</small></h2>
         {#if roster.length === 0}
           <p class="hint">Seu time está vazio. Monte o time no PC.</p>
@@ -1242,6 +1299,7 @@
               Alimentar o time
             </button>
           {/if}
+        {/if}
         {/if}
       </section>
     </div>
@@ -2180,7 +2238,8 @@
       inset 0 -2px 0 var(--selected);
   }
 
-  .member:disabled {
+  .member:disabled,
+  .member.out {
     filter: grayscale(1) opacity(0.6);
     cursor: default;
   }

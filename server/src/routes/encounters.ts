@@ -888,14 +888,13 @@ function loadLeagueBattleTeam(userId: number): { ok: true; rows: TeamBattleRow[]
   if (here.length === 0) return fail('invalid_team', 400)
   const fed = here.filter((member) => (statusOf.get(member.pokemonId)?.hunger ?? 0) >= petConfig.fightMinHunger)
   if (fed.length === 0) return fail('team_hungry', 400)
-  const ratioOf = new Map(fed.map((member) => [member.pokemonId, member.hpRatio]))
   const team: TeamBattleRow[] = []
   for (const member of fed) {
     const mon = byId.get(member.pokemonId)
     if (!mon) return fail('invalid_team', 400)
     const ready = toTeamBattleRow(mon)
     if (!ready) return fail('invalid_team', 400)
-    team.push({ ...ready, startHpRatio: clampRatio(ratioOf.get(member.pokemonId) ?? ready.startHpRatio) })
+    team.push({ ...ready, startHpRatio: clampRatio(member.hpRatio) })
   }
   return { ok: true, rows: team }
 }

@@ -43,6 +43,7 @@ export type PendingEncounter = {
 export type EncounterLeader = {
   key: string
   name: string
+  kind: 'leader' | 'elite' | 'champion' | 'rival'
   foes: { speciesId: number; displayName: string; level: number; ace: boolean }[]
 }
 

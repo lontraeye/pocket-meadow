@@ -1,5 +1,5 @@
 import { inArray } from 'drizzle-orm'
-import { trainerByKey } from '../config/trainers.js'
+import { type TrainerKind, trainerByKey } from '../config/trainers.js'
 import { placeBySlug } from '../config/places.js'
 import { regionBySlug } from '../config/regions.js'
 import { getDb } from '../db/client.js'
@@ -35,6 +35,8 @@ export type EncounterView = {
 export type EncounterLeader = {
   key: string
   name: string
+  /** Líder, Elite, campeão ou rival: a tela da Liga usa o time da tentativa. */
+  kind: TrainerKind
   foes: { speciesId: number; displayName: string; level: number; ace: boolean }[]
 }
 
@@ -97,6 +99,7 @@ function leaderView(key: string): EncounterLeader | null {
   return {
     key: trainer.key,
     name: trainer.name,
+    kind: trainer.kind,
     foes: trainer.foes.map((foe) => ({
       speciesId: foe.speciesId,
       displayName: names.get(foe.speciesId) ?? String(foe.speciesId),

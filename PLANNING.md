@@ -80,7 +80,7 @@ Escrito depois de jogar o jogo com o combate, a jornada e os líderes já no ar.
 4. **Habitats construídos em blocos** (5.22): o jogador monta o habitat peça por peça e o jogo reconhece o bioma pela mistura; cada habitat abriga 2 ou 3 Pokémon e dá o limite do jardim. Junto, o modo de construção e os enfeites. Pede arte (lista de peças na 5.16), por isso vem depois, mas a arte pode começar já.
 5. **Visitantes** atraídos pelos biomas.
 6. **Amaciar os muros** em paralelo: o painel do marco diz quanto falta, e o balanço dos líderes entra com o playtest (seção 11).
-7. **Congelar sistemas novos do mundo** até os itens 1 a 3 estarem no ar e jogados por alguns dias. Ficam parados: Liga contínua, rival, Equipe Rocket, Kanto, breed e personagem (5.17).
+7. **Congelar sistemas novos do mundo** até os itens 1 a 3 estarem no ar e jogados por alguns dias. Ficam parados: Equipe Rocket, Kanto, breed e personagem (5.17). A Liga e o rival saíram do congelamento em 2026-11-05 (5.24).
 
 #### Mais idle, menos exploração (decidido em 2026-11-03)
 Com o pet, as missões e o jardim em tiles no ar, o jogo se aproxima mais da proposta **idle**: progresso que corre pelo tempo e motivo para voltar várias vezes ao dia.
@@ -1300,7 +1300,7 @@ Para isso, a taxa muda (seção 11, "Daycare rende pouco"):
 - **Pontos em aberto, para quando voltar:**
   - A Pradaria aceita quem tem Voador em qualquer um dos dois tipos, então o Zubat (Veneno/Voador) aparece lá como visitante e pode morar lá. Decidir se o tipo principal tem de ser da Pradaria.
   - Móveis e decorativos (arbusto, pedra, boia) dependem da arte; a regra de chão de cada um (`OBJECT_GROUND`) já existe.
-  - O próximo item da lista é a Liga, o rival e o pós-jogo (PROGRESSAO.md, item 9); a Liga ainda não tem time no config.
+  - O próximo item da lista é a Liga, o rival e o pós-jogo (PROGRESSAO.md, item 9), especificado na 5.24.
 O jardim deixa de ser um gramado único com todo mundo junto. O jogador **constrói habitats com blocos** e o jogo **reconhece o bioma pelo que foi construído**: muita água vira Lago, areia e pedras viram Rochedo. Cada habitat abriga poucos Pokémon, que ficam no próprio bloco, e o jardim passa a ter um limite. O diferencial em relação aos jogos de habitat comprado pronto: aqui o habitat não é um item da loja. Ele é uma área que o jogador monta peça por peça, e a forma e a mistura são dele.
 
 **Peças:**
@@ -1434,6 +1434,106 @@ A primeira cadeia de produção (seção 1.1, item 3; 5.16, "Crafting"). Uma ár
 **Modelos de arte (2026-11-03):** `art/modelos/` tem esqueletos para editar no Piskel, gerados por `gerar-modelos.py`: `cubo-isometrico.piskel` (camadas Chão, Cubo como guia e Desenho) para peças que bloqueiam o passeio, e `graminha.piskel` (Chão, Trás e Frente) para decoração rasteira que os Pokémon atravessam. Tudo em 24×32 com a última linha na ponta de baixo do losango do chão. A graminha é desenhada em duas camadas porque o jardim vai pôr a de Trás atrás do Pokémon (z do bloco) e a da Frente por cima dele (z do bloco + 2): os fios da frente cobrem os pés, como andar no meio da grama, sem cortar o sprite. Essa decoração não bloqueia o passeio; o cubo bloqueia. Entra com a construção (5.22).
 
 **Ideia para depois (2026-11-03, exploração fora da prioridade, seção 1.1):** trocar o campo de encontro da exploração (5.14) por um campo isométrico com os mesmos tiles do jardim, e as manchas de árvore (Headbutt) e de água (pesca, Surf) pela arte isométrica (a árvore de Apricorn e um lago).
+
+### 5.24 Liga, rival e pós-jogo (especificado em 2026-11-05, PROGRESSAO.md item 9)
+
+Fecha a campanha de Johto. Hoje o marco `league` (capítulo 9, Indigo Plateau) **não tem luta**: `claimMilestone` em `routes/places.ts` entrega o marco a quem chega na cidade, e isso abre o capítulo 10 (Tin Tower, Rota 28, Mt. Silver, que já têm tabela em `config/regions.ts`). Esta seção troca isso pela Liga de verdade, põe o rival no caminho e dá um motivo para voltar depois de campeão.
+
+Este item tira a Liga e o rival do congelamento do item 7 da seção 1 (decisão de 2026-11-05). Equipe Rocket, Kanto, breed e personagem continuam parados.
+
+**Ordem de implementação:** parte 1 (lutas de treinador genéricas), parte 2 (a Liga), parte 3 (o rival), parte 4 (pós-jogo). Cada parte vai para a main sozinha, com testes. Nada de deploy (só quando o usuário pedir).
+
+**Andamento (2026-11-05):** partes 1 e 2 feitas na main (ab98a49, 6707eb8), sem deploy. Depois delas, a tela antes da luta da Liga passou a mostrar o time e o HP da tentativa, sem a máquina de cura e sem escolher quem abre (o encontro manda `leader.kind`). Faltam as partes 3 e 4.
+
+#### Parte 1: luta de treinador genérica (refatoração, sem mudar o jogo)
+
+Hoje a luta contra treinador só existe para líder: `config/leaders.ts` (`LeaderConfig`, `leaderByMilestone`), `routes/leaders.ts` (desafio), `routes/encounters.ts` (`createLeaderEncounter`, `trainerFoesOf`, `clearLeader`, o ramo `if (won && leader)` em `resolveBattle`) e a coluna `encounters.leader_key`.
+
+- Criar um tipo `TrainerConfig = { key, name, kind: 'leader' | 'elite' | 'champion' | 'rival', foes: LeaderFoe[] }` e uma função única `trainerByKey(key)` que procura em líderes, Liga e rival. Os líderes continuam com `key` = chave do marco (`'violet'`…); os novos usam prefixo: `'league-1'` a `'league-4'`, `'league-champion'`, `'rival-1'`….
+- `encounters.leader_key` passa a guardar a chave de qualquer treinador. **Sem migração**: só muda o comentário no `schema.ts` (a coluna não é renomeada).
+- `createLeaderEncounter` vira `createTrainerEncounter(userId, trainer, regionSlug, now)`; `trainerFoesOf` e `opponentsOf` usam `trainerByKey`.
+- Em `resolveBattle`, o ramo de vitória contra treinador chama um despacho por `kind`: líder → `clearLeader` (como hoje); elite/campeão → avança a Liga (parte 2); rival → `clearRival` (parte 3). O `opponent` da resposta ganha `kind: 'trainer'` com `trainerKind`, `name` e o resultado de cada caso (`cleared` do líder, `league` da Liga, `rival` do rival). Ajustar `web/src/lib/battleFlow.ts`/`BattleLive.svelte` onde leem `opponent.kind === 'leader'`.
+- Validação no boot (como `places.ts` faz): toda espécie dos `foes` existe no seed e todo `fastMove`/`chargedMove` existe na base de golpes e é do tipo certo (rápido até 55 de poder). Teste que roda isso.
+- Pronto quando: os testes dos líderes passam sem mudança de comportamento.
+
+#### Parte 2: a Liga (Elite dos Quatro e campeão)
+
+**Regra (de `roteiro/JOHTO.md`):** 5 lutas seguidas, com o time escolhido no começo e **sem curar entre elas**. Perdeu uma, a tentativa acaba e recomeça da primeira. Vencer as 5 dá o marco `league` (Campeão de Johto) e abre o capítulo 10.
+
+**Times (`server/src/config/league.ts`):** times e níveis do Crystal, com as mesmas regras dos líderes (`leaders.ts`): um golpe rápido (até 55 de poder) e um carregado escolhidos entre os da base, perto dos que cada um usa nos jogos; o ás com IV 31, natureza escolhida e a habilidade que pesa na luta; os outros com IV 20. Nomes provisórios no padrão dos líderes (os nomes dos NPCs seguem em aberto, JORNADA.md seção 10).
+
+| Ordem | Chave | Nome provisório | Time (espécie Nv) | Ás |
+|---|---|---|---|---|
+| 1 | `league-1` | Elite da Liga (Psíquico) | Xatu 40, Jynx 41, Exeggutor 41, Slowbro 41, Xatu 42 | Xatu 42 |
+| 2 | `league-2` | Elite da Liga (Veneno) | Ariados 40, Venomoth 41, Forretress 43, Muk 42, Crobat 44 | Crobat 44 |
+| 3 | `league-3` | Elite da Liga (Lutador) | Hitmontop 42, Hitmonlee 42, Hitmonchan 42, Onix 43, Machamp 46 | Machamp 46 |
+| 4 | `league-4` | Elite da Liga (Sombrio) | Umbreon 42, Vileplume 42, Gengar 45, Murkrow 44, Houndoom 47 | Houndoom 47 |
+| 5 | `league-champion` | Campeão da Liga (Dragão) | Gyarados 44, Dragonite 47, Dragonite 47, Aerodactyl 46, Charizard 46, Dragonite 50 | Dragonite 50 |
+
+**Estado da tentativa:** tabela nova `league_runs` (migração nova, a próxima depois da 0037):
+- `id`, `user_id`, `started_at`, `stage` (0 a 4: a próxima luta), `status` (`active`, `won`, `lost`, `abandoned`), `finished_at`.
+- `team` (JSON): os ids dos Pokémon escolhidos no começo, na ordem do time, e o `hpRatio` de cada um **dentro da tentativa**. A luta da Liga começa com esse HP, não com o `pokemon.hp_ratio`. Assim o descanso no jardim e a máquina de cura não curam entre as lutas, sem mexer no catch-up nem na máquina.
+- Índice único parcial: uma tentativa `active` por jogador (igual a `uq_encounters_one_pending`).
+- Depois de cada luta, o HP do snapshot vai para o `team` da tentativa **e** para o `pokemon.hp_ratio`, como em qualquer luta. Desmaiado fica com 0 até o fim da tentativa.
+
+**Rotas (`server/src/routes/league.ts`):**
+- `GET /league`: a Liga do jogador. Os 5 treinadores (nome, espécies, níveis, ás), a tentativa ativa (etapa, time com HP), quantas vezes venceu e se já é campeão.
+- `POST /league/start { pokemonIds }`: precisa do capítulo 9 aberto, estar em `indigo-plateau` e não ter tentativa ativa nem encontro pendente. Os ids precisam ser do time atual (1 a `teamMax`), vivos (HP > 0) e sem fome abaixo de `fightMinHunger`. Grava a tentativa com o HP atual de cada um. Não gasta energia.
+- `POST /league/next`: abre o encontro da etapa atual (`createTrainerEncounter` com `league-N`). A luta usa só os Pokémon da tentativa, com o HP da tentativa; os desmaiados ficam de fora. Se todos estão desmaiados, a tentativa vira `lost`.
+- `POST /league/abandon`: desiste (`abandoned`). O HP fica como está.
+- Vitória numa etapa: `stage + 1`. Vitória na 5ª: `won`, grava `trainer_milestones` com `league` (o mesmo efeito do `clearLeader`) e entrega o prêmio. Derrota: `lost`.
+- `claimMilestone` passa a recusar `league` com `league_required` (como faz com `leader_required`). Quem já tem o marco segue com ele.
+- A troca de time (`db/team.ts`), soltar Pokémon e mandar para o PC continuam livres durante a tentativa; quem saiu do time só fica fora das próximas lutas dela.
+- O XP de treinador e de Pokémon de cada luta sai como em qualquer luta de treinador. A fome também (−`battleHungerCost` por luta); alimentar entre as lutas é permitido.
+
+**Prêmio de campeão** (`leagueConfig.championRewards`, número de partida): 3 Ultra Balls, 5 Apricorns amarelos e 50 doces genéricos, só na primeira vez. Ajustar com o item 7 (`npm run economia`).
+
+**Tela (Journey, cartão do marco no Indigo Plateau):** no lugar do botão do líder, o cartão da Liga:
+- sem tentativa: a lista dos 5 com os times (o mesmo `.leader-team`), e "Começar a Liga", que abre a escolha de até 6 do time (todos marcados por padrão) com o HP de cada um e o aviso "sem curar entre as lutas; cure antes no jardim";
+- com tentativa: "Luta 2 de 5 · Elite da Liga (Veneno)", o time com a barra de HP da tentativa, "Próxima luta" e "Desistir" (dois toques, como a lixeira do habitat);
+- depois de cada vitória, a tela da luta mostra "Próxima: …" e volta para o cartão; depois da 5ª, o cartão de campeão (o que abriu e o prêmio).
+- Mobile-first: conferir em 360 px.
+
+**Testes:** começar fora do Indigo Plateau ou com o capítulo fechado recusa; o HP passa de uma luta para a outra e a máquina de cura não muda o HP da tentativa; derrota zera; a 5ª vitória dá o marco e abre o capítulo 10; `claimMilestone('league')` recusa; o prêmio vem só uma vez.
+
+#### Parte 3: o rival
+
+**Regra:** lutas pontuais nos capítulos 1, 2, 4, 7 e 9 (`roteiro/JOHTO.md`). **O rival não trava o marco** (decisão de 2026-11-05: a seção 3 da PROGRESSAO aponta muros demais; o rival é um bônus, não um portão). Cada luta é feita uma vez e dá um prêmio.
+
+**Onde e quando (`server/src/config/rival.ts`):**
+
+| Chave | Capítulo | Lugar | Nível do ás | Prêmio (de partida) |
+|---|---|---|---|---|
+| `rival-1` | 1 | `cherrygrove` | 5 | 5 Poké Balls |
+| `rival-2` | 2 | `azalea` | 16 | 3 Great Balls |
+| `rival-3` | 4 | `burned-tower` | 22 | 2 Apricorns azuis, 3 Great Balls |
+| `rival-4` | 7 | `goldenrod` (a Torre de Rádio não é lugar) | 34 | 2 Apricorns amarelos, 2 Ultra Balls |
+| `rival-5` | 9 | `victory-road-johto` | 40 | 3 Ultra Balls |
+
+Os slugs são os de `config/places.ts`; o teste de boot confere que existem.
+
+**O time:** começa com o inicial que vence o do jogador (Chikorita → Cyndaquil, Cyndaquil → Totodile, Totodile → Chikorita), evoluindo com o capítulo, e os outros como no Crystal (Gastly/Haunter/Gengar, Zubat/Golbat/Crobat, Magnemite/Magneton, Sneasel). O config guarda os três times por luta (um por inicial do jogador).
+
+**O inicial do jogador:** hoje não fica guardado. Coluna nova `trainers.starter_species_id` (na mesma migração da Liga ou na seguinte), gravada no cadastro. Para contas que já existem, o fallback é o Pokémon de menor id do jogador; sem conversão de save (só há um jogador, e o reset de contas está planejado).
+
+**Rotas:** `GET /places` passa a mandar, no lugar atual, o rival disponível (`rival: { key, name, foes } | null`): capítulo aberto, luta ainda não vencida e jogador no lugar dela. `POST /rival/:key/challenge` abre o encontro, sem energia, com as mesmas recusas do líder. Vencer grava em tabela nova `trainer_rivals (user_id, rival_key, cleared_at)` e entrega o prêmio; perder não custa nada além do HP. Quem já passou do capítulo pode voltar ao lugar e lutar.
+
+**Tela:** no Journey, um cartão "Rival" no lugar (como o do líder, com o time), com "Lutar". Depois de vencer, o cartão some.
+
+**Testes:** o time muda com o inicial; a luta só aparece no lugar certo e com o capítulo aberto; o prêmio vem uma vez; o marco do capítulo abre sem o rival.
+
+#### Parte 4: pós-jogo (capítulo 10)
+
+O capítulo 10 já abre com o marco `league` (`LAST_CHAPTER = 10`, áreas em `regions.ts`). Esta parte só confere e completa:
+- **Conferir** que Tin Tower, Rota 28 e Mt. Silver aparecem e abrem no mapa depois da Liga, e que o painel do marco mostra "Campeão de Johto" em vez de um próximo marco.
+- **Liga de novo (revanche):** depois de campeão, a Liga pode ser refeita com os times da Liga a +10 níveis (`leagueConfig.rematchLevelBonus`) e todos os ases com IV 31. Prêmio da revanche **uma vez por semana** (segunda-feira, meia-noite de Brasília, o mesmo relógio das missões): 2 Ultra Balls e 30 doces genéricos. É o "motivo para voltar" do pós-jogo, sem sistema novo de mundo. Usa a mesma `league_runs` com uma coluna `rematch` (0/1).
+- **Fora desta seção:** Kanto, lendários (Lugia, Ho-Oh, Suicune, Celebi), Rocket e o treinador de Mt. Silver. Continuam congelados.
+
+#### Pontos em aberto (decidir antes ou durante)
+
+- O prêmio de campeão, os do rival e o da revanche são números de partida; ajustar com o item 7.
+- Nomes da Elite, do campeão e do rival (JORNADA.md seção 10). Por enquanto os provisórios.
+- A Liga no `npm run economia`: quando os times estiverem no config, medir quantos dias de treino depois da Blackthorn até vencer o campeão (PROGRESSAO 7.1 deixou a Liga de fora).
 
 ---
 
