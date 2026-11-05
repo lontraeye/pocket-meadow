@@ -140,6 +140,20 @@ export const trainers = sqliteTable('trainers', {
   gardenLayoutAt: integer('garden_layout_at'),
   /** Inicial escolhido no cadastro (decide o time do rival, 5.24); null = conta antiga. */
   starterSpeciesId: integer('starter_species_id'),
+  /**
+   * Limites do jardim (casas inclusivas, game/garden/layout.ts). Começam no
+   * 12×12 de sempre e crescem pela expansão; os mínimos podem ficar negativos.
+   */
+  gardenMinCol: integer('garden_min_col').notNull().default(0),
+  gardenMinRow: integer('garden_min_row').notNull().default(0),
+  gardenMaxCol: integer('garden_max_col').notNull().default(11),
+  gardenMaxRow: integer('garden_max_row').notNull().default(11),
+  /** Expansões já terminadas (decide o custo da próxima). */
+  gardenExpansions: integer('garden_expansions').notNull().default(0),
+  /** Obra de expansão em andamento: o lado e quando termina (null = nenhuma). */
+  gardenExpandSide: text('garden_expand_side'),
+  gardenExpandStartedAt: integer('garden_expand_started_at'),
+  gardenExpandReadyAt: integer('garden_expand_ready_at'),
   updatedAt: integer('updated_at').notNull(),
 })
 

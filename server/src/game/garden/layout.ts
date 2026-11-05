@@ -5,6 +5,51 @@
 export const GARDEN_COLS = 12
 export const GARDEN_ROWS = 12
 
+/**
+ * Limites do jardim de um jogador (casas inclusivas). Começa no 12×12 de
+ * sempre (0..11) e cresce pela expansão (config/gardenExpansion): para cima e
+ * para a esquerda os mínimos ficam negativos, e nada do que já está colocado
+ * muda de coordenada.
+ */
+export type GardenBounds = { minCol: number; minRow: number; maxCol: number; maxRow: number }
+
+export const BASE_BOUNDS: GardenBounds = { minCol: 0, minRow: 0, maxCol: GARDEN_COLS - 1, maxRow: GARDEN_ROWS - 1 }
+
+export const boundsCols = (bounds: GardenBounds): number => bounds.maxCol - bounds.minCol + 1
+export const boundsRows = (bounds: GardenBounds): number => bounds.maxRow - bounds.minRow + 1
+
+/** Lado para onde o jardim cresce. */
+export type ExpandSide = 'up' | 'down' | 'left' | 'right'
+export const EXPAND_SIDES: readonly ExpandSide[] = ['up', 'down', 'left', 'right']
+
+export function isExpandSide(value: unknown): value is ExpandSide {
+  return typeof value === 'string' && (EXPAND_SIDES as readonly string[]).includes(value)
+}
+
+/**
+ * Os limites depois de abrir `strip` casas no lado. Os nomes são da grade
+ * (up = linha menor, down = linha maior, left = coluna menor, right = coluna
+ * maior); a tela isométrica desenha cada um na borda do losango que é dele.
+ */
+export function expandBounds(bounds: GardenBounds, side: ExpandSide, strip: number): GardenBounds {
+  switch (side) {
+    case 'up':
+      return { ...bounds, minRow: bounds.minRow - strip }
+    case 'down':
+      return { ...bounds, maxRow: bounds.maxRow + strip }
+    case 'left':
+      return { ...bounds, minCol: bounds.minCol - strip }
+    case 'right':
+      return { ...bounds, maxCol: bounds.maxCol + strip }
+  }
+}
+
+/** Ainda cabe crescer para esse lado sem passar de `maxSize` casas na direção dele. */
+export function canExpandSide(bounds: GardenBounds, side: ExpandSide, strip: number, maxSize: number): boolean {
+  const next = expandBounds(bounds, side, strip)
+  return boundsCols(next) <= maxSize && boundsRows(next) <= maxSize
+}
+
 export type StructurePiece =
   | 'ball_bench'
   | 'heal_machine'
@@ -73,8 +118,8 @@ export function cellsOf(piece: PieceKey, col: number, row: number, flipped = fal
   )
 }
 
-export function inBounds(cell: Cell): boolean {
-  return cell.col >= 0 && cell.col < GARDEN_COLS && cell.row >= 0 && cell.row < GARDEN_ROWS
+export function inBounds(cell: Cell, bounds: GardenBounds = BASE_BOUNDS): boolean {
+  return cell.col >= bounds.minCol && cell.col <= bounds.maxCol && cell.row >= bounds.minRow && cell.row <= bounds.maxRow
 }
 
 export const cellKey = (col: number, row: number): string => `${col},${row}`
@@ -99,9 +144,10 @@ export function canPlace(
   row: number,
   ignoreId?: number,
   flipped = false,
+  bounds: GardenBounds = BASE_BOUNDS,
 ): PlaceError | null {
   const cells = cellsOf(piece, col, row, flipped)
-  if (!cells.every(inBounds)) return 'out_of_bounds'
+  if (!cells.every((cell) => inBounds(cell, bounds))) return 'out_of_bounds'
   const taken = occupied(pieces, ignoreId)
   if (cells.some((cell) => taken.has(cellKey(cell.col, cell.row)))) return 'occupied'
   return null

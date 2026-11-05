@@ -479,9 +479,34 @@ export type HealMachineView = {
 }
 
 /** Construção do jardim (PROGRESSAO.md 4.3): peças colocadas (casas da grade jogável) e guardadas. */
+export type GardenBounds = { minCol: number; minRow: number; maxCol: number; maxRow: number }
+export type ExpandSide = 'up' | 'down' | 'left' | 'right'
+
+/** Expansão do jardim (GET /state, garden.layout.expansion). */
+export type GardenExpansion = {
+  bounds: GardenBounds
+  strip: number
+  maxSize: number
+  done: number
+  unlocked: number
+  total: number
+  next: {
+    n: number
+    items: { itemKey: string; quantity: number; have: number }[]
+    genericCandies: { quantity: number; have: number }
+    ms: number
+  } | null
+  nextAt: { milestone: string; name: string } | null
+  sides: Record<ExpandSide, boolean>
+  building: { side: ExpandSide; startedAt: number; readyAt: number } | null
+}
+
 export type GardenLayout = {
   cols: number
   rows: number
+  /** Limites do jardim (casas inclusivas; os mínimos podem ser negativos depois de expandir). */
+  bounds: GardenBounds
+  expansion: GardenExpansion
   /** `flipped`: girada (só bancada e máquina de cura); `structureId`: a estrutura (null nos canteiros). */
   pieces: {
     id: number

@@ -1,9 +1,9 @@
 // Caminho relativo (não o alias @garden) para os testes rodarem com o tsx puro.
 import {
+  BASE_BOUNDS,
   canPlace,
   cellsOf,
-  GARDEN_COLS,
-  GARDEN_ROWS,
+  type GardenBounds,
   isFlippable,
   type PieceKey,
 } from '../../../server/src/game/garden/layout'
@@ -11,7 +11,7 @@ import type { PaintFloor } from '../../../server/src/game/habitat/config'
 import type { GardenLayout } from './api'
 
 // Modo Construir do jardim (PROGRESSAO.md 4.3): o que está escolhido e onde dá
-// para pôr. As casas são as da grade jogável (0..11), como no servidor.
+// para pôr. As casas são as da grade jogável (os limites do jogador, `bounds`), como no servidor.
 // Peça nova ou sendo movida tem uma prévia (col, row, flipped): ela é desenhada
 // lá no lugar da de verdade até o jogador confirmar.
 
@@ -31,6 +31,11 @@ export type PlacedView = GardenLayout['pieces'][number]
 /** A prévia ganha este id (peça nova) e este slot (canteiro novo). */
 export const GHOST_ID = -1
 
+/** Limites do jardim do layout (resposta antiga sem `bounds`: o 12×12). */
+export function boundsOf(layout: Pick<GardenLayout, 'bounds'>): GardenBounds {
+  return layout.bounds ?? BASE_BOUNDS
+}
+
 /** A peça colocada que ocupa a casa (pela pegada inteira). */
 export function pieceAtCell(pieces: readonly PlacedView[], col: number, row: number): PlacedView | null {
   return (
@@ -45,9 +50,10 @@ export function validAnchors(layout: GardenLayout, pick: BuildPick | null): Set<
   const out = new Set<string>()
   if (!pick || pick.kind === 'selected') return out
   const ignoreId = pick.kind === 'move' ? pick.id : undefined
-  for (let row = 0; row < GARDEN_ROWS; row += 1) {
-    for (let col = 0; col < GARDEN_COLS; col += 1) {
-      if (canPlace(layout.pieces, pick.piece, col, row, ignoreId, pick.flipped) === null) out.add(`${col},${row}`)
+  const bounds = boundsOf(layout)
+  for (let row = bounds.minRow; row <= bounds.maxRow; row += 1) {
+    for (let col = bounds.minCol; col <= bounds.maxCol; col += 1) {
+      if (canPlace(layout.pieces, pick.piece, col, row, ignoreId, pick.flipped, bounds) === null) out.add(`${col},${row}`)
     }
   }
   return out
@@ -56,7 +62,10 @@ export function validAnchors(layout: GardenLayout, pick: BuildPick | null): Set<
 /** A prévia cabe onde está. */
 export function ghostFits(layout: GardenLayout, pick: BuildPick | null): boolean {
   if (!pick || pick.kind === 'selected') return false
-  return canPlace(layout.pieces, pick.piece, pick.col, pick.row, pick.kind === 'move' ? pick.id : undefined, pick.flipped) === null
+  return (
+    canPlace(layout.pieces, pick.piece, pick.col, pick.row, pick.kind === 'move' ? pick.id : undefined, pick.flipped, boundsOf(layout)) ===
+    null
+  )
 }
 
 /** Casas da peça selecionada, ou da prévia, para destacar. */
@@ -85,13 +94,14 @@ export function viewPieces(layout: GardenLayout, pick: BuildPick | null): Placed
 
 /** Prévia nova: a casa livre mais perto do meio do jardim (ou o meio, se nada couber). */
 export function startGhost(layout: GardenLayout, piece: PieceKey): BuildGhost {
-  const midCol = (GARDEN_COLS - 1) / 2
-  const midRow = (GARDEN_ROWS - 1) / 2
+  const bounds = boundsOf(layout)
+  const midCol = (bounds.minCol + bounds.maxCol) / 2
+  const midRow = (bounds.minRow + bounds.maxRow) / 2
   let best: BuildGhost | null = null
   let bestDistance = Infinity
-  for (let row = 0; row < GARDEN_ROWS; row += 1) {
-    for (let col = 0; col < GARDEN_COLS; col += 1) {
-      if (canPlace(layout.pieces, piece, col, row) !== null) continue
+  for (let row = bounds.minRow; row <= bounds.maxRow; row += 1) {
+    for (let col = bounds.minCol; col <= bounds.maxCol; col += 1) {
+      if (canPlace(layout.pieces, piece, col, row, undefined, false, bounds) !== null) continue
       const distance = Math.abs(col - midCol) + Math.abs(row - midRow)
       if (distance < bestDistance) {
         bestDistance = distance
@@ -103,12 +113,12 @@ export function startGhost(layout: GardenLayout, piece: PieceKey): BuildGhost {
 }
 
 /** Leva a prévia para (col, row), sem sair da grade. */
-export function ghostAt<T extends BuildPick>(pick: T, col: number, row: number): T {
+export function ghostAt<T extends BuildPick>(pick: T, col: number, row: number, bounds: GardenBounds = BASE_BOUNDS): T {
   if (pick.kind === 'selected') return pick
   return {
     ...pick,
-    col: Math.min(GARDEN_COLS - 1, Math.max(0, col)),
-    row: Math.min(GARDEN_ROWS - 1, Math.max(0, row)),
+    col: Math.min(bounds.maxCol, Math.max(bounds.minCol, col)),
+    row: Math.min(bounds.maxRow, Math.max(bounds.minRow, row)),
   }
 }
 

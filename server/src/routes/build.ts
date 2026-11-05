@@ -23,12 +23,15 @@ import {
 } from '../game/habitat/index.js'
 import { itemQty } from '../db/inventory.js'
 import { buildingOf, countOf, craftStructure } from '../db/structures.js'
+import { expansionBuilding, expansionView, gardenBoundsOf, startExpansion, type ExpansionView } from '../db/gardenExpansion.js'
+import { gardenExpansionConfig } from '../config/gardenExpansion.js'
 import { freezeHealMachine } from '../db/healMachine.js'
 import { berryPlots, gardenPlacements, gardenStructures, gardenTiles, habitatTiles, habitats, pokemon } from '../db/schema.js'
 import {
-  GARDEN_COLS,
-  GARDEN_ROWS,
   STRUCTURE_PIECES,
+  boundsCols,
+  boundsRows,
+  isExpandSide,
   canPlace,
   cellsOf,
   inBounds,
@@ -47,6 +50,10 @@ import { type Failure, fail, parseId, readObject } from './http.js'
 export type LayoutView = {
   cols: number
   rows: number
+  /** Limites do jardim (casas inclusivas; os mínimos podem ser negativos). */
+  bounds: { minCol: number; minRow: number; maxCol: number; maxRow: number }
+  /** Expansão do jardim: a próxima, o custo, os lados que cabem e a obra em andamento. */
+  expansion: ExpansionView
   pieces: PlacedRow[]
   /** Estruturas guardadas no inventário de construção (a peça e o tipo). */
   stored: { id: number; piece: StructurePiece }[]
@@ -92,9 +99,12 @@ export function layoutView(userId: number): LayoutView {
   const ownedKinds = new Set(owned.map((row) => row.piece))
   const cleared = clearedMilestones(userId)
   const unlocks = gardenUnlocksOf(userId)
+  const expansion = expansionView(userId)
   return {
-    cols: GARDEN_COLS,
-    rows: GARDEN_ROWS,
+    cols: boundsCols(expansion.bounds),
+    rows: boundsRows(expansion.bounds),
+    bounds: expansion.bounds,
+    expansion,
     pieces,
     stored: owned.filter((row) => !placed.has(row.id)),
     plotLimit: gardenUnlocksOf(userId).plotLimit,
@@ -126,6 +136,18 @@ export function layoutView(userId: number): LayoutView {
 }
 
 type Ok = { ok: true; layout: LayoutView; evicted?: number[] }
+
+/** Teto de casas num pedido (o jardim no tamanho máximo). */
+const MAX_CELLS = gardenExpansionConfig.maxSize * gardenExpansionConfig.maxSize
+
+/** Começa a obra que abre uma faixa do jardim no lado escolhido. */
+export function expandGarden(userId: number, side: unknown, now: number): Ok | Failure {
+  if (!isExpandSide(side)) return fail('invalid_body', 400)
+  persistCatchUp(userId, now)
+  const out = startExpansion(userId, side, now)
+  if (!out.ok) return fail(out.error, out.error === 'build_busy' ? 409 : 400)
+  return { ok: true, layout: layoutView(userId) }
+}
 
 function parseCell(body: Record<string, unknown> | null): { col: number; row: number } | null {
   const col = body?.col
@@ -202,7 +224,7 @@ export function placePiece(
     }
     structure = chosen.id
   }
-  const blocked = canPlace(pieces, piece, col, row, undefined, turn)
+  const blocked = canPlace(pieces, piece, col, row, undefined, turn, gardenBoundsOf(userId))
   if (blocked) return fail(blocked, 400)
   if (onWater(userId, cellsOf(piece, col, row, turn))) return fail('on_water', 400)
   insertPlacement(userId, piece, slot, col, row, now, turn, structure)
@@ -225,7 +247,7 @@ export function movePiece(
   const found = pieces.find((row) => row.id === id)
   if (!found) return fail('piece_not_found', 404)
   const turn = isFlippable(found.piece) ? (flipped ?? found.flipped) : false
-  const blocked = canPlace(pieces, found.piece, col, row, id, turn)
+  const blocked = canPlace(pieces, found.piece, col, row, id, turn, gardenBoundsOf(userId))
   if (blocked) return fail(blocked, 400)
   if (onWater(userId, cellsOf(found.piece, col, row, turn))) return fail('on_water', 400)
   // O operador da bancada vai junto: a casa dele sai da pegada (cellsOf).
@@ -275,6 +297,8 @@ export function storePiece(userId: number, id: number, now: number): Ok | Failur
 /** Constrói uma peça pela receita (passo 2c): fica pronta depois do tempo dela, guardada. */
 export function craftPiece(userId: number, piece: StructurePiece, now: number): Ok | Failure {
   persistCatchUp(userId, now)
+  // Uma obra por vez: a expansão do jardim divide a fila com as construções.
+  if (expansionBuilding(userId)) return fail('build_busy', 400)
   const out = craftStructure(userId, piece, now)
   if (!out.ok) return fail(out.error, 400)
   return { ok: true, layout: layoutView(userId) }
@@ -289,8 +313,9 @@ export type FloorPaint = { col: number; row: number; floor: PaintFloor | null }
 export function paintFloor(userId: number, cells: readonly FloorPaint[], now: number): Ok | Failure {
   persistCatchUp(userId, now)
   const open = gardenUnlocksOf(userId).floors
+  const bounds = gardenBoundsOf(userId)
   for (const cell of cells) {
-    if (!inBounds(cell)) return fail('out_of_bounds', 400)
+    if (!inBounds(cell, bounds)) return fail('out_of_bounds', 400)
     if (cell.floor !== null && !open.has(cell.floor)) return fail('floor_locked', 400)
   }
   // Água não vai embaixo de peça (canteiro, árvore, bancada, máquina: terra).
@@ -319,7 +344,7 @@ export function paintFloor(userId: number, cells: readonly FloorPaint[], now: nu
 
 function parsePaint(body: Record<string, unknown> | null): FloorPaint[] | null {
   const cells = body?.cells
-  if (!Array.isArray(cells) || cells.length === 0 || cells.length > GARDEN_COLS * GARDEN_ROWS) return null
+  if (!Array.isArray(cells) || cells.length === 0 || cells.length > MAX_CELLS) return null
   const out: FloorPaint[] = []
   for (const raw of cells) {
     const cell = parseCell(raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : null)
@@ -339,7 +364,8 @@ type Cell = { col: number; row: number }
 function habitatAreaError(userId: number, cells: readonly Cell[], selfId: number | null): string | null {
   const keys = new Set(cells.map((cell) => `${cell.col},${cell.row}`))
   if (keys.size !== cells.length) return 'invalid_body'
-  if (!cells.every(inBounds)) return 'out_of_bounds'
+  const bounds = gardenBoundsOf(userId)
+  if (!cells.every((cell) => inBounds(cell, bounds))) return 'out_of_bounds'
   if (!isConnected(cells)) return 'habitat_not_connected'
   const others = loadHabitats(userId).filter((row) => row.id !== selfId)
   if (others.some((row) => row.tiles.some((tile) => keys.has(`${tile.col},${tile.row}`)))) return 'habitat_overlap'
@@ -407,7 +433,7 @@ export function deleteHabitat(userId: number, id: number, now: number): Ok | Fai
 }
 
 function parseCells(raw: unknown): Cell[] | null {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > GARDEN_COLS * GARDEN_ROWS) return null
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_CELLS) return null
   const out: Cell[] = []
   for (const item of raw) {
     const cell = parseCell(item !== null && typeof item === 'object' ? (item as Record<string, unknown>) : null)
@@ -458,6 +484,13 @@ buildRoutes.post('/floor', requireUser, async (c) => {
   const result = immediate(() => paintFloor(c.get('userId'), cells, Date.now()))
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json({ layout: result.layout, evicted: result.evicted ?? [] })
+})
+
+buildRoutes.post('/expand', requireUser, async (c) => {
+  const side = (await readObject(c))?.side
+  const result = immediate(() => expandGarden(c.get('userId'), side, Date.now()))
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ layout: result.layout })
 })
 
 buildRoutes.post('/craft', requireUser, async (c) => {

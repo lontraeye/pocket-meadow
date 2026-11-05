@@ -42,6 +42,7 @@
   import BuildTray from './BuildTray.svelte'
   import {
     GHOST_ID,
+    boundsOf,
     ghostAt,
     ghostFits,
     pickedCells,
@@ -318,19 +319,26 @@
     }
   }
 
-  // Zona andável 12×12. O mundo tem uma margem em volta só para a câmera ter
-  // folga; o gramado de fora (mais escuro) é o fundo do .lawn, que não acaba.
-  const playCols = 12
-  const playRows = 12
+  // Zona andável: os limites do jardim do jogador (12×12 de começo, cresce pela
+  // expansão). O mundo tem uma margem em volta só para a câmera ter folga; o
+  // gramado de fora (mais escuro) é o fundo do .lawn, que não acaba.
+  // Grade → mundo: somar playCol0/playRow0 (com mínimos negativos, a grade
+  // começa antes do 0 e a zona jogável continua começando na margem).
   const margin = 10
-  const worldCols = playCols + margin * 2
-  const worldRows = playRows + margin * 2
-  const playCol0 = margin
-  const playRow0 = margin
-  const playColEnd = margin + playCols
-  const playRowEnd = margin + playRows
+  const bounds = $derived(boundsOf(game.garden.layout))
+  const playCols = $derived(bounds.maxCol - bounds.minCol + 1)
+  const playRows = $derived(bounds.maxRow - bounds.minRow + 1)
+  const worldCols = $derived(playCols + margin * 2)
+  const worldRows = $derived(playRows + margin * 2)
+  const playCol0 = $derived(margin - bounds.minCol)
+  const playRow0 = $derived(margin - bounds.minRow)
+  /** Primeira casa jogável no mundo (sempre a margem). */
+  const playColStart = margin
+  const playRowStart = margin
+  const playColEnd = $derived(margin + playCols)
+  const playRowEnd = $derived(margin + playRows)
   // Faixa de z: chão (0..span-1), entidades (span..) — sprites grandes não furam o gramado.
-  const depthSpan = worldCols + worldRows
+  const depthSpan = $derived(worldCols + worldRows)
   // Zoom manual (1–3). Abertura mais afastada (~8 tiles de largura).
   const scaleMin = 1
   const scaleMax = 3
@@ -404,7 +412,7 @@
   }
 
   function inPlay(col: number, row: number): boolean {
-    return col >= playCol0 && col < playColEnd && row >= playRow0 && row < playRowEnd
+    return col >= playColStart && col < playColEnd && row >= playRowStart && row < playRowEnd
   }
 
   // Construção (PROGRESSAO.md 4.3): cada peça (canteiro, árvore, bancada,
@@ -583,10 +591,12 @@
   const buildBusy = $derived(building ? occupied(layout.pieces, ghost?.kind === 'move' ? ghost.id : undefined) : new Set<string>())
   /** O que espera para ser colocado: estruturas guardadas e canteiros livres. */
   const buildWaiting = $derived(layout.stored.length + Math.max(0, layout.plotLimit - layout.plotsPlaced))
-  const playCells = Array.from({ length: playCols * playRows }, (_, index) => ({
-    col: playCol0 + (index % playCols),
-    row: playRow0 + Math.floor(index / playCols),
-  }))
+  const playCells = $derived(
+    Array.from({ length: playCols * playRows }, (_, index) => ({
+      col: playColStart + (index % playCols),
+      row: playRowStart + Math.floor(index / playCols),
+    })),
+  )
 
   function setBuilding(on: boolean) {
     building = on
@@ -708,7 +718,7 @@
   /** Marca ou desmarca a casa na área (casa de outro habitat não entra). */
   function areaAt(cell: { col: number; row: number }, first: boolean) {
     const edit = areaEdit
-    if (!edit || !inBounds(cell)) return
+    if (!edit || !inBounds(cell, bounds)) return
     const key = cellKey(cell.col, cell.row)
     const owner = layout.habitats.find((row) => row.tiles.some((tile) => tile.col === cell.col && tile.row === cell.row))
     if (owner && owner.id !== edit.id) return
@@ -821,7 +831,7 @@
   }
 
   function paintAt(cell: { col: number; row: number }) {
-    if (!paint || !inBounds(cell) || isPlotCell(playCol0 + cell.col, playRow0 + cell.row)) return
+    if (!paint || !inBounds(cell, bounds) || isPlotCell(playCol0 + cell.col, playRow0 + cell.row)) return
     // No menu de um habitat, o pincel só pinta dentro da área dele.
     if (areaEdit && !areaEdit.cells[cellKey(cell.col, cell.row)]) return
     const floor = paint === 'erase' ? null : paint
@@ -958,7 +968,7 @@
     const pick = buildPick
     if (!pick || pick.kind === 'selected' || buildPending) return
     buildMessage = ''
-    buildPick = ghostAt(pick, pick.col + dc, pick.row + dr)
+    buildPick = ghostAt(pick, pick.col + dc, pick.row + dr, bounds)
   }
 
   // Arrastar na camada do Construir: a prévia (ou uma peça, que já vira
@@ -1064,7 +1074,7 @@
       // Mouse sem botão: a prévia segue o ponteiro.
       if (event.pointerType !== 'mouse' || event.buttons !== 0 || !ghost || buildPending) return
       const cell = gridCellAt(event.clientX, event.clientY)
-      if (cell.col !== ghost.col || cell.row !== ghost.row) buildPick = ghostAt(ghost, cell.col, cell.row)
+      if (cell.col !== ghost.col || cell.row !== ghost.row) buildPick = ghostAt(ghost, cell.col, cell.row, bounds)
       return
     }
     if (drag.pointerId !== event.pointerId) return
@@ -1091,7 +1101,7 @@
     const cell = gridCellAt(event.clientX, event.clientY)
     const col = cell.col - drag.offCol
     const row = cell.row - drag.offRow
-    if (col !== pick.col || row !== pick.row) buildPick = ghostAt(pick, col, row)
+    if (col !== pick.col || row !== pick.row) buildPick = ghostAt(pick, col, row, bounds)
   }
 
   function onBuildUp(event: PointerEvent) {
@@ -1122,7 +1132,7 @@
     if (pick && pick.kind !== 'selected') {
       const cell = gridCellAt(event.clientX, event.clientY)
       if (buildMouse) {
-        buildPick = ghostAt(pick, cell.col, cell.row)
+        buildPick = ghostAt(pick, cell.col, cell.row, bounds)
         void commitGhost()
       } else if (pieceUnder(drawnPieces, event.clientX, event.clientY)?.id !== ghostId(pick)) {
         // Toque numa casa: a prévia vai para lá.
@@ -1295,7 +1305,7 @@
     const spots = walkableSpots()
     return game.garden.gifts.map((gift) => ({
       gift,
-      spot: spots[(gift.id * 7919) % Math.max(1, spots.length)] ?? { col: playCol0, row: playRow0 },
+      spot: spots[(gift.id * 7919) % Math.max(1, spots.length)] ?? { col: playColStart, row: playRowStart },
     }))
   })
   let giftToast = $state('')
@@ -1521,8 +1531,8 @@
   // O chão é desenhado no canvas (floor); só os canteiros viram elemento, para o toque.
   const tiles = $derived(
     Array.from({ length: playCols * playRows }, (_, index) => ({
-      col: playCol0 + (index % playCols),
-      row: playRow0 + Math.floor(index / playCols),
+      col: playColStart + (index % playCols),
+      row: playRowStart + Math.floor(index / playCols),
     })).filter((tile) => isPlotCell(tile.col, tile.row)),
   )
 
@@ -1539,9 +1549,9 @@
   let floorCanvas = $state<HTMLCanvasElement | null>(null)
   /** Escala da arte (24×12) para o bloco do jardim (48×24 no zoom 1). */
   const floorScale = $derived(tileW / TILE_W)
-  const floorW = (playCols + playRows) * (TILE_W / 2)
-  const floorH = (playCols + playRows) * (TILE_H / 2)
-  const floorOriginX = playRows * (TILE_W / 2)
+  const floorW = $derived((playCols + playRows) * (TILE_W / 2))
+  const floorH = $derived((playCols + playRows) * (TILE_H / 2))
+  const floorOriginX = $derived(playRows * (TILE_W / 2))
 
   $effect(() => {
     void buildFloorAssets(
@@ -1555,9 +1565,14 @@
   $effect(() => {
     if (!floorCanvas || !floorAssets) return
     const cells: (string | null)[] = []
+    // col/row aqui contam a partir do canto da zona; a casa da grade é bounds.min + isso.
     for (let row = 0; row < playRows; row += 1) {
       for (let col = 0; col < playCols; col += 1) {
-        cells.push(isPlotCell(playCol0 + col, playRow0 + row) ? 'canteiro' : (floorMap.get(cellKey(col, row)) ?? 'grama'))
+        cells.push(
+          isPlotCell(playColStart + col, playRowStart + row)
+            ? 'canteiro'
+            : (floorMap.get(cellKey(bounds.minCol + col, bounds.minRow + row)) ?? 'grama'),
+        )
       }
     }
     const grid: TerrainGrid = { cols: playCols, rows: playRows, cells }
@@ -1567,14 +1582,14 @@
   })
 
   const floorBox = $derived.by(() => {
-    const spot = place(playCol0, playRow0)
+    const spot = place(playColStart, playRowStart)
     return { left: spot.x - floorOriginX * floorScale, top: spot.y }
   })
 
   // Fundo do gramado: o padrão de grama acompanha o pan e o zoom, com o vértice
   // de um bloco no canto do padrão (o padrão é um período da grade).
   const lawnBackground = $derived.by(() => {
-    const spot = place(playCol0, playRow0)
+    const spot = place(playColStart, playRowStart)
     const size = (lawnPatternUrl ? 4 : 1) * floorScale
     return {
       image: lawnPatternUrl ? `url("${lawnPatternUrl}")` : 'none',
@@ -1658,8 +1673,8 @@
   }
 
   function centerPanOnPlay(viewW: number, viewH: number, sw: number, sh: number, hw: number, hh: number, ox: number, oy: number) {
-    const midCol = playCol0 + (playCols - 1) / 2
-    const midRow = playRow0 + (playRows - 1) / 2
+    const midCol = playColStart + (playCols - 1) / 2
+    const midRow = playRowStart + (playRows - 1) / 2
     const cx = ox + (midCol - midRow) * hw
     const cy = oy + (midCol + midRow) * hh + hh
     return clampPan(viewW / 2 - cx, viewH / 2 - cy, viewW, viewH, sw, sh)
@@ -2027,7 +2042,7 @@
         kept.get(mon.id) ??
         (home ? freeSpot((key) => home.has(key)) : null) ??
         freeSpot((key) => !water.has(key)) ??
-        spots[0] ?? { col: playCol0, row: playRow0 }
+        spots[0] ?? { col: playColStart, row: playRowStart }
       return {
         id: mon.id,
         speciesId: mon.speciesId,
@@ -2261,8 +2276,8 @@
 
   function walkableSpots(): { col: number; row: number }[] {
     const spots: { col: number; row: number }[] = []
-    for (let row = playRow0; row < playRowEnd; row += 1) {
-      for (let col = playCol0; col < playColEnd; col += 1) {
+    for (let row = playRowStart; row < playRowEnd; row += 1) {
+      for (let col = playColStart; col < playColEnd; col += 1) {
         if (isWalkable(col, row)) spots.push({ col, row })
       }
     }
@@ -2691,7 +2706,7 @@
       {/if}
       {#if showGrid}
         <svg class="grid" width={stageW} height={stageH} style:z-index={depthSpan * 4} aria-hidden="true">
-          {#each Array.from({ length: playCols * playRows }, (_, i) => ({ col: playCol0 + (i % playCols), row: playRow0 + Math.floor(i / playCols) })) as cell (`${cell.col}-${cell.row}`)}
+          {#each Array.from({ length: playCols * playRows }, (_, i) => ({ col: playColStart + (i % playCols), row: playRowStart + Math.floor(i / playCols) })) as cell (`${cell.col}-${cell.row}`)}
             {@const at = place(cell.col, cell.row)}
             {@const kind = isPlotCell(cell.col, cell.row)
               ? 'horta'
@@ -2972,6 +2987,7 @@
         candidates={areaCandidates}
         onHome={(pokemonId, habitatId) => void habitatCall(`/api/garden/pets/${pokemonId}/home`, { habitatId })}
         onCallVisitors={devTools ? () => void habitatCall('/api/dev/visitors/call', {}) : null}
+        onFinishBuild={devTools ? () => void habitatCall('/api/dev/build/finish', {}) : null}
         onAreaKind={(kind) => {
           if (!areaEdit) return
           areaEdit = { ...areaEdit, kind, dirty: true }
@@ -2998,6 +3014,14 @@
           void buildCall('/api/build/craft', { piece }).then((ok) => {
             if (ok) {
               buildMessage = 'Obra começada: a peça vai para o inventário quando ficar pronta.'
+              play('tap')
+            }
+          })
+        }}
+        onExpand={(side) => {
+          void buildCall('/api/build/expand', { side }).then((ok) => {
+            if (ok) {
+              buildMessage = 'Obra começada: o jardim cresce quando ela terminar.'
               play('tap')
             }
           })

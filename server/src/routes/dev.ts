@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { asUsername, createPlayer, isStarter, openSession, setSessionCookie } from '../auth/accounts.js'
 import { type AuthEnv, requireUser } from '../auth/session.js'
@@ -218,6 +218,26 @@ devRoutes.post('/visitors/call', requireUser, (c) => {
     return visitorsView(userId).length
   })
   return c.json({ visitors: count })
+})
+
+// Obra na hora (expansão do jardim e construções): o relógio dela já passou.
+devRoutes.post('/build/finish', requireUser, (c) => {
+  const userId = c.get('userId')
+  const now = Date.now()
+  immediate(() => {
+    getDb()
+      .update(trainers)
+      .set({ gardenExpandReadyAt: now - 1 })
+      .where(and(eq(trainers.userId, userId), isNotNull(trainers.gardenExpandReadyAt)))
+      .run()
+    getDb()
+      .update(gardenStructures)
+      .set({ readyAt: now - 1 })
+      .where(and(eq(gardenStructures.userId, userId), isNotNull(gardenStructures.readyAt)))
+      .run()
+    persistCatchUp(userId, now)
+  })
+  return c.json({ ok: true })
 })
 
 devRoutes.post('/plots/advance', requireUser, async (c) => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { isFlippable, PIECES, STRUCTURE_PIECES, type PieceKey, type StructurePiece } from '@garden/layout'
-  import { giftIconSrc, type GardenLayout } from './api'
+  import { giftIconSrc, type ExpandSide, type GardenLayout } from './api'
   import type { BuildPick, PaintTool } from './build'
   import { BUILD_CATEGORIES, ICON_H, ICON_W, PIECE_ICONS, type BuildCategory } from './buildIcons'
   import { formatCountdown } from './time'
@@ -33,6 +33,7 @@
     candidates,
     onHome,
     onCallVisitors,
+    onFinishBuild,
     onAreaKind,
     onAreaSave,
     onAreaDelete,
@@ -41,6 +42,7 @@
     onPick,
     onSelectPlaced,
     onCraft,
+    onExpand,
     onMove,
     onTurn,
     onConfirm,
@@ -80,6 +82,8 @@
     onHome: (pokemonId: number, habitatId: number | null) => void
     /** Só no dev: chama os visitantes na hora (null = sem o botão). */
     onCallVisitors: (() => void) | null
+    /** Só no dev: termina a obra em andamento na hora (null = sem o botão). */
+    onFinishBuild: (() => void) | null
     onAreaKind: (kind: HabitatKind) => void
     onAreaSave: () => void
     onAreaDelete: () => void
@@ -90,6 +94,8 @@
     onSelectPlaced: (id: number) => void
     /** Constrói uma peça pela receita. */
     onCraft: (piece: StructurePiece) => void
+    /** Começa a obra que abre uma faixa do jardim no lado. */
+    onExpand: (side: ExpandSide) => void
     onMove: () => void
     onTurn: () => void
     onConfirm: () => void
@@ -182,6 +188,7 @@
       return recipe.nextCap ? `No máximo (${recipe.cap}). Mais no ${recipe.nextCap.name}.` : `No máximo (${recipe.cap}).`
     }
     if (layout.building) return `Já tem uma obra: ${name(layout.building.piece).toLowerCase()}.`
+    if (layout.expansion.building) return 'Já tem uma obra: a expansão do jardim.'
     if (recipe.cost.some((item) => item.have < item.quantity)) return 'Faltam materiais.'
     return null
   })
@@ -192,7 +199,30 @@
     return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`
   }
 
-  let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat'>('all')
+  let tab = $state<BuildCategory | 'all' | 'chao' | 'habitat' | 'expandir'>('all')
+
+  // Expansão do jardim: cada lado na borda do losango que é dele (a coluna
+  // cresce para baixo à direita e a linha para baixo à esquerda na tela).
+  const SIDES: { side: ExpandSide; arrow: string; label: string }[] = [
+    { side: 'left', arrow: '↖', label: 'em cima, à esquerda' },
+    { side: 'up', arrow: '↗', label: 'em cima, à direita' },
+    { side: 'down', arrow: '↙', label: 'embaixo, à esquerda' },
+    { side: 'right', arrow: '↘', label: 'embaixo, à direita' },
+  ]
+  let expandSide = $state<ExpandSide | null>(null)
+  const expansion = $derived(layout.expansion)
+  /** Por que não dá para expandir agora (null = dá, escolhendo um lado). */
+  const expandBlock = $derived.by((): string | null => {
+    if (expansion.building) return null
+    if (!expansion.next) return 'O jardim já está no tamanho máximo.'
+    if (expansion.done >= expansion.unlocked) {
+      return expansion.nextAt ? `A próxima expansão abre no ${expansion.nextAt.name}.` : 'Sem expansões abertas.'
+    }
+    if (layout.building) return `Já tem uma obra: ${name(layout.building.piece).toLowerCase()}.`
+    if (expansion.next.items.some((item) => item.have < item.quantity)) return 'Faltam materiais.'
+    if (expansion.next.genericCandies.have < expansion.next.genericCandies.quantity) return 'Faltam doces.'
+    return null
+  })
   /** Habitat com a lixeira armada: o segundo toque apaga. */
   let confirmDelete = $state<number | null>(null)
   /** Bandeja recolhida: só a linha de cima, para ver o jardim enquanto constrói. */
@@ -209,7 +239,8 @@
   }
   /** Escolhendo o tipo do habitat novo. */
   let choosingKind = $state(false)
-  function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat') {
+  function openTab(next: BuildCategory | 'all' | 'chao' | 'habitat' | 'expandir') {
+    expandSide = null
     choosingKind = false
     tab = next
     // Sair da aba Chão larga o pincel (o toque volta a escolher peças).
@@ -222,7 +253,7 @@
     })).filter((category) => cards.some((card) => category.pieces.includes(card.piece))),
   )
   const shown = $derived(
-    tab === 'all' || tab === 'chao' || tab === 'habitat' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
+    tab === 'all' || tab === 'chao' || tab === 'habitat' || tab === 'expandir' ? cards : cards.filter((card) => BUILD_CATEGORIES.find((row) => row.key === tab)?.pieces.includes(card.piece)),
   )
   const waitingAll = $derived(cards.filter((card) => card.ready).length)
 
@@ -250,12 +281,19 @@
   ></span>
 {/snippet}
 
-{#snippet tabIcon(key: BuildCategory | 'all' | 'chao' | 'habitat')}
+{#snippet tabIcon(key: BuildCategory | 'all' | 'chao' | 'habitat' | 'expandir')}
   <!-- Ícones em pixels (grade 12×12), como os do jardim. -->
   <svg viewBox="0 0 12 12" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true">
     {#if key === 'all'}
       <rect x="1" y="1" width="4" height="4" /><rect x="7" y="1" width="4" height="4" />
       <rect x="1" y="7" width="4" height="4" /><rect x="7" y="7" width="4" height="4" />
+    {:else if key === 'expandir'}
+      <!-- Quatro cantos para fora. -->
+      <rect x="1" y="1" width="3" height="1" /><rect x="1" y="1" width="1" height="3" />
+      <rect x="8" y="1" width="3" height="1" /><rect x="10" y="1" width="1" height="3" />
+      <rect x="1" y="10" width="3" height="1" /><rect x="1" y="8" width="1" height="3" />
+      <rect x="8" y="10" width="3" height="1" /><rect x="10" y="8" width="1" height="3" />
+      <rect x="4" y="4" width="4" height="4" />
     {:else if key === 'habitat'}
       <!-- Casinha. -->
       <rect x="5" y="1" width="2" height="1" /><rect x="3" y="2" width="6" height="2" /><rect x="1" y="4" width="10" height="1" />
@@ -349,6 +387,17 @@
       onclick={() => openTab('habitat')}
     >
       {@render tabIcon('habitat')}
+    </button>
+    <button
+      type="button"
+      class="tab"
+      role="tab"
+      aria-selected={tab === 'expandir'}
+      aria-label="Expandir o jardim"
+      title="Expandir o jardim"
+      onclick={() => openTab('expandir')}
+    >
+      {@render tabIcon('expandir')}
     </button>
   </div>
 {/snippet}
@@ -622,6 +671,65 @@
         </div>
       {/if}
     </div>
+  {:else if tab === 'expandir'}
+    <!-- Expansão do jardim: uma faixa por obra, no lado escolhido. -->
+    <div class="catalog expand">
+      <p class="expand-title">
+        <strong>Jardim {layout.cols}×{layout.rows}</strong>
+        <span>expansão {expansion.done}/{expansion.total}</span>
+      </p>
+      {#if expansion.building}
+        {@const going = SIDES.find((row) => row.side === expansion.building?.side)}
+        <p class="hint">Expandindo {going?.arrow} · faltam {formatCountdown(expansion.building.readyAt - now)}.</p>
+        {#if onFinishBuild}
+          <button type="button" class="btn" disabled={pending} onclick={onFinishBuild}>Terminar obra (teste)</button>
+        {/if}
+      {:else}
+        {#if expansion.next}
+          <p class="expand-cost">
+            {#each expansion.next.items as item (item.itemKey)}
+              <span class:short={item.have < item.quantity}>{item.quantity} {itemName(item.itemKey)} ({item.have})</span>
+            {/each}
+            <span class:short={expansion.next.genericCandies.have < expansion.next.genericCandies.quantity}>
+              {expansion.next.genericCandies.quantity} doces ({expansion.next.genericCandies.have})
+            </span>
+            <span>{recipeTime(expansion.next.ms)}</span>
+          </p>
+        {/if}
+        <div class="sides" role="group" aria-label="Lado para expandir">
+          {#each SIDES as row (row.side)}
+            {@const open = expansion.sides[row.side]}
+            <button
+              type="button"
+              class="card side"
+              class:focused={expandSide === row.side}
+              aria-pressed={expandSide === row.side}
+              aria-label="Expandir {row.label}{open ? '' : ' (no máximo)'}"
+              disabled={pending || expandBlock !== null || !open}
+              onclick={() => (expandSide = expandSide === row.side ? null : row.side)}
+            >
+              <span class="arrow" aria-hidden="true">{row.arrow}</span>
+              <small>{open ? `+${expansion.strip}` : 'máx.'}</small>
+            </button>
+          {/each}
+        </div>
+        {#if expandBlock}
+          <p class="hint">{expandBlock}</p>
+        {:else}
+          <button
+            type="button"
+            class="btn btn-primary"
+            disabled={pending || expandSide === null}
+            onclick={() => {
+              if (expandSide) onExpand(expandSide)
+              expandSide = null
+            }}
+          >
+            {expandSide ? `Expandir ${SIDES.find((row) => row.side === expandSide)?.arrow}` : 'Escolha um lado'}
+          </button>
+        {/if}
+      {/if}
+    </div>
   {:else if tab === 'chao'}
     <!-- Chão dos habitats (5.22): sem custo nem limite; o espaço é o freio. -->
     <div class="catalog">
@@ -855,6 +963,50 @@
      fileira só, que rola para o lado: a bandeja fica baixa no celular. */
   .catalog {
     min-width: 0;
+  }
+
+  /* Aba Expandir: tamanho, custo, os quatro lados em losango e o botão. */
+  .catalog.expand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .expand-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .expand-cost {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.6rem;
+    margin: 0;
+    font-size: 0.75rem;
+  }
+
+  .expand-cost .short {
+    color: #c0392b;
+    font-weight: 700;
+  }
+
+  .sides {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.3rem;
+  }
+
+  .card.side {
+    min-height: 44px;
+    align-content: center;
+  }
+
+  .card.side .arrow {
+    font-size: 1.2rem;
+    line-height: 1;
   }
 
   .tabs {

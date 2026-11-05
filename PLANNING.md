@@ -1535,6 +1535,18 @@ O capítulo 10 já abre com o marco `league` (`LAST_CHAPTER = 10`, áreas em `re
 - Nomes da Elite, do campeão e do rival (JORNADA.md seção 10). Por enquanto os provisórios.
 - A Liga no `npm run economia`: quando os times estiverem no config, medir quantos dias de treino depois da Blackthorn até vencer o campeão (PROGRESSAO 7.1 deixou a Liga de fora).
 
+
+### 5.25 Expansão do jardim (decidida em 2026-11-05, branch `feat/expansao-jardim`)
+
+O jardim deixa de ser um 12×12 fixo: o jogador abre uma faixa de casas no lado que escolher. Com os habitats, o espaço virou o freio de verdade (5.22); a expansão é o que gastar com o tempo.
+
+- **Lado escolhido, faixa de 2:** cada expansão soma 2 colunas ou 2 linhas num lado (na tela: ↖ ↗ ↙ ↘, a borda do losango). Teto de 20 casas em cada direção (`gardenExpansionConfig.maxSize`).
+- **Nada muda de lugar:** os limites ficam por jogador (`trainers.garden_min_col`... `garden_max_row`, migração 0042) e os mínimos podem ser negativos; crescer para cima ou para a esquerda só baixa o mínimo. Chão, peças, habitats e canteiros guardam as coordenadas de sempre. `inBounds` e `canPlace` recebem os limites (`game/garden/layout.ts`).
+- **Obra com materiais e tempo, na fila única:** a n-ésima custa 10+10n madeiras, 10+10n pedras e 20n doces, e leva 2+2n horas (`expansionCost`). Divide a fila com as construções (uma obra por vez); termina no catch-up (`finishExpansion`).
+- **Por marco:** uma expansão por marco, da Azalea à Liga (8 no total; com todas, até 20×20).
+- **Tela:** aba Expandir no Construir (tamanho, custo com o que tem, os quatro lados, a obra em andamento). No dev, "Terminar obra (teste)" (`POST /dev/build/finish`).
+- **Depois:** mostrar no jardim a faixa que vai abrir antes de confirmar; o limite do jardim (5.22) pode vir junto.
+
 ---
 
 ## 6. Cálculo de progresso por tempo ("catch-up")

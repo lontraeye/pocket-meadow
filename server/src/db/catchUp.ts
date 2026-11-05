@@ -8,6 +8,7 @@ import { ensureGardenLayout } from './gardenLayout.js'
 import { settleGarden } from './pets.js'
 import { activeEffects, daycareSlots, encounters, pokemon, trainers } from './schema.js'
 import { finishBuilds, grantStructures } from './structures.js'
+import { finishExpansion } from './gardenExpansion.js'
 import { settleVisitors } from './visitors.js'
 
 export type PlayerClock = {
@@ -139,6 +140,7 @@ export function persistCatchUp(userId: number, now: number): PlayerClock {
   // depois, a primeira unidade do que os marcos abriram nasce e vai para o jardim.
   ensureGardenLayout(userId, now)
   finishBuilds(userId, now)
+  finishExpansion(userId, now)
   grantStructures(userId, now)
   // Visitantes dos habitats prontos (5.22): chegam e vão embora pelo relógio.
   settleVisitors(userId, now)
