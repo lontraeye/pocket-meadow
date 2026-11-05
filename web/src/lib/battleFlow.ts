@@ -29,7 +29,10 @@ export function recapIntro(battle: BattleOutcome, encounter: Pick<PendingEncount
 /** Linhas do resumo depois do XP: o prêmio do treinador vencido (marco, ferramentas). */
 export function prizeLines(battle: BattleOutcome): string[] {
   const opponent = opponentOf(battle)
-  if (!battle.won || opponent.kind !== 'trainer' || opponent.trainerKind !== 'leader' || !opponent.cleared) return []
+  if (!battle.won || opponent.kind !== 'trainer') return []
+  if (opponent.league?.status === 'won' && opponent.league.rewards.length > 0) return opponent.league.rewards
+  if (opponent.league?.status === 'active' && opponent.league.nextName) return [`Próxima: ${opponent.league.nextName}`]
+  if (opponent.trainerKind !== 'leader' || !opponent.cleared) return []
   const lines = [`Conquistou o ${opponent.cleared.name}!`]
   if (opponent.cleared.grants.length > 0) lines.push(`Agora você tem: ${opponent.cleared.grants.join(', ')}.`)
   return lines
@@ -39,9 +42,30 @@ export function prizeLines(battle: BattleOutcome): string[] {
 export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
   const opponent = opponentOf(battle)
   if (!battle.won) {
+    if (opponent.kind === 'trainer' && opponent.league) {
+      return { id: 'lost', title: 'Derrota', detail: 'A tentativa acabou. A Liga recomeça da primeira luta.', tone: 'bad' }
+    }
     return opponent.kind === 'wild'
       ? { id: 'lost', title: 'Derrota', detail: 'Seus Pokémon não se machucaram.', tone: 'bad' }
       : { id: 'lost', title: 'Derrota', detail: `Treine o time e desafie o ${opponent.name} de novo.`, tone: 'bad' }
+  }
+  if (opponent.kind === 'trainer' && opponent.league?.champion) {
+    const rewards = opponent.league.rewards.length > 0 ? ` · ${opponent.league.rewards.join(', ')}` : ''
+    return {
+      id: 'defeated',
+      title: 'Campeão de Johto!',
+      detail: `Capítulo ${opponent.league.opens ?? ''} aberto${rewards}`,
+      tone: 'good',
+      sound: 'levelup',
+    }
+  }
+  if (opponent.kind === 'trainer' && opponent.league?.status === 'active') {
+    return {
+      id: 'defeated',
+      title: `Venceu o ${opponent.name}`,
+      detail: opponent.league.nextName ? `Próxima: ${opponent.league.nextName}` : undefined,
+      tone: 'good',
+    }
   }
   if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
     if (!opponent.cleared) return { id: 'defeated', title: `Venceu o ${opponent.name}`, tone: 'good' }
@@ -67,6 +91,16 @@ export function resultLine(
   battle: BattleOutcome & { left?: boolean },
 ): { text: string; tone: 'good' | 'bad' | 'neutral' } {
   const opponent = opponentOf(battle)
+  if (opponent.kind === 'trainer' && opponent.league) {
+    if (!battle.won || opponent.league.status === 'lost') {
+      return { text: 'Derrota. A Liga recomeça da primeira luta.', tone: 'bad' }
+    }
+    if (opponent.league.champion) return { text: `Campeão de Johto! Capítulo ${opponent.league.opens ?? ''} aberto.`, tone: 'good' }
+    return {
+      text: opponent.league.nextName ? `Você venceu! Próxima: ${opponent.league.nextName}.` : `Você venceu o ${opponent.name}!`,
+      tone: 'good',
+    }
+  }
   if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
     if (!battle.won) return { text: 'Derrota. Treine o time e desafie de novo.', tone: 'bad' }
     return {

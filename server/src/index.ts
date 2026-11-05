@@ -10,6 +10,7 @@ import { devRoutes, devToolsEnabled } from './routes/dev.js'
 import { daycareRoutes } from './routes/daycare.js'
 import { encounterRoutes } from './routes/encounters.js'
 import { leaderRoutes } from './routes/leaders.js'
+import { leagueRoutes } from './routes/league.js'
 import { itemRoutes } from './routes/items.js'
 import { plotRoutes } from './routes/plots.js'
 import { pokedexRoutes } from './routes/pokedex.js'
@@ -78,6 +79,7 @@ app.route('/field', fieldRoutes)
 app.route('/pc', pcRoutes)
 app.route('/encounters', encounterRoutes)
 app.route('/leaders', leaderRoutes)
+app.route('/league', leagueRoutes)
 app.route('/pokemon', pokemonRoutes)
 app.route('/pokedex', pokedexRoutes)
 app.route('/daycare', daycareRoutes)

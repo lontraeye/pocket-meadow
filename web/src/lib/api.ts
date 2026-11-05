@@ -214,9 +214,40 @@ export type BattleOutcome = {
         name: string
         /** Líder: o marco, se a vitória o deu. Liga e rival preenchem os seus nas partes seguintes. */
         cleared: { key: string; name: string; opens: number; grants: string[] } | null
-        league: null
+        league: {
+          status: 'active' | 'won' | 'lost'
+          nextName: string | null
+          champion: boolean
+          opens: number | null
+          rewards: string[]
+        } | null
         rival: null
       }
+}
+
+/** GET /league: os cinco treinadores, a tentativa e o time do jogador. */
+export type LeagueState = {
+  champion: boolean
+  wins: number
+  trainers: {
+    key: string
+    name: string
+    kind: string
+    foes: { speciesId: number; displayName: string; level: number; ace: boolean }[]
+  }[]
+  run: {
+    stage: number
+    trainerName: string
+    team: { pokemonId: number; name: string; hpRatio: number }[]
+  } | null
+  roster: {
+    pokemonId: number
+    name: string
+    level: number
+    hpRatio: number
+    fainted: boolean
+    hungry: boolean
+  }[]
 }
 
 /** Resposta de POST /encounters/:id/throw. */
@@ -811,6 +842,14 @@ export function errorText(error: ApiError): string {
       return 'Ainda falta nível de treinador para esse marco.'
     case 'leader_required':
       return 'Esse marco só vem vencendo o líder.'
+    case 'league_required':
+      return 'A Liga só vem vencendo as cinco lutas.'
+    case 'league_active':
+      return 'Você já está no meio da Liga.'
+    case 'league_not_active':
+      return 'Não há uma tentativa da Liga.'
+    case 'league_lost':
+      return 'Todos desmaiaram. A tentativa acabou.'
     case 'milestone_cleared':
       return 'Esse marco já é seu.'
     case 'milestone_locked':

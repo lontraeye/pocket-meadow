@@ -180,6 +180,36 @@ export const trainerMilestones = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.milestoneKey] })],
 )
 
+/**
+ * Tentativa da Liga (5.24): uma ativa por jogador. `team` é o HP de cada
+ * Pokémon dentro da tentativa; a luta usa esse HP, não o do jardim.
+ */
+export const leagueRuns = sqliteTable(
+  'league_runs',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startedAt: integer('started_at').notNull(),
+    /** 0 a 4: a próxima luta. */
+    stage: integer('stage').notNull().default(0),
+    status: text('status', { enum: ['active', 'won', 'lost', 'abandoned'] }).notNull().default('active'),
+    finishedAt: integer('finished_at'),
+    team: text('team').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_league_runs_one_active')
+      .on(table.userId)
+      .where(sql`${table.status} = 'active'`),
+    check('ck_league_runs_stage', sql`${table.stage} >= 0 and ${table.stage} <= 4`),
+    check(
+      'ck_league_runs_status',
+      sql`${table.status} in ('active', 'won', 'lost', 'abandoned')`,
+    ),
+  ],
+)
+
 /** Lugares já visitados: Voo, selo "novo" e aviso de chegada. */
 export const trainerPlaces = sqliteTable(
   'trainer_places',

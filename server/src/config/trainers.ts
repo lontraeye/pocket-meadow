@@ -1,6 +1,7 @@
 // Luta contra treinador (PLANNING 5.24, parte 1). Líder, Liga e rival usam o
 // mesmo formato; cada um entra na lista quando a parte dele existe.
 
+import { leagueTrainers } from './league.js'
 import { leaderConfigs, type LeaderFoe } from './leaders.js'
 import { traitsConfig } from './traits.js'
 import { readSpeciesSnapshot } from '../seed/apply.js'
@@ -15,14 +16,17 @@ export type TrainerConfig = {
   foes: readonly LeaderFoe[]
 }
 
-/** Líderes hoje; a Liga (parte 2) e o rival (parte 3) entram nesta lista. */
+/** Líderes e a Liga; o rival (parte 3) entra nesta lista. */
 export function allTrainers(): readonly TrainerConfig[] {
-  return leaderConfigs.map((leader) => ({
-    key: leader.milestoneKey,
-    name: leader.name,
-    kind: 'leader' as const,
-    foes: leader.foes,
-  }))
+  return [
+    ...leaderConfigs.map((leader) => ({
+      key: leader.milestoneKey,
+      name: leader.name,
+      kind: 'leader' as const,
+      foes: leader.foes,
+    })),
+    ...leagueTrainers,
+  ]
 }
 
 export function trainerByKey(key: string): TrainerConfig | undefined {

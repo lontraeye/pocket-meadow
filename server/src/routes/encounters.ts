@@ -13,6 +13,7 @@ import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/
 import { trainerCatchXp, trainerConfig, trainerWinXp, trainerXpToNext } from '../config/trainer.js'
 import { petConfig } from '../config/pets.js'
 import { clampRatio } from '../game/heal.js'
+import { activeLeagueRun, loseLeagueRun, parseLeagueTeam, settleLeagueFight, type LeagueFightResult } from '../db/league.js'
 import { isWholeTeam } from '../db/team.js'
 import { currentPlaceOf } from './places.js'
 import { persistCatchUp, type PlayerClock } from '../db/catchUp.js'
@@ -327,7 +328,7 @@ function resolveBattle(userId: number, encounterId: number, pokemonIds: number[]
   if (encounter.row.wonAt != null) return fail('battle_already_won', 409)
   if (encounter.row.battleStartedAt !== null) return fail('battle_already_started', 409)
 
-  const team = loadBattleTeam(userId, pokemonIds)
+  const team = teamForEncounter(userId, encounter.row, pokemonIds)
   if (!team.ok) return team
   const wild = loadWildSpecies(encounter.row.speciesId)
   const built = buildBattleSetup({
@@ -365,7 +366,7 @@ function startBattle(userId: number, encounterId: number, pokemonIds: number[], 
   if (encounter.row.wonAt != null) return fail('battle_already_won', 409)
   if (encounter.row.battleStartedAt !== null) return fail('battle_already_started', 409)
 
-  const team = loadBattleTeam(userId, pokemonIds)
+  const team = teamForEncounter(userId, encounter.row, pokemonIds)
   if (!team.ok) return team
   const wild = loadWildSpecies(encounter.row.speciesId)
   const built = buildBattleSetup({
@@ -578,11 +579,13 @@ function applyBattleOutcome(input: {
 
   // HP que fica depois da luta: fração do snapshot (desmaiado = 0).
   const snapBySlot = new Map(teamSnapshot.map((side) => [side.slot, side]))
+  const hpByPokemonId = new Map<number, number>()
   for (const mon of team) {
     const side = snapBySlot.get(mon.slot)
     if (!side) continue
     const fainted = side.fainted || side.hp <= 0 || side.maxHp <= 0
     const hpRatio = fainted ? 0 : clampRatio(side.hp / side.maxHp)
+    hpByPokemonId.set(mon.id, hpRatio)
     db.update(pokemon)
       .set({ hpRatio, hpUpdatedAt: now, faintedAt: fainted ? now : null })
       .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
@@ -619,13 +622,13 @@ function applyBattleOutcome(input: {
   }
 
   let trainerOutcome: TrainerWin | null = null
+  if (trainer) trainerOutcome = finishTrainerWin(userId, trainer, won, hpByPokemonId, now)
   if (won && trainer) {
     // Treinador: sem captura. O que a vitória entrega depende do tipo.
     db.update(encounters)
       .set({ status: 'escaped', winChance: null, catchChance: null, resolvedAt: now })
       .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
       .run()
-    trainerOutcome = finishTrainerWin(userId, trainer, now)
   } else if (won) {
     const decisionUntil = now + battleConfig.decisionTtlMs
     db.update(encounters)
@@ -680,7 +683,7 @@ function applyBattleOutcome(input: {
             trainerKind: trainer.kind,
             name: trainer.name,
             cleared: trainerOutcome?.cleared ?? null,
-            league: null,
+            league: trainerOutcome?.league ?? null,
             rival: null,
           }
         : { kind: 'wild' as const },
@@ -690,20 +693,32 @@ function applyBattleOutcome(input: {
 
 type TrainerWin = {
   cleared: ReturnType<typeof clearLeader>['cleared'] | null
+  league: LeagueFightResult | null
 }
 
-/** Vitória contra treinador: líder dá o marco; Liga e rival entram nas partes seguintes. */
-function finishTrainerWin(userId: number, trainer: TrainerConfig, now: number): TrainerWin {
+/** Vitória contra treinador: líder dá o marco; a Liga avança; o rival entra na parte 3. */
+function finishTrainerWin(
+  userId: number,
+  trainer: TrainerConfig,
+  won: boolean,
+  hpByPokemonId: ReadonlyMap<number, number>,
+  now: number,
+): TrainerWin {
   switch (trainer.kind) {
     case 'leader': {
+      if (!won) return { cleared: null, league: null }
       const leader = leaderByMilestone(trainer.key)
       if (!leader) throw new Error(`leader ${trainer.key} is missing`)
-      return { cleared: clearLeader(userId, leader, now).cleared }
+      return { cleared: clearLeader(userId, leader, now).cleared, league: null }
     }
     case 'elite':
     case 'champion':
-      throw new Error(`league win for ${trainer.key} is part 2`)
+      return {
+        cleared: null,
+        league: settleLeagueFight({ userId, trainer, won, hpByPokemonId, now }),
+      }
     case 'rival':
+      if (!won) return { cleared: null, league: null }
       throw new Error(`rival win for ${trainer.key} is part 3`)
     default: {
       const kind: never = trainer.kind
@@ -823,6 +838,66 @@ function loadPendingEncounter(userId: number, encounterId: number): { ok: true; 
     .get()
   if (!row) return fail('encounter_not_found', 404)
   return { ok: true, row }
+}
+
+function teamForEncounter(
+  userId: number,
+  row: Pick<EncounterRow, 'leaderKey'>,
+  pokemonIds: number[],
+): { ok: true; rows: TeamBattleRow[] } | Failure {
+  const trainer = row.leaderKey ? trainerByKey(row.leaderKey) : undefined
+  if (trainer && (trainer.kind === 'elite' || trainer.kind === 'champion')) return loadLeagueBattleTeam(userId)
+  return loadBattleTeam(userId, pokemonIds)
+}
+
+/**
+ * Luta da Liga: só quem está na tentativa, com o HP dela (não o do jardim).
+ * Desmaiado na tentativa fica de fora até ela acabar. Se ninguém tem HP, a
+ * tentativa acaba em derrota.
+ */
+function loadLeagueBattleTeam(userId: number): { ok: true; rows: TeamBattleRow[] } | Failure {
+  const run = activeLeagueRun(userId)
+  if (!run) return fail('league_not_active', 400)
+  const members = parseLeagueTeam(run.team)
+  const alive = members.filter((member) => member.hpRatio > 0)
+  if (alive.length === 0) {
+    loseLeagueRun(run.id, members, Date.now())
+    return fail('league_lost', 400)
+  }
+  const ids = alive.map((member) => member.pokemonId)
+  const rows = selectTeamRows(userId, ids)
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const statusOf = new Map(
+    getDb()
+      .select({
+        id: pokemon.id,
+        hunger: pokemon.hunger,
+        location: pokemon.location,
+        inPc: pokemon.inPc,
+        teamSlot: pokemon.teamSlot,
+      })
+      .from(pokemon)
+      .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, ids)))
+      .all()
+      .map((row) => [row.id, row]),
+  )
+  const here = alive.filter((member) => {
+    const row = statusOf.get(member.pokemonId)
+    return row != null && row.location === 'garden' && !row.inPc && row.teamSlot != null
+  })
+  if (here.length === 0) return fail('invalid_team', 400)
+  const fed = here.filter((member) => (statusOf.get(member.pokemonId)?.hunger ?? 0) >= petConfig.fightMinHunger)
+  if (fed.length === 0) return fail('team_hungry', 400)
+  const ratioOf = new Map(fed.map((member) => [member.pokemonId, member.hpRatio]))
+  const team: TeamBattleRow[] = []
+  for (const member of fed) {
+    const mon = byId.get(member.pokemonId)
+    if (!mon) return fail('invalid_team', 400)
+    const ready = toTeamBattleRow(mon)
+    if (!ready) return fail('invalid_team', 400)
+    team.push({ ...ready, startHpRatio: clampRatio(ratioOf.get(member.pokemonId) ?? ready.startHpRatio) })
+  }
+  return { ok: true, rows: team }
 }
 
 function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows: TeamBattleRow[] } | Failure {

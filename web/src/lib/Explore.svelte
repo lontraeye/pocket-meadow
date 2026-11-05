@@ -1097,6 +1097,10 @@
         fromField = false
         void search(key, () => api(`/api/leaders/${key}/challenge`, {}))
       }}
+      onLeagueNext={() => {
+        fromField = false
+        void search('league', () => api('/api/league/next', {}))
+      }}
       onGarden={onClose}
       {onOpenPc}
       onMapView={onMapOpen}

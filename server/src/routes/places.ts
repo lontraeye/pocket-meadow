@@ -147,7 +147,8 @@ function claimMilestone(
   if (progress.cleared.has(key)) return fail('milestone_cleared', 409)
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
-  // Marco com líder: só vencendo o desafio (POST /leaders/:key/challenge).
+  // Marco com líder: só vencendo o desafio. A Liga, só vencendo as cinco lutas.
+  if (key === 'league') return fail('league_required', 400)
   if (leaderByMilestone(key)) return fail('leader_required', 400)
 
   getDb().insert(trainerMilestones).values({ userId, milestoneKey: key, clearedAt: now }).run()
