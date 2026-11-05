@@ -4,7 +4,7 @@
   // carinho e felicidade; a equipe, quem trabalha (com a função) e o resto do
   // jardim; dar berry a um só ou alimentar todos. Faminto não luta.
   import { api, berryIconSrc, errorText, itemLabel, type ApiError, type GameState, type OwnedPokemon } from './api'
-  import { liveHpRatio } from './hp'
+  import { faintLabel, liveHpRatio } from './hp'
   import { serverClock } from './serverClock.svelte'
   import { play } from './sound'
   import { formatCountdown } from './time'
@@ -208,6 +208,7 @@
             {@const starving = mon.pet.hunger < game.garden.fightMinHunger}
             {@const hp = liveHpRatio(mon, game, clock.now())}
             {@const fainted = hp <= 0}
+            {@const faint = faintLabel(mon, clock.now())}
             {@const full = mon.pet.hunger >= game.garden.fullAt}
             {@const role = roleOf(mon)}
             {@const wait = petWaitMs(mon)}
@@ -228,7 +229,8 @@
                     <i style:width="{hpPct}%" style:background={hpColor(hp)}></i>
                   </span>
                 </span>
-                {#if fainted}<small class="warn">desmaiado · não luta</small>
+                {#if faint}<small class="warn">{faint}</small>
+                {:else if fainted}<small class="warn">desmaiado · não luta</small>
                 {:else if starving}<small class="warn">com fome · não luta</small>{/if}
               </div>
               <div class="acts">

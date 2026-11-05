@@ -298,6 +298,8 @@ export type OwnedPokemon = {
   pet: PetView
   /** Fração do HP de luta (0..1); 0 = desmaiado (não luta). */
   hpRatio: number
+  /** Quando sai do desmaio (ms). null = não está desmaiado. */
+  faintedUntil: number | null
   /** HP máximo de luta (o atual = hpRatio × maxHp). */
   maxHp: number
   /** Habitat onde mora (5.22); null = sem casa. */
@@ -628,8 +630,10 @@ export type GameState = {
     berryFill: number
     /** Visitantes dos habitats (5.22): um por habitat pronto; tocar abre o encontro. */
     visitors: GardenVisitor[]
-    /** Descanso: do HP 0 ao cheio no jardim, em ms. */
+    /** Descanso: do ferido ao cheio no jardim, em ms. Não age no desmaio. */
     restFullMs: number
+    /** HP ao sair do desmaio; o descanso do jardim segue a partir daí. */
+    faintRecoverRatio: number
     /** Cada estrutura é uma peça (PROGRESSAO.md 4.3, passo 2): listas, com o id de cada uma. */
     trees: TreeView[]
     benches: BenchView[]

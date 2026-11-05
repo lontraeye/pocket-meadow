@@ -70,12 +70,12 @@ export function useHealMachine(
   if (Math.floor(charges) < 1) return { ok: false, error: 'no_charge' }
 
   const members = db
-    .select({ id: pokemon.id, hpRatio: pokemon.hpRatio })
+    .select({ id: pokemon.id, hpRatio: pokemon.hpRatio, faintedAt: pokemon.faintedAt })
     .from(pokemon)
     .where(and(eq(pokemon.userId, userId), isNotNull(pokemon.teamSlot)))
     .all()
 
-  const injured = members.filter((mon) => clampRatio(mon.hpRatio) < 1)
+  const injured = members.filter((mon) => mon.faintedAt != null || clampRatio(mon.hpRatio) < 1)
   if (injured.length === 0) return { ok: false, error: 'team_healthy' }
 
   db.update(gardenStructures)
@@ -85,7 +85,7 @@ export function useHealMachine(
 
   for (const mon of members) {
     db.update(pokemon)
-      .set({ hpRatio: 1, hpUpdatedAt: now })
+      .set({ hpRatio: 1, hpUpdatedAt: now, faintedAt: null })
       .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
       .run()
   }

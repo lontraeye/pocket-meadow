@@ -112,6 +112,7 @@ function readState(userId: number, now: number) {
       happiness: pokemon.happiness,
       lastPetAt: pokemon.lastPetAt,
       hpRatio: pokemon.hpRatio,
+      faintedAt: pokemon.faintedAt,
       habitatId: pokemon.habitatId,
     })
     .from(pokemon)
@@ -387,6 +388,8 @@ function readState(userId: number, now: number) {
         pet: petView(mon, now),
         /** Fração do HP de luta (0..1); já liquidada no catch-up. */
         hpRatio: mon.hpRatio,
+        /** Quando sai do desmaio; null = não está desmaiado. */
+        faintedUntil: mon.faintedAt == null ? null : mon.faintedAt + healConfig.faintRecoverMs,
         /** HP máximo de luta (o atual sai do hpRatio). */
         maxHp: battleMaxHp(view.stats.hp),
         /** Habitat onde mora (5.22); null = sem casa. */
@@ -412,6 +415,8 @@ function readState(userId: number, now: number) {
       fightMinHunger: petConfig.fightMinHunger,
       berryFill: petConfig.berryFill,
       restFullMs: healConfig.restFullMs,
+      /** HP ao sair do desmaio; o descanso do jardim segue a partir daí. */
+      faintRecoverRatio: healConfig.faintRecoverRatio,
       trees,
       /** Visitantes dos habitats (5.22), um por habitat pronto. */
       visitors: visitorsView(userId),

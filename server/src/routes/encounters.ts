@@ -580,10 +580,10 @@ function applyBattleOutcome(input: {
   for (const mon of team) {
     const side = snapBySlot.get(mon.slot)
     if (!side) continue
-    const hpRatio =
-      side.fainted || side.hp <= 0 || side.maxHp <= 0 ? 0 : clampRatio(side.hp / side.maxHp)
+    const fainted = side.fainted || side.hp <= 0 || side.maxHp <= 0
+    const hpRatio = fainted ? 0 : clampRatio(side.hp / side.maxHp)
     db.update(pokemon)
-      .set({ hpRatio, hpUpdatedAt: now })
+      .set({ hpRatio, hpUpdatedAt: now, faintedAt: fainted ? now : null })
       .where(and(eq(pokemon.id, mon.id), eq(pokemon.userId, userId)))
       .run()
   }
@@ -803,7 +803,7 @@ function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows:
   // Faminto / desmaiado não luta (PROGRESSAO.md, 4.2): fica fora; se ninguém sobra, não há luta.
   const statusOf = new Map(
     getDb()
-      .select({ id: pokemon.id, hunger: pokemon.hunger, hpRatio: pokemon.hpRatio })
+      .select({ id: pokemon.id, hunger: pokemon.hunger, hpRatio: pokemon.hpRatio, faintedAt: pokemon.faintedAt })
       .from(pokemon)
       .where(and(eq(pokemon.userId, userId), inArray(pokemon.id, pokemonIds)))
       .all()
@@ -811,7 +811,11 @@ function loadBattleTeam(userId: number, pokemonIds: number[]): { ok: true; rows:
   )
   const fed = pokemonIds.filter((id) => (statusOf.get(id)?.hunger ?? 100) >= petConfig.fightMinHunger)
   if (fed.length === 0) return fail('team_hungry', 400)
-  const standing = fed.filter((id) => (statusOf.get(id)?.hpRatio ?? 1) > 0)
+  const standing = fed.filter((id) => {
+    const row = statusOf.get(id)
+    // fainted_at vale mesmo se o HP já passou de 0 (o descanso não levanta desmaiado).
+    return row != null && row.faintedAt == null && row.hpRatio > 0
+  })
   if (standing.length === 0) return fail('team_fainted', 400)
   const team: TeamBattleRow[] = []
   for (const id of standing) {

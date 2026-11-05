@@ -267,6 +267,13 @@
       "when": 1794000000000,
       "tag": "0037_habitat_visitors",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794050000000,
+      "tag": "0038_pokemon_fainted_at",
+      "breakpoints": true
     }
   ]
 }

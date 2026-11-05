@@ -8,6 +8,45 @@ export function restHpRatio(hpRatio: number, elapsedMs: number, fullMs: number =
   return clampRatio(hpRatio + elapsedMs / fullMs)
 }
 
+export type SettledHp = {
+  hpRatio: number
+  /** null = não está desmaiado. */
+  faintedAt: number | null
+  /** null = fora do jardim (o descanso congela). */
+  hpUpdatedAt: number | null
+}
+
+/**
+ * HP no catch-up. Desmaiado (faintedAt) fica em 0 até faintedAt + faintRecoverMs,
+ * em qualquer lugar. Ao voltar, ganha faintRecoverRatio; no jardim o descanso
+ * conta a partir desse instante. Sem desmaio, o descanso só anda no jardim.
+ */
+export function settleHp(
+  hpRatio: number,
+  faintedAt: number | null,
+  hpUpdatedAt: number | null,
+  now: number,
+  inGarden: boolean,
+): SettledHp {
+  if (faintedAt != null) {
+    const wakeAt = faintedAt + healConfig.faintRecoverMs
+    if (now < wakeAt) {
+      return { hpRatio: 0, faintedAt, hpUpdatedAt: inGarden ? hpUpdatedAt : null }
+    }
+    const recovered = healConfig.faintRecoverRatio
+    if (!inGarden) return { hpRatio: recovered, faintedAt: null, hpUpdatedAt: null }
+    return {
+      hpRatio: restHpRatio(recovered, now - wakeAt),
+      faintedAt: null,
+      hpUpdatedAt: now,
+    }
+  }
+  if (!inGarden) return { hpRatio: clampRatio(hpRatio), faintedAt: null, hpUpdatedAt: null }
+  const from = hpUpdatedAt
+  if (from == null) return { hpRatio: clampRatio(hpRatio), faintedAt: null, hpUpdatedAt: now }
+  return { hpRatio: restHpRatio(hpRatio, now - from), faintedAt: null, hpUpdatedAt: now }
+}
+
 /** Cargas da máquina no instante `now`, a partir de `progress` em `since`. */
 export function settleHealCharges(
   progress: number,

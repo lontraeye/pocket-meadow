@@ -486,7 +486,7 @@ A lista completa de áreas, a ordem em que abrem e as fontes de cada uma estão 
   winChance = clamp(winChance, BATTLE_MIN, BATTLE_MAX)  // 0.05 .. 0.95
   ```
   Com poderes iguais a chance é 50%. Sempre existe uma chance pequena de vencer um muito mais forte e de perder para um muito mais fraco.
-- **Derrota**: encontro encerrado. Os Pokémon do jogador não sofrem penalidade (não há HP persistente).
+- **Derrota**: encontro encerrado. O HP da luta fica (ver 5.18): desmaiado espera 2 h ou a máquina de cura.
 - **Vitória**: só quem **entrou em campo e não desmaiou** ganha XP (e EVs). Quem ficou na pokébola não conta. O XP é **dividido entre esses**. O treinador ganha XP normalmente, e o encontro segue para a captura. Mandar gente a mais só custa XP se ela entrar de fato; lutar só com um deixa o XP inteiro nele. **Exp Share** (item) fica para depois e deve ampliar quem recebe sem exigir entrada.
 - **XP de batalha**, igual aos jogos a partir da Geração 5. O BST decide a luta (poder, acima), e o `base_experience` decide a recompensa:
   ```
@@ -1167,7 +1167,7 @@ Decidido em 2026-10-27. Substitui a batalha automática da seção 5.5 (`power`,
 - **Rápido x carregado:** no golpe carregado o efeito usa a chance cheia do jogo. No rápido, a chance é dividida (config, inicial ÷3), porque ele acerta a cada segundo. **Sono, congelamento e confusão só saem do golpe carregado:** no rápido, mesmo com chance baixa, eles travariam a luta. A lista de status permitidos no rápido fica no config.
 - **Golpes só de status** (Thunder Wave, Sleep Powder, Toxic) continuam fora do pool por enquanto. Pedem um balanceamento à parte como golpe carregado.
 - **Habilidades ligadas a status** entram no conjunto escolhido: Static, Poison Point, Flame Body, Effect Spore, Synchronize, Guts, Immunity, Limber, Insomnia, Vital Spirit, Water Veil, Magma Armor, Own Tempo, Natural Cure, Shed Skin, Early Bird, Marvel Scale, Shield Dust, Serene Grace e Rock Head. As de contato (Static, Poison Point, Flame Body, Effect Spore) usam a classe física do golpe como contato, porque a PokéAPI não traz esse dado.
-- **Só durante a luta:** todos saem curados no fim. Pokémon que ficam machucados depois da luta (com cura no jardim, itens ou centro) é ideia para o futuro.
+- **HP depois da luta:** a fração fica (`hp_ratio`). No jardim, o descanso enche em `healConfig.restFullMs` (4 h) e não age no desmaio. Desmaiado grava `fainted_at`: depois de `faintRecoverMs` (2 h), em qualquer lugar (jardim, time, daycare, PC), volta com `faintRecoverRatio` (0,1) e, se estiver no jardim, o descanso conta a partir daí. A máquina de cura cura a equipe na hora e limpa o desmaio. Fora do jardim o HP congela, menos esse relógio.
 - Tudo dentro da simulação compartilhada, com as regras de sempre (seed da luta, só `+ − × ÷` e `floor`/`min`/`max`, tempo em ms inteiros). O servidor continua refazendo a luta igual.
 - **Na tela:** selo do status ao lado da barra de vida (QMD, ENV, PAR, DRM, CGL, CNF) e o dano por tempo como número. O visual de cada status (chama, bolhas, faíscas) vem na parte 2 do juice.
 - **Golpe crítico** (entra junto): rolagem em todo golpe de dano, rápido ou carregado, sem dividir a chance (só aumenta o dano, não trava a luta). Chance inicial 1/24, e 1/8 nos golpes de crítico alto (`meta.crit_rate` da PokéAPI, como Slash e Razor Leaf). Dano ×1,5, ignorando os estágios que atrapalham o atacante, como nos jogos principais. Super Luck aumenta a chance, Sniper leva o crítico a ×2,25, Battle Armor e Shell Armor são imunes. Na tela, "Crítico!" junto ao número.

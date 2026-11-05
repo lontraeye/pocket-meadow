@@ -57,9 +57,12 @@ const post = (cookie: string, url: string, body: unknown = {}) =>
   app.request(url, { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) }, env)
 
 const hpOf = (id: number) =>
-  sql().prepare('select hp_ratio as hpRatio, hp_updated_at as hpUpdatedAt from pokemon where id = ?').get(id) as {
+  sql().prepare(
+    'select hp_ratio as hpRatio, hp_updated_at as hpUpdatedAt, fainted_at as faintedAt from pokemon where id = ?',
+  ).get(id) as {
     hpRatio: number
     hpUpdatedAt: number | null
+    faintedAt: number | null
   }
 
 test('luta começa com o HP guardado (startHpRatio no setup)', async () => {
@@ -102,6 +105,69 @@ test('HP final da luta é gravado; desmaiado = 0 e fica fora do time', async () 
   const refused = await post(p.cookie, `/encounters/${enc2.id}/battle/start`, { pokemonIds: [p.starterId] })
   assert.equal(refused.status, 400)
   assert.equal(((await refused.json()) as { error: string }).error, 'team_fainted')
+})
+
+test('desmaiado na luta continua fora 1 minuto depois (o descanso não o levanta)', async () => {
+  const p = player('heal-faint-minute')
+  sql().prepare('update pokemon set level = 1, hp_ratio = 1 where id = ?').run(p.starterId)
+  const created = await post(p.cookie, '/encounters', { regionSlug: 'route-29' })
+  const encounter = (await created.json()) as { id: number }
+  sql().prepare('update encounters set level = 50 where id = ?').run(encounter.id)
+  const battle = await post(p.cookie, `/encounters/${encounter.id}/battle`, { pokemonIds: [p.starterId] })
+  assert.equal(battle.status, 200)
+  assert.equal(((await battle.json()) as { won: boolean }).won, false)
+  assert.equal(hpOf(p.starterId).hpRatio, 0)
+  assert.ok(hpOf(p.starterId).faintedAt != null)
+
+  // 1 minuto depois: o catch-up da próxima luta liquida o jardim. O desmaio
+  // tem de continuar (team_fainted), e não virar HP > 0 pelo descanso.
+  const ago = Date.now() - 60_000
+  sql()
+    .prepare(
+      'update pokemon set pet_at = ?, hp_updated_at = ?, location = ?, in_pc = 0 where id = ?',
+    )
+    .run(ago, ago, 'garden', p.starterId)
+
+  const again = await post(p.cookie, '/encounters', { regionSlug: 'route-29' })
+  const enc2 = (await again.json()) as { id: number }
+  const refused = await post(p.cookie, `/encounters/${enc2.id}/battle/start`, { pokemonIds: [p.starterId] })
+  assert.equal(refused.status, 400)
+  assert.equal(((await refused.json()) as { error: string }).error, 'team_fainted')
+})
+
+test('desmaiado não descansa; 2 h depois volta com 0,1 e o jardim continua', () => {
+  const p = player('heal-faint-clock')
+  const t0 = Date.now()
+  sql()
+    .prepare(
+      'update pokemon set hp_ratio = 0, fainted_at = ?, hp_updated_at = ?, pet_at = ?, location = ?, in_pc = 0 where id = ?',
+    )
+    .run(t0, t0, t0, 'garden', p.starterId)
+  immediate(() => settleGarden(p.userId, t0 + hourMs))
+  const mid = hpOf(p.starterId)
+  assert.equal(mid.hpRatio, 0)
+  assert.equal(mid.faintedAt, t0)
+
+  const wake = t0 + healConfig.faintRecoverMs
+  immediate(() => settleGarden(p.userId, wake + healConfig.restFullMs / 2))
+  const rested = hpOf(p.starterId)
+  assert.equal(rested.faintedAt, null)
+  assert.ok(Math.abs(rested.hpRatio - (healConfig.faintRecoverRatio + 0.5)) < 1e-9)
+})
+
+test('o relógio do desmaio corre no PC, sem descanso', () => {
+  const p = player('heal-faint-pc')
+  const t0 = Date.now()
+  sql()
+    .prepare('update pokemon set hp_ratio = 0, fainted_at = ?, hp_updated_at = ?, pet_at = ?, in_pc = 1 where id = ?')
+    .run(t0, t0, t0, p.starterId)
+  const wake = t0 + healConfig.faintRecoverMs
+  immediate(() => settleGarden(p.userId, wake + healConfig.restFullMs))
+  const woken = hpOf(p.starterId)
+  assert.equal(woken.faintedAt, null)
+  assert.equal(woken.hpRatio, healConfig.faintRecoverRatio)
+  immediate(() => settleGarden(p.userId, wake + 2 * healConfig.restFullMs))
+  assert.equal(hpOf(p.starterId).hpRatio, healConfig.faintRecoverRatio)
 })
 
 test('descanso no jardim recupera HP pelo tempo', () => {
@@ -160,9 +226,65 @@ test('máquina: recarrega pelo tempo, gasta 1 carga, cura a equipe e recusa sem 
 
   // State manda a máquina.
   const state = (await (await app.request('/state', { headers: { cookie: p.cookie } }, env)).json()) as {
-    garden: { healMachines: { charges: number; max: number; nextChargeAt: number | null }[] }
-    pokemon: { hpRatio: number }[]
+    garden: {
+      healMachines: { charges: number; max: number; nextChargeAt: number | null }[]
+      faintRecoverRatio: number
+    }
+    pokemon: { hpRatio: number; faintedUntil: number | null }[]
   }
   assert.equal(state.garden.healMachines[0]!.max, healConfig.machine.maxCharges)
+  assert.equal(state.garden.faintRecoverRatio, healConfig.faintRecoverRatio)
   assert.ok(typeof state.pokemon[0]!.hpRatio === 'number')
+  assert.equal(state.pokemon[0]!.faintedUntil, null)
+})
+
+test('a máquina cura desmaiado e limpa o desmaio', async () => {
+  const p = player('heal-faint-machine')
+  const now = Date.now()
+  immediate(() => grantStructures(p.userId, now))
+  sql()
+    .prepare('update pokemon set hp_ratio = 0, fainted_at = ? where id = ?')
+    .run(now, p.starterId)
+  const used = await post(p.cookie, '/garden/heal-machine/use')
+  assert.equal(used.status, 200)
+  const after = hpOf(p.starterId)
+  assert.equal(after.hpRatio, 1)
+  assert.equal(after.faintedAt, null)
+})
+
+test('time com um desmaiado e um vivo luta só com o vivo', async () => {
+  const p = player('heal-faint-partial')
+  sql().prepare('update pokemon set level = 1, hp_ratio = 1 where id = ?').run(p.starterId)
+  const created = await post(p.cookie, '/encounters', { regionSlug: 'route-29' })
+  const encounter = (await created.json()) as { id: number }
+  sql().prepare('update encounters set level = 50 where id = ?').run(encounter.id)
+  const battle = await post(p.cookie, `/encounters/${encounter.id}/battle`, { pokemonIds: [p.starterId] })
+  assert.equal(battle.status, 200)
+  assert.equal(hpOf(p.starterId).hpRatio, 0)
+  assert.ok(hpOf(p.starterId).faintedAt != null)
+
+  const alive = Number(
+    sql()
+      .prepare(
+        `insert into pokemon (user_id, species_id, level, xp, caught_at, original_species_id, nature, ability_slot,
+           fast_move, charged_move, iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed, team_slot, hp_ratio)
+         select user_id, species_id, 20, 0, caught_at, original_species_id, nature, ability_slot,
+           fast_move, charged_move, iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed, 1, 1
+         from pokemon where id = ?`,
+      )
+      .run(p.starterId).lastInsertRowid,
+  )
+
+  const again = await post(p.cookie, '/encounters', { regionSlug: 'route-29' })
+  const enc2 = (await again.json()) as { id: number }
+  const started = await post(p.cookie, `/encounters/${enc2.id}/battle/start`, {
+    pokemonIds: [alive, p.starterId],
+  })
+  assert.equal(started.status, 200)
+  const body = (await started.json()) as { setup: { team: { id: number | null }[] } }
+  // A pausa "quem entra" lista o setup: o desmaiado não é opção.
+  assert.deepEqual(
+    body.setup.team.map((fighter) => fighter.id),
+    [alive],
+  )
 })

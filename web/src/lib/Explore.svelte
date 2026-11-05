@@ -3,7 +3,7 @@
   import Journey from './Journey.svelte'
   import { snapIconSize } from './pixelSnap.svelte'
   import { spriteLoading } from './spriteLoading'
-  import { liveHpRatio } from './hp'
+  import { faintLabel, liveHpRatio } from './hp'
   import { serverClock } from './serverClock.svelte'
   import { connection } from './connection.svelte'
   import { formatCountdown } from './time'
@@ -1204,6 +1204,7 @@
           <div class="roster">
             {#each roster as mon (mon.id)}
               {@const on = mon.id === leadId}
+              {@const faint = faintLabel(mon, clock.now())}
               <button
                 type="button"
                 class="member"
@@ -1214,7 +1215,8 @@
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
                 <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
-                {#if hpOf(mon) <= 0}<small class="starving">desmaiado · fica fora</small>
+                {#if faint}<small class="starving">{faint}</small>
+                {:else if hpOf(mon) <= 0}<small class="starving">desmaiado · fica fora</small>
                 {:else if hpOf(mon) < 1}<small class="hurt">ferido · {Math.round(hpOf(mon) * 100)}% HP</small>
                 {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
               </button>

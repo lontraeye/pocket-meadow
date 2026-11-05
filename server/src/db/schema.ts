@@ -258,13 +258,19 @@ export const pokemon = sqliteTable(
     /** Último presente (ou a entrada no jardim): o próximo sai `intervalMs` depois. */
     lastGiftAt: integer('last_gift_at'),
     /**
-     * Fração do HP de luta (0..1). Absoluto mudaria com nível/evolução;
-     * desmaiado = 0 (fica fora da luta). Atualizado no fim da luta, no
-     * descanso do jardim e na máquina de cura (PROGRESSAO.md, 4.2).
+     * Fração do HP de luta (0..1). Absoluto mudaria com nível/evolução.
+     * Atualizado no fim da luta, no descanso do jardim e na máquina de cura
+     * (PROGRESSAO.md, 4.2). Desmaiado não sobe por descanso: ver faintedAt.
      */
     hpRatio: real('hp_ratio').notNull().default(1),
     /** Até quando o HP de descanso foi liquidado; null = fora do jardim (congelado). */
     hpUpdatedAt: integer('hp_updated_at'),
+    /**
+     * Quando desmaiou (HP da luta foi a 0). null = não está desmaiado.
+     * O relógio de faintRecoverMs corre em qualquer lugar; o descanso não age
+     * enquanto esta coluna está preenchida.
+     */
+    faintedAt: integer('fainted_at'),
     /** Habitat onde mora (PLANNING 5.22); null = sem casa (anda pelo jardim). */
     habitatId: integer('habitat_id').references((): AnySQLiteColumn => habitats.id, { onDelete: 'set null' }),
   },

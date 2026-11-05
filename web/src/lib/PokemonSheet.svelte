@@ -23,7 +23,7 @@
   import { dosesToCap, previewFeed, releaseYield } from './progression'
   import { play } from './sound'
   import { serverClock } from './serverClock.svelte'
-  import { hpFullInMs, liveHpRatio } from './hp'
+  import { faintLabel, hpFullInMs, liveHpRatio } from './hp'
   import { formatCountdown } from './time'
   import { showdownSrc } from './sprites'
   import StatTable from './StatTable.svelte'
@@ -280,6 +280,7 @@
   // HP de luta agora: o mesmo arredondamento da luta (vivo tem pelo menos 1).
   const hpRatio = $derived(liveHpRatio(mon, game, careClock.now()))
   const hpFullIn = $derived(hpFullInMs(mon, game, careClock.now()))
+  const faint = $derived(faintLabel(mon, careClock.now()))
   const hpNow = $derived(hpRatio <= 0 ? 0 : Math.max(1, Math.round(mon.maxHp * hpRatio)))
   let choosingSnack = $state(false)
   let hearts = $state(0)
@@ -747,7 +748,7 @@
               <span style:width="{hpRatio * 100}%"></span>
             </div>
             <small>
-              {hpNow <= 0 ? 'Desmaiado' : `HP ${hpNow}/${mon.maxHp}`}{hpFullIn > 0 ? ` · cheio em ${formatCountdown(hpFullIn)}` : ''}
+              {faint ?? (hpNow <= 0 ? 'Desmaiado' : `HP ${hpNow}/${mon.maxHp}`)}{hpFullIn > 0 ? ` · cheio em ${formatCountdown(hpFullIn)}` : ''}
             </small>
           </div>
           <div class="candies" aria-label="Doces">
