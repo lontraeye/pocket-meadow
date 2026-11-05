@@ -2,7 +2,9 @@ import { SqliteError } from 'better-sqlite3'
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { leagueTrainers } from '../config/league.js'
+import { leagueConfig, leagueTrainersFor } from '../config/league.js'
+import { rewardLabel } from '../config/rewardNames.js'
+import { weekStartAt } from '../game/weather.js'
 import { chapterOpen } from '../config/milestones.js'
 import { petConfig } from '../config/pets.js'
 import { trainerConfig } from '../config/trainer.js'
@@ -14,6 +16,7 @@ import {
   insertLeagueRun,
   loseLeagueRun,
   parseLeagueTeam,
+  rematchRewardTaken,
   type LeagueMember,
 } from '../db/league.js'
 import { loadProgress } from '../db/milestones.js'
@@ -82,8 +85,11 @@ function leagueView(userId: number, now: number) {
   const clock = persistCatchUp(userId, now)
   const progress = loadProgress(userId, clock.level)
   const db = getDb()
-  const names = speciesNames(leagueTrainers.flatMap((trainer) => trainer.foes.map((foe) => foe.speciesId)))
   const run = activeLeagueRun(userId)
+  const champion = progress.cleared.has('league')
+  // Campeão vê a Liga da revanche (ou a tentativa que já está em andamento).
+  const leagueTrainers = leagueTrainersFor(run ? run.rematch : champion)
+  const names = speciesNames(leagueTrainers.flatMap((trainer) => trainer.foes.map((foe) => foe.speciesId)))
   const members = run ? parseLeagueTeam(run.team) : []
   const memberIds = members.map((member) => member.pokemonId)
   const owned =
@@ -121,8 +127,21 @@ function leagueView(userId: number, now: number) {
     .orderBy(asc(pokemon.teamSlot))
     .all()
   return {
-    champion: progress.cleared.has('league'),
+    champion,
     wins,
+    /** Pós-jogo: a próxima tentativa é revanche (times +nível, prêmio semanal). */
+    rematch: run ? run.rematch : champion,
+    rematchReward: champion
+      ? {
+          items: [
+            ...leagueConfig.rematchRewards.items.map(rewardLabel),
+            `${leagueConfig.rematchRewards.genericCandies} doces`,
+          ],
+          /** Já venceu a revanche nesta semana: o prêmio volta na segunda. */
+          taken: rematchRewardTaken(userId, now),
+          resetsAt: weekStartAt(now) + 7 * 24 * 60 * 60 * 1000,
+        }
+      : null,
     trainers: leagueTrainers.map((trainer) => ({
       key: trainer.key,
       name: trainer.name,
@@ -174,7 +193,6 @@ function startLeague(userId: number, pokemonIds: number[], now: number) {
   const progress = loadProgress(userId, clock.level)
   if (!chapterOpen(9, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== 'indigo-plateau') return fail('milestone_not_here', 400)
-  if (progress.cleared.has('league')) return fail('milestone_cleared', 409)
   if (activeLeagueRun(userId)) return fail('league_active', 409)
   if (pendingEncounter(userId)) return fail('encounter_pending', 409)
   if (pokemonIds.length < 1 || pokemonIds.length > trainerConfig.teamMax || new Set(pokemonIds).size !== pokemonIds.length) {
@@ -202,7 +220,8 @@ function startLeague(userId: number, pokemonIds: number[], now: number) {
     if (row.hunger < petConfig.fightMinHunger) return fail('team_hungry', 400)
     members.push({ pokemonId: id, hpRatio: clampRatio(row.hpRatio) })
   }
-  insertLeagueRun(userId, members, now)
+  // Já campeão: a tentativa é a revanche.
+  insertLeagueRun(userId, members, now, progress.cleared.has('league'))
   return { ok: true as const, view: leagueView(userId, now) }
 }
 
@@ -216,7 +235,7 @@ function nextLeagueFight(userId: number, now: number) {
     loseLeagueRun(run.id, members, now)
     return fail('league_lost', 400)
   }
-  const trainer = leagueTrainers[run.stage]
+  const trainer = leagueTrainersFor(run.rematch)[run.stage]
   if (!trainer) return fail('league_not_active', 400)
   return { ok: true as const, encounter: createTrainerEncounter(userId, trainer, 'indigo-plateau', now) }
 }

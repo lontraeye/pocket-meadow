@@ -226,6 +226,8 @@ export type BattleOutcome = {
           status: 'active' | 'won' | 'lost'
           nextName: string | null
           champion: boolean
+          /** Revanche (já era campeão): sem marco; prêmio uma vez por semana. */
+          rematch: boolean
           opens: number | null
           rewards: string[]
         } | null
@@ -238,6 +240,10 @@ export type BattleOutcome = {
 export type LeagueState = {
   champion: boolean
   wins: number
+  /** A próxima tentativa (ou a atual) é a revanche do pós-jogo. */
+  rematch: boolean
+  /** Campeão: o prêmio semanal da revanche e se já saiu nesta semana. */
+  rematchReward: { items: string[]; taken: boolean; resetsAt: number } | null
   trainers: {
     key: string
     name: string

@@ -293,7 +293,8 @@
       }
       data = (await response.json()) as PlacesResponse
       failed = false
-      if (data.goal.milestone?.key === 'league') await loadLeague()
+      // A Liga: marco do capítulo 9 ou, para o campeão, a revanche no Indigo Plateau.
+      if (data.goal.milestone?.key === 'league' || data.current === 'indigo-plateau') await loadLeague()
       else league = null
       await loadField()
     } catch {
@@ -540,8 +541,18 @@
           {/each}
         </ul>
       {/each}
+      {#if league.rematchReward}
+        <p class="hint">
+          Revanche: times mais fortes, sem curar entre as lutas.
+          {#if league.rematchReward.taken}
+            Prêmio desta semana já recebido; volta na segunda.
+          {:else}
+            Prêmio da semana: {league.rematchReward.items.join(', ')}.
+          {/if}
+        </p>
+      {/if}
       <button type="button" class="btn btn-primary challenge" disabled={leagueBusy || pending || hasEncounter} onclick={openLeaguePick}>
-        Começar a Liga
+        {league.rematch ? 'Começar a revanche' : 'Começar a Liga'}
       </button>
     {/if}
   </div>
@@ -658,6 +669,10 @@
 
         {#if isHere}
           <p class="blurb">{selected.blurb}</p>
+          {#if league?.champion && selected.slug === 'indigo-plateau'}
+            <!-- Pós-jogo: a Liga continua aqui como revanche. -->
+            {@render leagueCard()}
+          {/if}
           {#if data.here.rival}
             {@const rival = data.here.rival}
             <!-- O rival não trava o marco: é uma luta a mais, com prêmio, uma vez. -->

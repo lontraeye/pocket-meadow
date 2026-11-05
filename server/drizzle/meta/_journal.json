@@ -288,6 +288,13 @@
       "when": 1794150000000,
       "tag": "0040_rival",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794200000000,
+      "tag": "0041_league_rematch",
+      "breakpoints": true
     }
   ]
 }

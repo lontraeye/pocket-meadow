@@ -56,6 +56,15 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
       ? { id: 'lost', title: 'Derrota', detail: 'Cure o time no jardim antes de tentar de novo.', tone: 'bad' }
       : { id: 'lost', title: 'Derrota', detail: `Treine o time e desafie ${trainerTitle(opponent)} de novo.`, tone: 'bad' }
   }
+  if (opponent.kind === 'trainer' && opponent.league?.champion && opponent.league.rematch) {
+    return {
+      id: 'defeated',
+      title: 'Revanche vencida!',
+      detail: opponent.league.rewards.length > 0 ? opponent.league.rewards.join(', ') : 'O prêmio desta semana já saiu.',
+      tone: 'good',
+      sound: 'levelup',
+    }
+  }
   if (opponent.kind === 'trainer' && opponent.league?.champion) {
     const rewards = opponent.league.rewards.length > 0 ? ` · ${opponent.league.rewards.join(', ')}` : ''
     return {
@@ -103,6 +112,7 @@ export function resultLine(
     if (!battle.won || opponent.league.status === 'lost') {
       return { text: 'Derrota. A Liga recomeça da primeira luta.', tone: 'bad' }
     }
+    if (opponent.league.champion && opponent.league.rematch) return { text: 'Revanche vencida! A Liga segue sua.', tone: 'good' }
     if (opponent.league.champion) return { text: `Campeão de Johto! Capítulo ${opponent.league.opens ?? ''} aberto.`, tone: 'good' }
     return {
       text: opponent.league.nextName ? `Você venceu! Próxima: ${opponent.league.nextName}.` : `Você venceu ${trainerTitle(opponent)}!`,

@@ -14,6 +14,14 @@ export function weatherDay(now: number): number {
   return Math.floor((now + offsetMs()) / DAY_MS)
 }
 
+/** Instante (ms) em que a semana começou: segunda-feira, meia-noite de Brasília. */
+export function weekStartAt(now: number): number {
+  const day = weatherDay(now)
+  // O dia 0 (1970-01-01) foi uma quinta: +3 faz a segunda virar 0.
+  const monday = day - ((day + 3) % 7)
+  return monday * DAY_MS - offsetMs()
+}
+
 /** Instante (ms) da próxima meia-noite de Brasília, quando o clima muda. */
 export function nextWeatherChangeAt(now: number): number {
   return (weatherDay(now) + 1) * DAY_MS - offsetMs()

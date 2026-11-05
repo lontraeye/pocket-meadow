@@ -149,7 +149,7 @@ O nível de treinador continua existindo (XP, recompensas de nível), mas não t
    3. ~~Peças de habitat~~ (feito em 2026-11-04, com o redesenho da 5.22: área e tipo escolhidos pelo jogador).
 7. **Ritmo do jardim e simulação da campanha** para fechar ~3 semanas, com a simulação virando script. **Tabela base aplicada em 2026-11-04** (seção 7), com a conta em `npm run economia` (server/scripts/economia.ts); tempo da campanha medido no mesmo script (seção 7.1: ~12 dias de treino até a Blackthorn); falta conferir jogando.
 8. ~~**Habitats (5.22)** e **visitantes**~~ (feito em 2026-11-04, em produção; abrem cedo, por partes, não no capítulo 7).
-9. **Liga, rival e pós-jogo:** especificado em 2026-11-05 no PLANNING.md, seção 5.24 (4 partes: luta de treinador genérica, Liga, rival, revanche). Partes 1 e 2 (a Liga) feitas em 2026-11-05; faltam o rival e a revanche.
+9. ~~**Liga, rival e pós-jogo**~~ (feito em 2026-11-05, PLANNING.md 5.24): a Liga (5 lutas seguidas sem curar), o rival (5 lutas com prêmio, sem travar o marco) e a revanche semanal da Liga para o campeão. Falta pôr a Liga no `npm run economia`.
 
 **Para depois (anotado):** breed, com sorteio de sexo (macho/fêmea; alguns sprites mudam com o sexo, então o sprite tem de respeitar isso) e ovos personalizados (muda só a cor do ovo), com ninho e incubadora no jardim.
 

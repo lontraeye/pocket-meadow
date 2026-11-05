@@ -190,7 +190,14 @@ test('a quinta vitória dá o marco, abre o capítulo 10 e o prêmio só na prim
   }
   assert.equal(places.goal.chapter, 10)
   assert.equal(places.places.find((place) => place.slug === 'tin-tower')?.open, true)
-  assert.equal(await errorOf(await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })), 'milestone_cleared')
+  // Campeão: começar de novo é a revanche, e o prêmio de campeão não vem outra vez.
+  const rematch = (await (await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).json()) as {
+    rematch: boolean
+    trainers: { foes: { level: number }[] }[]
+  }
+  assert.equal(rematch.rematch, true)
+  assert.equal(rematch.trainers[0]!.foes[0]!.level, 40 + leagueConfig.rematchLevelBonus)
+  assert.equal((await post('/league/abandon', p.cookie)).status, 200)
   assert.equal(itemQty(p.userId, 'ball:ultra'), leagueConfig.championRewards.items[0]!.quantity)
 
   const again = player('league-again')
@@ -214,4 +221,47 @@ test('a quinta vitória dá o marco, abre o capítulo 10 e o prêmio só na prim
   assert.equal(body.won, true)
   assert.deepEqual(body.opponent.league.rewards, [])
   assert.equal(itemQty(again.userId, 'ball:ultra'), 0)
+})
+
+test('revanche: o prêmio vem uma vez por semana, sem mexer no marco', async () => {
+  const p = player('league-rematch')
+  openLeague(p.userId)
+  sql().prepare('insert into trainer_milestones (user_id, milestone_key, cleared_at) values (?, ?, ?)').run(p.userId, 'league', Date.now())
+  const winLast = async () => {
+    sql()
+      .prepare(
+        `update pokemon set level = 100, species_id = 150, hp_ratio = 1, fainted_at = null, hunger = 100, nature = 'modest',
+          fast_move = 'powder-snow', charged_move = 'blizzard',
+          iv_hp = 31, iv_attack = 31, iv_defense = 31, iv_sp_attack = 31, iv_sp_defense = 31, iv_speed = 31
+         where id = ?`,
+      )
+      .run(p.starterId)
+    sql()
+      .prepare(`insert into league_runs (user_id, started_at, stage, status, team, rematch) values (?, ?, 4, 'active', ?, 1)`)
+      .run(p.userId, Date.now(), JSON.stringify([{ pokemonId: p.starterId, hpRatio: 1 }]))
+    const encounter = (await (await post('/league/next', p.cookie)).json()) as { id: number; level: number }
+    assert.equal(encounter.level, 44 + leagueConfig.rematchLevelBonus, 'o campeão da revanche')
+    const battle = (await (await post(`/encounters/${encounter.id}/battle`, p.cookie, { pokemonIds: [p.starterId] })).json()) as {
+      won: boolean
+      opponent: { league: { status: string; rematch: boolean; rewards: string[]; opens: number | null } }
+    }
+    assert.equal(battle.won, true)
+    assert.equal(battle.opponent.league.status, 'won')
+    assert.equal(battle.opponent.league.rematch, true)
+    assert.equal(battle.opponent.league.opens, null)
+    return battle.opponent.league.rewards
+  }
+  const ultra = leagueConfig.rematchRewards.items[0]!
+
+  assert.equal((await winLast()).length, leagueConfig.rematchRewards.items.length + 1)
+  assert.equal(itemQty(p.userId, ultra.itemKey), ultra.quantity)
+  assert.deepEqual(await winLast(), [], 'a segunda na mesma semana não dá prêmio')
+  assert.equal(itemQty(p.userId, ultra.itemKey), ultra.quantity)
+
+  // As vitórias de antes da semana não contam: o prêmio volta.
+  sql().prepare(`update league_runs set finished_at = finished_at - 8 * 24 * 60 * 60 * 1000 where user_id = ?`).run(p.userId)
+  assert.equal((await winLast()).length, leagueConfig.rematchRewards.items.length + 1)
+  assert.equal(itemQty(p.userId, ultra.itemKey), ultra.quantity * 2)
+  const milestones = sql().prepare(`select count(*) as n from trainer_milestones where user_id = ? and milestone_key = 'league'`).get(p.userId) as { n: number }
+  assert.equal(milestones.n, 1)
 })

@@ -44,7 +44,7 @@ export const CHAPTER_TITLES: Readonly<Record<number, string>> = {
   7: 'Mahogany',
   8: 'Blackthorn',
   9: 'Caminho da Liga',
-  10: 'Fim de jogo',
+  10: 'Campeão de Johto',
 }
 
 export const placeConfigs: readonly PlaceConfig[] = [

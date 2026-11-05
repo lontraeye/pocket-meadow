@@ -22,6 +22,13 @@ export const leagueConfig = {
     ],
     genericCandies: 50,
   },
+  /** Revanche (pós-jogo, 5.24 parte 4): os mesmos times, mais fortes. */
+  rematchLevelBonus: 10,
+  /** Prêmio da revanche: uma vez por semana (vira na segunda, meia-noite de Brasília). */
+  rematchRewards: {
+    items: [{ itemKey: 'ball:ultra', quantity: 2 }],
+    genericCandies: 30,
+  },
 }
 
 export const leagueTrainers: readonly TrainerConfig[] = [
@@ -88,6 +95,17 @@ export const leagueTrainers: readonly TrainerConfig[] = [
   },
 ]
 
-export function leagueTrainerAt(stage: number): TrainerConfig | undefined {
-  return leagueTrainers[stage]
+/** A Liga da revanche: +rematchLevelBonus níveis e IV 31 em todos. */
+export const leagueRematchTrainers: readonly TrainerConfig[] = leagueTrainers.map((trainer) => ({
+  ...trainer,
+  key: `${trainer.key}-rematch`,
+  foes: trainer.foes.map((entry) => ({ ...entry, level: entry.level + leagueConfig.rematchLevelBonus, iv: ACE_IV })),
+}))
+
+export function leagueTrainersFor(rematch: boolean): readonly TrainerConfig[] {
+  return rematch ? leagueRematchTrainers : leagueTrainers
+}
+
+export function leagueTrainerAt(stage: number, rematch = false): TrainerConfig | undefined {
+  return leagueTrainersFor(rematch)[stage]
 }

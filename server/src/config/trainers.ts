@@ -1,7 +1,7 @@
 // Luta contra treinador (PLANNING 5.24, parte 1). Líder, Liga e rival usam o
 // mesmo formato; cada um entra na lista quando a parte dele existe.
 
-import { leagueTrainers } from './league.js'
+import { leagueRematchTrainers, leagueTrainers } from './league.js'
 import { leaderConfigs, type LeaderFoe } from './leaders.js'
 import { rivalTrainers } from './rival.js'
 import { traitsConfig } from './traits.js'
@@ -27,6 +27,7 @@ export function allTrainers(): readonly TrainerConfig[] {
       foes: leader.foes,
     })),
     ...leagueTrainers,
+    ...leagueRematchTrainers,
     ...rivalTrainers,
   ]
 }

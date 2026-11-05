@@ -1,11 +1,12 @@
 // Tentativa da Liga (PLANNING 5.24). O HP fica no JSON da tentativa: o
 // descanso e a máquina de cura não mexem nele.
 
-import { and, eq, sql } from 'drizzle-orm'
-import { leagueConfig, leagueTrainerAt, leagueTrainers } from '../config/league.js'
+import { and, eq, gte, sql } from 'drizzle-orm'
+import { leagueConfig, leagueTrainerAt, leagueTrainersFor } from '../config/league.js'
 import { milestoneByKey } from '../config/milestones.js'
 import { rewardLabel } from '../config/rewardNames.js'
 import type { TrainerConfig } from '../config/trainers.js'
+import { weekStartAt } from '../game/weather.js'
 import { creditItems } from './inventory.js'
 import { getDb } from './client.js'
 import { leagueRuns, trainerMilestones, trainers } from './schema.js'
@@ -16,6 +17,8 @@ export type LeagueFightResult = {
   status: 'active' | 'won' | 'lost'
   nextName: string | null
   champion: boolean
+  /** Revanche de quem já é campeão: sem marco, prêmio uma vez por semana. */
+  rematch: boolean
   opens: number | null
   rewards: string[]
 }
@@ -47,7 +50,7 @@ export function activeLeagueRun(userId: number) {
     .get()
 }
 
-export function insertLeagueRun(userId: number, members: LeagueMember[], now: number): number {
+export function insertLeagueRun(userId: number, members: LeagueMember[], now: number, rematch = false): number {
   const inserted = getDb()
     .insert(leagueRuns)
     .values({
@@ -56,6 +59,7 @@ export function insertLeagueRun(userId: number, members: LeagueMember[], now: nu
       stage: 0,
       status: 'active',
       team: JSON.stringify(members),
+      rematch,
     })
     .returning({ id: leagueRuns.id })
     .get()
@@ -81,9 +85,41 @@ export function loseLeagueRun(runId: number, members: LeagueMember[], now: numbe
     .run()
 }
 
+/** Já venceu uma revanche nesta semana (segunda, meia-noite de Brasília)? */
+export function rematchRewardTaken(userId: number, now: number): boolean {
+  const row = getDb()
+    .select({ id: leagueRuns.id })
+    .from(leagueRuns)
+    .where(
+      and(
+        eq(leagueRuns.userId, userId),
+        eq(leagueRuns.rematch, true),
+        eq(leagueRuns.status, 'won'),
+        gte(leagueRuns.finishedAt, weekStartAt(now)),
+      ),
+    )
+    .get()
+  return row !== undefined
+}
+
+/** Itens e doces de um prêmio da Liga; devolve o texto de cada um. */
+function grantLeagueRewards(
+  userId: number,
+  prize: { items: readonly { itemKey: string; quantity: number }[]; genericCandies: number },
+  now: number,
+): string[] {
+  creditItems(userId, prize.items)
+  getDb()
+    .update(trainers)
+    .set({ genericCandies: sql`${trainers.genericCandies} + ${prize.genericCandies}`, updatedAt: now })
+    .where(eq(trainers.userId, userId))
+    .run()
+  return [...prize.items.map(rewardLabel), `${prize.genericCandies} doces`]
+}
+
 /**
  * Depois da luta: grava o HP da tentativa e avança, perde ou coroa.
- * Só na primeira vitória do campeão sai o prêmio.
+ * Só na primeira vitória do campeão sai o prêmio; na revanche, uma vez por semana.
  */
 export function settleLeagueFight(input: {
   userId: number
@@ -94,7 +130,9 @@ export function settleLeagueFight(input: {
 }): LeagueFightResult {
   const run = activeLeagueRun(input.userId)
   if (!run) throw new Error(`league run missing for ${input.trainer.key}`)
-  const expected = leagueTrainerAt(run.stage)
+  const rematch = run.rematch
+  const list = leagueTrainersFor(rematch)
+  const expected = leagueTrainerAt(run.stage, rematch)
   if (!expected || expected.key !== input.trainer.key) {
     throw new Error(`league stage mismatch: ${input.trainer.key}`)
   }
@@ -110,18 +148,31 @@ export function settleLeagueFight(input: {
       .set({ status: 'lost', finishedAt: input.now, team })
       .where(eq(leagueRuns.id, run.id))
       .run()
-    return { status: 'lost', nextName: null, champion: false, opens: null, rewards: [] }
+    return { status: 'lost', nextName: null, champion: false, rematch, opens: null, rewards: [] }
   }
   const next = run.stage + 1
-  if (next < leagueTrainers.length) {
+  if (next < list.length) {
     getDb().update(leagueRuns).set({ stage: next, team }).where(eq(leagueRuns.id, run.id)).run()
     return {
       status: 'active',
-      nextName: leagueTrainers[next]!.name,
+      nextName: list[next]!.name,
       champion: false,
+      rematch,
       opens: null,
       rewards: [],
     }
+  }
+  if (rematch) {
+    // Conferir antes de marcar esta como vencida, senão ela mesma contaria.
+    const rewards = rematchRewardTaken(input.userId, input.now)
+      ? []
+      : grantLeagueRewards(input.userId, leagueConfig.rematchRewards, input.now)
+    getDb()
+      .update(leagueRuns)
+      .set({ status: 'won', finishedAt: input.now, team })
+      .where(eq(leagueRuns.id, run.id))
+      .run()
+    return { status: 'won', nextName: null, champion: true, rematch, opens: null, rewards }
   }
   const milestone = milestoneByKey('league')
   const inserted = getDb()
@@ -129,20 +180,8 @@ export function settleLeagueFight(input: {
     .values({ userId: input.userId, milestoneKey: 'league', clearedAt: input.now })
     .onConflictDoNothing()
     .run()
-  const rewards: string[] = []
-  if (inserted.changes === 1) {
-    creditItems(input.userId, leagueConfig.championRewards.items)
-    getDb()
-      .update(trainers)
-      .set({
-        genericCandies: sql`${trainers.genericCandies} + ${leagueConfig.championRewards.genericCandies}`,
-        updatedAt: input.now,
-      })
-      .where(eq(trainers.userId, input.userId))
-      .run()
-    for (const item of leagueConfig.championRewards.items) rewards.push(rewardLabel(item))
-    rewards.push(`${leagueConfig.championRewards.genericCandies} doces`)
-  }
+  const rewards =
+    inserted.changes === 1 ? grantLeagueRewards(input.userId, leagueConfig.championRewards, input.now) : []
   getDb()
     .update(leagueRuns)
     .set({ status: 'won', finishedAt: input.now, team })
@@ -152,6 +191,7 @@ export function settleLeagueFight(input: {
     status: 'won',
     nextName: null,
     champion: true,
+    rematch,
     opens: milestone ? milestone.chapter + 1 : null,
     rewards,
   }

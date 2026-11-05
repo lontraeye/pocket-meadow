@@ -199,6 +199,8 @@ export const leagueRuns = sqliteTable(
     status: text('status', { enum: ['active', 'won', 'lost', 'abandoned'] }).notNull().default('active'),
     finishedAt: integer('finished_at'),
     team: text('team').notNull(),
+    /** Revanche de quem já é campeão (5.24 parte 4): times mais fortes, sem marco. */
+    rematch: integer('rematch', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [
     uniqueIndex('uq_league_runs_one_active')
