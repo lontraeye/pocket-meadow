@@ -47,7 +47,7 @@ import { leaderFoeTraits } from '../game/leaders.js'
 import { applyLevelMovesToPokemon } from '../game/levelMoves.js'
 import { bumpMaxLevelReached } from '../game/pokedex.js'
 import { mulberry32, randomSeed } from '../game/rng.js'
-import { isFinishTooEarly, simConfig } from '../game/sim/config.js'
+import { abandonAfterMs, isFinishTooEarly, simConfig, timeLimitOf } from '../game/sim/config.js'
 import { battleRngSeed, seedDropRngSeed, wildTraitsSeed } from '../game/sim/seeds.js'
 import { parseBattleSetup, serializeBattleSetup } from '../game/sim/setupJson.js'
 import type {
@@ -396,7 +396,7 @@ function startBattle(userId: number, encounterId: number, pokemonIds: number[], 
       encounterId: encounter.row.id,
       seed: battleRngSeed(encounter.row.rngSeed),
       setup: setupPayload,
-      timeLimitMs: simConfig.timeLimitMs,
+      timeLimitMs: timeLimitOf(setupPayload),
     },
   }
 }
@@ -410,7 +410,6 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
   if (!encounter.row.battleSetupJson) return fail('battle_not_started', 400)
 
   const startedAt = encounter.row.battleStartedAt
-  const abandoned = now > startedAt + simConfig.timeLimitMs + simConfig.abandonSlackMs
 
   let setup: BattleSetup
   try {
@@ -418,6 +417,8 @@ function finishBattle(userId: number, encounterId: number, inputs: BattleInput[]
   } catch {
     return fail('invalid_battle_setup', 400)
   }
+  // A pausa do "quem vai agora?" para o relógio da luta, não o de parede: há folga para ela.
+  const abandoned = now > startedAt + abandonAfterMs(setup)
 
   const wild = loadWildSpecies(encounter.row.speciesId)
   const team = loadRewardTeamFromSetup(userId, setup)
@@ -854,16 +855,17 @@ function teamForEncounter(
   pokemonIds: number[],
 ): { ok: true; rows: TeamBattleRow[] } | Failure {
   const trainer = row.leaderKey ? trainerByKey(row.leaderKey) : undefined
-  if (trainer && (trainer.kind === 'elite' || trainer.kind === 'champion')) return loadLeagueBattleTeam(userId)
+  if (trainer && (trainer.kind === 'elite' || trainer.kind === 'champion')) return loadLeagueBattleTeam(userId, pokemonIds[0])
   return loadBattleTeam(userId, pokemonIds)
 }
 
 /**
  * Luta da Liga: só quem está na tentativa, com o HP dela (não o do jardim).
  * Desmaiado na tentativa fica de fora até ela acabar. Se ninguém tem HP, a
- * tentativa acaba em derrota.
+ * tentativa acaba em derrota. `leadId` (se estiver vivo na tentativa) abre a
+ * luta; o resto segue a ordem da tentativa.
  */
-function loadLeagueBattleTeam(userId: number): { ok: true; rows: TeamBattleRow[] } | Failure {
+function loadLeagueBattleTeam(userId: number, leadId?: number): { ok: true; rows: TeamBattleRow[] } | Failure {
   const run = activeLeagueRun(userId)
   if (!run) return fail('league_not_active', 400)
   const members = parseLeagueTeam(run.team)
@@ -896,8 +898,9 @@ function loadLeagueBattleTeam(userId: number): { ok: true; rows: TeamBattleRow[]
   if (here.length === 0) return fail('invalid_team', 400)
   const fed = here.filter((member) => (statusOf.get(member.pokemonId)?.hunger ?? 0) >= petConfig.fightMinHunger)
   if (fed.length === 0) return fail('team_hungry', 400)
+  const ordered = [...fed.filter((member) => member.pokemonId === leadId), ...fed.filter((member) => member.pokemonId !== leadId)]
   const team: TeamBattleRow[] = []
-  for (const member of fed) {
+  for (const member of ordered) {
     const mon = byId.get(member.pokemonId)
     if (!mon) return fail('invalid_team', 400)
     const ready = toTeamBattleRow(mon)

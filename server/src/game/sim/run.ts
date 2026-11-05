@@ -11,7 +11,7 @@ import {
   rollCriticalAgainst,
   typeMultiplier,
 } from './damage.js'
-import { battleMaxHp, simConfig } from './config.js'
+import { battleMaxHp, simConfig, timeLimitOf } from './config.js'
 import { autoReactionSeed } from './seeds.js'
 import {
   applyStageChange,
@@ -83,11 +83,12 @@ export function runBattle(options: RunBattleOptions): BattleResult {
   }
 
   const auto = options.inputs === undefined || options.inputs === 'auto'
-  const inputs: BattleInput[] = auto ? [] : validateAndSortInputs(options.inputs as BattleInput[])
+  const limit = timeLimitOf(setup)
+  const inputs: BattleInput[] = auto ? [] : validateAndSortInputs(options.inputs as BattleInput[], limit)
   const untilMs =
     options.untilMs === undefined
       ? null
-      : Math.max(0, Math.min(simConfig.timeLimitMs, Math.floor(options.untilMs)))
+      : Math.max(0, Math.min(limit, Math.floor(options.untilMs)))
 
   const rng = mulberry32(seed)
   const autoRng = mulberry32(autoReactionSeed(seed))
@@ -129,7 +130,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
   let stoppedEarly = false
 
   while (result === null) {
-    if (state.t >= simConfig.timeLimitMs) {
+    if (state.t >= limit) {
       result = 'timeout'
       break
     }
@@ -156,7 +157,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
         break
       }
       state.t = switchAt
-      if (state.t >= simConfig.timeLimitMs) {
+      if (state.t >= limit) {
         result = 'timeout'
         break
       }
@@ -185,7 +186,7 @@ export function runBattle(options: RunBattleOptions): BattleResult {
         break
       }
       state.t = switchAt
-      if (state.t >= simConfig.timeLimitMs) {
+      if (state.t >= limit) {
         result = 'timeout'
         break
       }
@@ -288,14 +289,14 @@ export function runBattle(options: RunBattleOptions): BattleResult {
       break
     }
 
-    const next = nextTime(state, auto, inputs, inputIndex, untilMs)
+    const next = nextTime(state, auto, inputs, inputIndex, untilMs, limit)
     if (next === null) {
       if (untilMs !== null) {
         state.t = untilMs
         stoppedEarly = true
         break
       }
-      state.t = simConfig.timeLimitMs
+      state.t = limit
       result = 'timeout'
       break
     }
@@ -881,8 +882,9 @@ function nextTime(
   inputs: BattleInput[],
   inputIndex: number,
   untilMs: number | null,
+  limit: number,
 ): number | null {
-  const candidates: number[] = [simConfig.timeLimitMs]
+  const candidates: number[] = [limit]
   if (untilMs !== null) candidates.push(untilMs)
 
   if (auto && state.playerActAt !== null) candidates.push(state.playerActAt)
@@ -911,10 +913,10 @@ function pushTick(candidates: number[], side: SideState) {
   if (side.confusionUntil > 0) candidates.push(side.confusionUntil)
 }
 
-function validateAndSortInputs(inputs: BattleInput[]): BattleInput[] {
+function validateAndSortInputs(inputs: BattleInput[], limit: number): BattleInput[] {
   let prev = -1
   for (const input of inputs) {
-    if (!(input.t >= 0) || !Number.isInteger(input.t) || input.t > simConfig.timeLimitMs) {
+    if (!(input.t >= 0) || !Number.isInteger(input.t) || input.t > limit) {
       throw new Error('invalid_input_time')
     }
     if (input.t < prev) throw new Error('inputs_out_of_order')

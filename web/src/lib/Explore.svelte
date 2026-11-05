@@ -47,7 +47,7 @@
   import { play, playCry, warmCries } from './sound'
   import { loadBattleFx } from './fx'
   import { gardenSprite, loadPmdBattle, pmdAnim, showdownSrc } from './sprites'
-  import { simConfig, type BattleInput } from './sim'
+  import { abandonAfterMs, timeLimitOf, type BattleInput } from './sim'
   import GardenCare from './GardenCare.svelte'
   import Modal from './Modal.svelte'
 
@@ -57,6 +57,7 @@
     onState,
     onOpenPc,
     onMapOpen,
+    onFocusView,
   }: {
     game: GameState
     onClose: () => void
@@ -64,6 +65,8 @@
     onOpenPc: () => void
     /** A jornada (mapa ou campo) apareceu (true) ou saiu da tela (false). */
     onMapOpen?: (open: boolean) => void
+    /** Encontro, luta, captura, resultado e treino: a barra de cima some (só o mapa e o jardim a têm). */
+    onFocusView?: (on: boolean) => void
   } = $props()
 
   type Step = 'regions' | 'encounter' | 'fight' | 'decide' | 'highlights' | 'result' | 'practice'
@@ -342,6 +345,11 @@
     if (!prefsBusy) battleAuto = server
   })
 
+  $effect(() => {
+    onFocusView?.(step !== 'regions')
+    return () => onFocusView?.(false)
+  })
+
   // Avisa o PWA: não recarregar no meio da luta ao vivo.
   $effect(() => {
     setLiveFight(step === 'fight')
@@ -365,7 +373,7 @@
   )
   /**
    * Luta da Liga: o servidor usa o time e o HP da tentativa (league_runs), não
-   * o do jardim, e ignora a escolha de quem abre. A tela mostra o mesmo.
+   * o do jardim. Quem abre é o primeiro da lista enviada (se estiver vivo).
    */
   const leagueFight = $derived(encounter?.leader?.kind === 'elite' || encounter?.leader?.kind === 'champion')
   let leagueRun = $state<LeagueState['run']>(null)
@@ -390,10 +398,20 @@
       return mon ? [{ mon, hpRatio: member.hpRatio }] : []
     }),
   )
-  /** Quem abre primeiro; o resto segue a ordem do time. */
+  const leagueCanFight = (member: { mon: OwnedPokemon; hpRatio: number }) =>
+    member.hpRatio > 0 && member.mon.pet.hunger >= game.garden.fightMinHunger
+  const leagueLeadId = $derived(
+    leagueMembers.some((member) => member.mon.id === lead && leagueCanFight(member))
+      ? lead
+      : (leagueMembers.find(leagueCanFight)?.mon.id ?? null),
+  )
+  /** Quem abre primeiro; o resto segue a ordem do time (na Liga, só quem tem HP na tentativa). */
   const chosen = $derived(
     leagueFight
-      ? leagueMembers.filter((member) => member.hpRatio > 0).map((member) => member.mon)
+      ? [
+          ...leagueMembers.filter((member) => member.mon.id === leagueLeadId),
+          ...leagueMembers.filter((member) => member.mon.id !== leagueLeadId && member.hpRatio > 0),
+        ].map((member) => member.mon)
       : [...roster.filter((mon) => mon.id === leadId), ...roster.filter((mon) => mon.id !== leadId)],
   )
 
@@ -457,8 +475,8 @@
     message = ''
     try {
       const members = saved.setup.team.flatMap((fighter) => game.pokemon.filter((mon) => mon.id === fighter.id))
-      const limit = saved.timeLimitMs || simConfig.timeLimitMs
-      const late = clock.now() - startedAt > limit + simConfig.abandonSlackMs
+      // O mesmo critério de abandono do servidor (tempo por Pokémon do treinador e folga das pausas).
+      const late = clock.now() - startedAt > abandonAfterMs(saved.setup)
       if (late) {
         const response = await api(`/api/encounters/${found.id}/battle/finish`, { inputs: saved.inputs })
         if (!response.ok) {
@@ -481,7 +499,7 @@
         })),
       ])
       enterFight(
-        { encounterId: found.id, seed: saved.seed, setup: saved.setup, timeLimitMs: limit },
+        { encounterId: found.id, seed: saved.seed, setup: saved.setup, timeLimitMs: saved.timeLimitMs || timeLimitOf(saved.setup) },
         members,
         saved.inputs,
         // Acelerada (2x), a luta pode ter andado mais que o relógio: retoma do último toque.
@@ -542,6 +560,49 @@
   }
 
   /** Fim do desafio (marco ou derrota): volta ao mapa, na cidade do líder. */
+  /** Começa a Liga: o start já devolve o encontro da 1ª luta (vai direto para ela). */
+  async function startLeagueRun(pokemonIds: number[]): Promise<Response> {
+    const response = await api('/api/league/start', { pokemonIds })
+    if (!response.ok) return response
+    const body = (await response.json()) as { encounter: PendingEncounter }
+    return new Response(JSON.stringify(body.encounter), { status: 201, headers: { 'content-type': 'application/json' } })
+  }
+
+  /** Desistir da Liga (dois toques): encerra a tentativa e este encontro de uma vez. */
+  let quitArmed = $state(false)
+  async function quitLeague() {
+    if (!quitArmed) {
+      quitArmed = true
+      return
+    }
+    quitArmed = false
+    if (!encounter) return
+    pending = true
+    message = ''
+    try {
+      const response = await api('/api/league/abandon', {})
+      if (!response.ok) {
+        message = errorText(await readError(response))
+        return
+      }
+      clearSavedBattle(encounter.id)
+      fightStart = null
+      backToMap()
+    } catch {
+      message = 'Sem conexão com o servidor.'
+    } finally {
+      pending = false
+    }
+  }
+
+  /** Depois de vencer uma luta da Liga: a próxima direto, sem passar pelo mapa. */
+  function nextLeagueFight() {
+    play('tap')
+    result = null
+    fromField = false
+    void search('league', () => api('/api/league/next', {}))
+  }
+
   function backToMap() {
     play('tap')
     encounter = null
@@ -741,6 +802,14 @@
   }
 
   function pickLead(id: number) {
+    if (leagueFight) {
+      // Na Liga vale o HP da tentativa, não o do jardim.
+      const member = leagueMembers.find((entry) => entry.mon.id === id)
+      if (!member || !leagueCanFight(member)) return
+      play('tap')
+      lead = id
+      return
+    }
     const mon = roster.find((row) => row.id === id)
     if (!mon || !canFight(mon)) return
     play('tap')
@@ -1130,6 +1199,10 @@
         fromField = false
         void search('league', () => api('/api/league/next', {}))
       }}
+      onLeagueStart={(pokemonIds) => {
+        fromField = false
+        void search('league', () => startLeagueRun(pokemonIds))
+      }}
       onRivalChallenge={(key) => {
         fromField = false
         void search(key, () => api(`/api/rival/${key}/challenge`, {}))
@@ -1223,12 +1296,11 @@
             {#each encounter.leader.foes as foe, index (index)}
               <li class:ace={foe.ace}>
                 <img src={showdownSrc(foe.speciesId, false)} alt="" />
-                <span>{foe.displayName}</span>
+                <span class="foe-name"><span>{foe.displayName}</span></span>
                 <small>Nv {foe.level}{#if foe.ace} · ás{/if}</small>
               </li>
             {/each}
           </ul>
-          <p class="hint">Quando um Pokémon cai, o próximo entra, dos dois lados. Sem captura.</p>
         </section>
       {:else}
         <section class="panel sheet">
@@ -1237,24 +1309,31 @@
       {/if}
       <section class="panel sheet">
         {#if leagueFight}
-          <!-- Liga: o time e o HP da tentativa; sem máquina, sem escolher quem abre. -->
+          <!-- Liga: o time e o HP da tentativa; sem máquina (não cura dentro da Liga). -->
           <h2>Time da Liga</h2>
           {#if !leagueRun}
             <p class="hint">Carregando a tentativa…</p>
           {:else}
-            <div class="roster">
+            <div class="roster compact">
               {#each leagueMembers as member (member.mon.id)}
                 {@const mon = member.mon}
-                <div class="member" class:out={member.hpRatio <= 0}>
+                {@const on = mon.id === leagueLeadId}
+                <button
+                  type="button"
+                  class="member"
+                  class:on
+                  aria-pressed={on}
+                  disabled={pending || !leagueCanFight(member)}
+                  onclick={() => pickLead(mon.id)}
+                >
                   <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
-                  <small>Nv {mon.level}</small>
-                  {#if member.hpRatio <= 0}<small class="starving">desmaiado · fora até o fim da Liga</small>
-                  {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>
-                  {:else if member.hpRatio < 1}<small class="hurt">ferido · {Math.round(member.hpRatio * 100)}% HP</small>{/if}
-                </div>
+                  <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
+                  {#if member.hpRatio <= 0}<small class="starving">desmaiado</small>
+                  {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome</small>
+                  {:else if member.hpRatio < 1}<small class="hurt">{Math.round(member.hpRatio * 100)}% HP</small>{/if}
+                </button>
               {/each}
             </div>
-            <p class="hint">Sem curar entre as lutas: a máquina e o descanso do jardim não valem na Liga.</p>
             {#if leagueMembers.some((member) => member.mon.pet.hunger < game.garden.fullAt)}
               <button type="button" class="btn feed-team" disabled={pending} onclick={() => (feedOpen = true)}>
                 Alimentar o time
@@ -1262,11 +1341,11 @@
             {/if}
           {/if}
         {:else}
-        <h2>Time {roster.length}/{game.trainer.teamMax} <small class="pick">toque em quem abre</small></h2>
+        <h2>Time {roster.length}/{game.trainer.teamMax}</h2>
         {#if roster.length === 0}
           <p class="hint">Seu time está vazio. Monte o time no PC.</p>
         {:else}
-          <div class="roster">
+          <div class="roster compact">
             {#each roster as mon (mon.id)}
               {@const on = mon.id === leadId}
               {@const faint = faintLabel(mon, clock.now())}
@@ -1280,10 +1359,10 @@
               >
                 <span>{mon.nickname ?? mon.displayName}{#if mon.isShiny} ★{/if}</span>
                 <small>{#if on}<strong class="lead-tag">Abre</strong> · {/if}Nv {mon.level}</small>
-                {#if faint}<small class="starving">{faint}</small>
-                {:else if hpOf(mon) <= 0}<small class="starving">desmaiado · fica fora</small>
-                {:else if hpOf(mon) < 1}<small class="hurt">ferido · {Math.round(hpOf(mon) * 100)}% HP</small>
-                {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome · fica fora</small>{/if}
+                {#if faint}<small class="starving">{faint.replace('desmaiado · ', '')}</small>
+                {:else if hpOf(mon) <= 0}<small class="starving">desmaiado</small>
+                {:else if hpOf(mon) < 1}<small class="hurt">{Math.round(hpOf(mon) * 100)}% HP</small>
+                {:else if mon.pet.hunger < game.garden.fightMinHunger}<small class="starving">com fome</small>{/if}
               </button>
             {/each}
           </div>
@@ -1323,7 +1402,13 @@
           <strong>Luta automática</strong>
           <small>{battleAuto ? 'Ligada' : 'Desligada'}</small>
         </button>
-        <button type="button" class="btn" disabled={pending} onclick={flee}>{encounter.leader ? 'Desistir' : 'Fugir'}</button>
+        {#if leagueFight}
+          <button type="button" class="btn" class:armed={quitArmed} disabled={pending} onclick={() => void quitLeague()}>
+            {quitArmed ? 'Desistir mesmo?' : 'Desistir da Liga'}
+          </button>
+        {:else}
+          <button type="button" class="btn" disabled={pending} onclick={flee}>{encounter.leader ? 'Desistir' : 'Fugir'}</button>
+        {/if}
       </div>
       <button
         type="button"
@@ -1610,7 +1695,7 @@
               {#each encounter.leader.foes as foe, index (index)}
                 <li class:ace={foe.ace} class:beaten={result.battle.won}>
                   <img src={showdownSrc(foe.speciesId, false)} alt="" />
-                  <span>{foe.displayName}</span>
+                  <span class="foe-name"><span>{foe.displayName}</span></span>
                   <small>Nv {foe.level}</small>
                 </li>
               {/each}
@@ -1626,7 +1711,12 @@
       </section>
     </div>
     <div class="dock">
-      {#if encounter?.leader}
+      {#if result.kind === 'battle' && result.battle.won && result.battle.opponent?.kind === 'trainer' && result.battle.opponent.league?.status === 'active'}
+        <button type="button" class="btn btn-primary" disabled={pending} onclick={nextLeagueFight}>
+          Próxima luta · {result.battle.opponent.league.nextName}
+        </button>
+        <button type="button" class="btn-link" onclick={backToMap}>Voltar ao mapa</button>
+      {:else if encounter?.leader}
         <button type="button" class="btn btn-primary" onclick={backToMap}>Voltar ao mapa</button>
       {:else if fromField}
         <button type="button" class="btn btn-primary" onclick={backToField}>Voltar ao campo</button>
@@ -1685,7 +1775,8 @@
 
   .foe-team {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    /* Até 6 numa linha no celular (360 px). */
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
     gap: 0.4rem;
     margin: 0;
     padding: 0;
@@ -1695,6 +1786,10 @@
   .foe-team li {
     display: grid;
     justify-items: center;
+    align-content: start;
+    /* Sem isto o nome longo (Hitmonchan) alarga o card além da coluna. */
+    min-width: 0;
+    overflow: hidden;
     padding: 0.25rem;
     border: 2px solid var(--panel-edge);
     background: var(--inlay-face);
@@ -1706,19 +1801,57 @@
   }
 
   .foe-team img {
-    width: 56px;
-    height: 56px;
+    width: 40px;
+    max-width: 100%;
+    height: 40px;
     object-fit: contain;
     image-rendering: pixelated;
   }
 
-  .foe-team span {
-    font-size: 0.8rem;
+  /*
+   * Nome numa linha só. Se não couber no card, desliza até o fim e volta, sem
+   * parar: o deslocamento é a sobra (largura do card − largura do nome), e
+   * nome que cabe fica parado (a sobra vira 0).
+   */
+  .foe-name {
+    container-type: inline-size;
+    width: 100%;
+    overflow: hidden;
+    font-size: 0.66rem;
     font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .foe-name > span {
+    display: inline-block;
+    animation: foe-name-shift 4s ease-in-out infinite alternate;
+  }
+
+  @keyframes foe-name-shift {
+    0%,
+    20% {
+      transform: translateX(0);
+    }
+    80%,
+    100% {
+      transform: translateX(min(0px, calc(100cqw - 100%)));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .foe-name > span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      animation: none;
+    }
   }
 
   .foe-team small {
-    font-size: 0.7rem;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0.6rem;
+    white-space: nowrap;
   }
 
   /* Na tela final, depois da vitória: o time do líder derrubado. */
@@ -2154,12 +2287,6 @@
     transform: scaleY(2.5);
   }
 
-  .pick {
-    font-size: 0.85rem;
-    font-weight: 600;
-    opacity: 0.75;
-  }
-
   .pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2196,6 +2323,34 @@
     gap: 0.4rem;
   }
 
+  /* Tela do encontro sem rolagem: o time em 2 colunas, cada um em duas linhas. */
+  .roster.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+  }
+
+  .roster.compact .member {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    min-height: 44px;
+    padding: 0.15rem 0.45rem;
+    text-align: left;
+  }
+
+  .roster.compact .member > span {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0.85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .roster.compact .member small {
+    font-size: 0.7rem;
+  }
+
   .starving {
     color: #c0392b;
     font-weight: 700;
@@ -2204,6 +2359,12 @@
   .hurt {
     color: #b86a1c;
     font-weight: 700;
+  }
+
+  /* "Desistir mesmo?": o segundo toque confirma. */
+  .btn.armed {
+    border-color: #a03028;
+    background: #f8d0c8;
   }
 
   .feed-team {
@@ -2242,8 +2403,7 @@
       inset 0 -2px 0 var(--selected);
   }
 
-  .member:disabled,
-  .member.out {
+  .member:disabled {
     filter: grayscale(1) opacity(0.6);
     cursor: default;
   }

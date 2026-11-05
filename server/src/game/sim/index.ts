@@ -1,4 +1,4 @@
-export { simConfig, isFinishTooEarly } from './config.js'
+export { simConfig, isFinishTooEarly, timeLimitOf, abandonAfterMs } from './config.js'
 export { runBattle, type RunBattleOptions } from './run.js'
 export { mulberry32 } from '../mulberry32.js'
 export {

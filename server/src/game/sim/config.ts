@@ -74,8 +74,21 @@ export const simConfig = {
   /** Cooldown após troca manual (ms). */
   switchCooldownMs: 2500,
 
-  /** Tempo limite da luta (ms). */
+  /** Tempo limite da luta (ms) contra um Pokémon só (selvagem). */
   timeLimitMs: 60_000,
+
+  /**
+   * Treinador: cada Pokémon dele além do primeiro dá este tempo a mais
+   * (líder de 4 = 150 s; Elite de 5 = 180 s; campeão de 6 = 210 s).
+   */
+  timeLimitPerExtraFoeMs: 30_000,
+
+  /**
+   * Pausa do "quem vai agora?" (desmaio no manual): o relógio da luta para,
+   * o de parede não. Cada Pokémon do time além do primeiro dá esta folga ao
+   * conferir abandono no servidor.
+   */
+  sendPauseSlackMs: 60_000,
 
   /**
    * Multiplicador só do HP de luta (não altera os atributos guardados).
@@ -184,4 +197,16 @@ export function bandValue(
 /** HP máximo de luta a partir do stat de HP (o mesmo número da luta e da ficha). */
 export function battleMaxHp(statHp: number): number {
   return Math.max(1, Math.floor(statHp * simConfig.battleHpMultiplier))
+}
+
+/** Tempo limite desta luta: 60 s, mais 30 s por Pokémon a mais do treinador. */
+export function timeLimitOf(setup: { foes?: readonly unknown[] }): number {
+  const extra = Math.max(0, (setup.foes?.length ?? 1) - 1)
+  return simConfig.timeLimitMs + extra * simConfig.timeLimitPerExtraFoeMs
+}
+
+/** Até quando (ms desde o start, relógio de parede) o finish ainda não é abandono. */
+export function abandonAfterMs(setup: { foes?: readonly unknown[]; team: readonly unknown[] }): number {
+  const pauses = Math.max(0, setup.team.length - 1) * simConfig.sendPauseSlackMs
+  return timeLimitOf(setup) + pauses + simConfig.abandonSlackMs
 }

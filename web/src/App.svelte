@@ -44,6 +44,8 @@
   let offline = $state(false)
   /** A jornada (mapa ou campo) está na tela: a barra do topo some. */
   let mapOpen = $state(false)
+  /** Exploração fora do mapa (encontro, luta, captura, resultado): a barra de cima some. */
+  let exploreFocus = $state(false)
   let screen = $state<'meadow' | 'explore' | 'daycare' | 'bag' | 'pc'>('meadow')
   /** De onde o PC foi aberto (Voltar volta para lá). */
   let pcReturn = $state<'meadow' | 'explore'>('meadow')
@@ -440,7 +442,7 @@
       <p class="offline-banner" role="status">Sem conexão · tentando de novo</p>
     {/if}
     <!-- Na jornada (mapa ou campo), a barra some e a tela fica para eles. -->
-    {#if !(screen === 'explore' && mapOpen)}
+    {#if !(screen === 'explore' && (mapOpen || exploreFocus))}
     <header class="panel hud">
       <div class="hud-trainer">
         <div class="level-wrap" aria-label="Nível de treinador {game.trainer.level}">
@@ -573,6 +575,7 @@
             onState={loadState}
             onOpenPc={() => openPc('explore')}
             onMapOpen={(open) => (mapOpen = open)}
+            onFocusView={(on) => (exploreFocus = on)}
           />
         {:else if screen === 'pc'}
           <PcBox {game} onClose={() => (screen = pcReturn)} onState={loadState} />

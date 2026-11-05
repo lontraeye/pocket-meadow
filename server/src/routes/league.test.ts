@@ -66,6 +66,19 @@ function openLeague(userId: number) {
   sql().prepare(`update trainers set current_place = 'indigo-plateau' where user_id = ?`).run(userId)
 }
 
+/**
+ * Começa a tentativa e dispensa o encontro da 1ª luta que o start já abre:
+ * os testes abaixo seguem pelo /league/next, como entre as lutas.
+ */
+async function startRun(cookie: string, pokemonIds: number[]) {
+  const response = await post('/league/start', cookie, { pokemonIds })
+  const body = (await response.json()) as { encounter?: { id: number } }
+  if (response.ok && body.encounter) {
+    assert.equal((await post(`/encounters/${body.encounter.id}/flee`, cookie)).status, 200)
+  }
+  return { status: response.status, body }
+}
+
 function teamJson(userId: number) {
   return JSON.parse(
     (sql().prepare(`select team from league_runs where user_id = ? and status = 'active'`).get(userId) as { team: string }).team,
@@ -91,7 +104,7 @@ test('o HP da tentativa passa para a luta seguinte e a máquina não mexe nele',
   const p = player('league-hp')
   openLeague(p.userId)
   sql().prepare('update pokemon set hp_ratio = 0.4, level = 100, species_id = 150 where id = ?').run(p.starterId)
-  const started = await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })
+  const started = await startRun(p.cookie, [p.starterId])
   assert.equal(started.status, 201)
   assert.equal(teamJson(p.userId)[0]!.hpRatio, 0.4)
 
@@ -115,7 +128,7 @@ test('derrota zera a tentativa; desmaiado no começo da próxima também', async
   const p = player('league-loss')
   openLeague(p.userId)
   sql().prepare('update pokemon set level = 1 where id = ?').run(p.starterId)
-  assert.equal((await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).status, 201)
+  assert.equal((await startRun(p.cookie, [p.starterId])).status, 201)
   const next = await post('/league/next', p.cookie)
   const encounter = (await next.json()) as { id: number }
   const battle = await post(`/encounters/${encounter.id}/battle`, p.cookie, { pokemonIds: [p.starterId] })
@@ -126,7 +139,7 @@ test('derrota zera a tentativa; desmaiado no começo da próxima também', async
   assert.equal(view.run, null)
 
   sql().prepare('update pokemon set hp_ratio = 1, fainted_at = null, hunger = 100 where id = ?').run(p.starterId)
-  assert.equal((await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).status, 201)
+  assert.equal((await startRun(p.cookie, [p.starterId])).status, 201)
   sql().prepare(`update league_runs set team = ? where user_id = ? and status = 'active'`).run(
     JSON.stringify([{ pokemonId: p.starterId, hpRatio: 0 }]),
     p.userId,
@@ -147,7 +160,7 @@ test('a quinta vitória dá o marco, abre o capítulo 10 e o prêmio só na prim
        where id = ?`,
     )
     .run(p.starterId)
-  assert.equal((await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).status, 201)
+  assert.equal((await startRun(p.cookie, [p.starterId])).status, 201)
 
   type LeagueBattle = {
     won: boolean
@@ -264,4 +277,47 @@ test('revanche: o prêmio vem uma vez por semana, sem mexer no marco', async () 
   assert.equal(itemQty(p.userId, ultra.itemKey), ultra.quantity * 2)
   const milestones = sql().prepare(`select count(*) as n from trainer_milestones where user_id = ? and milestone_key = 'league'`).get(p.userId) as { n: number }
   assert.equal(milestones.n, 1)
+})
+
+test('na Liga, o primeiro da lista enviada abre a luta (se estiver vivo na tentativa)', async () => {
+  const p = player('league-lead')
+  openLeague(p.userId)
+  const second = sql()
+    .prepare(
+      `insert into pokemon (user_id, species_id, level, team_slot, caught_at, caught_ball, original_species_id,
+        iv_hp, iv_attack, iv_defense, iv_sp_attack, iv_sp_defense, iv_speed, nature, ability_slot, fast_move, charged_move)
+       select user_id, 150, 50, 1, caught_at, caught_ball, 150, 31, 31, 31, 31, 31, 31, 'modest', ability_slot, 'confusion', 'psychic'
+       from pokemon where id = ?`,
+    )
+    .run(p.starterId).lastInsertRowid as number
+  assert.equal((await startRun(p.cookie, [p.starterId, second])).status, 201)
+  const encounter = (await (await post('/league/next', p.cookie)).json()) as { id: number }
+  const start = (await (await post(`/encounters/${encounter.id}/battle/start`, p.cookie, { pokemonIds: [second, p.starterId] })).json()) as {
+    setup: { team: { id: number }[]; foes: unknown[] }
+    timeLimitMs: number
+  }
+  assert.deepEqual(start.setup.team.map((fighter) => fighter.id), [second, p.starterId])
+  // Elite de 5: 60 s + 4 × 30 s.
+  assert.equal(start.timeLimitMs, 180_000)
+})
+
+test('começar já abre a 1ª luta, e desistir fecha a Liga e esse encontro de uma vez', async () => {
+  const p = player('league-flow')
+  openLeague(p.userId)
+  const started = await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })
+  assert.equal(started.status, 201)
+  const body = (await started.json()) as { run: { stage: number } | null; encounter: { id: number; leader: { key: string } } }
+  assert.equal(body.run?.stage, 0)
+  assert.equal(body.encounter.leader.key, 'league-1')
+
+  assert.equal((await post('/league/abandon', p.cookie)).status, 200)
+  const encounter = sql().prepare('select status from encounters where id = ?').get(body.encounter.id) as { status: string }
+  assert.equal(encounter.status, 'fled')
+  const view = (await (await get('/league', p.cookie)).json()) as { run: unknown }
+  assert.equal(view.run, null)
+
+  // Com a luta já começada, desistir espera a luta acabar.
+  const again = (await (await post('/league/start', p.cookie, { pokemonIds: [p.starterId] })).json()) as { encounter: { id: number } }
+  assert.equal((await post(`/encounters/${again.encounter.id}/battle/start`, p.cookie, { pokemonIds: [p.starterId] })).status, 200)
+  assert.equal(await errorOf(await post('/league/abandon', p.cookie)), 'battle_in_progress')
 })

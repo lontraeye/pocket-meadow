@@ -240,6 +240,8 @@ export type BattleOutcome = {
 export type LeagueState = {
   champion: boolean
   wins: number
+  /** Cargas da melhor máquina de cura do jardim; null = nenhuma colocada. */
+  healCharges: number | null
   /** A próxima tentativa (ou a atual) é a revanche do pós-jogo. */
   rematch: boolean
   /** Campeão: o prêmio semanal da revanche e se já saiu nesta semana. */
@@ -865,6 +867,14 @@ export function errorText(error: ApiError): string {
       return 'Não há uma tentativa da Liga.'
     case 'league_lost':
       return 'Todos desmaiaram. A tentativa acabou.'
+    case 'battle_in_progress':
+      return 'A luta já começou: termine a luta antes de desistir.'
+    case 'rival_cleared':
+      return 'Você já venceu o rival aqui.'
+    case 'rival_locked':
+      return 'Essa luta do rival ainda não abriu.'
+    case 'rival_not_here':
+      return 'O rival não está neste lugar.'
     case 'milestone_cleared':
       return 'Esse marco já é seu.'
     case 'milestone_locked':

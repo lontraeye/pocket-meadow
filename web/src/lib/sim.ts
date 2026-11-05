@@ -2,6 +2,8 @@
 export {
   runBattle,
   simConfig,
+  timeLimitOf,
+  abandonAfterMs,
   battleRngSeed,
   autoReactionSeed,
   mulberry32,

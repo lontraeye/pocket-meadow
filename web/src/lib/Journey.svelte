@@ -26,6 +26,7 @@
     onUseSpot,
     onChallenge,
     onLeagueNext,
+    onLeagueStart,
     onRivalChallenge,
     onGarden,
     onOpenPc,
@@ -51,6 +52,8 @@
     onChallenge: (milestoneKey: string) => void
     /** Abre a próxima luta da tentativa da Liga. */
     onLeagueNext: () => void
+    /** Começa a Liga com estes Pokémon e já abre a 1ª luta. */
+    onLeagueStart: (pokemonIds: number[]) => void
     /** Desafia o rival que está no lugar atual. */
     onRivalChallenge: (key: string) => void
     onGarden: () => void
@@ -73,7 +76,8 @@
   let leaguePick = $state(false)
   let leagueChosen = $state<number[]>([])
   let leagueBusy = $state(false)
-  let abandonArmed = $state(false)
+  /** Página da lista de treinadores da Liga (um por vez). */
+  let leaguePage = $state(0)
   let failed = $state(false)
   let traveling = $state(false)
   let message = $state('')
@@ -229,7 +233,6 @@
     const response = await api('/api/league')
     if (!response.ok) return
     league = (await response.json()) as LeagueState
-    abandonArmed = false
   }
 
   function openLeaguePick() {
@@ -243,40 +246,29 @@
     leagueChosen = leagueChosen.includes(id) ? leagueChosen.filter((entry) => entry !== id) : [...leagueChosen, id]
   }
 
-  async function startLeague() {
+  /** Começa e já vai para a 1ª luta (a exploração abre o encontro). */
+  function startLeague() {
     if (leagueBusy || leagueChosen.length === 0) return
-    leagueBusy = true
     message = ''
-    try {
-      const response = await api('/api/league/start', { pokemonIds: leagueChosen })
-      if (!response.ok) {
-        message = errorText((await response.json()) as ApiError)
-        return
-      }
-      league = (await response.json()) as LeagueState
-      leaguePick = false
-    } catch {
-      message = 'Sem conexão com o servidor.'
-    } finally {
-      leagueBusy = false
-    }
+    leaguePick = false
+    onLeagueStart(leagueChosen)
   }
 
-  async function abandonLeague() {
-    if (!abandonArmed) {
-      abandonArmed = true
-      return
-    }
-    abandonArmed = false
+  /** Cura o time na máquina antes de começar a Liga (o HP entra na tentativa). */
+  async function healBeforeLeague() {
+    if (leagueBusy) return
     leagueBusy = true
     message = ''
     try {
-      const response = await api('/api/league/abandon', {})
+      const response = await api('/api/garden/heal-machine/use', {})
       if (!response.ok) {
         message = errorText((await response.json()) as ApiError)
         return
       }
+      play('tap')
       await loadLeague()
+      leaguePick = true
+      leagueChosen = (league?.roster ?? []).filter((mon) => !mon.fainted && !mon.hungry).map((mon) => mon.pokemonId)
     } catch {
       message = 'Sem conexão com o servidor.'
     } finally {
@@ -481,57 +473,59 @@
     {#if !league}
       <p class="hint">Carregando a Liga…</p>
     {:else if league.run && !leaguePick}
+      <!-- Tentativa aberta: o time, o HP e o desistir ficam na tela da luta. -->
       <p class="league-step">Luta {league.run.stage + 1} de {league.trainers.length} · {league.run.trainerName}</p>
-      <ul class="league-hp">
-        {#each league.run.team as mon (mon.pokemonId)}
-          <li>
-            <span>{mon.name}</span>
-            <small>{mon.hpRatio <= 0 ? 'desmaiado' : `${Math.round(mon.hpRatio * 100)}%`}</small>
-            <div class="bar" aria-hidden="true"><span style:width="{Math.max(0, Math.round(mon.hpRatio * 100))}%"></span></div>
-          </li>
-        {/each}
-      </ul>
-      <div class="league-actions">
-        <button type="button" class="btn btn-primary" disabled={leagueBusy || pending || hasEncounter} onclick={onLeagueNext}>
-          Próxima luta
-        </button>
-        <button
-          type="button"
-          class="btn"
-          class:armed={abandonArmed}
-          disabled={leagueBusy}
-          onclick={() => void abandonLeague()}
-        >
-          {abandonArmed ? 'Desistir?' : 'Desistir'}
-        </button>
-      </div>
+      <button type="button" class="btn btn-primary" disabled={leagueBusy || pending || hasEncounter} onclick={onLeagueNext}>
+        Continuar a Liga
+      </button>
     {:else if leaguePick}
-      <p class="hint">Sem curar entre as lutas; cure antes no jardim.</p>
-      <ul class="league-pick">
+      <p class="hint">Sem curar entre as lutas: cure antes de começar.</p>
+      {#if league.healCharges !== null && league.roster.some((mon) => mon.fainted || mon.hpRatio < 1)}
+        <!-- A máquina do jardim com mais cargas (o servidor escolhe a mesma). -->
+        <button type="button" class="btn" disabled={leagueBusy || league.healCharges < 1} onclick={() => void healBeforeLeague()}>
+          Curar na máquina ({league.healCharges} carga{league.healCharges === 1 ? '' : 's'})
+        </button>
+      {/if}
+      <ul class="league-grid" aria-label="Quem vai para a Liga">
         {#each league.roster as mon (mon.pokemonId)}
+          {@const on = leagueChosen.includes(mon.pokemonId)}
           <li>
-            <label>
-              <input
-                type="checkbox"
-                checked={leagueChosen.includes(mon.pokemonId)}
-                disabled={mon.fainted || mon.hungry || leagueBusy}
-                onchange={() => toggleLeague(mon.pokemonId)}
-              />
-              <span>{mon.name} Nv {mon.level}</span>
-              <small>{mon.fainted ? 'desmaiado' : mon.hungry ? 'com fome' : `${Math.round(mon.hpRatio * 100)}%`}</small>
-            </label>
+            <button
+              type="button"
+              class="league-mon pick"
+              class:on
+              aria-pressed={on}
+              disabled={mon.fainted || mon.hungry || leagueBusy}
+              onclick={() => toggleLeague(mon.pokemonId)}
+            >
+              <span class="name">{on ? '✓ ' : ''}{mon.name}</span>
+              <small>Nv {mon.level} · {mon.fainted ? 'desmaiado' : mon.hungry ? 'com fome' : `${Math.round(mon.hpRatio * 100)}% HP`}</small>
+            </button>
           </li>
         {/each}
       </ul>
       <div class="league-actions">
-        <button type="button" class="btn btn-primary" disabled={leagueBusy || leagueChosen.length === 0} onclick={() => void startLeague()}>
+        <button type="button" class="btn btn-primary" disabled={leagueBusy || leagueChosen.length === 0} onclick={startLeague}>
           Começar
         </button>
         <button type="button" class="btn" disabled={leagueBusy} onclick={() => (leaguePick = false)}>Voltar</button>
       </div>
     {:else}
-      {#each league.trainers as trainer (trainer.key)}
-        <p class="league-step">{trainer.name}</p>
+      {@const page = Math.min(leaguePage, league.trainers.length - 1)}
+      {@const trainer = league.trainers[page]}
+      <!-- Um treinador por página: cabe no celular sem rolar. -->
+      <div class="league-pager">
+        <button type="button" class="btn pager" aria-label="Anterior" disabled={page === 0} onclick={() => (leaguePage = page - 1)}>‹</button>
+        <p class="league-step">{trainer?.name} <small>{page + 1}/{league.trainers.length}</small></p>
+        <button
+          type="button"
+          class="btn pager"
+          aria-label="Próximo"
+          disabled={page >= league.trainers.length - 1}
+          onclick={() => (leaguePage = page + 1)}
+        >›</button>
+      </div>
+      {#if trainer}
         <ul class="leader-team" aria-label="Time de {trainer.name}">
           {#each trainer.foes as foe, index (index)}
             <li class:ace={foe.ace} title="{foe.displayName} Nv {foe.level}{foe.ace ? ' · ás' : ''}">
@@ -540,7 +534,7 @@
             </li>
           {/each}
         </ul>
-      {/each}
+      {/if}
       {#if league.rematchReward}
         <p class="hint">
           Revanche: times mais fortes, sem curar entre as lutas.
@@ -569,9 +563,7 @@
           <span class="goal-name">{mark.name} · {mark.typeLabel}</span>
         </p>
         <div class="bar" aria-hidden="true"><span style:width="{goalPct}%"></span></div>
-        {#if mark.key === 'league' && mark.here}
-          {@render leagueCard()}
-        {:else if mark.leader}
+        {#if mark.leader}
           <!-- O time do líder: cada um é uma luta; o ás vem por último. -->
           <ul class="leader-team" aria-label="Time do {mark.leader.name}">
             {#each mark.leader.foes as foe, index (index)}
@@ -584,17 +576,9 @@
         {/if}
         <div class="goal-meta">
           <span class="goal-level" title="Espécies do capítulo capturadas">Espécies {goal?.caught ?? 0}/{goal?.total ?? 0}</span>
-          {#if mark.key === 'league' && mark.here}
-            <!-- Os botões da Liga ficam no cartão. -->
-          {:else if mark.ready && mark.here}
-            <button
-              type="button"
-              class="btn btn-primary challenge"
-              disabled={claiming || pending || hasEncounter}
-              onclick={() => (mark.leader ? onChallenge(mark.key) : void claim())}
-            >
-              {claiming ? '…' : 'Desafiar'}
-            </button>
+          {#if mark.ready && mark.here}
+            <!-- O desafio fica no painel do lugar, junto do PC. -->
+            <span class="goal-here">Você está aqui</span>
           {:else if mark.ready}
             <button type="button" class="btn go" onclick={() => select(mark.town)}>Vá até {mark.townName}</button>
           {/if}
@@ -669,9 +653,35 @@
 
         {#if isHere}
           <p class="blurb">{selected.blurb}</p>
-          {#if league?.champion && selected.slug === 'indigo-plateau'}
+          {#if mark?.key === 'league' && mark.here}
+            <!-- A Liga: o cartão inteiro (tentativa, escolha do time, cura). -->
+            {@render leagueCard()}
+          {:else if league?.champion && selected.slug === 'indigo-plateau'}
             <!-- Pós-jogo: a Liga continua aqui como revanche. -->
             {@render leagueCard()}
+          {:else if mark?.ready && mark.here}
+            <!-- O desafio do marco desta cidade fica aqui, com o PC. -->
+            <div class="challenge-box">
+              <p class="rival-title"><strong>{mark.leader?.name ?? mark.name}</strong> · {mark.typeLabel}</p>
+              {#if mark.leader}
+                <ul class="leader-team" aria-label="Time do {mark.leader.name}">
+                  {#each mark.leader.foes as foe, index (index)}
+                    <li class:ace={foe.ace} title="Nv {foe.level}{foe.ace ? ' · ás' : ''}">
+                      <img src={showdownSrc(foe.speciesId, false)} alt="" loading="lazy" />
+                      <small>Nv {foe.level}</small>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              <button
+                type="button"
+                class="btn btn-primary"
+                disabled={claiming || pending || hasEncounter}
+                onclick={() => (mark.leader ? onChallenge(mark.key) : void claim())}
+              >
+                {claiming ? '…' : mark.leader ? `Desafiar o ${mark.leader.name}` : 'Desafiar'}
+              </button>
+            </div>
           {/if}
           {#if data.here.rival}
             {@const rival = data.here.rival}
@@ -1312,6 +1322,12 @@
     margin: auto;
   }
 
+  .goal-here {
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .challenge-box,
   .rival {
     display: flex;
     flex-direction: column;
@@ -1327,12 +1343,14 @@
     font-size: 0.78rem;
   }
 
-  .rival .leader-team {
-    flex-wrap: wrap;
-  }
-
+  .challenge-box .btn,
   .rival .btn {
     min-height: 44px;
+  }
+
+  .challenge-box .leader-team,
+  .rival .leader-team {
+    flex-wrap: wrap;
   }
 
   .leader-team {
@@ -1347,6 +1365,7 @@
     display: grid;
     justify-items: center;
     width: 40px;
+    overflow: hidden;
     border: 2px solid var(--panel-edge);
     background: var(--inlay-face);
   }
@@ -1371,9 +1390,78 @@
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    max-height: min(58vh, 420px);
-    overflow: auto;
     min-width: 0;
+  }
+
+  /* Sem rolagem: treinadores em páginas, time em grade de 2 colunas. */
+  .league-pager {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .league-pager .league-step {
+    text-align: center;
+  }
+
+  .league-pager .btn.pager {
+    min-height: 40px;
+    padding: 0;
+    font-size: 1.2rem;
+  }
+
+  .league-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .league-mon {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.25rem 0.4rem;
+    border: 2px solid var(--panel-edge);
+    background: var(--inlay-face);
+    font: inherit;
+    text-align: left;
+    color: inherit;
+  }
+
+  .league-mon .name {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .league-mon small {
+    font-size: 0.68rem;
+  }
+
+  .league-mon.pick {
+    cursor: pointer;
+  }
+
+  .league-mon.on {
+    border-color: var(--selected);
+    background: var(--selected-face);
+  }
+
+  .league-mon.down,
+  .league-mon:disabled {
+    filter: grayscale(1) opacity(0.6);
+    cursor: default;
   }
 
   .league-step {
@@ -1386,29 +1474,6 @@
     flex-wrap: wrap;
   }
 
-  .league-hp,
-  .league-pick {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .league-hp li,
-  .league-pick label {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.15rem 0.4rem;
-    align-items: center;
-    font-size: 0.78rem;
-  }
-
-  .league-hp .bar {
-    grid-column: 1 / -1;
-  }
-
   .league-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1418,11 +1483,6 @@
   .league-actions .btn {
     flex: 1 1 8rem;
     min-height: 44px;
-  }
-
-  .league-actions .btn.armed {
-    border-color: #a03028;
-    background: #f8d0c8;
   }
 
   .complete {

@@ -19,9 +19,11 @@ import {
   rematchRewardTaken,
   type LeagueMember,
 } from '../db/league.js'
+import { healMachinesView } from '../db/healMachine.js'
 import { loadProgress } from '../db/milestones.js'
 import { encounters, leagueRuns, pokemon, species } from '../db/schema.js'
 import { clampRatio } from '../game/heal.js'
+import { trainerByKey } from '../config/trainers.js'
 import { createTrainerEncounter } from './encounters.js'
 import { fail } from './http.js'
 import { currentPlaceOf } from './places.js'
@@ -129,6 +131,8 @@ function leagueView(userId: number, now: number) {
   return {
     champion,
     wins,
+    /** Cargas da máquina de cura colocada com mais cargas; null = nenhuma no jardim. Cura antes de começar. */
+    healCharges: bestHealCharges(userId, now),
     /** Pós-jogo: a próxima tentativa é revanche (times +nível, prêmio semanal). */
     rematch: run ? run.rematch : champion,
     rematchReward: champion
@@ -173,6 +177,11 @@ function leagueView(userId: number, now: number) {
       hungry: mon.hunger < petConfig.fightMinHunger,
     })),
   }
+}
+
+function bestHealCharges(userId: number, now: number): number | null {
+  const placed = healMachinesView(userId, now).filter((machine) => machine.placed)
+  return placed.length === 0 ? null : Math.max(...placed.map((machine) => machine.charges))
 }
 
 function speciesNames(ids: number[]): Map<number, string> {
@@ -222,7 +231,10 @@ function startLeague(userId: number, pokemonIds: number[], now: number) {
   }
   // Já campeão: a tentativa é a revanche.
   insertLeagueRun(userId, members, now, progress.cleared.has('league'))
-  return { ok: true as const, view: leagueView(userId, now) }
+  // Começar já abre a primeira luta: um toque a menos (escolher o time → luta).
+  const first = nextLeagueFight(userId, now)
+  if (!first.ok) return first
+  return { ok: true as const, view: { ...leagueView(userId, now), encounter: first.encounter } }
 }
 
 function nextLeagueFight(userId: number, now: number) {
@@ -240,10 +252,29 @@ function nextLeagueFight(userId: number, now: number) {
   return { ok: true as const, encounter: createTrainerEncounter(userId, trainer, 'indigo-plateau', now) }
 }
 
+/**
+ * Desistir encerra a Liga inteira de uma vez: o encontro da etapa (se ainda
+ * não começou a luta) é fechado junto. Luta em andamento termina na luta.
+ */
 function abandonLeague(userId: number, now: number) {
   persistCatchUp(userId, now)
   if (!activeLeagueRun(userId)) return fail('league_not_active', 400)
-  if (pendingEncounter(userId)) return fail('encounter_pending', 409)
+  const pending = getDb()
+    .select({ id: encounters.id, leaderKey: encounters.leaderKey, battleStartedAt: encounters.battleStartedAt })
+    .from(encounters)
+    .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
+    .get()
+  if (pending) {
+    const trainer = pending.leaderKey ? trainerByKey(pending.leaderKey) : undefined
+    const isLeague = trainer?.kind === 'elite' || trainer?.kind === 'champion'
+    if (!isLeague) return fail('encounter_pending', 409)
+    if (pending.battleStartedAt !== null) return fail('battle_in_progress', 409)
+    getDb()
+      .update(encounters)
+      .set({ status: 'fled', resolvedAt: now })
+      .where(and(eq(encounters.id, pending.id), eq(encounters.status, 'pending')))
+      .run()
+  }
   if (!abandonLeagueRun(userId, now)) return fail('league_not_active', 400)
   return { ok: true as const }
 }
