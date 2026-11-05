@@ -208,7 +208,15 @@ export type BattleOutcome = {
   /** Contra quem foi a luta; ausente em resposta antiga = selvagem (ver battleFlow.ts). */
   opponent?:
     | { kind: 'wild' }
-    | { kind: 'leader'; name: string; cleared: { key: string; name: string; opens: number; grants: string[] } | null }
+    | {
+        kind: 'trainer'
+        trainerKind: 'leader' | 'elite' | 'champion' | 'rival'
+        name: string
+        /** Líder: o marco, se a vitória o deu. Liga e rival preenchem os seus nas partes seguintes. */
+        cleared: { key: string; name: string; opens: number; grants: string[] } | null
+        league: null
+        rival: null
+      }
 }
 
 /** Resposta de POST /encounters/:id/throw. */

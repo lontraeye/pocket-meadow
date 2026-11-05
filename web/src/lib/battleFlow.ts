@@ -29,7 +29,7 @@ export function recapIntro(battle: BattleOutcome, encounter: Pick<PendingEncount
 /** Linhas do resumo depois do XP: o prêmio do treinador vencido (marco, ferramentas). */
 export function prizeLines(battle: BattleOutcome): string[] {
   const opponent = opponentOf(battle)
-  if (!battle.won || opponent.kind !== 'leader' || !opponent.cleared) return []
+  if (!battle.won || opponent.kind !== 'trainer' || opponent.trainerKind !== 'leader' || !opponent.cleared) return []
   const lines = [`Conquistou o ${opponent.cleared.name}!`]
   if (opponent.cleared.grants.length > 0) lines.push(`Agora você tem: ${opponent.cleared.grants.join(', ')}.`)
   return lines
@@ -43,7 +43,7 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
       ? { id: 'lost', title: 'Derrota', detail: 'Seus Pokémon não se machucaram.', tone: 'bad' }
       : { id: 'lost', title: 'Derrota', detail: `Treine o time e desafie o ${opponent.name} de novo.`, tone: 'bad' }
   }
-  if (opponent.kind === 'leader') {
+  if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
     if (!opponent.cleared) return { id: 'defeated', title: `Venceu o ${opponent.name}`, tone: 'good' }
     const grants = opponent.cleared.grants.length > 0 ? ` · Ganhou: ${opponent.cleared.grants.join(', ')}` : ''
     return {
@@ -53,6 +53,9 @@ export function outcomeCard(battle: BattleOutcome): HighlightCard | null {
       tone: 'good',
       sound: 'levelup',
     }
+  }
+  if (opponent.kind === 'trainer') {
+    return { id: 'defeated', title: `Venceu o ${opponent.name}`, tone: 'good' }
   }
   if (battle.caught) return { id: 'caught', title: 'Capturado!', detail: 'Entrou no jardim.', tone: 'good' }
   if (battle.status === 'escaped') return { id: 'escaped', title: 'Escapou', detail: 'Você venceu, mas ele fugiu.', tone: 'neutral' }
@@ -64,12 +67,16 @@ export function resultLine(
   battle: BattleOutcome & { left?: boolean },
 ): { text: string; tone: 'good' | 'bad' | 'neutral' } {
   const opponent = opponentOf(battle)
-  if (opponent.kind === 'leader') {
+  if (opponent.kind === 'trainer' && opponent.trainerKind === 'leader') {
     if (!battle.won) return { text: 'Derrota. Treine o time e desafie de novo.', tone: 'bad' }
     return {
       text: opponent.cleared ? `Você venceu o ${opponent.name}! ${opponent.cleared.name} conquistado.` : `Você venceu o ${opponent.name}!`,
       tone: 'good',
     }
+  }
+  if (opponent.kind === 'trainer') {
+    if (!battle.won) return { text: 'Derrota. Treine o time e desafie de novo.', tone: 'bad' }
+    return { text: `Você venceu o ${opponent.name}!`, tone: 'good' }
   }
   if (battle.caught) return { text: 'Capturado! Entrou no jardim.', tone: 'good' }
   if (battle.left) return { text: 'Você venceu e deixou ele ir.', tone: 'neutral' }

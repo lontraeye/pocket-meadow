@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { checkPlaces } from './config/places.js'
+import { checkTrainers } from './config/trainers.js'
 import { loadRegions } from './config/regions.js'
 import { migrateDatabase } from './db/migrate.js'
 import { authRoutes } from './routes/auth.js'
@@ -26,6 +27,7 @@ import { trainerRoutes } from './routes/trainer.js'
 migrateDatabase()
 loadRegions()
 checkPlaces()
+checkTrainers()
 
 const port = Number(process.env.PORT ?? 3001)
 if (!Number.isInteger(port) || port <= 0) {

@@ -2,13 +2,13 @@ import { SqliteError } from 'better-sqlite3'
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type AuthEnv, requireUser } from '../auth/session.js'
-import { leaderByMilestone } from '../config/leaders.js'
+import { trainerByKey } from '../config/trainers.js'
 import { chapterOpen, milestoneByKey } from '../config/milestones.js'
 import { persistCatchUp } from '../db/catchUp.js'
 import { getDb, immediate } from '../db/client.js'
 import { loadProgress } from '../db/milestones.js'
 import { encounters } from '../db/schema.js'
-import { createLeaderEncounter } from './encounters.js'
+import { createTrainerEncounter } from './encounters.js'
 import { fail } from './http.js'
 import { currentPlaceOf } from './places.js'
 
@@ -38,8 +38,8 @@ function startChallenge(userId: number, key: string, now: number) {
   const clock = persistCatchUp(userId, now)
   const progress = loadProgress(userId, clock.level)
   const milestone = milestoneByKey(key)
-  const leader = leaderByMilestone(key)
-  if (!milestone || !leader) return fail('milestone_not_found', 404)
+  const trainer = trainerByKey(key)
+  if (!milestone || !trainer || trainer.kind !== 'leader') return fail('milestone_not_found', 404)
   if (progress.cleared.has(key)) return fail('milestone_cleared', 409)
   if (!chapterOpen(milestone.chapter, progress)) return fail('milestone_locked', 400)
   if (currentPlaceOf(userId) !== milestone.town) return fail('milestone_not_here', 400)
@@ -49,5 +49,5 @@ function startChallenge(userId: number, key: string, now: number) {
     .where(and(eq(encounters.userId, userId), eq(encounters.status, 'pending')))
     .get()
   if (pending) return fail('encounter_pending', 409)
-  return { ok: true as const, encounter: createLeaderEncounter(userId, leader, now) }
+  return { ok: true as const, encounter: createTrainerEncounter(userId, trainer, milestone.town, now) }
 }

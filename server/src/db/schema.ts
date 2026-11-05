@@ -533,9 +533,9 @@ export const encounters = sqliteTable(
     expiresAt: integer('expires_at').notNull(),
     resolvedAt: integer('resolved_at'),
     /**
-     * Luta contra líder (leaders.ts): o marco do líder; null = selvagem. A
-     * espécie e o nível são os do 1º Pokémon dele; a luta é contra o time todo.
-     * Vitória contra o líder fica 'escaped' (não há captura).
+     * Luta contra treinador (5.24): a chave (`violet`, `league-1`, `rival-1`…);
+     * null = selvagem. O nome da coluna fica `leader_key`. A espécie e o nível
+     * são os do 1º; a luta é contra o time todo. Vitória fica 'escaped' (não há captura).
      */
     leaderKey: text('leader_key'),
   },

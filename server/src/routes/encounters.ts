@@ -6,6 +6,7 @@ import { ballItemKey, ballMultiplier, getBall, isMasterBall } from '../config/ba
 import { battleConfig, parseThrowQuality, throwAimMult, type ThrowQuality } from '../config/battle.js'
 import { berryItemKey, getBerry } from '../config/berries.js'
 import { type LeaderConfig, leaderByMilestone } from '../config/leaders.js'
+import { trainerByKey, type TrainerConfig } from '../config/trainers.js'
 import { milestoneByKey, TOOL_NAMES } from '../config/milestones.js'
 import { placeBySlug } from '../config/places.js'
 import { type Region, regionBySlug, regionOpen, regionSpecies } from '../config/regions.js'
@@ -590,8 +591,8 @@ function applyBattleOutcome(input: {
 
   let catchOdds: number | null = null
   let seedDrop: { itemKey: string; berryKey: string } | null = null
-  const leader = encounter.leaderKey ? leaderByMilestone(encounter.leaderKey) : undefined
-  if (won && !leader) {
+  const trainer = encounter.leaderKey ? trainerByKey(encounter.leaderKey) : undefined
+  if (won && !trainer) {
     // Chance só para a tela; o Pinap só gasta no 1º lançamento (throw).
     catchOdds = catchChance(wild.captureRate, peekBonus(userId, 'catch_boost'))
     const dropRng = mulberry32(seedDropRngSeed(hiddenSeed(encounter)))
@@ -617,14 +618,14 @@ function applyBattleOutcome(input: {
       .run()
   }
 
-  let leaderOutcome: ReturnType<typeof clearLeader> | null = null
-  if (won && leader) {
-    // Líder: sem captura; a vitória sobre o time todo dá o marco.
+  let trainerOutcome: TrainerWin | null = null
+  if (won && trainer) {
+    // Treinador: sem captura. O que a vitória entrega depende do tipo.
     db.update(encounters)
       .set({ status: 'escaped', winChance: null, catchChance: null, resolvedAt: now })
       .where(and(eq(encounters.id, encounter.id), eq(encounters.userId, userId), eq(encounters.status, 'pending')))
       .run()
-    leaderOutcome = clearLeader(userId, leader, now)
+    trainerOutcome = finishTrainerWin(userId, trainer, now)
   } else if (won) {
     const decisionUntil = now + battleConfig.decisionTtlMs
     db.update(encounters)
@@ -658,7 +659,7 @@ function applyBattleOutcome(input: {
       catchChance: catchOdds,
       caught: false,
       // 'defeated': venceu um treinador (não há captura nem fuga).
-      status: won ? (leader ? ('defeated' as const) : ('pending' as const)) : ('lost' as const),
+      status: won ? (trainer ? ('defeated' as const) : ('pending' as const)) : ('lost' as const),
       fighters,
       trainerXpGained,
       trainer: {
@@ -670,20 +671,51 @@ function applyBattleOutcome(input: {
       levelRewards,
       log,
       /**
-       * Contra quem foi a luta: o selvagem (segue para a captura) ou um líder
-       * (o marco, se venceu). A tela decide o fluxo depois da luta por aqui.
+       * Contra quem foi a luta: o selvagem (segue para a captura) ou um treinador.
+       * A tela decide o fluxo depois da luta por aqui.
        */
-      opponent: leader
-        ? { kind: 'leader' as const, name: leader.name, cleared: leaderOutcome?.cleared ?? null }
+      opponent: trainer
+        ? {
+            kind: 'trainer' as const,
+            trainerKind: trainer.kind,
+            name: trainer.name,
+            cleared: trainerOutcome?.cleared ?? null,
+            league: null,
+            rival: null,
+          }
         : { kind: 'wild' as const },
     },
   }
 }
 
-/** Time do líder do encontro, com as características fixas do config; selvagem: undefined. */
+type TrainerWin = {
+  cleared: ReturnType<typeof clearLeader>['cleared'] | null
+}
+
+/** Vitória contra treinador: líder dá o marco; Liga e rival entram nas partes seguintes. */
+function finishTrainerWin(userId: number, trainer: TrainerConfig, now: number): TrainerWin {
+  switch (trainer.kind) {
+    case 'leader': {
+      const leader = leaderByMilestone(trainer.key)
+      if (!leader) throw new Error(`leader ${trainer.key} is missing`)
+      return { cleared: clearLeader(userId, leader, now).cleared }
+    }
+    case 'elite':
+    case 'champion':
+      throw new Error(`league win for ${trainer.key} is part 2`)
+    case 'rival':
+      throw new Error(`rival win for ${trainer.key} is part 3`)
+    default: {
+      const kind: never = trainer.kind
+      throw new Error(`unknown trainer kind ${kind}`)
+    }
+  }
+}
+
+/** Time do treinador do encontro, com as características fixas do config; selvagem: undefined. */
 function trainerFoesOf(row: Pick<EncounterRow, 'leaderKey'>) {
-  const leader = row.leaderKey ? leaderByMilestone(row.leaderKey) : undefined
-  return leader?.foes.map((foe) => ({
+  const trainer = row.leaderKey ? trainerByKey(row.leaderKey) : undefined
+  return trainer?.foes.map((foe) => ({
     species: loadWildSpecies(foe.speciesId),
     level: foe.level,
     traits: leaderFoeTraits(foe),
@@ -719,9 +751,8 @@ function clearLeader(userId: number, leader: LeaderConfig, now: number) {
  * todo dele; a linha guarda o 1º. Sem custo de energia: o desafio é a luta.
  * O time dele já conta como visto na Pokédex.
  */
-export function createLeaderEncounter(userId: number, leader: LeaderConfig, now: number) {
-  const foe = leader.foes[0]!
-  const milestone = milestoneByKey(leader.milestoneKey)!
+export function createTrainerEncounter(userId: number, trainer: TrainerConfig, regionSlug: string, now: number) {
+  const foe = trainer.foes[0]!
   const db = getDb()
   const spec = db
     .select({
@@ -742,7 +773,7 @@ export function createLeaderEncounter(userId: number, leader: LeaderConfig, now:
     .insert(encounters)
     .values({
       userId,
-      regionSlug: milestone.town,
+      regionSlug,
       speciesId: spec.id,
       level: foe.level,
       isShiny: false,
@@ -751,15 +782,15 @@ export function createLeaderEncounter(userId: number, leader: LeaderConfig, now:
       status: 'pending',
       createdAt: now,
       expiresAt,
-      leaderKey: leader.milestoneKey,
+      leaderKey: trainer.key,
     })
     .returning({ id: encounters.id })
     .get()
-  if (!inserted) throw new Error('failed to create leader encounter')
-  for (const speciesId of new Set(leader.foes.map((entry) => entry.speciesId))) markSeen(userId, speciesId, now)
+  if (!inserted) throw new Error('failed to create trainer encounter')
+  for (const speciesId of new Set(trainer.foes.map((entry) => entry.speciesId))) markSeen(userId, speciesId, now)
   return toEncounterView({
     id: inserted.id,
-    regionSlug: milestone.town,
+    regionSlug,
     speciesId: spec.id,
     name: spec.name,
     displayName: spec.displayName,
@@ -770,7 +801,7 @@ export function createLeaderEncounter(userId: number, leader: LeaderConfig, now:
     captureRate: spec.captureRate,
     type1: spec.type1,
     type2: spec.type2,
-    leaderKey: leader.milestoneKey,
+    leaderKey: trainer.key,
   })
 }
 

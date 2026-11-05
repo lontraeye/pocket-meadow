@@ -59,7 +59,7 @@ type Encounter = {
 type Battle = {
   won: boolean
   status: string
-  opponent: { kind: string; name?: string; cleared?: { key: string; opens: number } | null }
+  opponent: { kind: string; trainerKind?: string; name?: string; cleared?: { key: string; opens: number } | null }
 }
 
 before(() => migrateDatabase())
@@ -124,7 +124,8 @@ test('desafio: vencer cada Pokémon do líder abre o próximo; o último dá o m
   const battle = (await response.json()) as Battle & { log: { kind: string; side?: string; slot?: number }[] }
   assert.equal(battle.won, true)
   assert.equal(battle.status, 'defeated')
-  assert.equal(battle.opponent.kind, 'leader')
+  assert.equal(battle.opponent.kind, 'trainer')
+  assert.equal(battle.opponent.trainerKind, 'leader')
   assert.equal(battle.opponent.name, 'Líder de Violet')
   assert.deepEqual(
     battle.log.filter((e) => e.kind === 'faint' && e.side === 'wild').map((e) => e.slot),

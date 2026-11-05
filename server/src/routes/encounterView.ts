@@ -1,5 +1,5 @@
 import { inArray } from 'drizzle-orm'
-import { leaderByMilestone } from '../config/leaders.js'
+import { trainerByKey } from '../config/trainers.js'
 import { placeBySlug } from '../config/places.js'
 import { regionBySlug } from '../config/regions.js'
 import { getDb } from '../db/client.js'
@@ -83,9 +83,9 @@ export function toEncounterView(input: {
 
 /** O líder e o time dele, com os nomes das espécies. */
 function leaderView(key: string): EncounterLeader | null {
-  const leader = leaderByMilestone(key)
-  if (!leader) return null
-  const ids = leader.foes.map((foe) => foe.speciesId)
+  const trainer = trainerByKey(key)
+  if (!trainer) return null
+  const ids = trainer.foes.map((foe) => foe.speciesId)
   const names = new Map(
     getDb()
       .select({ id: species.id, displayName: species.displayName })
@@ -95,9 +95,9 @@ function leaderView(key: string): EncounterLeader | null {
       .map((row) => [row.id, row.displayName] as const),
   )
   return {
-    key: leader.milestoneKey,
-    name: leader.name,
-    foes: leader.foes.map((foe) => ({
+    key: trainer.key,
+    name: trainer.name,
+    foes: trainer.foes.map((foe) => ({
       speciesId: foe.speciesId,
       displayName: names.get(foe.speciesId) ?? String(foe.speciesId),
       level: foe.level,
